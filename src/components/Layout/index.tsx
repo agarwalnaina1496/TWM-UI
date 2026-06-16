@@ -1,8 +1,5 @@
 /**
  * Layout
- *
- * App shell — renders the header and wraps page content.
- * All pages live inside <Layout>.
  */
 
 import type { ReactNode } from 'react'

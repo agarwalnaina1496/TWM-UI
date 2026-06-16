@@ -1,10 +1,3 @@
-/**
- * TripCard
- *
- * Displays a single saved trip: icon, title, status badge, and last updated time.
- * Renders inside TripList as part of the "Your Trips" section.
- */
-
 import { TRIP_STATUS_LABELS } from '@/constants'
 import { formatRelativeDate } from '@/utils/formatters'
 import type { Trip } from '@/types'

@@ -1,11 +1,3 @@
-/**
- * TripInput
- *
- * The primary input area. Today: a single textarea + submit button.
- * Future: this component will evolve into a chat interface.
- * The rest of the app should require no changes when that happens.
- */
-
 import { useState, type FormEvent, type KeyboardEvent, type ChangeEvent } from 'react'
 import styles from './TripInput.module.css'
 
@@ -30,7 +22,6 @@ function TripInput({ onSubmit, isLoading = false }: TripInputProps) {
     onSubmit(trimmed)
   }
 
-  // Submit on Cmd/Ctrl + Enter
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault()
