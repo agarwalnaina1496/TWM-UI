@@ -1,12 +1,3 @@
-/**
- * TripResponse
- *
- * Renders the API response: a conversational message from the advisor
- * and a list of destination recommendation cards.
- *
- * Only shown after a successful submission.
- */
-
 import type { TripMatcherResponse } from '@/types'
 import styles from './TripResponse.module.css'
 
@@ -17,10 +8,8 @@ interface TripResponseProps {
 function TripResponse({ response }: TripResponseProps) {
   return (
     <div className={styles.wrapper} role="region" aria-label="Trip recommendations">
-      {/* Advisor message */}
       <p className={styles.message}>{response.message}</p>
 
-      {/* Recommendation cards */}
       {response.recommendations.length > 0 && (
         <div className={styles.cards}>
           {response.recommendations.map(rec => (
