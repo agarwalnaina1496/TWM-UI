@@ -1,0 +1,52 @@
+.hero {
+  margin-bottom: var(--space-8);
+}
+
+.headline {
+  font-family: var(--font-display);
+  font-size: var(--text-4xl);
+  font-weight: 400;
+  color: var(--color-text-primary);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.headline em {
+  font-style: italic;
+  color: var(--color-accent);
+}
+
+.subheadline {
+  margin-top: var(--space-4);
+  font-size: var(--text-lg);
+  color: var(--color-text-secondary);
+  font-weight: 300;
+  max-width: 480px;
+}
+
+.inputSection {
+  max-width: var(--max-width-content);
+}
+
+.loadingText {
+  margin-top: var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.errorText {
+  margin-top: var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-error);
+  background: var(--color-error-light);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  max-width: var(--max-width-content);
+}
+
+@media (max-width: 640px) {
+  .headline {
+    font-size: var(--text-3xl);
+  }
+}
