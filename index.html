@@ -1,20 +1,923 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/twm-icon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TravelWithMe</title>
-    <meta name="description" content="Your conversational travel advisor — from the first question to the last day." />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Serif+Display:ital@0;1&display=swap"
-      rel="stylesheet"
-    />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trip Matcher — TWM</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --ink: #1a1612;
+    --ink-muted: #6b6460;
+    --ink-faint: #c4bdb9;
+    --paper: #faf8f5;
+    --paper-warm: #f2ede6;
+    --card: #ffffff;
+    --accent: #c46b3a;
+    --accent-light: #f5e8df;
+    --accent-dim: #8a4b28;
+    --green: #3a6b4a;
+    --green-light: #dff0e5;
+    --border: #e8e2db;
+    --shadow: 0 1px 3px rgba(26,22,18,0.07), 0 4px 16px rgba(26,22,18,0.05);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--paper);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .logo span { color: var(--accent); }
+  .stage-pill {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    background: var(--paper-warm);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+
+  /* ── Layout ── */
+  .app {
+    display: flex;
+    flex: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 24px;
+    gap: 24px;
+  }
+
+  /* ── Chat panel ── */
+  .chat-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .messages {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    padding-bottom: 16px;
+    min-height: 460px;
+    max-height: 560px;
+  }
+
+  .msg {
+    display: flex;
+    gap: 10px;
+    animation: fadeUp 0.25s ease;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .msg.user { flex-direction: row-reverse; }
+
+  .avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600;
+  }
+  .avatar.scout { background: var(--accent-light); color: var(--accent-dim); }
+  .avatar.user-av { background: var(--ink); color: var(--paper); }
+
+  .bubble {
+    max-width: 72%;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    font-size: 14.5px;
+    line-height: 1.6;
+    border: 1px solid transparent;
+  }
+  .msg.assistant .bubble {
+    background: var(--card);
+    border-color: var(--border);
+    box-shadow: var(--shadow);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.user .bubble {
+    background: var(--ink);
+    color: var(--paper);
+    border-bottom-right-radius: 4px;
+  }
+
+  /* ── Typing indicator ── */
+  .typing-bubble {
+    display: flex; gap: 5px; align-items: center;
+    padding: 14px 18px;
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--ink-faint);
+    animation: pulse 1.2s ease infinite;
+  }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse {
+    0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* ── Recommendation cards in chat ── */
+  .reco-cards { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .reco-card {
+    background: var(--paper-warm);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+  }
+  .reco-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .rank-badge {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .reco-name { font-weight: 600; font-size: 14px; }
+  .reco-reason { font-size: 13px; color: var(--ink-muted); line-height: 1.5; }
+  .reco-budget {
+    display: inline-block;
+    margin-top: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    background: var(--accent-light);
+    color: var(--accent-dim);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .confirm-btn {
+    margin-top: 8px;
+    display: inline-block;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 12px; font-weight: 500;
+    padding: 5px 12px; border-radius: 6px;
+    border: none; cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: background 0.15s;
+  }
+  .confirm-btn:hover { background: var(--accent); }
+
+  /* ── Confirmed banner ── */
+  .confirmed-banner {
+    background: var(--green-light);
+    border: 1px solid #b0d9be;
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-top: 10px;
+  }
+  .confirmed-icon { font-size: 18px; }
+  .confirmed-label { font-size: 12px; font-weight: 600; color: var(--green); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 2px; }
+  .confirmed-dest { font-size: 15px; font-weight: 600; }
+  .confirmed-why { font-size: 13px; color: var(--ink-muted); margin-top: 2px; }
+
+  /* ── Input area ── */
+  .input-area {
+    margin-top: 16px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .input-wrap {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    padding: 10px 14px;
+    box-shadow: var(--shadow);
+    transition: border-color 0.15s;
+  }
+  .input-wrap:focus-within { border-color: var(--accent); }
+  textarea {
+    flex: 1;
+    border: none; outline: none; resize: none;
+    background: transparent;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--ink);
+    min-height: 24px; max-height: 120px;
+  }
+  textarea::placeholder { color: var(--ink-faint); }
+  .send-btn {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: var(--accent);
+    color: #fff; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .send-btn:hover { background: var(--accent-dim); }
+  .send-btn:active { transform: scale(0.95); }
+  .send-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
+  .send-btn svg { width: 18px; height: 18px; }
+
+  /* ── State sidebar ── */
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .state-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .state-title {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .state-title-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .state-fields { display: flex; flex-direction: column; gap: 8px; }
+  .state-field { display: flex; flex-direction: column; gap: 2px; }
+  .field-key {
+    font-size: 10px; font-weight: 500; color: var(--ink-faint);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .field-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px; color: var(--ink);
+    background: var(--paper-warm);
+    padding: 3px 7px; border-radius: 4px;
+    display: inline-block;
+    word-break: break-word;
+  }
+  .field-val.empty { color: var(--ink-faint); font-style: italic; font-family: 'DM Sans', sans-serif; font-size: 11px; background: none; padding: 0; }
+
+  .missing-list { display: flex; flex-direction: column; gap: 4px; }
+  .missing-item {
+    font-size: 12px; color: var(--ink-muted);
+    padding: 4px 8px; background: var(--paper-warm);
+    border-radius: 4px; border-left: 2px solid var(--ink-faint);
+    font-family: 'DM Mono', monospace;
+  }
+  .missing-item.done {
+    color: var(--green);
+    border-left-color: var(--green);
+    background: var(--green-light);
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+
+  .stage-track { display: flex; gap: 6px; }
+  .stage-step {
+    flex: 1; height: 4px; border-radius: 2px;
+    background: var(--border);
+    transition: background 0.3s;
+  }
+  .stage-step.active { background: var(--accent); }
+  .stage-step.done { background: var(--green); }
+  .stage-label { font-size: 11px; color: var(--ink-muted); margin-top: 6px; }
+
+  .api-log { display: flex; flex-direction: column; gap: 4px; }
+  .api-entry {
+    font-size: 11px; font-family: 'DM Mono', monospace;
+    padding: 5px 8px; border-radius: 4px;
+    border-left: 2px solid transparent;
+  }
+  .api-entry.call { background: #f0f4ff; border-color: #7090e0; color: #4060b0; }
+  .api-entry.ok { background: var(--green-light); border-color: var(--green); color: var(--green); }
+  .api-entry.err { background: #ffeaea; border-color: #c04040; color: #a03030; }
+  .api-entry.pending { background: var(--accent-light); border-color: var(--accent); color: var(--accent-dim); }
+
+  .quick-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-size: 12px; padding: 5px 10px;
+    background: var(--paper-warm);
+    border: 1px solid var(--border);
+    border-radius: 20px; cursor: pointer;
+    transition: all 0.15s; color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+  }
+  .chip:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent-dim); }
+
+  /* ── Scrollbar ── */
+  .messages::-webkit-scrollbar { width: 4px; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  @media (max-width: 720px) {
+    .app { flex-direction: column; padding: 12px; }
+    .sidebar { width: 100%; }
+    .messages { min-height: 300px; max-height: 380px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Trip<span>Matcher</span> <span style="color:var(--ink-faint);font-family:'DM Sans';font-size:13px;font-weight:400;">by TWM</span></div>
+  <div class="stage-pill" id="stagePill">Collecting inputs</div>
+</header>
+
+<div class="app">
+  <!-- Chat panel -->
+  <div class="chat-panel">
+    <div class="messages" id="messages"></div>
+
+    <div class="input-area">
+      <div class="input-wrap">
+        <textarea id="userInput" placeholder="Tell Scout about your trip..." rows="1"></textarea>
+      </div>
+      <button class="send-btn" id="sendBtn" onclick="handleSend()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+
+    <div class="state-card" style="margin-top:14px;">
+      <div class="state-title"><div class="state-title-dot"></div>Quick replies</div>
+      <div class="quick-chips" id="quickChips">
+        <div class="chip" onclick="fillInput('Planning a trip from Bangalore, 3 friends')">Bangalore, 3 friends</div>
+        <div class="chip" onclick="fillInput('September, budget ₹30,000 total')">Sep · ₹30k</div>
+        <div class="chip" onclick="fillInput('3 nights, bachelorette vibe')">3 nights · bachelorette</div>
+        <div class="chip" onclick="fillInput('Prefer to avoid crowds')">Avoid crowds</div>
+        <div class="chip" onclick="fillInput('Let\'s go with Pondicherry')">Confirm Pondicherry</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <!-- Stage progress -->
+    <div class="state-card">
+      <div class="state-title"><div class="state-title-dot"></div>Flow stage</div>
+      <div class="stage-track">
+        <div class="stage-step active" id="step0"></div>
+        <div class="stage-step" id="step1"></div>
+        <div class="stage-step" id="step2"></div>
+        <div class="stage-step" id="step3"></div>
+      </div>
+      <div class="stage-label" id="stageLabel">Stage 1 — Collecting inputs</div>
+    </div>
+
+    <!-- Trip State -->
+    <div class="state-card">
+      <div class="state-title"><div class="state-title-dot"></div>Trip State (localStorage)</div>
+      <div class="state-fields" id="stateFields">
+        <div class="state-field"><div class="field-key">status</div><div class="field-val">free</div></div>
+        <div class="state-field"><div class="field-key">stage</div><div class="field-val">matching</div></div>
+        <div class="state-field"><div class="field-key">origin_city</div><div class="field-val empty">—</div></div>
+        <div class="state-field"><div class="field-key">budget</div><div class="field-val empty">—</div></div>
+        <div class="state-field"><div class="field-key">num_travelers</div><div class="field-val empty">—</div></div>
+        <div class="state-field"><div class="field-key">travel_month</div><div class="field-val empty">—</div></div>
+        <div class="state-field"><div class="field-key">duration_nights</div><div class="field-val empty">—</div></div>
+        <div class="state-field"><div class="field-key">trip_goal</div><div class="field-val empty">—</div></div>
+      </div>
+    </div>
+
+    <!-- Missing required -->
+    <div class="state-card">
+      <div class="state-title"><div class="state-title-dot"></div>Required inputs</div>
+      <div class="missing-list" id="missingList">
+        <div class="missing-item" id="req-origin_city">origin_city</div>
+        <div class="missing-item" id="req-budget">budget</div>
+        <div class="missing-item" id="req-num_travelers">num_travelers</div>
+        <div class="missing-item" id="req-travel_month">travel_month</div>
+        <div class="missing-item" id="req-duration_nights">duration_nights</div>
+        <div class="missing-item" id="req-trip_goal">trip_goal</div>
+      </div>
+    </div>
+
+    <!-- API log -->
+    <div class="state-card">
+      <div class="state-title"><div class="state-title-dot"></div>API calls</div>
+      <div class="api-log" id="apiLog">
+        <div class="api-entry" style="color:var(--ink-faint);font-family:'DM Sans',sans-serif;font-size:12px;">No calls yet</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Trip State ──────────────────────────────────────────────────────────────
+let tripState = {
+  version: "1.0",
+  status: "free",
+  stage: "matching",
+  destination_confirmed: false,
+  matcher_inputs: {},
+  destination: { type: null, name: null, destination_id: null, shortlist_considered: [] }
+};
+let conversation = [];
+let apiLogEl = document.getElementById('apiLog');
+let firstLog = true;
+
+function saveTripState() {
+  localStorage.setItem('twm_trip_state', JSON.stringify(tripState));
+  renderSidebar();
+}
+
+// ── Mock Backend ────────────────────────────────────────────────────────────
+// Simulates the full Scout → Meridian → Scout/Present pipeline
+
+const REQUIRED_FIELDS = ['origin_city', 'budget', 'num_travelers', 'travel_month', 'duration_nights', 'trip_goal'];
+
+// Simple NLP extraction from user message
+function extractFromMessage(msg, existing) {
+  const delta = {};
+  const m = msg.toLowerCase();
+
+  // Origin city
+  if (!existing.origin_city) {
+    if (m.includes('bangalore') || m.includes('bengaluru')) delta.origin_city = 'Bengaluru';
+    else if (m.includes('mumbai')) delta.origin_city = 'Mumbai';
+    else if (m.includes('delhi')) delta.origin_city = 'Delhi';
+    else if (m.includes('chennai')) delta.origin_city = 'Chennai';
+    else if (m.includes('hyderabad')) delta.origin_city = 'Hyderabad';
+  }
+
+  // Travelers
+  if (!existing.num_travelers) {
+    const matchN = m.match(/(\d+)\s*(of us|friends|people|travelers|travellers|pax)/);
+    if (matchN) delta.num_travelers = parseInt(matchN[1]);
+    else if (m.includes('just me') || m.includes('solo')) delta.num_travelers = 1;
+  }
+
+  // Budget
+  if (!existing.budget) {
+    const budgetMatch = m.match(/(?:₹|rs\.?|inr)?\s*(\d[\d,]*)\s*k?\s*(?:total|per person|each|budget)?/i);
+    if (budgetMatch) {
+      let amt = parseInt(budgetMatch[1].replace(/,/g, ''));
+      if (m.includes('k') || m.match(/\d+k/)) amt = amt * 1000;
+      if (amt > 500) { // reasonable budget
+        delta.budget = amt;
+        delta.budget_unit = m.includes('per person') || m.includes('each') ? 'per_person' : 'total';
+      }
+    }
+  }
+
+  // Month
+  if (!existing.travel_month) {
+    const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+    for (const mo of months) {
+      if (m.includes(mo)) { delta.travel_month = mo.charAt(0).toUpperCase() + mo.slice(1); break; }
+    }
+  }
+
+  // Duration
+  if (!existing.duration_nights) {
+    const nights = m.match(/(\d+)\s*nights?/);
+    if (nights) delta.duration_nights = parseInt(nights[1]);
+    const days = m.match(/(\d+)\s*days?/);
+    if (days && !nights) delta.duration_nights = parseInt(days[1]) - 1;
+  }
+
+  // Trip goal
+  if (!existing.trip_goal) {
+    if (m.includes('bachelorette')) delta.trip_goal = 'Bachelorette';
+    else if (m.includes('honeymoon')) delta.trip_goal = 'Honeymoon';
+    else if (m.includes('family')) delta.trip_goal = 'Family';
+    else if (m.includes('adventure')) delta.trip_goal = 'Adventure';
+    else if (m.includes('relaxation') || m.includes('relax') || m.includes('chill')) delta.trip_goal = 'Relaxation';
+    else if (m.includes('workation')) delta.trip_goal = 'Workation';
+  }
+
+  // Crowd preference
+  if (m.includes('avoid crowd') || m.includes('less crowd') || m.includes('quiet')) {
+    delta.crowd_preference = 'avoid_crowds';
+  }
+
+  return delta;
+}
+
+function getMissing(inputs) {
+  return REQUIRED_FIELDS.filter(f => !inputs[f]);
+}
+
+function scoutReply(msg, inputs, missing) {
+  const m = msg.toLowerCase();
+
+  // Confirmation detection
+  const confirmPatterns = ['go with','let\'s do','i choose','confirm','that works','sounds perfect','pondi','pondicherry it','first one'];
+  const isConfirm = confirmPatterns.some(p => m.includes(p));
+  if (isConfirm && missing.length === 0) {
+    return {
+      type: 'confirm',
+      message: "Pondicherry it is! Great choice for September — the French Quarter cafés and boutique stays will suit your group perfectly. I'll set that as your destination.",
+      confirmed_destination: {
+        name: 'Pondicherry',
+        destination_id: 'pondicherry_puducherry',
+        type: 'single',
+        confirmed_via: 'matcher',
+        why_it_matched: 'Fits budget, bachelorette vibe, and shoulder-season crowds'
+      }
+    };
+  }
+
+  // Refinement — user asks to change something
+  if (missing.length === 0 && (m.includes('october') || m.includes('change') || m.includes('instead') || m.includes('closer'))) {
+    return { type: 'refinement', message: "Got it — let me find updated options with that change." };
+  }
+
+  // Collect missing inputs
+  const field = missing[0];
+  const prompts = {
+    origin_city: "What city are you flying or departing from?",
+    num_travelers: "How many people are going?",
+    budget: "What's your total budget for the trip? (In ₹ if possible)",
+    travel_month: "Which month are you thinking of travelling?",
+    duration_nights: "How many nights? A long weekend (2–3), or more?",
+    trip_goal: "What's the vibe you're going for — relaxation, bachelorette, adventure, something else?"
+  };
+
+  if (field) {
+    return { type: 'collect', message: prompts[field] };
+  }
+
+  // All collected — bridging message
+  return {
+    type: 'bridge',
+    message: `Perfect — I have everything I need. Looking up destinations that match your trip from ${inputs.origin_city} for ${inputs.num_travelers} in ${inputs.travel_month}...`
+  };
+}
+
+function mockMeridian(inputs) {
+  // Returns structured recommendations based on inputs
+  return {
+    status: 'SUCCESS',
+    trip_type: 'single',
+    budget_basis: {
+      total: inputs.budget,
+      per_person: Math.round(inputs.budget / inputs.num_travelers),
+      num_travelers: inputs.num_travelers
+    },
+    options: [
+      {
+        rank: 1,
+        name: 'Pondicherry',
+        destination_id: 'pondicherry_puducherry',
+        per_person_total: Math.round(inputs.budget / inputs.num_travelers * 0.98),
+        group_total: Math.round(inputs.budget * 0.98),
+        reason_short: 'Boutique cafés, beachside celebrations, shoulder-season quiet',
+        vibe: 'French Quarter charm · Relaxed nightlife · Aesthetic stays'
+      },
+      {
+        rank: 2,
+        name: 'Coorg',
+        destination_id: 'coorg_karnataka',
+        per_person_total: Math.round(inputs.budget / inputs.num_travelers * 0.85),
+        group_total: Math.round(inputs.budget * 0.85),
+        reason_short: 'Shorter drive, misty hills, intimate stay-based celebration',
+        vibe: 'Estates & spas · Misty hills · Quieter crowds'
+      },
+      {
+        rank: 3,
+        name: 'Gokarna',
+        destination_id: 'gokarna_karnataka',
+        per_person_total: Math.round(inputs.budget / inputs.num_travelers * 0.72),
+        group_total: Math.round(inputs.budget * 0.72),
+        reason_short: 'Most affordable, least crowded, relaxed beach energy',
+        vibe: 'Secluded beaches · Hippie-chill · Budget headroom'
+      }
+    ],
+    final_recommendation: {
+      best_match: 'Pondicherry',
+      best_match_reason: 'Best balance of bachelorette vibe, manageable travel, and shoulder-season quiet'
+    }
+  };
+}
+
+function scoutPresent(meridianOutput, inputs) {
+  const opts = meridianOutput.options;
+  const budget = inputs.budget;
+  const perPerson = Math.round(budget / inputs.num_travelers);
+  return {
+    message: `Found three options that work for your trip. **Pondicherry** comes up first — it fits your ₹${budget.toLocaleString('en-IN')} budget cleanly (about ₹${perPerson.toLocaleString('en-IN')} per person), has the right bachelorette energy with boutique cafés and a relaxed beach scene, and ${inputs.travel_month} keeps the tourist crowds down. Want me to walk through why it ranks first, or would you rather compare all three?`,
+    shortlist: opts.map(o => o.destination_id),
+    options: opts
+  };
+}
+
+// ── API Logging ─────────────────────────────────────────────────────────────
+function logApi(type, label) {
+  if (firstLog) { apiLogEl.innerHTML = ''; firstLog = false; }
+  const el = document.createElement('div');
+  el.className = `api-entry ${type}`;
+  el.textContent = label;
+  el.id = 'log-' + Date.now();
+  apiLogEl.appendChild(el);
+  return el.id;
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  const inputs = tripState.matcher_inputs;
+  const fields = ['origin_city','budget','num_travelers','travel_month','duration_nights','trip_goal'];
+  const container = document.getElementById('stateFields');
+  container.innerHTML = `
+    <div class="state-field"><div class="field-key">status</div><div class="field-val">${tripState.status}</div></div>
+    <div class="state-field"><div class="field-key">stage</div><div class="field-val">${tripState.stage}</div></div>
+  `;
+  fields.forEach(f => {
+    const val = inputs[f];
+    const div = document.createElement('div');
+    div.className = 'state-field';
+    div.innerHTML = `<div class="field-key">${f}</div><div class="field-val${val ? '' : ' empty'}">${val !== undefined && val !== null ? (f === 'budget' ? '₹' + val.toLocaleString('en-IN') : val) : '—'}</div>`;
+    container.appendChild(div);
+  });
+
+  // Missing list
+  const missing = getMissing(inputs);
+  REQUIRED_FIELDS.forEach(f => {
+    const el = document.getElementById('req-' + f);
+    if (el) el.className = 'missing-item' + (missing.includes(f) ? '' : ' done');
+  });
+
+  // Stage pill & progress
+  const stage = tripState.stage;
+  const pill = document.getElementById('stagePill');
+  const label = document.getElementById('stageLabel');
+  const steps = [document.getElementById('step0'), document.getElementById('step1'), document.getElementById('step2'), document.getElementById('step3')];
+
+  if (tripState.destination_confirmed) {
+    pill.textContent = 'Destination confirmed';
+    label.textContent = 'Stage 4 — Confirmed';
+    steps.forEach((s, i) => { s.className = 'stage-step done'; });
+  } else if (stage === 'matched') {
+    pill.textContent = 'Confirming';
+    label.textContent = 'Stage 4 — Awaiting confirmation';
+    steps.forEach((s, i) => { s.className = i <= 2 ? 'stage-step done' : 'stage-step active'; });
+  } else if (missing.length === 0) {
+    pill.textContent = 'Recommendations shown';
+    label.textContent = 'Stage 3 — Presenting options';
+    steps.forEach((s, i) => { s.className = i <= 1 ? 'stage-step done' : 'stage-step active'; });
+  } else {
+    pill.textContent = 'Collecting inputs';
+    label.textContent = 'Stage 1 — Input collection';
+    steps[0].className = 'stage-step active';
+    steps.slice(1).forEach(s => s.className = 'stage-step');
+  }
+}
+
+function appendMessage(role, content, extra) {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+
+  const av = document.createElement('div');
+  av.className = `avatar ${role === 'assistant' ? 'scout' : 'user-av'}`;
+  av.textContent = role === 'assistant' ? 'S' : 'U';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+
+  if (role === 'assistant' && extra?.options) {
+    // Render recommendation cards
+    let html = `<div style="margin-bottom:10px;font-size:14.5px;line-height:1.6;">${content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`;
+    html += `<div class="reco-cards">`;
+    extra.options.forEach(opt => {
+      html += `<div class="reco-card">
+        <div class="reco-card-head">
+          <div class="rank-badge">${opt.rank}</div>
+          <div class="reco-name">${opt.name}</div>
+        </div>
+        <div class="reco-reason">${opt.reason_short}</div>
+        <div style="font-size:12px;color:var(--ink-muted);margin-top:4px;">${opt.vibe}</div>
+        <div class="reco-budget">₹${opt.per_person_total.toLocaleString('en-IN')} / person · ₹${opt.group_total.toLocaleString('en-IN')} total</div>
+        ${opt.rank === 1 ? `<br><button class="confirm-btn" onclick="quickConfirm('${opt.name}')">Confirm ${opt.name} →</button>` : ''}
+      </div>`;
+    });
+    html += `</div>`;
+    bubble.innerHTML = html;
+  } else if (role === 'assistant' && extra?.confirmed) {
+    bubble.innerHTML = `<div style="margin-bottom:10px;">${content}</div>
+      <div class="confirmed-banner">
+        <div class="confirmed-icon">✓</div>
+        <div>
+          <div class="confirmed-label">Destination confirmed</div>
+          <div class="confirmed-dest">${extra.confirmed.name}</div>
+          <div class="confirmed-why">${extra.confirmed.why_it_matched}</div>
+        </div>
+      </div>`;
+  } else {
+    bubble.innerHTML = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  }
+
+  div.appendChild(av);
+  div.appendChild(bubble);
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showTyping() {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.id = 'typing-indicator';
+  div.innerHTML = `
+    <div class="avatar scout">S</div>
+    <div class="bubble">
+      <div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+    </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeTyping() {
+  const el = document.getElementById('typing-indicator');
+  if (el) el.remove();
+}
+
+function showLoader(text) {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.id = 'loader-indicator';
+  div.innerHTML = `
+    <div class="avatar scout">S</div>
+    <div class="bubble" style="background:var(--accent-light);border-color:var(--accent);color:var(--accent-dim);font-size:13px;">
+      <div class="typing-bubble"><div class="dot" style="background:var(--accent)"></div><div class="dot" style="background:var(--accent)"></div><div class="dot" style="background:var(--accent)"></div></div>
+      <span style="margin-left:6px;">${text}</span>
+    </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeLoader() {
+  const el = document.getElementById('loader-indicator');
+  if (el) el.remove();
+}
+
+// ── Main flow ────────────────────────────────────────────────────────────────
+async function handleSend() {
+  const input = document.getElementById('userInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('sendBtn').disabled = true;
+
+  appendMessage('user', msg);
+  conversation.push({ role: 'user', content: msg });
+
+  // ── Stage 1: Scout/message ──
+  showTyping();
+  const logId1 = logApi('pending', '→ POST /api/scout/message');
+
+  await delay(700 + Math.random() * 400);
+
+  // Extract from message
+  const delta = extractFromMessage(msg, tripState.matcher_inputs);
+  Object.assign(tripState.matcher_inputs, delta);
+  saveTripState();
+
+  const missing = getMissing(tripState.matcher_inputs);
+  const sufficient = missing.length === 0;
+  const reply = scoutReply(msg, tripState.matcher_inputs, missing);
+
+  updateLog(logId1, 'ok', `✓ /scout/message → ${sufficient ? 'inputs_sufficient: true' : `missing: ${missing.slice(0,2).join(', ')}${missing.length > 2 ? '…' : ''}`}`);
+
+  removeTyping();
+
+  // Handle confirmation
+  if (reply.type === 'confirm') {
+    appendMessage('assistant', reply.message, { confirmed: reply.confirmed_destination });
+    conversation.push({ role: 'assistant', content: reply.message });
+    tripState.destination = {
+      ...reply.confirmed_destination,
+      shortlist_considered: tripState.destination.shortlist_considered
+    };
+    tripState.destination_confirmed = true;
+    tripState.stage = 'matched';
+    saveTripState();
+    document.getElementById('sendBtn').disabled = false;
+    return;
+  }
+
+  if (!sufficient) {
+    // Still collecting
+    appendMessage('assistant', reply.message);
+    conversation.push({ role: 'assistant', content: reply.message });
+    document.getElementById('sendBtn').disabled = false;
+    return;
+  }
+
+  // ── Stage 2: Show bridge + call Meridian ──
+  appendMessage('assistant', reply.message);
+  conversation.push({ role: 'assistant', content: reply.message });
+
+  await delay(300);
+  showLoader('Searching destinations…');
+
+  const logId2 = logApi('pending', '→ POST /api/meridian/match');
+  await delay(1200 + Math.random() * 500);
+
+  const meridianOutput = mockMeridian(tripState.matcher_inputs);
+  updateLog(logId2, 'ok', `✓ /meridian/match → ${meridianOutput.options.length} options found`);
+
+  tripState.destination.shortlist_considered = meridianOutput.options.map(o => o.destination_id);
+
+  // ── Stage 3: Scout/present ──
+  const logId3 = logApi('pending', '→ POST /api/scout/present');
+  await delay(600 + Math.random() * 300);
+
+  const presentation = scoutPresent(meridianOutput, tripState.matcher_inputs);
+  updateLog(logId3, 'ok', `✓ /scout/present → first_presentation`);
+
+  removeLoader();
+  appendMessage('assistant', presentation.message, { options: meridianOutput.options });
+  conversation.push({ role: 'assistant', content: presentation.message });
+
+  saveTripState();
+  document.getElementById('sendBtn').disabled = false;
+}
+
+function quickConfirm(name) {
+  document.getElementById('userInput').value = `Let's go with ${name}`;
+  handleSend();
+}
+
+function fillInput(text) {
+  document.getElementById('userInput').value = text;
+  document.getElementById('userInput').focus();
+}
+
+function updateLog(id, type, text) {
+  const el = document.getElementById(id);
+  if (el) { el.className = `api-entry ${type}`; el.textContent = text; }
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Auto-resize textarea ─────────────────────────────────────────────────────
+document.getElementById('userInput').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+document.getElementById('userInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    handleSend();
+  }
+});
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+const stored = localStorage.getItem('twm_trip_state');
+if (stored) { try { tripState = JSON.parse(stored); } catch(e) {} }
+
+renderSidebar();
+
+// Opening message
+setTimeout(() => {
+  appendMessage('assistant', "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest.");
+  conversation.push({ role: 'assistant', content: "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest." });
+}, 300);
+</script>
+</body>
 </html>
