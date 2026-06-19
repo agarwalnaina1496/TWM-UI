@@ -3,26 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trip Matcher — TWM</title>
+<title>TravelWithMe</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap');
 
   :root {
     --ink: #1a1612;
     --ink-muted: #6b6460;
-    --ink-faint: #c4bdb9;
+    --ink-faint: #bdb8b3;
     --paper: #faf8f5;
-    --paper-warm: #f2ede6;
+    --paper-warm: #f3ede6;
     --card: #ffffff;
     --accent: #c46b3a;
-    --accent-light: #f5e8df;
+    --accent-light: #f6e9df;
     --accent-dim: #8a4b28;
     --green: #3a6b4a;
     --green-light: #dff0e5;
     --border: #e8e2db;
-    --shadow: 0 1px 3px rgba(26,22,18,0.07), 0 4px 16px rgba(26,22,18,0.05);
-    --radius: 12px;
-    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(26,22,18,0.07), 0 4px 16px rgba(26,22,18,0.04);
+    --r: 12px;
+    --r-sm: 8px;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -41,39 +41,52 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 24px;
+    padding: 14px 24px;
     border-bottom: 1px solid var(--border);
     background: var(--paper);
     position: sticky; top: 0; z-index: 10;
+    gap: 12px;
   }
-  .logo {
+  .brand { display: flex; flex-direction: column; gap: 1px; }
+  .brand-name {
     font-family: 'DM Serif Display', serif;
-    font-size: 18px;
+    font-size: 17px;
     letter-spacing: -0.01em;
     color: var(--ink);
+    line-height: 1;
   }
-  .logo span { color: var(--accent); }
-  .stage-pill {
+  .brand-name span { color: var(--accent); }
+  .brand-tagline {
     font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-muted);
-    background: var(--paper-warm);
-    border: 1px solid var(--border);
-    padding: 4px 10px;
-    border-radius: 20px;
+    color: var(--ink-faint);
+    font-weight: 400;
+    letter-spacing: 0.01em;
   }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .reset-btn {
+    font-size: 12px; font-weight: 500;
+    color: var(--ink-muted);
+    background: none;
+    border: 1px solid var(--border);
+    padding: 5px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .reset-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .reset-btn svg { width: 12px; height: 12px; }
 
-  /* ── Layout ── */
+  /* ── App layout ── */
   .app {
     display: flex;
     flex: 1;
-    max-width: 1100px;
+    max-width: 1060px;
     margin: 0 auto;
     width: 100%;
     padding: 24px;
-    gap: 24px;
+    gap: 22px;
   }
 
   /* ── Chat panel ── */
@@ -85,43 +98,36 @@
   }
 
   .messages {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
     overflow-y: auto;
-    padding-bottom: 16px;
-    min-height: 460px;
-    max-height: 560px;
+    min-height: 420px;
+    max-height: 540px;
+    padding-bottom: 8px;
   }
 
-  .msg {
-    display: flex;
-    gap: 10px;
-    animation: fadeUp 0.25s ease;
-  }
+  .msg { display: flex; gap: 10px; animation: fadeUp 0.22s ease; }
   @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(5px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
   .msg.user { flex-direction: row-reverse; }
 
   .avatar {
-    width: 32px; height: 32px;
-    border-radius: 50%;
-    flex-shrink: 0;
+    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 600;
+    font-size: 12px; font-weight: 700;
   }
   .avatar.scout { background: var(--accent-light); color: var(--accent-dim); }
   .avatar.user-av { background: var(--ink); color: var(--paper); }
 
   .bubble {
-    max-width: 72%;
-    padding: 12px 16px;
-    border-radius: var(--radius);
-    font-size: 14.5px;
-    line-height: 1.6;
+    max-width: 74%;
+    padding: 11px 15px;
+    border-radius: var(--r);
+    font-size: 14px;
+    line-height: 1.65;
     border: 1px solid transparent;
   }
   .msg.assistant .bubble {
@@ -136,90 +142,103 @@
     border-bottom-right-radius: 4px;
   }
 
-  /* ── Typing indicator ── */
-  .typing-bubble {
-    display: flex; gap: 5px; align-items: center;
-    padding: 14px 18px;
-  }
+  /* Typing */
+  .typing-bubble { display: flex; gap: 5px; align-items: center; padding: 12px 16px; }
   .dot {
-    width: 7px; height: 7px; border-radius: 50%;
+    width: 6px; height: 6px; border-radius: 50%;
     background: var(--ink-faint);
     animation: pulse 1.2s ease infinite;
   }
   .dot:nth-child(2) { animation-delay: 0.2s; }
   .dot:nth-child(3) { animation-delay: 0.4s; }
   @keyframes pulse {
-    0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+    0%,80%,100% { transform: scale(0.75); opacity: 0.45; }
     40% { transform: scale(1); opacity: 1; }
   }
 
-  /* ── Recommendation cards in chat ── */
+  /* ── Generate button ── */
+  .generate-wrap {
+    display: none;
+    margin: 14px 0 2px 40px;
+    animation: fadeUp 0.25s ease;
+  }
+  .generate-wrap.visible { display: block; }
+  .generate-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none; border-radius: var(--r-sm);
+    padding: 10px 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .generate-btn:hover { background: var(--accent-dim); }
+  .generate-btn:active { transform: scale(0.97); }
+  .generate-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
+  .generate-btn svg { width: 16px; height: 16px; }
+
+  /* ── Recommendation cards ── */
   .reco-cards { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
   .reco-card {
     background: var(--paper-warm);
     border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--r-sm);
     padding: 14px 16px;
   }
-  .reco-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .reco-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .rank-badge {
-    width: 22px; height: 22px; border-radius: 50%;
+    width: 20px; height: 20px; border-radius: 50%;
     background: var(--accent); color: #fff;
-    font-size: 11px; font-weight: 700;
+    font-size: 10px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
   }
   .reco-name { font-weight: 600; font-size: 14px; }
   .reco-reason { font-size: 13px; color: var(--ink-muted); line-height: 1.5; }
-  .reco-budget {
-    display: inline-block;
-    margin-top: 6px;
+  .match-sections { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .match-section { font-size: 12.5px; color: var(--ink); }
+  .match-heading { font-weight: 600; margin-bottom: 2px; }
+  .match-points { padding-left: 14px; color: var(--ink-muted); }
+  .match-points li { margin-bottom: 2px; }
+  .budget-row {
+    display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;
+  }
+  .budget-chip {
     font-family: 'DM Mono', monospace;
-    font-size: 12px;
+    font-size: 11px;
     background: var(--accent-light);
     color: var(--accent-dim);
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: 3px 8px; border-radius: 4px;
   }
+  .tradeoffs { margin-top: 8px; }
+  .tradeoff-label { font-size: 11px; font-weight: 600; color: var(--ink-faint); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 4px; }
+  .tradeoff-item { font-size: 12px; color: var(--ink-muted); display: flex; gap: 5px; align-items: flex-start; }
+  .tradeoff-item::before { content: "↗"; font-size: 10px; margin-top: 2px; flex-shrink: 0; color: var(--ink-faint); }
   .confirm-btn {
-    margin-top: 8px;
-    display: inline-block;
-    background: var(--ink);
-    color: var(--paper);
+    margin-top: 10px;
+    background: var(--ink); color: var(--paper);
     font-size: 12px; font-weight: 500;
-    padding: 5px 12px; border-radius: 6px;
+    padding: 6px 13px; border-radius: 6px;
     border: none; cursor: pointer;
     font-family: 'DM Sans', sans-serif;
     transition: background 0.15s;
   }
   .confirm-btn:hover { background: var(--accent); }
 
-  /* ── Confirmed banner ── */
-  .confirmed-banner {
-    background: var(--green-light);
-    border: 1px solid #b0d9be;
-    border-radius: var(--radius-sm);
-    padding: 12px 16px;
-    display: flex; align-items: flex-start; gap: 10px;
-    margin-top: 10px;
-  }
-  .confirmed-icon { font-size: 18px; }
-  .confirmed-label { font-size: 12px; font-weight: 600; color: var(--green); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 2px; }
-  .confirmed-dest { font-size: 15px; font-weight: 600; }
-  .confirmed-why { font-size: 13px; color: var(--ink-muted); margin-top: 2px; }
-
   /* ── Input area ── */
   .input-area {
-    margin-top: 16px;
+    margin-top: 14px;
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: flex-end;
   }
   .input-wrap {
     flex: 1;
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--r);
     display: flex;
     padding: 10px 14px;
     box-shadow: var(--shadow);
@@ -227,20 +246,18 @@
   }
   .input-wrap:focus-within { border-color: var(--accent); }
   textarea {
-    flex: 1;
-    border: none; outline: none; resize: none;
+    flex: 1; border: none; outline: none; resize: none;
     background: transparent;
     font-family: 'DM Sans', sans-serif;
-    font-size: 14.5px;
-    line-height: 1.5;
+    font-size: 14px; line-height: 1.5;
     color: var(--ink);
     min-height: 24px; max-height: 120px;
   }
   textarea::placeholder { color: var(--ink-faint); }
   .send-btn {
     width: 40px; height: 40px; border-radius: 10px;
-    background: var(--accent);
-    color: #fff; border: none; cursor: pointer;
+    background: var(--accent); color: #fff;
+    border: none; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
     transition: background 0.15s, transform 0.1s;
@@ -248,91 +265,12 @@
   .send-btn:hover { background: var(--accent-dim); }
   .send-btn:active { transform: scale(0.95); }
   .send-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
-  .send-btn svg { width: 18px; height: 18px; }
+  .send-btn svg { width: 17px; height: 17px; }
 
-  /* ── State sidebar ── */
-  .sidebar {
-    width: 260px;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .state-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
-    box-shadow: var(--shadow);
-  }
-  .state-title {
-    font-size: 10px; font-weight: 600;
-    letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--ink-muted);
-    margin-bottom: 12px;
-    display: flex; align-items: center; gap: 6px;
-  }
-  .state-title-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--accent);
-  }
-
-  .state-fields { display: flex; flex-direction: column; gap: 8px; }
-  .state-field { display: flex; flex-direction: column; gap: 2px; }
-  .field-key {
-    font-size: 10px; font-weight: 500; color: var(--ink-faint);
-    letter-spacing: 0.06em; text-transform: uppercase;
-  }
-  .field-val {
-    font-family: 'DM Mono', monospace;
-    font-size: 12px; color: var(--ink);
-    background: var(--paper-warm);
-    padding: 3px 7px; border-radius: 4px;
-    display: inline-block;
-    word-break: break-word;
-  }
-  .field-val.empty { color: var(--ink-faint); font-style: italic; font-family: 'DM Sans', sans-serif; font-size: 11px; background: none; padding: 0; }
-
-  .missing-list { display: flex; flex-direction: column; gap: 4px; }
-  .missing-item {
-    font-size: 12px; color: var(--ink-muted);
-    padding: 4px 8px; background: var(--paper-warm);
-    border-radius: 4px; border-left: 2px solid var(--ink-faint);
-    font-family: 'DM Mono', monospace;
-  }
-  .missing-item.done {
-    color: var(--green);
-    border-left-color: var(--green);
-    background: var(--green-light);
-    text-decoration: line-through;
-    opacity: 0.7;
-  }
-
-  .stage-track { display: flex; gap: 6px; }
-  .stage-step {
-    flex: 1; height: 4px; border-radius: 2px;
-    background: var(--border);
-    transition: background 0.3s;
-  }
-  .stage-step.active { background: var(--accent); }
-  .stage-step.done { background: var(--green); }
-  .stage-label { font-size: 11px; color: var(--ink-muted); margin-top: 6px; }
-
-  .api-log { display: flex; flex-direction: column; gap: 4px; }
-  .api-entry {
-    font-size: 11px; font-family: 'DM Mono', monospace;
-    padding: 5px 8px; border-radius: 4px;
-    border-left: 2px solid transparent;
-  }
-  .api-entry.call { background: #f0f4ff; border-color: #7090e0; color: #4060b0; }
-  .api-entry.ok { background: var(--green-light); border-color: var(--green); color: var(--green); }
-  .api-entry.err { background: #ffeaea; border-color: #c04040; color: #a03030; }
-  .api-entry.pending { background: var(--accent-light); border-color: var(--accent); color: var(--accent-dim); }
-
-  .quick-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* Quick replies */
+  .quick-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
   .chip {
-    font-size: 12px; padding: 5px 10px;
+    font-size: 12px; padding: 5px 11px;
     background: var(--paper-warm);
     border: 1px solid var(--border);
     border-radius: 20px; cursor: pointer;
@@ -341,32 +279,103 @@
   }
   .chip:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent-dim); }
 
-  /* ── Scrollbar ── */
-  .messages::-webkit-scrollbar { width: 4px; }
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 250px; flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+
+  .state-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .state-title {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-muted); margin-bottom: 12px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .state-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  .state-section-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-faint);
+    margin: 10px 0 5px;
+  }
+  .state-section-label:first-child { margin-top: 0; }
+
+  .state-fields { display: flex; flex-direction: column; gap: 6px; }
+  .state-field { display: flex; flex-direction: column; gap: 1px; }
+  .field-key {
+    font-size: 10px; font-weight: 500; color: var(--ink-faint);
+    letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .field-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 11.5px; color: var(--ink);
+    background: var(--paper-warm);
+    padding: 2px 7px; border-radius: 4px;
+    display: inline-block; word-break: break-word;
+  }
+  .field-val.empty { color: var(--ink-faint); font-style: italic; font-family: 'DM Sans', sans-serif; font-size: 11px; background: none; padding: 0; }
+  .field-val.true-val { background: var(--green-light); color: var(--green); }
+  .field-val.false-val { background: var(--paper-warm); color: var(--ink-muted); }
+
+  .pref-item {
+    font-size: 11.5px;
+    font-family: 'DM Mono', monospace;
+    background: var(--paper-warm);
+    padding: 2px 7px; border-radius: 4px;
+    color: var(--ink);
+    margin-bottom: 3px;
+    word-break: break-word;
+  }
+
+  /* scrollbar */
+  .messages::-webkit-scrollbar { width: 3px; }
   .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-  @media (max-width: 720px) {
+  @media (max-width: 700px) {
     .app { flex-direction: column; padding: 12px; }
     .sidebar { width: 100%; }
-    .messages { min-height: 300px; max-height: 380px; }
+    .messages { min-height: 280px; max-height: 360px; }
   }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">Trip<span>Matcher</span> <span style="color:var(--ink-faint);font-family:'DM Sans';font-size:13px;font-weight:400;">by TWM</span></div>
-  <div class="stage-pill" id="stagePill">Collecting inputs</div>
+  <div class="brand">
+    <div class="brand-name">Travel<span>WithMe</span></div>
+    <div class="brand-tagline">Helping you choose your destination and plan your trip with confidence.</div>
+  </div>
+  <div class="header-right">
+    <button class="reset-btn" onclick="resetTrip()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.54"></path></svg>
+      Reset trip
+    </button>
+  </div>
 </header>
 
 <div class="app">
-  <!-- Chat panel -->
+
+  <!-- Chat -->
   <div class="chat-panel">
     <div class="messages" id="messages"></div>
 
+    <div class="generate-wrap" id="generateWrap">
+      <button class="generate-btn" id="generateBtn" onclick="handleGenerate()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        Generate Recommendations
+      </button>
+    </div>
+
     <div class="input-area">
       <div class="input-wrap">
-        <textarea id="userInput" placeholder="Tell Scout about your trip..." rows="1"></textarea>
+        <textarea id="userInput" placeholder="Tell Scout about your trip…" rows="1"></textarea>
       </div>
       <button class="send-btn" id="sendBtn" onclick="handleSend()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -376,334 +385,399 @@
       </button>
     </div>
 
-    <div class="state-card" style="margin-top:14px;">
-      <div class="state-title"><div class="state-title-dot"></div>Quick replies</div>
-      <div class="quick-chips" id="quickChips">
-        <div class="chip" onclick="fillInput('Planning a trip from Bangalore, 3 friends')">Bangalore, 3 friends</div>
-        <div class="chip" onclick="fillInput('September, budget ₹30,000 total')">Sep · ₹30k</div>
-        <div class="chip" onclick="fillInput('3 nights, bachelorette vibe')">3 nights · bachelorette</div>
-        <div class="chip" onclick="fillInput('Prefer to avoid crowds')">Avoid crowds</div>
-        <div class="chip" onclick="fillInput('Let\'s go with Pondicherry')">Confirm Pondicherry</div>
-      </div>
+    <div class="quick-chips" id="quickChips">
+      <div class="chip" onclick="fillInput('Planning a trip from Bangalore, 3 friends')">Bangalore · 3 friends</div>
+      <div class="chip" onclick="fillInput('September, budget ₹30,000 total')">Sep · ₹30k total</div>
+      <div class="chip" onclick="fillInput('3 nights, bachelorette vibe')">3 nights · bachelorette</div>
+      <div class="chip" onclick="fillInput('Nothing else, we\'re good')">Nothing else</div>
+      <div class="chip" onclick="fillInput('Let\'s go with Pondicherry')">Confirm Pondicherry</div>
     </div>
   </div>
 
-  <!-- Sidebar -->
+  <!-- Sidebar — Trip State only -->
   <div class="sidebar">
-
-    <!-- Stage progress -->
     <div class="state-card">
-      <div class="state-title"><div class="state-title-dot"></div>Flow stage</div>
-      <div class="stage-track">
-        <div class="stage-step active" id="step0"></div>
-        <div class="stage-step" id="step1"></div>
-        <div class="stage-step" id="step2"></div>
-        <div class="stage-step" id="step3"></div>
-      </div>
-      <div class="stage-label" id="stageLabel">Stage 1 — Collecting inputs</div>
+      <div class="state-title"><div class="state-dot"></div>Trip State</div>
+      <div id="stateContent"></div>
     </div>
-
-    <!-- Trip State -->
-    <div class="state-card">
-      <div class="state-title"><div class="state-title-dot"></div>Trip State (localStorage)</div>
-      <div class="state-fields" id="stateFields">
-        <div class="state-field"><div class="field-key">status</div><div class="field-val">free</div></div>
-        <div class="state-field"><div class="field-key">stage</div><div class="field-val">matching</div></div>
-        <div class="state-field"><div class="field-key">origin_city</div><div class="field-val empty">—</div></div>
-        <div class="state-field"><div class="field-key">budget</div><div class="field-val empty">—</div></div>
-        <div class="state-field"><div class="field-key">num_travelers</div><div class="field-val empty">—</div></div>
-        <div class="state-field"><div class="field-key">travel_month</div><div class="field-val empty">—</div></div>
-        <div class="state-field"><div class="field-key">duration_nights</div><div class="field-val empty">—</div></div>
-        <div class="state-field"><div class="field-key">trip_goal</div><div class="field-val empty">—</div></div>
-      </div>
-    </div>
-
-    <!-- Missing required -->
-    <div class="state-card">
-      <div class="state-title"><div class="state-title-dot"></div>Required inputs</div>
-      <div class="missing-list" id="missingList">
-        <div class="missing-item" id="req-origin_city">origin_city</div>
-        <div class="missing-item" id="req-budget">budget</div>
-        <div class="missing-item" id="req-num_travelers">num_travelers</div>
-        <div class="missing-item" id="req-travel_month">travel_month</div>
-        <div class="missing-item" id="req-duration_nights">duration_nights</div>
-        <div class="missing-item" id="req-trip_goal">trip_goal</div>
-      </div>
-    </div>
-
-    <!-- API log -->
-    <div class="state-card">
-      <div class="state-title"><div class="state-title-dot"></div>API calls</div>
-      <div class="api-log" id="apiLog">
-        <div class="api-entry" style="color:var(--ink-faint);font-family:'DM Sans',sans-serif;font-size:12px;">No calls yet</div>
-      </div>
-    </div>
-
   </div>
+
 </div>
 
 <script>
-// ── Trip State ──────────────────────────────────────────────────────────────
-let tripState = {
-  version: "1.0",
-  status: "free",
-  stage: "matching",
-  destination_confirmed: false,
-  matcher_inputs: {},
-  destination: { type: null, name: null, destination_id: null, shortlist_considered: [] }
+// ── TripState ────────────────────────────────────────────────────────────────
+const DEFAULT_STATE = {
+  trip_id: 'trip_' + Math.random().toString(36).slice(2, 8),
+  status: 'free',
+  stage: 'matching',
+  trip_context: {
+    required_inputs: {
+      origin_city: null,
+      budget: null,
+      budget_unit: null,
+      duration_nights: null,
+      num_travelers: null,
+      travel_month: null
+    },
+    preferences: {},
+    selected_option: null
+  },
+  matcher_state: {
+    generate_ready: false,
+    conversation_context: {
+      last_scout_message: null,
+      awaiting: null
+    },
+    last_recommendations: null
+  },
+  planner_state: null
 };
-let conversation = [];
-let apiLogEl = document.getElementById('apiLog');
-let firstLog = true;
 
-function saveTripState() {
-  localStorage.setItem('twm_trip_state', JSON.stringify(tripState));
+let tripState;
+let busy = false;
+
+function loadState() {
+  const raw = localStorage.getItem('twm_trip_state_v2');
+  if (raw) { try { tripState = JSON.parse(raw); return; } catch(e) {} }
+  tripState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+}
+
+function saveState() {
+  localStorage.setItem('twm_trip_state_v2', JSON.stringify(tripState));
   renderSidebar();
 }
 
-// ── Mock Backend ────────────────────────────────────────────────────────────
-// Simulates the full Scout → Meridian → Scout/Present pipeline
-
-const REQUIRED_FIELDS = ['origin_city', 'budget', 'num_travelers', 'travel_month', 'duration_nights', 'trip_goal'];
-
-// Simple NLP extraction from user message
-function extractFromMessage(msg, existing) {
-  const delta = {};
-  const m = msg.toLowerCase();
-
-  // Origin city
-  if (!existing.origin_city) {
-    if (m.includes('bangalore') || m.includes('bengaluru')) delta.origin_city = 'Bengaluru';
-    else if (m.includes('mumbai')) delta.origin_city = 'Mumbai';
-    else if (m.includes('delhi')) delta.origin_city = 'Delhi';
-    else if (m.includes('chennai')) delta.origin_city = 'Chennai';
-    else if (m.includes('hyderabad')) delta.origin_city = 'Hyderabad';
+function deepMerge(target, source) {
+  for (const key of Object.keys(source)) {
+    if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      if (!target[key] || typeof target[key] !== 'object') target[key] = {};
+      deepMerge(target[key], source[key]);
+    } else {
+      target[key] = source[key];
+    }
   }
+}
 
-  // Travelers
-  if (!existing.num_travelers) {
-    const matchN = m.match(/(\d+)\s*(of us|friends|people|travelers|travellers|pax)/);
-    if (matchN) delta.num_travelers = parseInt(matchN[1]);
-    else if (m.includes('just me') || m.includes('solo')) delta.num_travelers = 1;
+function applyStateDelta(delta) {
+  // Per spec: deep-merge trip_context sections, replace matcher_state fields
+  if (delta.trip_context) {
+    if (delta.trip_context.required_inputs)
+      deepMerge(tripState.trip_context.required_inputs, delta.trip_context.required_inputs);
+    if (delta.trip_context.preferences)
+      deepMerge(tripState.trip_context.preferences, delta.trip_context.preferences);
+    if (delta.trip_context.selected_option !== undefined)
+      tripState.trip_context.selected_option = delta.trip_context.selected_option;
   }
+  if (delta.matcher_state) {
+    deepMerge(tripState.matcher_state, delta.matcher_state);
+  }
+}
 
-  // Budget
-  if (!existing.budget) {
+// ── Mock Backend ─────────────────────────────────────────────────────────────
+
+function mockScoutMessage(state, userMsg) {
+  const ri = state.trip_context.required_inputs;
+  const prefs = state.trip_context.preferences;
+  const m = userMsg.toLowerCase();
+
+  // Extract from message
+  const delta = { trip_context: { required_inputs: {}, preferences: {} }, matcher_state: { conversation_context: {} } };
+
+  if (!ri.origin_city) {
+    if (m.includes('bangalore') || m.includes('bengaluru')) delta.trip_context.required_inputs.origin_city = 'Bengaluru';
+    else if (m.includes('mumbai')) delta.trip_context.required_inputs.origin_city = 'Mumbai';
+    else if (m.includes('delhi')) delta.trip_context.required_inputs.origin_city = 'Delhi';
+    else if (m.includes('chennai')) delta.trip_context.required_inputs.origin_city = 'Chennai';
+  }
+  if (!ri.num_travelers) {
+    const n = m.match(/(\d+)\s*(friends|of us|people|pax)/);
+    if (n) delta.trip_context.required_inputs.num_travelers = parseInt(n[1]);
+    else if (m.includes('solo') || m.includes('just me')) delta.trip_context.required_inputs.num_travelers = 1;
+  }
+  if (!ri.budget) {
     const budgetMatch = m.match(/(?:₹|rs\.?|inr)?\s*(\d[\d,]*)\s*k?\s*(?:total|per person|each|budget)?/i);
     if (budgetMatch) {
       let amt = parseInt(budgetMatch[1].replace(/,/g, ''));
-      if (m.includes('k') || m.match(/\d+k/)) amt = amt * 1000;
-      if (amt > 500) { // reasonable budget
-        delta.budget = amt;
-        delta.budget_unit = m.includes('per person') || m.includes('each') ? 'per_person' : 'total';
+      if (m.match(/\d+k/)) amt *= 1000;
+      if (amt > 500) {
+        delta.trip_context.required_inputs.budget = amt;
+        delta.trip_context.required_inputs.budget_unit = (m.includes('per person') || m.includes('each')) ? 'per_person' : 'total';
       }
     }
   }
-
-  // Month
-  if (!existing.travel_month) {
+  if (!ri.travel_month) {
     const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
     for (const mo of months) {
-      if (m.includes(mo)) { delta.travel_month = mo.charAt(0).toUpperCase() + mo.slice(1); break; }
+      if (m.includes(mo)) { delta.trip_context.required_inputs.travel_month = mo.charAt(0).toUpperCase()+mo.slice(1); break; }
     }
   }
-
-  // Duration
-  if (!existing.duration_nights) {
+  if (!ri.duration_nights) {
     const nights = m.match(/(\d+)\s*nights?/);
-    if (nights) delta.duration_nights = parseInt(nights[1]);
+    if (nights) delta.trip_context.required_inputs.duration_nights = parseInt(nights[1]);
     const days = m.match(/(\d+)\s*days?/);
-    if (days && !nights) delta.duration_nights = parseInt(days[1]) - 1;
+    if (days && !nights) delta.trip_context.required_inputs.duration_nights = parseInt(days[1]) - 1;
   }
 
-  // Trip goal
-  if (!existing.trip_goal) {
-    if (m.includes('bachelorette')) delta.trip_goal = 'Bachelorette';
-    else if (m.includes('honeymoon')) delta.trip_goal = 'Honeymoon';
-    else if (m.includes('family')) delta.trip_goal = 'Family';
-    else if (m.includes('adventure')) delta.trip_goal = 'Adventure';
-    else if (m.includes('relaxation') || m.includes('relax') || m.includes('chill')) delta.trip_goal = 'Relaxation';
-    else if (m.includes('workation')) delta.trip_goal = 'Workation';
+  if (!prefs.trip_goal) {
+    if (m.includes('bachelorette')) delta.trip_context.preferences.trip_goal = { value: 'Bachelorette', confidence: 'explicit' };
+    else if (m.includes('honeymoon')) delta.trip_context.preferences.trip_goal = { value: 'Honeymoon', confidence: 'explicit' };
+    else if (m.includes('family')) delta.trip_context.preferences.trip_goal = { value: 'Family', confidence: 'explicit' };
+    else if (m.includes('adventure')) delta.trip_context.preferences.trip_goal = { value: 'Adventure', confidence: 'explicit' };
+    else if (m.includes('relax') || m.includes('chill')) delta.trip_context.preferences.trip_goal = { value: 'Relaxation', confidence: 'explicit' };
   }
+  if (!prefs.group_type && (m.includes('friends') || m.includes('squad'))) delta.trip_context.preferences.group_type = 'friends';
+  if (m.includes('avoid crowd') || m.includes('less crowd') || m.includes('quiet'))
+    delta.trip_context.preferences.crowd_tolerance = { value: 'low', confidence: 'high' };
 
-  // Crowd preference
-  if (m.includes('avoid crowd') || m.includes('less crowd') || m.includes('quiet')) {
-    delta.crowd_preference = 'avoid_crowds';
-  }
+  // Merge delta to see updated state
+  const updatedRi = { ...ri, ...delta.trip_context.required_inputs };
+  const requiredKeys = ['origin_city', 'budget', 'num_travelers', 'travel_month', 'duration_nights'];
+  const allFilled = requiredKeys.every(k => updatedRi[k] != null);
+  const hasGoal = !!(prefs.trip_goal || delta.trip_context.preferences.trip_goal);
 
-  return delta;
-}
+  // Check confirmation
+  const confirmWords = ["go with","let's do","confirm","pondi","pondicherry it","that works","sounds perfect","first one","i choose","book it"];
+  const isConfirm = confirmWords.some(w => m.includes(w)) && state.matcher_state.last_recommendations;
 
-function getMissing(inputs) {
-  return REQUIRED_FIELDS.filter(f => !inputs[f]);
-}
-
-function scoutReply(msg, inputs, missing) {
-  const m = msg.toLowerCase();
-
-  // Confirmation detection
-  const confirmPatterns = ['go with','let\'s do','i choose','confirm','that works','sounds perfect','pondi','pondicherry it','first one'];
-  const isConfirm = confirmPatterns.some(p => m.includes(p));
-  if (isConfirm && missing.length === 0) {
+  if (isConfirm) {
+    const destId = 'pondicherry_puducherry';
     return {
-      type: 'confirm',
-      message: "Pondicherry it is! Great choice for September — the French Quarter cafés and boutique stays will suit your group perfectly. I'll set that as your destination.",
-      confirmed_destination: {
-        name: 'Pondicherry',
-        destination_id: 'pondicherry_puducherry',
-        type: 'single',
-        confirmed_via: 'matcher',
-        why_it_matched: 'Fits budget, bachelorette vibe, and shoulder-season crowds'
-      }
+      message: "Pondicherry it is. I'll lock that in — perfect fit for your group in September.",
+      state_delta: {
+        trip_context: { required_inputs: {}, preferences: {}, selected_option: { type: 'destination', id: destId } },
+        matcher_state: { generate_ready: false, conversation_context: { last_scout_message: "Pondicherry it is.", awaiting: null } }
+      },
+      stage: 'matched',
+      generate_ready: false,
+      confirmed_destination: { type: 'destination', id: destId }
     };
   }
 
-  // Refinement — user asks to change something
-  if (missing.length === 0 && (m.includes('october') || m.includes('change') || m.includes('instead') || m.includes('closer'))) {
-    return { type: 'refinement', message: "Got it — let me find updated options with that change." };
+  // "Nothing else" or similar → mark ready
+  const nothingElse = m.includes('nothing') || m.includes('that\'s all') || m.includes("that's it") || m.includes("we're good") || m.includes("go ahead") || m.includes("looks good");
+  if (nothingElse && allFilled) {
+    delta.matcher_state.generate_ready = true;
+    delta.matcher_state.conversation_context = { last_scout_message: "Perfect — I have everything I need. Ready to find recommendations when you are.", awaiting: null };
+    return {
+      message: "Perfect — I have everything I need. Ready to find recommendations when you are.",
+      state_delta: delta,
+      stage: 'ready',
+      generate_ready: true,
+      confirmed_destination: null
+    };
   }
 
-  // Collect missing inputs
-  const field = missing[0];
+  // Still collecting
+  const missing = requiredKeys.filter(k => updatedRi[k] == null);
   const prompts = {
-    origin_city: "What city are you flying or departing from?",
+    origin_city: "What city are you travelling from?",
     num_travelers: "How many people are going?",
-    budget: "What's your total budget for the trip? (In ₹ if possible)",
-    travel_month: "Which month are you thinking of travelling?",
-    duration_nights: "How many nights? A long weekend (2–3), or more?",
-    trip_goal: "What's the vibe you're going for — relaxation, bachelorette, adventure, something else?"
+    budget: "What's your total budget? (Rough ₹ estimate works)",
+    travel_month: "Which month are you thinking of?",
+    duration_nights: "How many nights are you planning for?"
   };
 
-  if (field) {
-    return { type: 'collect', message: prompts[field] };
+  let message, awaiting;
+  if (missing.length > 0) {
+    awaiting = missing[0];
+    message = prompts[awaiting];
+  } else if (!hasGoal) {
+    awaiting = 'trip_goal';
+    message = "What's the vibe — bachelorette, relaxation, adventure, something else?";
+  } else {
+    // All done — ask anything else
+    awaiting = 'additional_preferences';
+    message = `Got everything I need. Anything else you'd like me to factor in — crowd preferences, travel style, must-haves?`;
+    delta.matcher_state.generate_ready = false;
   }
 
-  // All collected — bridging message
+  delta.matcher_state.conversation_context = { last_scout_message: message, awaiting };
+
+  // Acknowledge what was just extracted
+  const extracted = Object.values(delta.trip_context.required_inputs).filter(v => v != null);
+  const prefExtracted = Object.keys(delta.trip_context.preferences).length > 0;
+  let ack = '';
+  if (extracted.length > 0 || prefExtracted) {
+    const parts = [];
+    if (delta.trip_context.required_inputs.origin_city) parts.push(`starting from ${delta.trip_context.required_inputs.origin_city}`);
+    if (delta.trip_context.required_inputs.num_travelers) parts.push(`${delta.trip_context.required_inputs.num_travelers} people`);
+    if (delta.trip_context.required_inputs.budget) parts.push(`₹${delta.trip_context.required_inputs.budget.toLocaleString('en-IN')} ${delta.trip_context.required_inputs.budget_unit || ''}`);
+    if (delta.trip_context.required_inputs.travel_month) parts.push(delta.trip_context.required_inputs.travel_month);
+    if (delta.trip_context.required_inputs.duration_nights) parts.push(`${delta.trip_context.required_inputs.duration_nights} nights`);
+    if (prefExtracted) parts.push(delta.trip_context.preferences.trip_goal?.value || '');
+    if (parts.filter(Boolean).length > 0) ack = `Got it — ${parts.filter(Boolean).join(', ')}. `;
+  }
+
   return {
-    type: 'bridge',
-    message: `Perfect — I have everything I need. Looking up destinations that match your trip from ${inputs.origin_city} for ${inputs.num_travelers} in ${inputs.travel_month}...`
+    message: ack + message,
+    state_delta: delta,
+    stage: 'matching',
+    generate_ready: false,
+    confirmed_destination: null
   };
 }
 
-function mockMeridian(inputs) {
-  // Returns structured recommendations based on inputs
+function mockMeridian(tripContext) {
+  const ri = tripContext.required_inputs;
+  const n = ri.num_travelers || 3;
+  const budget = ri.budget || 30000;
+  const pp = Math.round(budget / n);
+
   return {
     status: 'SUCCESS',
     trip_type: 'single',
-    budget_basis: {
-      total: inputs.budget,
-      per_person: Math.round(inputs.budget / inputs.num_travelers),
-      num_travelers: inputs.num_travelers
-    },
+    budget_basis: { total: budget, per_person: pp, num_travelers: n },
     options: [
       {
-        rank: 1,
-        name: 'Pondicherry',
-        destination_id: 'pondicherry_puducherry',
-        per_person_total: Math.round(inputs.budget / inputs.num_travelers * 0.98),
-        group_total: Math.round(inputs.budget * 0.98),
-        reason_short: 'Boutique cafés, beachside celebrations, shoulder-season quiet',
-        vibe: 'French Quarter charm · Relaxed nightlife · Aesthetic stays'
+        rank: 1, type: 'single', name: 'Pondicherry', destination_id: 'pondicherry_puducherry',
+        match_sections: [
+          {
+            type: 'budget', heading: `Fits your ₹${budget.toLocaleString('en-IN')} budget`,
+            stay: { per_night_per_person: 2000, nights: ri.duration_nights || 3, total: 2000*(ri.duration_nights||3)*n, note: 'Boutique guesthouses in White Town' },
+            food: { per_day_per_person: 600, days: (ri.duration_nights||3)+1, total: 600*((ri.duration_nights||3)+1)*n },
+            travel: { per_person: 2000, total: 2000*n, description: 'Bus or train round trip from Bengaluru' },
+            activities: { per_person: 800, total: 800*n, description: 'Café hopping, beach time, one spa session' },
+            per_person_total: Math.round(pp*0.98), group_total: Math.round(budget*0.98),
+            budget_given: budget, verdict: 'Just within budget without cutting on comfort'
+          },
+          {
+            type: 'trip_goal', heading: 'Works well for a bachelorette-style friend trip',
+            points: ['Boutique stays and aesthetic cafés', 'Beachside brunches and rooftop sunset spots', 'Easygoing bar scene — celebratory without overwhelming']
+          },
+          {
+            type: 'crowd_preference', heading: `Quieter than usual in ${ri.travel_month || 'September'}`,
+            points: ['Shoulder season — tourist volume drops', 'Better availability across stays and restaurants']
+          },
+          {
+            type: 'weather', heading: 'Some rain expected — plan flexibly', contextual: true,
+            points: ['Warm and humid with intermittent showers', 'Rain usually short bursts — beach time still possible']
+          }
+        ],
+        tradeoffs: [
+          { point: 'Rain may interrupt beach plans', affects: 'trip_goal' },
+          { point: 'Nightlife is low-key — no large clubs', affects: 'trip_goal' }
+        ]
       },
       {
-        rank: 2,
-        name: 'Coorg',
-        destination_id: 'coorg_karnataka',
-        per_person_total: Math.round(inputs.budget / inputs.num_travelers * 0.85),
-        group_total: Math.round(inputs.budget * 0.85),
-        reason_short: 'Shorter drive, misty hills, intimate stay-based celebration',
-        vibe: 'Estates & spas · Misty hills · Quieter crowds'
+        rank: 2, type: 'single', name: 'Coorg', destination_id: 'coorg_karnataka',
+        match_sections: [
+          { type: 'budget', heading: `₹${Math.round(budget*0.82).toLocaleString('en-IN')} of your budget`, per_person_total: Math.round(pp*0.82), group_total: Math.round(budget*0.82), verdict: 'Budget-comfortable with headroom' },
+          { type: 'trip_goal', heading: 'Intimate stay-based celebration', points: ['Estate & spa stays suit small groups', 'Misty hills, coffee-garden walks'] },
+        ],
+        tradeoffs: [{ point: 'Limited nightlife options', affects: 'trip_goal' }]
       },
       {
-        rank: 3,
-        name: 'Gokarna',
-        destination_id: 'gokarna_karnataka',
-        per_person_total: Math.round(inputs.budget / inputs.num_travelers * 0.72),
-        group_total: Math.round(inputs.budget * 0.72),
-        reason_short: 'Most affordable, least crowded, relaxed beach energy',
-        vibe: 'Secluded beaches · Hippie-chill · Budget headroom'
+        rank: 3, type: 'single', name: 'Gokarna', destination_id: 'gokarna_karnataka',
+        match_sections: [
+          { type: 'budget', heading: `₹${Math.round(budget*0.68).toLocaleString('en-IN')} — most affordable`, per_person_total: Math.round(pp*0.68), group_total: Math.round(budget*0.68), verdict: 'Significant budget headroom' },
+          { type: 'crowd_preference', heading: 'Least crowded of the three', points: ['Secluded coves and quiet beaches', 'Hippie-chill energy'] }
+        ],
+        tradeoffs: [{ point: 'Longer travel from Bengaluru (~8 hrs)', affects: 'logistics' }]
       }
     ],
     final_recommendation: {
-      best_match: 'Pondicherry',
-      best_match_reason: 'Best balance of bachelorette vibe, manageable travel, and shoulder-season quiet'
+      best_match: 'Pondicherry', best_match_reason: 'Best balance of bachelorette vibe, manageable travel, shoulder-season quiet',
+      alternative_1: 'Coorg', alternative_1_reason: 'Shorter travel, more intimate celebration stay',
+      alternative_2: 'Gokarna', alternative_2_reason: 'Most affordable, least crowded'
+    },
+    refinement_hooks: {
+      weakest_scoring_factor: 'Seasonality — all three carry rain risk',
+      budget_headroom: 'comfortable',
+      seasonality_note: `${ri.travel_month || 'September'} is monsoon or shoulder for all three options`
     }
   };
 }
 
-function scoutPresent(meridianOutput, inputs) {
+function mockScoutPresent(state, meridianOutput, context) {
+  const ri = state.trip_context.required_inputs;
+  const n = ri.num_travelers || 3;
+  const budget = ri.budget || 30000;
+  const pp = Math.round(budget / n);
   const opts = meridianOutput.options;
-  const budget = inputs.budget;
-  const perPerson = Math.round(budget / inputs.num_travelers);
+  const prefix = context === 'refinement' ? "Updated results based on your changes. " : "";
+  const msg = `${prefix}Found three options that work. **Pondicherry** comes up top — fits your ₹${budget.toLocaleString('en-IN')} budget at about ₹${pp.toLocaleString('en-IN')} per person, right bachelorette energy with boutique cafés and a relaxed beach scene, and ${ri.travel_month || 'September'} keeps crowds down. Rain is something to plan around, but usually short bursts. Want me to walk through all three, or does Pondicherry feel right?`;
+
   return {
-    message: `Found three options that work for your trip. **Pondicherry** comes up first — it fits your ₹${budget.toLocaleString('en-IN')} budget cleanly (about ₹${perPerson.toLocaleString('en-IN')} per person), has the right bachelorette energy with boutique cafés and a relaxed beach scene, and ${inputs.travel_month} keeps the tourist crowds down. Want me to walk through why it ranks first, or would you rather compare all three?`,
-    shortlist: opts.map(o => o.destination_id),
+    message: msg,
+    state_delta: {
+      trip_context: { required_inputs: {}, preferences: {} },
+      matcher_state: {
+        generate_ready: false,
+        conversation_context: { last_scout_message: msg, awaiting: 'user_response_to_recommendations' },
+        last_recommendations: {
+          options: opts.map(o => o.destination_id),
+          best_match: 'pondicherry_puducherry',
+          generated_at: new Date().toISOString(),
+          meridian_output: meridianOutput
+        }
+      }
+    },
+    stage: 'ready',
+    generate_ready: false,
+    confirmed_destination: null,
     options: opts
   };
 }
 
-// ── API Logging ─────────────────────────────────────────────────────────────
-function logApi(type, label) {
-  if (firstLog) { apiLogEl.innerHTML = ''; firstLog = false; }
-  const el = document.createElement('div');
-  el.className = `api-entry ${type}`;
-  el.textContent = label;
-  el.id = 'log-' + Date.now();
-  apiLogEl.appendChild(el);
-  return el.id;
-}
-
-// ── Rendering ────────────────────────────────────────────────────────────────
+// ── Render sidebar (Trip State only) ─────────────────────────────────────────
 function renderSidebar() {
-  const inputs = tripState.matcher_inputs;
-  const fields = ['origin_city','budget','num_travelers','travel_month','duration_nights','trip_goal'];
-  const container = document.getElementById('stateFields');
-  container.innerHTML = `
-    <div class="state-field"><div class="field-key">status</div><div class="field-val">${tripState.status}</div></div>
-    <div class="state-field"><div class="field-key">stage</div><div class="field-val">${tripState.stage}</div></div>
-  `;
-  fields.forEach(f => {
-    const val = inputs[f];
-    const div = document.createElement('div');
-    div.className = 'state-field';
-    div.innerHTML = `<div class="field-key">${f}</div><div class="field-val${val ? '' : ' empty'}">${val !== undefined && val !== null ? (f === 'budget' ? '₹' + val.toLocaleString('en-IN') : val) : '—'}</div>`;
-    container.appendChild(div);
+  const ri = tripState.trip_context.required_inputs;
+  const prefs = tripState.trip_context.preferences;
+  const ms = tripState.matcher_state;
+
+  let html = '';
+
+  // Top-level
+  html += '<div class="state-section-label">Root</div><div class="state-fields">';
+  html += field('trip_id', tripState.trip_id);
+  html += field('status', tripState.status);
+  html += field('stage', tripState.stage);
+  html += '</div>';
+
+  // required_inputs
+  html += '<div class="state-section-label">trip_context.required_inputs</div><div class="state-fields">';
+  ['origin_city','budget','budget_unit','num_travelers','travel_month','duration_nights'].forEach(k => {
+    const v = ri[k];
+    html += field(k, v != null ? (k === 'budget' ? '₹'+v.toLocaleString('en-IN') : String(v)) : null);
   });
+  html += field('selected_option', tripState.trip_context.selected_option ? tripState.trip_context.selected_option.id : null);
+  html += '</div>';
 
-  // Missing list
-  const missing = getMissing(inputs);
-  REQUIRED_FIELDS.forEach(f => {
-    const el = document.getElementById('req-' + f);
-    if (el) el.className = 'missing-item' + (missing.includes(f) ? '' : ' done');
-  });
-
-  // Stage pill & progress
-  const stage = tripState.stage;
-  const pill = document.getElementById('stagePill');
-  const label = document.getElementById('stageLabel');
-  const steps = [document.getElementById('step0'), document.getElementById('step1'), document.getElementById('step2'), document.getElementById('step3')];
-
-  if (tripState.destination_confirmed) {
-    pill.textContent = 'Destination confirmed';
-    label.textContent = 'Stage 4 — Confirmed';
-    steps.forEach((s, i) => { s.className = 'stage-step done'; });
-  } else if (stage === 'matched') {
-    pill.textContent = 'Confirming';
-    label.textContent = 'Stage 4 — Awaiting confirmation';
-    steps.forEach((s, i) => { s.className = i <= 2 ? 'stage-step done' : 'stage-step active'; });
-  } else if (missing.length === 0) {
-    pill.textContent = 'Recommendations shown';
-    label.textContent = 'Stage 3 — Presenting options';
-    steps.forEach((s, i) => { s.className = i <= 1 ? 'stage-step done' : 'stage-step active'; });
+  // preferences
+  html += '<div class="state-section-label">trip_context.preferences</div>';
+  const prefKeys = Object.keys(prefs);
+  if (prefKeys.length === 0) {
+    html += '<div style="font-size:11px;color:var(--ink-faint);margin-bottom:4px;">—</div>';
   } else {
-    pill.textContent = 'Collecting inputs';
-    label.textContent = 'Stage 1 — Input collection';
-    steps[0].className = 'stage-step active';
-    steps.slice(1).forEach(s => s.className = 'stage-step');
+    html += '<div class="state-fields">';
+    prefKeys.forEach(k => {
+      const v = prefs[k];
+      const display = typeof v === 'object' && v.value ? `${v.value} (${v.confidence})` : (Array.isArray(v) ? v.join(', ') : String(v));
+      html += field(k, display);
+    });
+    html += '</div>';
   }
+
+  // matcher_state
+  html += '<div class="state-section-label">matcher_state</div><div class="state-fields">';
+  html += boolField('generate_ready', ms.generate_ready);
+  html += field('awaiting', ms.conversation_context?.awaiting);
+  html += field('last_recs', ms.last_recommendations ? ms.last_recommendations.options?.join(', ') : null);
+  html += '</div>';
+
+  document.getElementById('stateContent').innerHTML = html;
 }
 
-function appendMessage(role, content, extra) {
+function field(key, value) {
+  const empty = value == null || value === '';
+  return `<div class="state-field"><div class="field-key">${key}</div><div class="field-val${empty ? ' empty' : ''}">${empty ? '—' : value}</div></div>`;
+}
+function boolField(key, value) {
+  return `<div class="state-field"><div class="field-key">${key}</div><div class="field-val ${value ? 'true-val' : 'false-val'}">${value ? 'true' : 'false'}</div></div>`;
+}
+
+// ── Chat helpers ──────────────────────────────────────────────────────────────
+function appendMsg(role, content, extra) {
   const msgs = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = `msg ${role}`;
@@ -716,35 +790,38 @@ function appendMessage(role, content, extra) {
   bubble.className = 'bubble';
 
   if (role === 'assistant' && extra?.options) {
-    // Render recommendation cards
-    let html = `<div style="margin-bottom:10px;font-size:14.5px;line-height:1.6;">${content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`;
-    html += `<div class="reco-cards">`;
+    let html = `<div style="margin-bottom:12px;">${md(content)}</div><div class="reco-cards">`;
     extra.options.forEach(opt => {
       html += `<div class="reco-card">
-        <div class="reco-card-head">
-          <div class="rank-badge">${opt.rank}</div>
-          <div class="reco-name">${opt.name}</div>
-        </div>
-        <div class="reco-reason">${opt.reason_short}</div>
-        <div style="font-size:12px;color:var(--ink-muted);margin-top:4px;">${opt.vibe}</div>
-        <div class="reco-budget">₹${opt.per_person_total.toLocaleString('en-IN')} / person · ₹${opt.group_total.toLocaleString('en-IN')} total</div>
-        ${opt.rank === 1 ? `<br><button class="confirm-btn" onclick="quickConfirm('${opt.name}')">Confirm ${opt.name} →</button>` : ''}
-      </div>`;
+        <div class="reco-head"><div class="rank-badge">${opt.rank}</div><div class="reco-name">${opt.name}</div></div>`;
+      opt.match_sections.forEach(sec => {
+        html += `<div class="match-section" style="margin-top:8px;"><div class="match-heading">${sec.heading}</div>`;
+        if (sec.points) {
+          html += `<ul class="match-points">${sec.points.map(p=>`<li>${p}</li>`).join('')}</ul>`;
+        }
+        if (sec.per_person_total) {
+          html += `<div class="budget-row">
+            <span class="budget-chip">₹${sec.per_person_total.toLocaleString('en-IN')} / person</span>
+            ${sec.group_total ? `<span class="budget-chip">₹${sec.group_total.toLocaleString('en-IN')} total</span>` : ''}
+            ${sec.verdict ? `<span class="budget-chip" style="background:var(--green-light);color:var(--green);">${sec.verdict}</span>` : ''}
+          </div>`;
+        }
+        html += `</div>`;
+      });
+      if (opt.tradeoffs?.length) {
+        html += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>`;
+        opt.tradeoffs.forEach(t => { html += `<div class="tradeoff-item">${t.point}</div>`; });
+        html += `</div>`;
+      }
+      if (opt.rank === 1) {
+        html += `<button class="confirm-btn" onclick="quickConfirm('${opt.name}')">Confirm ${opt.name} →</button>`;
+      }
+      html += `</div>`;
     });
     html += `</div>`;
     bubble.innerHTML = html;
-  } else if (role === 'assistant' && extra?.confirmed) {
-    bubble.innerHTML = `<div style="margin-bottom:10px;">${content}</div>
-      <div class="confirmed-banner">
-        <div class="confirmed-icon">✓</div>
-        <div>
-          <div class="confirmed-label">Destination confirmed</div>
-          <div class="confirmed-dest">${extra.confirmed.name}</div>
-          <div class="confirmed-why">${extra.confirmed.why_it_matched}</div>
-        </div>
-      </div>`;
   } else {
-    bubble.innerHTML = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    bubble.innerHTML = md(content);
   }
 
   div.appendChild(av);
@@ -753,128 +830,91 @@ function appendMessage(role, content, extra) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+function md(text) {
+  return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+}
+
 function showTyping() {
   const msgs = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'msg assistant';
-  div.id = 'typing-indicator';
-  div.innerHTML = `
-    <div class="avatar scout">S</div>
-    <div class="bubble">
-      <div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
-    </div>`;
+  div.id = 'typing-ind';
+  div.innerHTML = `<div class="avatar scout">S</div><div class="bubble"><div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
 }
+function removeTyping() { document.getElementById('typing-ind')?.remove(); }
 
-function removeTyping() {
-  const el = document.getElementById('typing-indicator');
-  if (el) el.remove();
-}
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function showLoader(text) {
-  const msgs = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = 'msg assistant';
-  div.id = 'loader-indicator';
-  div.innerHTML = `
-    <div class="avatar scout">S</div>
-    <div class="bubble" style="background:var(--accent-light);border-color:var(--accent);color:var(--accent-dim);font-size:13px;">
-      <div class="typing-bubble"><div class="dot" style="background:var(--accent)"></div><div class="dot" style="background:var(--accent)"></div><div class="dot" style="background:var(--accent)"></div></div>
-      <span style="margin-left:6px;">${text}</span>
-    </div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-function removeLoader() {
-  const el = document.getElementById('loader-indicator');
-  if (el) el.remove();
-}
-
-// ── Main flow ────────────────────────────────────────────────────────────────
+// ── Handlers ──────────────────────────────────────────────────────────────────
 async function handleSend() {
   const input = document.getElementById('userInput');
   const msg = input.value.trim();
-  if (!msg) return;
-
+  if (!msg || busy) return;
+  busy = true;
   input.value = '';
   input.style.height = 'auto';
-  document.getElementById('sendBtn').disabled = true;
+  setSendDisabled(true);
 
-  appendMessage('user', msg);
-  conversation.push({ role: 'user', content: msg });
-
-  // ── Stage 1: Scout/message ──
+  appendMsg('user', msg);
   showTyping();
-  const logId1 = logApi('pending', '→ POST /api/scout/message');
 
-  await delay(700 + Math.random() * 400);
+  await delay(600 + Math.random() * 400);
 
-  // Extract from message
-  const delta = extractFromMessage(msg, tripState.matcher_inputs);
-  Object.assign(tripState.matcher_inputs, delta);
-  saveTripState();
+  // POST /api/scout/message (mocked)
+  const res = mockScoutMessage(tripState, msg);
 
-  const missing = getMissing(tripState.matcher_inputs);
-  const sufficient = missing.length === 0;
-  const reply = scoutReply(msg, tripState.matcher_inputs, missing);
+  applyStateDelta(res.state_delta);
+  tripState.stage = res.stage;
+  tripState.matcher_state.generate_ready = res.generate_ready;
 
-  updateLog(logId1, 'ok', `✓ /scout/message → ${sufficient ? 'inputs_sufficient: true' : `missing: ${missing.slice(0,2).join(', ')}${missing.length > 2 ? '…' : ''}`}`);
+  if (res.confirmed_destination) {
+    tripState.trip_context.selected_option = res.confirmed_destination;
+  }
 
+  saveState();
   removeTyping();
+  appendMsg('assistant', res.message);
 
-  // Handle confirmation
-  if (reply.type === 'confirm') {
-    appendMessage('assistant', reply.message, { confirmed: reply.confirmed_destination });
-    conversation.push({ role: 'assistant', content: reply.message });
-    tripState.destination = {
-      ...reply.confirmed_destination,
-      shortlist_considered: tripState.destination.shortlist_considered
-    };
-    tripState.destination_confirmed = true;
-    tripState.stage = 'matched';
-    saveTripState();
-    document.getElementById('sendBtn').disabled = false;
-    return;
+  // Show / hide generate button
+  const gw = document.getElementById('generateWrap');
+  if (res.generate_ready) {
+    gw.classList.add('visible');
+  } else {
+    gw.classList.remove('visible');
   }
 
-  if (!sufficient) {
-    // Still collecting
-    appendMessage('assistant', reply.message);
-    conversation.push({ role: 'assistant', content: reply.message });
-    document.getElementById('sendBtn').disabled = false;
-    return;
-  }
+  busy = false;
+  setSendDisabled(false);
+}
 
-  // ── Stage 2: Show bridge + call Meridian ──
-  appendMessage('assistant', reply.message);
-  conversation.push({ role: 'assistant', content: reply.message });
+async function handleGenerate() {
+  if (busy) return;
+  busy = true;
+  const gBtn = document.getElementById('generateBtn');
+  gBtn.disabled = true;
+  gBtn.textContent = 'Finding matches…';
 
-  await delay(300);
-  showLoader('Searching destinations…');
+  // POST /api/meridian/match (mocked)
+  await delay(900 + Math.random() * 400);
+  const meridianOut = mockMeridian(tripState.trip_context);
 
-  const logId2 = logApi('pending', '→ POST /api/meridian/match');
-  await delay(1200 + Math.random() * 500);
+  // POST /api/scout/present (mocked)
+  await delay(500 + Math.random() * 300);
+  const presentRes = mockScoutPresent(tripState, meridianOut, 'first_presentation');
 
-  const meridianOutput = mockMeridian(tripState.matcher_inputs);
-  updateLog(logId2, 'ok', `✓ /meridian/match → ${meridianOutput.options.length} options found`);
+  applyStateDelta(presentRes.state_delta);
+  tripState.stage = presentRes.stage;
+  tripState.matcher_state.generate_ready = presentRes.generate_ready;
+  saveState();
 
-  tripState.destination.shortlist_considered = meridianOutput.options.map(o => o.destination_id);
+  document.getElementById('generateWrap').classList.remove('visible');
+  appendMsg('assistant', presentRes.message, { options: presentRes.options });
 
-  // ── Stage 3: Scout/present ──
-  const logId3 = logApi('pending', '→ POST /api/scout/present');
-  await delay(600 + Math.random() * 300);
-
-  const presentation = scoutPresent(meridianOutput, tripState.matcher_inputs);
-  updateLog(logId3, 'ok', `✓ /scout/present → first_presentation`);
-
-  removeLoader();
-  appendMessage('assistant', presentation.message, { options: meridianOutput.options });
-  conversation.push({ role: 'assistant', content: presentation.message });
-
-  saveTripState();
-  document.getElementById('sendBtn').disabled = false;
+  busy = false;
+  gBtn.disabled = false;
+  gBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Generate Recommendations`;
 }
 
 function quickConfirm(name) {
@@ -887,37 +927,49 @@ function fillInput(text) {
   document.getElementById('userInput').focus();
 }
 
-function updateLog(id, type, text) {
-  const el = document.getElementById(id);
-  if (el) { el.className = `api-entry ${type}`; el.textContent = text; }
+function setSendDisabled(v) {
+  document.getElementById('sendBtn').disabled = v;
 }
 
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+function resetTrip() {
+  localStorage.removeItem('twm_trip_state_v2');
+  tripState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+  tripState.trip_id = 'trip_' + Math.random().toString(36).slice(2, 8);
+  saveState();
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('generateWrap').classList.remove('visible');
+  busy = false;
+  setSendDisabled(false);
+  setTimeout(() => {
+    appendMsg('assistant', "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest.");
+  }, 200);
+}
 
-// ── Auto-resize textarea ─────────────────────────────────────────────────────
+// ── Textarea auto-resize ───────────────────────────────────────────────────────
 document.getElementById('userInput').addEventListener('input', function() {
   this.style.height = 'auto';
   this.style.height = Math.min(this.scrollHeight, 120) + 'px';
 });
-
 document.getElementById('userInput').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    handleSend();
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
 });
 
-// ── Init ─────────────────────────────────────────────────────────────────────
-const stored = localStorage.getItem('twm_trip_state');
-if (stored) { try { tripState = JSON.parse(stored); } catch(e) {} }
-
+// ── Boot ──────────────────────────────────────────────────────────────────────
+loadState();
 renderSidebar();
 
-// Opening message
 setTimeout(() => {
-  appendMessage('assistant', "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest.");
-  conversation.push({ role: 'assistant', content: "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest." });
-}, 300);
+  const ctx = tripState.matcher_state.conversation_context;
+  if (ctx?.last_scout_message && tripState.stage !== 'new') {
+    // Resuming from localStorage
+    appendMsg('assistant', `Welcome back. ${ctx.last_scout_message}`);
+    if (tripState.matcher_state.generate_ready) {
+      document.getElementById('generateWrap').classList.add('visible');
+    }
+  } else {
+    appendMsg('assistant', "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest.");
+  }
+}, 250);
 </script>
 </body>
 </html>
