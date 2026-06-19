@@ -41,57 +41,79 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 24px;
+    padding: 12px 24px;
     border-bottom: 1px solid var(--border);
     background: var(--paper);
-    position: sticky; top: 0; z-index: 10;
+    position: sticky; top: 0; z-index: 20;
     gap: 12px;
   }
   .brand { display: flex; flex-direction: column; gap: 1px; }
-  .brand-name {
-    font-family: 'DM Serif Display', serif;
-    font-size: 17px;
-    letter-spacing: -0.01em;
-    color: var(--ink);
-    line-height: 1;
-  }
+  .brand-name { font-family: 'DM Serif Display', serif; font-size: 17px; letter-spacing: -0.01em; color: var(--ink); line-height: 1; }
   .brand-name span { color: var(--accent); }
-  .brand-tagline {
-    font-size: 11px;
-    color: var(--ink-faint);
-    font-weight: 400;
-    letter-spacing: 0.01em;
-  }
-  .header-right { display: flex; align-items: center; gap: 10px; }
+  .brand-tagline { font-size: 11px; color: var(--ink-faint); font-weight: 400; }
   .reset-btn {
-    font-size: 12px; font-weight: 500;
-    color: var(--ink-muted);
-    background: none;
-    border: 1px solid var(--border);
-    padding: 5px 12px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
-    transition: all 0.15s;
+    font-size: 12px; font-weight: 500; color: var(--ink-muted);
+    background: none; border: 1px solid var(--border);
+    padding: 5px 12px; border-radius: 20px; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; transition: all 0.15s;
     display: flex; align-items: center; gap: 5px;
   }
   .reset-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .reset-btn svg { width: 12px; height: 12px; }
+  .reset-btn svg { width: 11px; height: 11px; }
 
-  /* ── App layout ── */
+  /* ── Trip State bar (full width, below header) ── */
+  .state-bar {
+    width: 100%;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    align-items: flex-start;
+  }
+  .state-bar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 80px;
+  }
+  .state-bar-label {
+    font-size: 9px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-faint);
+  }
+  .state-bar-section {
+    display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  }
+  .state-chip {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; color: var(--ink);
+    background: var(--paper-warm);
+    padding: 2px 7px; border-radius: 4px;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .state-chip.empty { color: var(--ink-faint); background: none; border-color: transparent; font-family: 'DM Sans', sans-serif; font-style: italic; font-size: 10px; }
+  .state-chip.true-val { background: var(--green-light); color: var(--green); border-color: #b0d9be; }
+  .state-chip.false-val { background: var(--paper-warm); color: var(--ink-muted); }
+  .state-chip.stage-chip { background: var(--accent-light); color: var(--accent-dim); border-color: #e0c0a8; font-weight: 600; }
+  .state-divider { width: 1px; background: var(--border); align-self: stretch; margin: 0 4px; }
+
+  /* ── Main layout ── */
   .app {
     display: flex;
     flex: 1;
-    max-width: 1060px;
-    margin: 0 auto;
     width: 100%;
-    padding: 24px;
-    gap: 22px;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 20px 24px;
+    gap: 20px;
+    align-items: flex-start;
   }
 
   /* ── Chat panel ── */
   .chat-panel {
-    flex: 1;
+    flex: 0 0 420px;
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -102,246 +124,188 @@
     flex-direction: column;
     gap: 14px;
     overflow-y: auto;
-    min-height: 420px;
-    max-height: 540px;
+    height: 480px;
     padding-bottom: 8px;
   }
 
   .msg { display: flex; gap: 10px; animation: fadeUp 0.22s ease; }
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(5px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
   .msg.user { flex-direction: row-reverse; }
 
   .avatar {
-    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 700;
+    font-size: 11px; font-weight: 700;
   }
   .avatar.scout { background: var(--accent-light); color: var(--accent-dim); }
   .avatar.user-av { background: var(--ink); color: var(--paper); }
 
   .bubble {
-    max-width: 74%;
-    padding: 11px 15px;
+    max-width: 82%;
+    padding: 10px 14px;
     border-radius: var(--r);
-    font-size: 14px;
+    font-size: 13.5px;
     line-height: 1.65;
     border: 1px solid transparent;
   }
-  .msg.assistant .bubble {
-    background: var(--card);
-    border-color: var(--border);
-    box-shadow: var(--shadow);
-    border-bottom-left-radius: 4px;
-  }
-  .msg.user .bubble {
-    background: var(--ink);
-    color: var(--paper);
-    border-bottom-right-radius: 4px;
-  }
+  .msg.assistant .bubble { background: var(--card); border-color: var(--border); box-shadow: var(--shadow); border-bottom-left-radius: 4px; }
+  .msg.user .bubble { background: var(--ink); color: var(--paper); border-bottom-right-radius: 4px; }
 
   /* Typing */
-  .typing-bubble { display: flex; gap: 5px; align-items: center; padding: 12px 16px; }
-  .dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--ink-faint);
-    animation: pulse 1.2s ease infinite;
-  }
+  .typing-bubble { display: flex; gap: 5px; align-items: center; padding: 10px 14px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); animation: pulse 1.2s ease infinite; }
   .dot:nth-child(2) { animation-delay: 0.2s; }
   .dot:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes pulse {
-    0%,80%,100% { transform: scale(0.75); opacity: 0.45; }
-    40% { transform: scale(1); opacity: 1; }
-  }
+  @keyframes pulse { 0%,80%,100% { transform: scale(0.75); opacity: 0.45; } 40% { transform: scale(1); opacity: 1; } }
 
-  /* ── Generate button ── */
-  .generate-wrap {
-    display: none;
-    margin: 14px 0 2px 40px;
-    animation: fadeUp 0.25s ease;
-  }
+  /* Generate button */
+  .generate-wrap { display: none; margin: 12px 0 2px 38px; animation: fadeUp 0.25s ease; }
   .generate-wrap.visible { display: block; }
   .generate-btn {
-    background: var(--accent);
-    color: #fff;
+    background: var(--accent); color: #fff;
     border: none; border-radius: var(--r-sm);
-    padding: 10px 20px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px; font-weight: 600;
-    cursor: pointer;
-    display: flex; align-items: center; gap: 8px;
+    padding: 9px 18px;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; gap: 7px;
     transition: background 0.15s, transform 0.1s;
   }
   .generate-btn:hover { background: var(--accent-dim); }
   .generate-btn:active { transform: scale(0.97); }
   .generate-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
-  .generate-btn svg { width: 16px; height: 16px; }
+  .generate-btn svg { width: 14px; height: 14px; }
 
-  /* ── Recommendation cards ── */
-  .reco-cards { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
-  .reco-card {
-    background: var(--paper-warm);
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-    padding: 14px 16px;
-  }
-  .reco-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .rank-badge {
-    width: 20px; height: 20px; border-radius: 50%;
-    background: var(--accent); color: #fff;
-    font-size: 10px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-  }
-  .reco-name { font-weight: 600; font-size: 14px; }
-  .reco-reason { font-size: 13px; color: var(--ink-muted); line-height: 1.5; }
-  .match-sections { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-  .match-section { font-size: 12.5px; color: var(--ink); }
-  .match-heading { font-weight: 600; margin-bottom: 2px; }
-  .match-points { padding-left: 14px; color: var(--ink-muted); }
-  .match-points li { margin-bottom: 2px; }
-  .budget-row {
-    display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;
-  }
-  .budget-chip {
-    font-family: 'DM Mono', monospace;
-    font-size: 11px;
-    background: var(--accent-light);
-    color: var(--accent-dim);
-    padding: 3px 8px; border-radius: 4px;
-  }
-  .tradeoffs { margin-top: 8px; }
-  .tradeoff-label { font-size: 11px; font-weight: 600; color: var(--ink-faint); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 4px; }
-  .tradeoff-item { font-size: 12px; color: var(--ink-muted); display: flex; gap: 5px; align-items: flex-start; }
-  .tradeoff-item::before { content: "↗"; font-size: 10px; margin-top: 2px; flex-shrink: 0; color: var(--ink-faint); }
-  .confirm-btn {
-    margin-top: 10px;
-    background: var(--ink); color: var(--paper);
-    font-size: 12px; font-weight: 500;
-    padding: 6px 13px; border-radius: 6px;
-    border: none; cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
-    transition: background 0.15s;
-  }
-  .confirm-btn:hover { background: var(--accent); }
-
-  /* ── Input area ── */
-  .input-area {
-    margin-top: 14px;
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
-  }
+  /* Input area */
+  .input-area { margin-top: 12px; display: flex; gap: 8px; align-items: flex-end; }
   .input-wrap {
-    flex: 1;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    display: flex;
-    padding: 10px 14px;
-    box-shadow: var(--shadow);
-    transition: border-color 0.15s;
+    flex: 1; background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--r); display: flex; padding: 9px 13px;
+    box-shadow: var(--shadow); transition: border-color 0.15s;
   }
   .input-wrap:focus-within { border-color: var(--accent); }
   textarea {
-    flex: 1; border: none; outline: none; resize: none;
-    background: transparent;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px; line-height: 1.5;
-    color: var(--ink);
-    min-height: 24px; max-height: 120px;
+    flex: 1; border: none; outline: none; resize: none; background: transparent;
+    font-family: 'DM Sans', sans-serif; font-size: 13.5px; line-height: 1.5;
+    color: var(--ink); min-height: 22px; max-height: 110px;
   }
   textarea::placeholder { color: var(--ink-faint); }
   .send-btn {
-    width: 40px; height: 40px; border-radius: 10px;
-    background: var(--accent); color: #fff;
-    border: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
+    width: 38px; height: 38px; border-radius: 10px;
+    background: var(--accent); color: #fff; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     transition: background 0.15s, transform 0.1s;
   }
   .send-btn:hover { background: var(--accent-dim); }
   .send-btn:active { transform: scale(0.95); }
   .send-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
-  .send-btn svg { width: 17px; height: 17px; }
+  .send-btn svg { width: 16px; height: 16px; }
 
-  /* Quick replies */
-  .quick-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  /* Quick chips */
+  .quick-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
   .chip {
-    font-size: 12px; padding: 5px 11px;
-    background: var(--paper-warm);
-    border: 1px solid var(--border);
-    border-radius: 20px; cursor: pointer;
-    transition: all 0.15s; color: var(--ink);
+    font-size: 11.5px; padding: 4px 10px;
+    background: var(--paper-warm); border: 1px solid var(--border);
+    border-radius: 20px; cursor: pointer; transition: all 0.15s; color: var(--ink);
     font-family: 'DM Sans', sans-serif;
   }
   .chip:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent-dim); }
 
-  /* ── Sidebar ── */
-  .sidebar {
-    width: 250px; flex-shrink: 0;
-    display: flex; flex-direction: column; gap: 14px;
+  /* ── Recommendations panel (right) ── */
+  .reco-panel {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 
-  .state-card {
+  .reco-panel-empty {
+    height: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed var(--border);
+    border-radius: var(--r);
+    color: var(--ink-faint);
+    font-size: 13px;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  .reco-panel-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .reco-panel-label-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  .reco-cards { display: flex; flex-direction: column; gap: 10px; }
+
+  .reco-card {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--r);
-    padding: 16px;
+    padding: 16px 18px;
     box-shadow: var(--shadow);
   }
-  .state-title {
-    font-size: 10px; font-weight: 600;
-    letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--ink-muted); margin-bottom: 12px;
-    display: flex; align-items: center; gap: 6px;
-  }
-  .state-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .reco-card.rank-1 { border-color: var(--accent); border-width: 1.5px; }
 
-  .state-section-label {
-    font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
-    text-transform: uppercase; color: var(--ink-faint);
-    margin: 10px 0 5px;
+  .reco-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+  .rank-badge {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .state-section-label:first-child { margin-top: 0; }
+  .reco-name { font-weight: 600; font-size: 15px; flex: 1; }
+  .reco-best { font-size: 10px; font-weight: 600; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent-light); padding: 2px 7px; border-radius: 4px; }
 
-  .state-fields { display: flex; flex-direction: column; gap: 6px; }
-  .state-field { display: flex; flex-direction: column; gap: 1px; }
-  .field-key {
-    font-size: 10px; font-weight: 500; color: var(--ink-faint);
-    letter-spacing: 0.05em; text-transform: uppercase;
-  }
-  .field-val {
-    font-family: 'DM Mono', monospace;
-    font-size: 11.5px; color: var(--ink);
-    background: var(--paper-warm);
-    padding: 2px 7px; border-radius: 4px;
-    display: inline-block; word-break: break-word;
-  }
-  .field-val.empty { color: var(--ink-faint); font-style: italic; font-family: 'DM Sans', sans-serif; font-size: 11px; background: none; padding: 0; }
-  .field-val.true-val { background: var(--green-light); color: var(--green); }
-  .field-val.false-val { background: var(--paper-warm); color: var(--ink-muted); }
+  .match-sections { display: flex; flex-direction: column; gap: 8px; }
+  .match-section { font-size: 12.5px; }
+  .match-heading { font-weight: 600; color: var(--ink); margin-bottom: 3px; }
+  .match-points { padding-left: 15px; color: var(--ink-muted); }
+  .match-points li { margin-bottom: 2px; }
 
-  .pref-item {
-    font-size: 11.5px;
-    font-family: 'DM Mono', monospace;
-    background: var(--paper-warm);
-    padding: 2px 7px; border-radius: 4px;
-    color: var(--ink);
-    margin-bottom: 3px;
-    word-break: break-word;
+  .budget-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .budget-chip {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    background: var(--accent-light); color: var(--accent-dim);
+    padding: 2px 8px; border-radius: 4px;
+  }
+  .verdict-chip {
+    font-size: 11px; background: var(--green-light); color: var(--green);
+    padding: 2px 8px; border-radius: 4px;
+  }
+
+  .tradeoffs { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .tradeoff-label { font-size: 10px; font-weight: 600; color: var(--ink-faint); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+  .tradeoff-item { font-size: 12px; color: var(--ink-muted); display: flex; gap: 5px; align-items: flex-start; margin-bottom: 2px; }
+  .tradeoff-item::before { content: "↗"; font-size: 10px; margin-top: 1px; flex-shrink: 0; color: var(--ink-faint); }
+
+  .confirm-btn {
+    margin-top: 12px; background: var(--ink); color: var(--paper);
+    font-size: 12px; font-weight: 500; padding: 7px 14px; border-radius: 6px;
+    border: none; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    transition: background 0.15s;
+  }
+  .confirm-btn:hover { background: var(--accent); }
+
+  /* Error bubble */
+  .error-bubble {
+    background: #fff0f0; border: 1px solid #f0c0c0; border-radius: var(--r-sm);
+    padding: 10px 14px; font-size: 13px; color: #a03030;
+    margin-top: 4px;
   }
 
   /* scrollbar */
   .messages::-webkit-scrollbar { width: 3px; }
   .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-  @media (max-width: 700px) {
+  @media (max-width: 860px) {
     .app { flex-direction: column; padding: 12px; }
-    .sidebar { width: 100%; }
-    .messages { min-height: 280px; max-height: 360px; }
+    .chat-panel { flex: none; width: 100%; }
+    .messages { height: 340px; }
+    .reco-panel-empty { height: 160px; }
+    .state-bar { padding: 8px 12px; }
   }
 </style>
 </head>
@@ -352,13 +316,14 @@
     <div class="brand-name">Travel<span>WithMe</span></div>
     <div class="brand-tagline">Helping you choose your destination and plan your trip with confidence.</div>
   </div>
-  <div class="header-right">
-    <button class="reset-btn" onclick="resetTrip()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.54"></path></svg>
-      Reset trip
-    </button>
-  </div>
+  <button class="reset-btn" onclick="resetTrip()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.54"></path></svg>
+    Reset trip
+  </button>
 </header>
+
+<!-- Trip State Bar -->
+<div class="state-bar" id="stateBar"></div>
 
 <div class="app">
 
@@ -385,7 +350,7 @@
       </button>
     </div>
 
-    <div class="quick-chips" id="quickChips">
+    <div class="quick-chips">
       <div class="chip" onclick="fillInput('Planning a trip from Bangalore, 3 friends')">Bangalore · 3 friends</div>
       <div class="chip" onclick="fillInput('September, budget ₹30,000 total')">Sep · ₹30k total</div>
       <div class="chip" onclick="fillInput('3 nights, bachelorette vibe')">3 nights · bachelorette</div>
@@ -394,44 +359,43 @@
     </div>
   </div>
 
-  <!-- Sidebar — Trip State only -->
-  <div class="sidebar">
-    <div class="state-card">
-      <div class="state-title"><div class="state-dot"></div>Trip State</div>
-      <div id="stateContent"></div>
+  <!-- Recommendations panel -->
+  <div class="reco-panel" id="recoPanel">
+    <div class="reco-panel-empty" id="recoEmpty">
+      Recommendations will appear here<br>once Scout is ready and you tap Generate.
     </div>
   </div>
 
 </div>
 
 <script>
-// ── TripState ────────────────────────────────────────────────────────────────
-const DEFAULT_STATE = {
+// ── Endpoints ─────────────────────────────────────────────────────────────────
+const API = {
+  scout_message: 'https://twm.app.n8n.cloud/webhook/scout/message',
+  meridian_match: 'https://twm.app.n8n.cloud/webhook/meridian/match',
+  scout_present:  'https://twm.app.n8n.cloud/webhook/scout/present',
+};
+
+// ── TripState ─────────────────────────────────────────────────────────────────
+const DEFAULT_STATE = () => ({
   trip_id: 'trip_' + Math.random().toString(36).slice(2, 8),
   status: 'free',
   stage: 'matching',
   trip_context: {
     required_inputs: {
-      origin_city: null,
-      budget: null,
-      budget_unit: null,
-      duration_nights: null,
-      num_travelers: null,
-      travel_month: null
+      origin_city: null, budget: null, budget_unit: null,
+      duration_nights: null, num_travelers: null, travel_month: null
     },
     preferences: {},
     selected_option: null
   },
   matcher_state: {
     generate_ready: false,
-    conversation_context: {
-      last_scout_message: null,
-      awaiting: null
-    },
+    conversation_context: { last_scout_message: null, awaiting: null },
     last_recommendations: null
   },
   planner_state: null
-};
+});
 
 let tripState;
 let busy = false;
@@ -439,12 +403,12 @@ let busy = false;
 function loadState() {
   const raw = localStorage.getItem('twm_trip_state_v2');
   if (raw) { try { tripState = JSON.parse(raw); return; } catch(e) {} }
-  tripState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+  tripState = DEFAULT_STATE();
 }
 
 function saveState() {
   localStorage.setItem('twm_trip_state_v2', JSON.stringify(tripState));
-  renderSidebar();
+  renderStateBar();
 }
 
 function deepMerge(target, source) {
@@ -459,7 +423,7 @@ function deepMerge(target, source) {
 }
 
 function applyStateDelta(delta) {
-  // Per spec: deep-merge trip_context sections, replace matcher_state fields
+  if (!delta) return;
   if (delta.trip_context) {
     if (delta.trip_context.required_inputs)
       deepMerge(tripState.trip_context.required_inputs, delta.trip_context.required_inputs);
@@ -468,384 +432,220 @@ function applyStateDelta(delta) {
     if (delta.trip_context.selected_option !== undefined)
       tripState.trip_context.selected_option = delta.trip_context.selected_option;
   }
-  if (delta.matcher_state) {
-    deepMerge(tripState.matcher_state, delta.matcher_state);
-  }
+  if (delta.matcher_state) deepMerge(tripState.matcher_state, delta.matcher_state);
 }
 
-// ── Mock Backend ─────────────────────────────────────────────────────────────
-
-function mockScoutMessage(state, userMsg) {
-  const ri = state.trip_context.required_inputs;
-  const prefs = state.trip_context.preferences;
-  const m = userMsg.toLowerCase();
-
-  // Extract from message
-  const delta = { trip_context: { required_inputs: {}, preferences: {} }, matcher_state: { conversation_context: {} } };
-
-  if (!ri.origin_city) {
-    if (m.includes('bangalore') || m.includes('bengaluru')) delta.trip_context.required_inputs.origin_city = 'Bengaluru';
-    else if (m.includes('mumbai')) delta.trip_context.required_inputs.origin_city = 'Mumbai';
-    else if (m.includes('delhi')) delta.trip_context.required_inputs.origin_city = 'Delhi';
-    else if (m.includes('chennai')) delta.trip_context.required_inputs.origin_city = 'Chennai';
-  }
-  if (!ri.num_travelers) {
-    const n = m.match(/(\d+)\s*(friends|of us|people|pax)/);
-    if (n) delta.trip_context.required_inputs.num_travelers = parseInt(n[1]);
-    else if (m.includes('solo') || m.includes('just me')) delta.trip_context.required_inputs.num_travelers = 1;
-  }
-  if (!ri.budget) {
-    const budgetMatch = m.match(/(?:₹|rs\.?|inr)?\s*(\d[\d,]*)\s*k?\s*(?:total|per person|each|budget)?/i);
-    if (budgetMatch) {
-      let amt = parseInt(budgetMatch[1].replace(/,/g, ''));
-      if (m.match(/\d+k/)) amt *= 1000;
-      if (amt > 500) {
-        delta.trip_context.required_inputs.budget = amt;
-        delta.trip_context.required_inputs.budget_unit = (m.includes('per person') || m.includes('each')) ? 'per_person' : 'total';
-      }
-    }
-  }
-  if (!ri.travel_month) {
-    const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
-    for (const mo of months) {
-      if (m.includes(mo)) { delta.trip_context.required_inputs.travel_month = mo.charAt(0).toUpperCase()+mo.slice(1); break; }
-    }
-  }
-  if (!ri.duration_nights) {
-    const nights = m.match(/(\d+)\s*nights?/);
-    if (nights) delta.trip_context.required_inputs.duration_nights = parseInt(nights[1]);
-    const days = m.match(/(\d+)\s*days?/);
-    if (days && !nights) delta.trip_context.required_inputs.duration_nights = parseInt(days[1]) - 1;
-  }
-
-  if (!prefs.trip_goal) {
-    if (m.includes('bachelorette')) delta.trip_context.preferences.trip_goal = { value: 'Bachelorette', confidence: 'explicit' };
-    else if (m.includes('honeymoon')) delta.trip_context.preferences.trip_goal = { value: 'Honeymoon', confidence: 'explicit' };
-    else if (m.includes('family')) delta.trip_context.preferences.trip_goal = { value: 'Family', confidence: 'explicit' };
-    else if (m.includes('adventure')) delta.trip_context.preferences.trip_goal = { value: 'Adventure', confidence: 'explicit' };
-    else if (m.includes('relax') || m.includes('chill')) delta.trip_context.preferences.trip_goal = { value: 'Relaxation', confidence: 'explicit' };
-  }
-  if (!prefs.group_type && (m.includes('friends') || m.includes('squad'))) delta.trip_context.preferences.group_type = 'friends';
-  if (m.includes('avoid crowd') || m.includes('less crowd') || m.includes('quiet'))
-    delta.trip_context.preferences.crowd_tolerance = { value: 'low', confidence: 'high' };
-
-  // Merge delta to see updated state
-  const updatedRi = { ...ri, ...delta.trip_context.required_inputs };
-  const requiredKeys = ['origin_city', 'budget', 'num_travelers', 'travel_month', 'duration_nights'];
-  const allFilled = requiredKeys.every(k => updatedRi[k] != null);
-  const hasGoal = !!(prefs.trip_goal || delta.trip_context.preferences.trip_goal);
-
-  // Check confirmation
-  const confirmWords = ["go with","let's do","confirm","pondi","pondicherry it","that works","sounds perfect","first one","i choose","book it"];
-  const isConfirm = confirmWords.some(w => m.includes(w)) && state.matcher_state.last_recommendations;
-
-  if (isConfirm) {
-    const destId = 'pondicherry_puducherry';
-    return {
-      message: "Pondicherry it is. I'll lock that in — perfect fit for your group in September.",
-      state_delta: {
-        trip_context: { required_inputs: {}, preferences: {}, selected_option: { type: 'destination', id: destId } },
-        matcher_state: { generate_ready: false, conversation_context: { last_scout_message: "Pondicherry it is.", awaiting: null } }
-      },
-      stage: 'matched',
-      generate_ready: false,
-      confirmed_destination: { type: 'destination', id: destId }
-    };
-  }
-
-  // "Nothing else" or similar → mark ready
-  const nothingElse = m.includes('nothing') || m.includes('that\'s all') || m.includes("that's it") || m.includes("we're good") || m.includes("go ahead") || m.includes("looks good");
-  if (nothingElse && allFilled) {
-    delta.matcher_state.generate_ready = true;
-    delta.matcher_state.conversation_context = { last_scout_message: "Perfect — I have everything I need. Ready to find recommendations when you are.", awaiting: null };
-    return {
-      message: "Perfect — I have everything I need. Ready to find recommendations when you are.",
-      state_delta: delta,
-      stage: 'ready',
-      generate_ready: true,
-      confirmed_destination: null
-    };
-  }
-
-  // Still collecting
-  const missing = requiredKeys.filter(k => updatedRi[k] == null);
-  const prompts = {
-    origin_city: "What city are you travelling from?",
-    num_travelers: "How many people are going?",
-    budget: "What's your total budget? (Rough ₹ estimate works)",
-    travel_month: "Which month are you thinking of?",
-    duration_nights: "How many nights are you planning for?"
-  };
-
-  let message, awaiting;
-  if (missing.length > 0) {
-    awaiting = missing[0];
-    message = prompts[awaiting];
-  } else if (!hasGoal) {
-    awaiting = 'trip_goal';
-    message = "What's the vibe — bachelorette, relaxation, adventure, something else?";
-  } else {
-    // All done — ask anything else
-    awaiting = 'additional_preferences';
-    message = `Got everything I need. Anything else you'd like me to factor in — crowd preferences, travel style, must-haves?`;
-    delta.matcher_state.generate_ready = false;
-  }
-
-  delta.matcher_state.conversation_context = { last_scout_message: message, awaiting };
-
-  // Acknowledge what was just extracted
-  const extracted = Object.values(delta.trip_context.required_inputs).filter(v => v != null);
-  const prefExtracted = Object.keys(delta.trip_context.preferences).length > 0;
-  let ack = '';
-  if (extracted.length > 0 || prefExtracted) {
-    const parts = [];
-    if (delta.trip_context.required_inputs.origin_city) parts.push(`starting from ${delta.trip_context.required_inputs.origin_city}`);
-    if (delta.trip_context.required_inputs.num_travelers) parts.push(`${delta.trip_context.required_inputs.num_travelers} people`);
-    if (delta.trip_context.required_inputs.budget) parts.push(`₹${delta.trip_context.required_inputs.budget.toLocaleString('en-IN')} ${delta.trip_context.required_inputs.budget_unit || ''}`);
-    if (delta.trip_context.required_inputs.travel_month) parts.push(delta.trip_context.required_inputs.travel_month);
-    if (delta.trip_context.required_inputs.duration_nights) parts.push(`${delta.trip_context.required_inputs.duration_nights} nights`);
-    if (prefExtracted) parts.push(delta.trip_context.preferences.trip_goal?.value || '');
-    if (parts.filter(Boolean).length > 0) ack = `Got it — ${parts.filter(Boolean).join(', ')}. `;
-  }
-
-  return {
-    message: ack + message,
-    state_delta: delta,
-    stage: 'matching',
-    generate_ready: false,
-    confirmed_destination: null
-  };
+// ── Console logging ───────────────────────────────────────────────────────────
+function logScoutTurn(userMsg, stateBefore, response, stateAfter) {
+  const id = tripState.trip_id;
+  console.group(`%c trip id: ${id}`, 'color:#c46b3a;font-weight:700;font-size:13px;');
+  console.log('%cUser message:', 'color:#6b6460;font-weight:600;', userMsg);
+  console.log('%cTrip state (before):', 'color:#6b6460;font-weight:600;', JSON.parse(JSON.stringify(stateBefore)));
+  console.log('---');
+  console.log('%cScout response:', 'color:#3a6b4a;font-weight:600;', response);
+  console.log('%cTrip state (after):', 'color:#3a6b4a;font-weight:600;', JSON.parse(JSON.stringify(stateAfter)));
+  console.groupEnd();
 }
 
-function mockMeridian(tripContext) {
-  const ri = tripContext.required_inputs;
-  const n = ri.num_travelers || 3;
-  const budget = ri.budget || 30000;
-  const pp = Math.round(budget / n);
-
-  return {
-    status: 'SUCCESS',
-    trip_type: 'single',
-    budget_basis: { total: budget, per_person: pp, num_travelers: n },
-    options: [
-      {
-        rank: 1, type: 'single', name: 'Pondicherry', destination_id: 'pondicherry_puducherry',
-        match_sections: [
-          {
-            type: 'budget', heading: `Fits your ₹${budget.toLocaleString('en-IN')} budget`,
-            stay: { per_night_per_person: 2000, nights: ri.duration_nights || 3, total: 2000*(ri.duration_nights||3)*n, note: 'Boutique guesthouses in White Town' },
-            food: { per_day_per_person: 600, days: (ri.duration_nights||3)+1, total: 600*((ri.duration_nights||3)+1)*n },
-            travel: { per_person: 2000, total: 2000*n, description: 'Bus or train round trip from Bengaluru' },
-            activities: { per_person: 800, total: 800*n, description: 'Café hopping, beach time, one spa session' },
-            per_person_total: Math.round(pp*0.98), group_total: Math.round(budget*0.98),
-            budget_given: budget, verdict: 'Just within budget without cutting on comfort'
-          },
-          {
-            type: 'trip_goal', heading: 'Works well for a bachelorette-style friend trip',
-            points: ['Boutique stays and aesthetic cafés', 'Beachside brunches and rooftop sunset spots', 'Easygoing bar scene — celebratory without overwhelming']
-          },
-          {
-            type: 'crowd_preference', heading: `Quieter than usual in ${ri.travel_month || 'September'}`,
-            points: ['Shoulder season — tourist volume drops', 'Better availability across stays and restaurants']
-          },
-          {
-            type: 'weather', heading: 'Some rain expected — plan flexibly', contextual: true,
-            points: ['Warm and humid with intermittent showers', 'Rain usually short bursts — beach time still possible']
-          }
-        ],
-        tradeoffs: [
-          { point: 'Rain may interrupt beach plans', affects: 'trip_goal' },
-          { point: 'Nightlife is low-key — no large clubs', affects: 'trip_goal' }
-        ]
-      },
-      {
-        rank: 2, type: 'single', name: 'Coorg', destination_id: 'coorg_karnataka',
-        match_sections: [
-          { type: 'budget', heading: `₹${Math.round(budget*0.82).toLocaleString('en-IN')} of your budget`, per_person_total: Math.round(pp*0.82), group_total: Math.round(budget*0.82), verdict: 'Budget-comfortable with headroom' },
-          { type: 'trip_goal', heading: 'Intimate stay-based celebration', points: ['Estate & spa stays suit small groups', 'Misty hills, coffee-garden walks'] },
-        ],
-        tradeoffs: [{ point: 'Limited nightlife options', affects: 'trip_goal' }]
-      },
-      {
-        rank: 3, type: 'single', name: 'Gokarna', destination_id: 'gokarna_karnataka',
-        match_sections: [
-          { type: 'budget', heading: `₹${Math.round(budget*0.68).toLocaleString('en-IN')} — most affordable`, per_person_total: Math.round(pp*0.68), group_total: Math.round(budget*0.68), verdict: 'Significant budget headroom' },
-          { type: 'crowd_preference', heading: 'Least crowded of the three', points: ['Secluded coves and quiet beaches', 'Hippie-chill energy'] }
-        ],
-        tradeoffs: [{ point: 'Longer travel from Bengaluru (~8 hrs)', affects: 'logistics' }]
-      }
-    ],
-    final_recommendation: {
-      best_match: 'Pondicherry', best_match_reason: 'Best balance of bachelorette vibe, manageable travel, shoulder-season quiet',
-      alternative_1: 'Coorg', alternative_1_reason: 'Shorter travel, more intimate celebration stay',
-      alternative_2: 'Gokarna', alternative_2_reason: 'Most affordable, least crowded'
-    },
-    refinement_hooks: {
-      weakest_scoring_factor: 'Seasonality — all three carry rain risk',
-      budget_headroom: 'comfortable',
-      seasonality_note: `${ri.travel_month || 'September'} is monsoon or shoulder for all three options`
-    }
-  };
+function logMeridianTurn(input, output) {
+  console.group('%c Meridian', 'color:#7090e0;font-weight:700;font-size:13px;');
+  console.log('%cMeridian input:', 'color:#6b6460;font-weight:600;', JSON.parse(JSON.stringify(input)));
+  console.log('%cMeridian output:', 'color:#3a6b4a;font-weight:600;', output);
+  console.groupEnd();
 }
 
-function mockScoutPresent(state, meridianOutput, context) {
-  const ri = state.trip_context.required_inputs;
-  const n = ri.num_travelers || 3;
-  const budget = ri.budget || 30000;
-  const pp = Math.round(budget / n);
-  const opts = meridianOutput.options;
-  const prefix = context === 'refinement' ? "Updated results based on your changes. " : "";
-  const msg = `${prefix}Found three options that work. **Pondicherry** comes up top — fits your ₹${budget.toLocaleString('en-IN')} budget at about ₹${pp.toLocaleString('en-IN')} per person, right bachelorette energy with boutique cafés and a relaxed beach scene, and ${ri.travel_month || 'September'} keeps crowds down. Rain is something to plan around, but usually short bursts. Want me to walk through all three, or does Pondicherry feel right?`;
-
-  return {
-    message: msg,
-    state_delta: {
-      trip_context: { required_inputs: {}, preferences: {} },
-      matcher_state: {
-        generate_ready: false,
-        conversation_context: { last_scout_message: msg, awaiting: 'user_response_to_recommendations' },
-        last_recommendations: {
-          options: opts.map(o => o.destination_id),
-          best_match: 'pondicherry_puducherry',
-          generated_at: new Date().toISOString(),
-          meridian_output: meridianOutput
-        }
-      }
-    },
-    stage: 'ready',
-    generate_ready: false,
-    confirmed_destination: null,
-    options: opts
-  };
+// ── Real API calls ────────────────────────────────────────────────────────────
+async function callScoutMessage(userMsg) {
+  const stateBefore = JSON.parse(JSON.stringify(tripState));
+  const body = { trip_state: tripState, message: userMsg };
+  const res = await fetch(API.scout_message, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Scout /message ${res.status}`);
+  const data = await res.json();
+  logScoutTurn(userMsg, stateBefore, data, tripState);
+  return data;
 }
 
-// ── Render sidebar (Trip State only) ─────────────────────────────────────────
-function renderSidebar() {
+async function callMeridianMatch() {
+  const input = { trip_context: tripState.trip_context };
+  const res = await fetch(API.meridian_match, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  if (!res.ok) throw new Error(`Meridian /match ${res.status}`);
+  const data = await res.json();
+  logMeridianTurn(input, data);
+  return data;
+}
+
+async function callScoutPresent(meridianOutput, context) {
+  const stateBefore = JSON.parse(JSON.stringify(tripState));
+  const body = { trip_state: tripState, meridian_output: meridianOutput, context };
+  const res = await fetch(API.scout_present, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Scout /present ${res.status}`);
+  const data = await res.json();
+  logScoutTurn('[present]', stateBefore, data, tripState);
+  return data;
+}
+
+// ── State bar render ──────────────────────────────────────────────────────────
+function renderStateBar() {
   const ri = tripState.trip_context.required_inputs;
   const prefs = tripState.trip_context.preferences;
   const ms = tripState.matcher_state;
 
-  let html = '';
+  const chip = (val, cls='') => {
+    if (val == null || val === '') return `<span class="state-chip empty">—</span>`;
+    return `<span class="state-chip ${cls}">${val}</span>`;
+  };
+  const boolChip = (v) => `<span class="state-chip ${v ? 'true-val' : 'false-val'}">${v}</span>`;
 
-  // Top-level
-  html += '<div class="state-section-label">Root</div><div class="state-fields">';
-  html += field('trip_id', tripState.trip_id);
-  html += field('status', tripState.status);
-  html += field('stage', tripState.stage);
-  html += '</div>';
-
-  // required_inputs
-  html += '<div class="state-section-label">trip_context.required_inputs</div><div class="state-fields">';
-  ['origin_city','budget','budget_unit','num_travelers','travel_month','duration_nights'].forEach(k => {
-    const v = ri[k];
-    html += field(k, v != null ? (k === 'budget' ? '₹'+v.toLocaleString('en-IN') : String(v)) : null);
-  });
-  html += field('selected_option', tripState.trip_context.selected_option ? tripState.trip_context.selected_option.id : null);
-  html += '</div>';
-
-  // preferences
-  html += '<div class="state-section-label">trip_context.preferences</div>';
   const prefKeys = Object.keys(prefs);
-  if (prefKeys.length === 0) {
-    html += '<div style="font-size:11px;color:var(--ink-faint);margin-bottom:4px;">—</div>';
-  } else {
-    html += '<div class="state-fields">';
-    prefKeys.forEach(k => {
-      const v = prefs[k];
-      const display = typeof v === 'object' && v.value ? `${v.value} (${v.confidence})` : (Array.isArray(v) ? v.join(', ') : String(v));
-      html += field(k, display);
-    });
-    html += '</div>';
-  }
+  const prefChips = prefKeys.length === 0
+    ? chip(null)
+    : prefKeys.map(k => {
+        const v = prefs[k];
+        const disp = typeof v === 'object' && v.value ? v.value : (Array.isArray(v) ? v.join(', ') : String(v));
+        return `<span class="state-chip">${k}: ${disp}</span>`;
+      }).join('');
 
-  // matcher_state
-  html += '<div class="state-section-label">matcher_state</div><div class="state-fields">';
-  html += boolField('generate_ready', ms.generate_ready);
-  html += field('awaiting', ms.conversation_context?.awaiting);
-  html += field('last_recs', ms.last_recommendations ? ms.last_recommendations.options?.join(', ') : null);
-  html += '</div>';
-
-  document.getElementById('stateContent').innerHTML = html;
+  document.getElementById('stateBar').innerHTML = `
+    <div class="state-bar-group">
+      <div class="state-bar-label">Stage</div>
+      <div class="state-bar-section">${chip(tripState.stage, 'stage-chip')}</div>
+    </div>
+    <div class="state-divider"></div>
+    <div class="state-bar-group">
+      <div class="state-bar-label">required_inputs</div>
+      <div class="state-bar-section">
+        ${chip(ri.origin_city)} ${chip(ri.num_travelers ? ri.num_travelers + ' pax' : null)}
+        ${chip(ri.travel_month)} ${chip(ri.duration_nights ? ri.duration_nights + ' nights' : null)}
+        ${chip(ri.budget ? '₹' + ri.budget.toLocaleString('en-IN') + (ri.budget_unit === 'per_person' ? '/pp' : ' total') : null)}
+      </div>
+    </div>
+    <div class="state-divider"></div>
+    <div class="state-bar-group">
+      <div class="state-bar-label">preferences</div>
+      <div class="state-bar-section">${prefChips}</div>
+    </div>
+    <div class="state-divider"></div>
+    <div class="state-bar-group">
+      <div class="state-bar-label">generate_ready</div>
+      <div class="state-bar-section">${boolChip(ms.generate_ready)}</div>
+    </div>
+    <div class="state-bar-group">
+      <div class="state-bar-label">awaiting</div>
+      <div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div>
+    </div>
+    <div class="state-bar-group">
+      <div class="state-bar-label">selected_option</div>
+      <div class="state-bar-section">${chip(tripState.trip_context.selected_option?.id)}</div>
+    </div>
+  `;
 }
 
-function field(key, value) {
-  const empty = value == null || value === '';
-  return `<div class="state-field"><div class="field-key">${key}</div><div class="field-val${empty ? ' empty' : ''}">${empty ? '—' : value}</div></div>`;
-}
-function boolField(key, value) {
-  return `<div class="state-field"><div class="field-key">${key}</div><div class="field-val ${value ? 'true-val' : 'false-val'}">${value ? 'true' : 'false'}</div></div>`;
-}
+// ── Recommendations panel ─────────────────────────────────────────────────────
+function renderRecos(options, finalRec) {
+  const panel = document.getElementById('recoPanel');
+  panel.innerHTML = '';
 
-// ── Chat helpers ──────────────────────────────────────────────────────────────
-function appendMsg(role, content, extra) {
-  const msgs = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = `msg ${role}`;
+  const label = document.createElement('div');
+  label.className = 'reco-panel-label';
+  label.innerHTML = `<div class="reco-panel-label-dot"></div>Recommendations`;
+  panel.appendChild(label);
 
-  const av = document.createElement('div');
-  av.className = `avatar ${role === 'assistant' ? 'scout' : 'user-av'}`;
-  av.textContent = role === 'assistant' ? 'S' : 'U';
+  const cards = document.createElement('div');
+  cards.className = 'reco-cards';
 
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble';
+  options.forEach(opt => {
+    const card = document.createElement('div');
+    card.className = `reco-card${opt.rank === 1 ? ' rank-1' : ''}`;
 
-  if (role === 'assistant' && extra?.options) {
-    let html = `<div style="margin-bottom:12px;">${md(content)}</div><div class="reco-cards">`;
-    extra.options.forEach(opt => {
-      html += `<div class="reco-card">
-        <div class="reco-head"><div class="rank-badge">${opt.rank}</div><div class="reco-name">${opt.name}</div></div>`;
-      opt.match_sections.forEach(sec => {
-        html += `<div class="match-section" style="margin-top:8px;"><div class="match-heading">${sec.heading}</div>`;
-        if (sec.points) {
-          html += `<ul class="match-points">${sec.points.map(p=>`<li>${p}</li>`).join('')}</ul>`;
-        }
-        if (sec.per_person_total) {
-          html += `<div class="budget-row">
-            <span class="budget-chip">₹${sec.per_person_total.toLocaleString('en-IN')} / person</span>
-            ${sec.group_total ? `<span class="budget-chip">₹${sec.group_total.toLocaleString('en-IN')} total</span>` : ''}
-            ${sec.verdict ? `<span class="budget-chip" style="background:var(--green-light);color:var(--green);">${sec.verdict}</span>` : ''}
-          </div>`;
-        }
-        html += `</div>`;
-      });
-      if (opt.tradeoffs?.length) {
-        html += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>`;
-        opt.tradeoffs.forEach(t => { html += `<div class="tradeoff-item">${t.point}</div>`; });
-        html += `</div>`;
-      }
-      if (opt.rank === 1) {
-        html += `<button class="confirm-btn" onclick="quickConfirm('${opt.name}')">Confirm ${opt.name} →</button>`;
+    let html = `<div class="reco-head">
+      <div class="rank-badge">${opt.rank}</div>
+      <div class="reco-name">${opt.name}</div>
+      ${opt.rank === 1 ? `<span class="reco-best">Best match</span>` : ''}
+    </div><div class="match-sections">`;
+
+    (opt.match_sections || []).forEach(sec => {
+      html += `<div class="match-section"><div class="match-heading">${sec.heading}</div>`;
+      if (sec.points) html += `<ul class="match-points">${sec.points.map(p=>`<li>${p}</li>`).join('')}</ul>`;
+      if (sec.per_person_total) {
+        html += `<div class="budget-row">
+          <span class="budget-chip">₹${sec.per_person_total.toLocaleString('en-IN')} / person</span>
+          ${sec.group_total ? `<span class="budget-chip">₹${sec.group_total.toLocaleString('en-IN')} total</span>` : ''}
+          ${sec.verdict ? `<span class="verdict-chip">${sec.verdict}</span>` : ''}
+        </div>`;
       }
       html += `</div>`;
     });
-    html += `</div>`;
-    bubble.innerHTML = html;
-  } else {
-    bubble.innerHTML = md(content);
-  }
 
+    html += `</div>`;
+
+    if (opt.tradeoffs?.length) {
+      html += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>`;
+      opt.tradeoffs.forEach(t => { html += `<div class="tradeoff-item">${t.point}</div>`; });
+      html += `</div>`;
+    }
+
+    if (opt.rank === 1) {
+      html += `<button class="confirm-btn" onclick="quickConfirm('${opt.name}')">Confirm ${opt.name} →</button>`;
+    }
+
+    card.innerHTML = html;
+    cards.appendChild(card);
+  });
+
+  panel.appendChild(cards);
+}
+
+// ── Chat helpers ──────────────────────────────────────────────────────────────
+function appendMsg(role, content) {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const av = document.createElement('div');
+  av.className = `avatar ${role === 'assistant' ? 'scout' : 'user-av'}`;
+  av.textContent = role === 'assistant' ? 'S' : 'U';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.innerHTML = md(content);
   div.appendChild(av);
   div.appendChild(bubble);
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+function appendError(text) {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.innerHTML = `<div class="avatar scout">S</div><div class="error-bubble">${text}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
 function md(text) {
-  return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  if (!text) return '';
+  return String(text).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 }
 
 function showTyping() {
   const msgs = document.getElementById('messages');
   const div = document.createElement('div');
-  div.className = 'msg assistant';
-  div.id = 'typing-ind';
+  div.className = 'msg assistant'; div.id = 'typing-ind';
   div.innerHTML = `<div class="avatar scout">S</div><div class="bubble"><div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
+  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
 }
 function removeTyping() { document.getElementById('typing-ind')?.remove(); }
-
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 async function handleSend() {
@@ -853,36 +653,35 @@ async function handleSend() {
   const msg = input.value.trim();
   if (!msg || busy) return;
   busy = true;
-  input.value = '';
-  input.style.height = 'auto';
+  input.value = ''; input.style.height = 'auto';
   setSendDisabled(true);
 
   appendMsg('user', msg);
   showTyping();
 
-  await delay(600 + Math.random() * 400);
+  try {
+    const res = await callScoutMessage(msg);
 
-  // POST /api/scout/message (mocked)
-  const res = mockScoutMessage(tripState, msg);
+    applyStateDelta(res.state_delta);
+    if (res.stage) tripState.stage = res.stage;
+    if (typeof res.generate_ready === 'boolean') tripState.matcher_state.generate_ready = res.generate_ready;
+    if (res.confirmed_destination) tripState.trip_context.selected_option = res.confirmed_destination;
 
-  applyStateDelta(res.state_delta);
-  tripState.stage = res.stage;
-  tripState.matcher_state.generate_ready = res.generate_ready;
+    // Log after applying delta
+    console.log('%cTrip state (after apply):', 'color:#3a6b4a;font-weight:600;', JSON.parse(JSON.stringify(tripState)));
 
-  if (res.confirmed_destination) {
-    tripState.trip_context.selected_option = res.confirmed_destination;
-  }
+    saveState();
+    removeTyping();
+    appendMsg('assistant', res.message);
 
-  saveState();
-  removeTyping();
-  appendMsg('assistant', res.message);
+    const gw = document.getElementById('generateWrap');
+    if (res.generate_ready) gw.classList.add('visible');
+    else gw.classList.remove('visible');
 
-  // Show / hide generate button
-  const gw = document.getElementById('generateWrap');
-  if (res.generate_ready) {
-    gw.classList.add('visible');
-  } else {
-    gw.classList.remove('visible');
+  } catch (err) {
+    removeTyping();
+    appendError(`Something went wrong: ${err.message}. Please try again.`);
+    console.error('[Scout/message error]', err);
   }
 
   busy = false;
@@ -894,23 +693,41 @@ async function handleGenerate() {
   busy = true;
   const gBtn = document.getElementById('generateBtn');
   gBtn.disabled = true;
-  gBtn.textContent = 'Finding matches…';
+  gBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Finding matches…`;
 
-  // POST /api/meridian/match (mocked)
-  await delay(900 + Math.random() * 400);
-  const meridianOut = mockMeridian(tripState.trip_context);
+  try {
+    // POST /api/meridian/match
+    const meridianOut = await callMeridianMatch();
 
-  // POST /api/scout/present (mocked)
-  await delay(500 + Math.random() * 300);
-  const presentRes = mockScoutPresent(tripState, meridianOut, 'first_presentation');
+    // POST /api/scout/present
+    const presentRes = await callScoutPresent(meridianOut, 'first_presentation');
 
-  applyStateDelta(presentRes.state_delta);
-  tripState.stage = presentRes.stage;
-  tripState.matcher_state.generate_ready = presentRes.generate_ready;
-  saveState();
+    applyStateDelta(presentRes.state_delta);
+    if (presentRes.stage) tripState.stage = presentRes.stage;
+    if (typeof presentRes.generate_ready === 'boolean') tripState.matcher_state.generate_ready = presentRes.generate_ready;
 
-  document.getElementById('generateWrap').classList.remove('visible');
-  appendMsg('assistant', presentRes.message, { options: presentRes.options });
+    // Store last_recommendations
+    if (meridianOut.options) {
+      tripState.matcher_state.last_recommendations = {
+        options: meridianOut.options.map(o => o.destination_id),
+        best_match: meridianOut.final_recommendation?.best_match,
+        generated_at: new Date().toISOString(),
+      };
+    }
+
+    saveState();
+    document.getElementById('generateWrap').classList.remove('visible');
+    appendMsg('assistant', presentRes.message);
+
+    // Render options to the right panel
+    if (meridianOut.options?.length) {
+      renderRecos(meridianOut.options, meridianOut.final_recommendation);
+    }
+
+  } catch (err) {
+    appendError(`Couldn't reach the recommendation engine: ${err.message}. Want to try again?`);
+    console.error('[Meridian/Scout present error]', err);
+  }
 
   busy = false;
   gBtn.disabled = false;
@@ -921,34 +738,26 @@ function quickConfirm(name) {
   document.getElementById('userInput').value = `Let's go with ${name}`;
   handleSend();
 }
-
-function fillInput(text) {
-  document.getElementById('userInput').value = text;
-  document.getElementById('userInput').focus();
-}
-
-function setSendDisabled(v) {
-  document.getElementById('sendBtn').disabled = v;
-}
+function fillInput(text) { document.getElementById('userInput').value = text; document.getElementById('userInput').focus(); }
+function setSendDisabled(v) { document.getElementById('sendBtn').disabled = v; }
 
 function resetTrip() {
   localStorage.removeItem('twm_trip_state_v2');
-  tripState = JSON.parse(JSON.stringify(DEFAULT_STATE));
-  tripState.trip_id = 'trip_' + Math.random().toString(36).slice(2, 8);
+  tripState = DEFAULT_STATE();
   saveState();
   document.getElementById('messages').innerHTML = '';
   document.getElementById('generateWrap').classList.remove('visible');
+  document.getElementById('recoPanel').innerHTML = `<div class="reco-panel-empty" id="recoEmpty">Recommendations will appear here<br>once Scout is ready and you tap Generate.</div>`;
   busy = false;
   setSendDisabled(false);
-  setTimeout(() => {
-    appendMsg('assistant', "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest.");
-  }, 200);
+  console.log('%c[Trip reset]', 'color:#c46b3a;font-weight:700;', tripState.trip_id);
+  setTimeout(() => appendMsg('assistant', "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest."), 200);
 }
 
-// ── Textarea auto-resize ───────────────────────────────────────────────────────
+// ── Textarea ──────────────────────────────────────────────────────────────────
 document.getElementById('userInput').addEventListener('input', function() {
   this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  this.style.height = Math.min(this.scrollHeight, 110) + 'px';
 });
 document.getElementById('userInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -956,16 +765,13 @@ document.getElementById('userInput').addEventListener('keydown', function(e) {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 loadState();
-renderSidebar();
+renderStateBar();
 
 setTimeout(() => {
   const ctx = tripState.matcher_state.conversation_context;
   if (ctx?.last_scout_message && tripState.stage !== 'new') {
-    // Resuming from localStorage
     appendMsg('assistant', `Welcome back. ${ctx.last_scout_message}`);
-    if (tripState.matcher_state.generate_ready) {
-      document.getElementById('generateWrap').classList.add('visible');
-    }
+    if (tripState.matcher_state.generate_ready) document.getElementById('generateWrap').classList.add('visible');
   } else {
     appendMsg('assistant', "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest.");
   }
