@@ -21,133 +21,46 @@
     --green-light: #dff0e5;
     --border: #e8e2db;
     --shadow: 0 1px 3px rgba(26,22,18,0.07), 0 4px 16px rgba(26,22,18,0.04);
-    --r: 12px;
-    --r-sm: 8px;
+    --r: 12px; --r-sm: 8px;
   }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; display: flex; flex-direction: column; }
 
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--paper);
-    color: var(--ink);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* ── Header ── */
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 24px;
-    border-bottom: 1px solid var(--border);
-    background: var(--paper);
-    position: sticky; top: 0; z-index: 20;
-    gap: 12px;
-  }
+  /* Header */
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--paper); position: sticky; top: 0; z-index: 20; }
   .brand { display: flex; flex-direction: column; gap: 1px; }
   .brand-name { font-family: 'DM Serif Display', serif; font-size: 17px; letter-spacing: -0.01em; color: var(--ink); line-height: 1; }
   .brand-name span { color: var(--accent); }
-  .brand-tagline { font-size: 11px; color: var(--ink-faint); font-weight: 400; }
-  .reset-btn {
-    font-size: 12px; font-weight: 500; color: var(--ink-muted);
-    background: none; border: 1px solid var(--border);
-    padding: 5px 12px; border-radius: 20px; cursor: pointer;
-    font-family: 'DM Sans', sans-serif; transition: all 0.15s;
-    display: flex; align-items: center; gap: 5px;
-  }
+  .brand-tagline { font-size: 11px; color: var(--ink-faint); }
+  .reset-btn { font-size: 12px; font-weight: 500; color: var(--ink-muted); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 20px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; display: flex; align-items: center; gap: 5px; }
   .reset-btn:hover { border-color: var(--accent); color: var(--accent); }
   .reset-btn svg { width: 11px; height: 11px; }
 
-  /* ── Trip State bar (full width, below header) ── */
-  .state-bar {
-    width: 100%;
-    background: var(--card);
-    border-bottom: 1px solid var(--border);
-    padding: 10px 24px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 20px;
-    align-items: flex-start;
-  }
-  .state-bar-group {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-width: 80px;
-  }
-  .state-bar-label {
-    font-size: 9px; font-weight: 600; letter-spacing: 0.08em;
-    text-transform: uppercase; color: var(--ink-faint);
-  }
-  .state-bar-section {
-    display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
-  }
-  .state-chip {
-    font-family: 'DM Mono', monospace;
-    font-size: 11px; color: var(--ink);
-    background: var(--paper-warm);
-    padding: 2px 7px; border-radius: 4px;
-    border: 1px solid var(--border);
-    white-space: nowrap;
-  }
+  /* State bar */
+  .state-bar { width: 100%; background: var(--card); border-bottom: 1px solid var(--border); padding: 10px 24px; display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: flex-start; }
+  .state-bar-group { display: flex; flex-direction: column; gap: 3px; min-width: 70px; }
+  .state-bar-label { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .state-bar-section { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .state-chip { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink); background: var(--paper-warm); padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border); white-space: nowrap; }
   .state-chip.empty { color: var(--ink-faint); background: none; border-color: transparent; font-family: 'DM Sans', sans-serif; font-style: italic; font-size: 10px; }
   .state-chip.true-val { background: var(--green-light); color: var(--green); border-color: #b0d9be; }
   .state-chip.false-val { background: var(--paper-warm); color: var(--ink-muted); }
   .state-chip.stage-chip { background: var(--accent-light); color: var(--accent-dim); border-color: #e0c0a8; font-weight: 600; }
   .state-divider { width: 1px; background: var(--border); align-self: stretch; margin: 0 4px; }
 
-  /* ── Main layout ── */
-  .app {
-    display: flex;
-    flex: 1;
-    width: 100%;
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 20px 24px;
-    gap: 20px;
-    align-items: flex-start;
-  }
+  /* Layout */
+  .app { display: flex; flex: 1; width: 100%; max-width: 1280px; margin: 0 auto; padding: 20px 24px; gap: 20px; align-items: flex-start; }
 
-  /* ── Chat panel ── */
-  .chat-panel {
-    flex: 0 0 420px;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  .messages {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    overflow-y: auto;
-    height: 480px;
-    padding-bottom: 8px;
-  }
-
+  /* Chat panel */
+  .chat-panel { flex: 0 0 400px; display: flex; flex-direction: column; min-width: 0; }
+  .messages { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 500px; padding-bottom: 8px; }
   .msg { display: flex; gap: 10px; animation: fadeUp 0.22s ease; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
   .msg.user { flex-direction: row-reverse; }
-
-  .avatar {
-    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700;
-  }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
   .avatar.scout { background: var(--accent-light); color: var(--accent-dim); }
   .avatar.user-av { background: var(--ink); color: var(--paper); }
-
-  .bubble {
-    max-width: 82%;
-    padding: 10px 14px;
-    border-radius: var(--r);
-    font-size: 13.5px;
-    line-height: 1.65;
-    border: 1px solid transparent;
-  }
+  .bubble { max-width: 84%; padding: 10px 14px; border-radius: var(--r); font-size: 13.5px; line-height: 1.65; border: 1px solid transparent; }
   .msg.assistant .bubble { background: var(--card); border-color: var(--border); box-shadow: var(--shadow); border-bottom-left-radius: 4px; }
   .msg.user .bubble { background: var(--ink); color: var(--paper); border-bottom-right-radius: 4px; }
 
@@ -158,143 +71,84 @@
   .dot:nth-child(3) { animation-delay: 0.4s; }
   @keyframes pulse { 0%,80%,100% { transform: scale(0.75); opacity: 0.45; } 40% { transform: scale(1); opacity: 1; } }
 
-  /* Generate button */
-  .generate-wrap { display: none; margin: 12px 0 2px 38px; animation: fadeUp 0.25s ease; }
-  .generate-wrap.visible { display: block; }
-  .generate-btn {
-    background: var(--accent); color: #fff;
-    border: none; border-radius: var(--r-sm);
-    padding: 9px 18px;
-    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
-    cursor: pointer; display: flex; align-items: center; gap: 7px;
-    transition: background 0.15s, transform 0.1s;
-  }
+  /* Generate */
+  .generate-wrap { display: none; margin: 12px 0 2px 38px; }
+  .generate-wrap.visible { display: block; animation: fadeUp 0.25s ease; }
+  .generate-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); padding: 9px 18px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: background 0.15s, transform 0.1s; }
   .generate-btn:hover { background: var(--accent-dim); }
   .generate-btn:active { transform: scale(0.97); }
   .generate-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
   .generate-btn svg { width: 14px; height: 14px; }
 
-  /* Input area */
+  /* Input */
   .input-area { margin-top: 12px; display: flex; gap: 8px; align-items: flex-end; }
-  .input-wrap {
-    flex: 1; background: var(--card); border: 1px solid var(--border);
-    border-radius: var(--r); display: flex; padding: 9px 13px;
-    box-shadow: var(--shadow); transition: border-color 0.15s;
-  }
+  .input-wrap { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: var(--r); display: flex; padding: 9px 13px; box-shadow: var(--shadow); transition: border-color 0.15s; }
   .input-wrap:focus-within { border-color: var(--accent); }
-  textarea {
-    flex: 1; border: none; outline: none; resize: none; background: transparent;
-    font-family: 'DM Sans', sans-serif; font-size: 13.5px; line-height: 1.5;
-    color: var(--ink); min-height: 22px; max-height: 110px;
-  }
+  textarea { flex: 1; border: none; outline: none; resize: none; background: transparent; font-family: 'DM Sans', sans-serif; font-size: 13.5px; line-height: 1.5; color: var(--ink); min-height: 22px; max-height: 110px; }
   textarea::placeholder { color: var(--ink-faint); }
-  .send-btn {
-    width: 38px; height: 38px; border-radius: 10px;
-    background: var(--accent); color: #fff; border: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    transition: background 0.15s, transform 0.1s;
-  }
+  .send-btn { width: 38px; height: 38px; border-radius: 10px; background: var(--accent); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s, transform 0.1s; }
   .send-btn:hover { background: var(--accent-dim); }
   .send-btn:active { transform: scale(0.95); }
   .send-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
   .send-btn svg { width: 16px; height: 16px; }
 
-  /* Quick chips */
-  .quick-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
-  .chip {
-    font-size: 11.5px; padding: 4px 10px;
-    background: var(--paper-warm); border: 1px solid var(--border);
-    border-radius: 20px; cursor: pointer; transition: all 0.15s; color: var(--ink);
-    font-family: 'DM Sans', sans-serif;
-  }
-  .chip:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent-dim); }
-
-  /* ── Recommendations panel (right) ── */
-  .reco-panel {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .reco-panel-empty {
-    height: 480px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px dashed var(--border);
-    border-radius: var(--r);
-    color: var(--ink-faint);
-    font-size: 13px;
-    text-align: center;
-    line-height: 1.6;
-  }
-
-  .reco-panel-label {
-    font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
-    text-transform: uppercase; color: var(--ink-muted);
-    display: flex; align-items: center; gap: 6px;
-  }
+  /* Reco panel */
+  .reco-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .reco-panel-empty { height: 500px; display: flex; align-items: center; justify-content: center; border: 2px dashed var(--border); border-radius: var(--r); color: var(--ink-faint); font-size: 13px; text-align: center; line-height: 1.7; }
+  .reco-panel-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-muted); display: flex; align-items: center; gap: 6px; }
   .reco-panel-label-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 
-  .reco-cards { display: flex; flex-direction: column; gap: 10px; }
+  /* Accordion */
+  .acc-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+  .acc-card.rank-1 { border-color: var(--accent); border-width: 1.5px; }
+  .acc-card.open { border-color: var(--accent); }
 
-  .reco-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: 16px 18px;
-    box-shadow: var(--shadow);
-  }
-  .reco-card.rank-1 { border-color: var(--accent); border-width: 1.5px; }
+  .acc-header { display: flex; align-items: center; gap: 10px; padding: 13px 16px; cursor: pointer; user-select: none; transition: background 0.15s; }
+  .acc-header:hover { background: var(--paper-warm); }
 
-  .reco-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
-  .rank-badge {
-    width: 22px; height: 22px; border-radius: 50%;
-    background: var(--accent); color: #fff;
-    font-size: 11px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  }
-  .reco-name { font-weight: 600; font-size: 15px; flex: 1; }
-  .reco-best { font-size: 10px; font-weight: 600; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent-light); padding: 2px 7px; border-radius: 4px; }
+  .rank-badge { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .acc-name { font-weight: 600; font-size: 14.5px; flex: 1; }
+  .acc-best { font-size: 10px; font-weight: 600; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent-light); padding: 2px 7px; border-radius: 4px; }
+  .acc-summary { font-size: 11px; color: var(--ink-muted); font-family: 'DM Mono', monospace; background: var(--paper-warm); padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+  .acc-chevron { width: 15px; height: 15px; flex-shrink: 0; color: var(--ink-faint); transition: transform 0.22s ease; }
+  .acc-card.open .acc-chevron { transform: rotate(180deg); color: var(--accent); }
 
-  .match-sections { display: flex; flex-direction: column; gap: 8px; }
+  .acc-body { display: none; padding: 14px 16px 16px; border-top: 1px solid var(--border); }
+  .acc-card.open .acc-body { display: block; animation: fadeUp 0.18s ease; }
+
+  /* Match sections inside accordion */
+  .match-sections { display: flex; flex-direction: column; gap: 12px; }
   .match-section { font-size: 12.5px; }
-  .match-heading { font-weight: 600; color: var(--ink); margin-bottom: 3px; }
+  .match-heading { font-weight: 600; color: var(--ink); margin-bottom: 4px; font-size: 13px; }
   .match-points { padding-left: 15px; color: var(--ink-muted); }
   .match-points li { margin-bottom: 2px; }
 
-  .budget-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
-  .budget-chip {
-    font-family: 'DM Mono', monospace; font-size: 11px;
-    background: var(--accent-light); color: var(--accent-dim);
-    padding: 2px 8px; border-radius: 4px;
-  }
-  .verdict-chip {
-    font-size: 11px; background: var(--green-light); color: var(--green);
-    padding: 2px 8px; border-radius: 4px;
-  }
+  /* Budget breakdown table */
+  .budget-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
+  .budget-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  .budget-table td:first-child { color: var(--ink-muted); }
+  .budget-table td:last-child { font-family: 'DM Mono', monospace; text-align: right; color: var(--ink); }
+  .budget-table tr.total-row td { font-weight: 700; border-bottom: none; padding-top: 7px; }
+  .budget-table tr.total-row td:last-child { color: var(--accent-dim); }
+  .budget-note { font-size: 11px; color: var(--ink-faint); margin-top: 4px; }
 
-  .tradeoffs { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
-  .tradeoff-label { font-size: 10px; font-weight: 600; color: var(--ink-faint); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
-  .tradeoff-item { font-size: 12px; color: var(--ink-muted); display: flex; gap: 5px; align-items: flex-start; margin-bottom: 2px; }
+  .budget-tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .budget-tag { font-family: 'DM Mono', monospace; font-size: 11px; background: var(--accent-light); color: var(--accent-dim); padding: 2px 8px; border-radius: 4px; }
+  .verdict-tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+  .verdict-tag.comfortable { background: var(--green-light); color: var(--green); }
+  .verdict-tag.tight { background: #fff3e0; color: #b06000; }
+  .verdict-tag.stretch { background: #ffeaea; color: #a03030; }
+
+  .tradeoffs { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .tradeoff-label { font-size: 10px; font-weight: 600; color: var(--ink-faint); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 5px; }
+  .tradeoff-item { font-size: 12px; color: var(--ink-muted); display: flex; gap: 5px; align-items: flex-start; margin-bottom: 3px; }
   .tradeoff-item::before { content: "↗"; font-size: 10px; margin-top: 1px; flex-shrink: 0; color: var(--ink-faint); }
 
-  .confirm-btn {
-    margin-top: 12px; background: var(--ink); color: var(--paper);
-    font-size: 12px; font-weight: 500; padding: 7px 14px; border-radius: 6px;
-    border: none; cursor: pointer; font-family: 'DM Sans', sans-serif;
-    transition: background 0.15s;
-  }
+  .confirm-btn { margin-top: 14px; background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 500; padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; display: inline-flex; align-items: center; gap: 5px; }
   .confirm-btn:hover { background: var(--accent); }
 
-  /* Error bubble */
-  .error-bubble {
-    background: #fff0f0; border: 1px solid #f0c0c0; border-radius: var(--r-sm);
-    padding: 10px 14px; font-size: 13px; color: #a03030;
-    margin-top: 4px;
-  }
+  /* Error */
+  .error-bubble { background: #fff0f0; border: 1px solid #f0c0c0; border-radius: var(--r-sm); padding: 10px 14px; font-size: 13px; color: #a03030; }
 
   /* scrollbar */
   .messages::-webkit-scrollbar { width: 3px; }
@@ -304,7 +158,7 @@
     .app { flex-direction: column; padding: 12px; }
     .chat-panel { flex: none; width: 100%; }
     .messages { height: 340px; }
-    .reco-panel-empty { height: 160px; }
+    .reco-panel-empty { height: 140px; }
     .state-bar { padding: 8px 12px; }
   }
 </style>
@@ -322,12 +176,9 @@
   </button>
 </header>
 
-<!-- Trip State Bar -->
 <div class="state-bar" id="stateBar"></div>
 
 <div class="app">
-
-  <!-- Chat -->
   <div class="chat-panel">
     <div class="messages" id="messages"></div>
 
@@ -349,43 +200,31 @@
         </svg>
       </button>
     </div>
-
-    <div class="quick-chips">
-      <div class="chip" onclick="fillInput('Planning a trip from Bangalore, 3 friends')">Bangalore · 3 friends</div>
-      <div class="chip" onclick="fillInput('September, budget ₹30,000 total')">Sep · ₹30k total</div>
-      <div class="chip" onclick="fillInput('3 nights, bachelorette vibe')">3 nights · bachelorette</div>
-      <div class="chip" onclick="fillInput('Nothing else, we\'re good')">Nothing else</div>
-      <div class="chip" onclick="fillInput('Let\'s go with Pondicherry')">Confirm Pondicherry</div>
-    </div>
   </div>
 
-  <!-- Recommendations panel -->
   <div class="reco-panel" id="recoPanel">
     <div class="reco-panel-empty" id="recoEmpty">
       Recommendations will appear here<br>once Scout is ready and you tap Generate.
     </div>
   </div>
-
 </div>
 
 <script>
 // ── Endpoints ─────────────────────────────────────────────────────────────────
 const API = {
-  scout_message: 'https://twm.app.n8n.cloud/webhook/scout/message',
-  meridian_match: 'https://twm.app.n8n.cloud/webhook/meridian/match',
-  scout_present:  'https://twm.app.n8n.cloud/webhook/scout/present',
+  scout:    'https://twm.app.n8n.cloud/webhook/scout',
+  meridian: 'https://twm.app.n8n.cloud/webhook/meridian',
 };
+
+const WELCOME = "Hey there, I'm Scout. Tell me about the trip you have in mind, and I'll help you discover a destination that's the right fit for you and also tell you why it is the right fit for you.";
 
 // ── TripState ─────────────────────────────────────────────────────────────────
 const DEFAULT_STATE = () => ({
   trip_id: 'trip_' + Math.random().toString(36).slice(2, 8),
   status: 'free',
-  stage: 'matching',
+  stage: 'new',
   trip_context: {
-    required_inputs: {
-      origin_city: null, budget: null, budget_unit: null,
-      duration_nights: null, num_travelers: null, travel_month: null
-    },
+    required_inputs: { origin_city: null, budget: null, budget_unit: null, duration_nights: null, num_travelers: null, travel_month: null },
     preferences: {},
     selected_option: null
   },
@@ -401,17 +240,18 @@ let tripState;
 let busy = false;
 
 function loadState() {
-  const raw = localStorage.getItem('twm_trip_state_v2');
+  const raw = localStorage.getItem('twm_v3');
   if (raw) { try { tripState = JSON.parse(raw); return; } catch(e) {} }
   tripState = DEFAULT_STATE();
 }
 
 function saveState() {
-  localStorage.setItem('twm_trip_state_v2', JSON.stringify(tripState));
+  localStorage.setItem('twm_v3', JSON.stringify(tripState));
   renderStateBar();
 }
 
 function deepMerge(target, source) {
+  if (!source || typeof source !== 'object') return;
   for (const key of Object.keys(source)) {
     if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
       if (!target[key] || typeof target[key] !== 'object') target[key] = {};
@@ -424,187 +264,203 @@ function deepMerge(target, source) {
 
 function applyStateDelta(delta) {
   if (!delta) return;
+  if (delta.stage) tripState.stage = delta.stage;
   if (delta.trip_context) {
-    if (delta.trip_context.required_inputs)
-      deepMerge(tripState.trip_context.required_inputs, delta.trip_context.required_inputs);
-    if (delta.trip_context.preferences)
-      deepMerge(tripState.trip_context.preferences, delta.trip_context.preferences);
-    if (delta.trip_context.selected_option !== undefined)
-      tripState.trip_context.selected_option = delta.trip_context.selected_option;
+    if (delta.trip_context.required_inputs) deepMerge(tripState.trip_context.required_inputs, delta.trip_context.required_inputs);
+    if (delta.trip_context.preferences) deepMerge(tripState.trip_context.preferences, delta.trip_context.preferences);
+    if ('selected_option' in delta.trip_context) tripState.trip_context.selected_option = delta.trip_context.selected_option;
   }
   if (delta.matcher_state) deepMerge(tripState.matcher_state, delta.matcher_state);
 }
 
 // ── Console logging ───────────────────────────────────────────────────────────
-function logScoutTurn(userMsg, stateBefore, response, stateAfter) {
-  const id = tripState.trip_id;
-  console.group(`%c trip id: ${id}`, 'color:#c46b3a;font-weight:700;font-size:13px;');
-  console.log('%cUser message:', 'color:#6b6460;font-weight:600;', userMsg);
-  console.log('%cTrip state (before):', 'color:#6b6460;font-weight:600;', JSON.parse(JSON.stringify(stateBefore)));
-  console.log('---');
-  console.log('%cScout response:', 'color:#3a6b4a;font-weight:600;', response);
-  console.log('%cTrip state (after):', 'color:#3a6b4a;font-weight:600;', JSON.parse(JSON.stringify(stateAfter)));
+function logScoutTurn(userMsg, stateBefore, rawResponse, stateAfter) {
+  console.group(`%c trip id: ${tripState.trip_id}`, 'color:#c46b3a;font-weight:700;font-size:13px;');
+  console.log('%c___', 'color:#bdb8b3;');
+  console.log('%cUser message:', 'color:#6b6460;font-weight:600;', userMsg ?? '(null — post-Meridian)');
+  console.log('%cTrip state:', 'color:#6b6460;font-weight:600;', JSON.parse(JSON.stringify(stateBefore)));
+  console.log('%c---', 'color:#bdb8b3;');
+  console.log('%cScout response:', 'color:#3a6b4a;font-weight:600;', rawResponse);
+  console.log('%cTrip state:', 'color:#3a6b4a;font-weight:600;', JSON.parse(JSON.stringify(stateAfter)));
   console.groupEnd();
 }
 
 function logMeridianTurn(input, output) {
-  console.group('%c Meridian', 'color:#7090e0;font-weight:700;font-size:13px;');
+  console.group(`%c trip id: ${tripState.trip_id}`, 'color:#7090e0;font-weight:700;font-size:13px;');
   console.log('%cMeridian input:', 'color:#6b6460;font-weight:600;', JSON.parse(JSON.stringify(input)));
   console.log('%cMeridian output:', 'color:#3a6b4a;font-weight:600;', output);
   console.groupEnd();
 }
 
-// ── Real API calls ────────────────────────────────────────────────────────────
-async function callScoutMessage(userMsg) {
+// ── API calls ─────────────────────────────────────────────────────────────────
+async function callScout(message) {
+  // message can be string (user turn) or null (post-Meridian presentation)
   const stateBefore = JSON.parse(JSON.stringify(tripState));
-  const body = { trip_state: tripState, message: userMsg };
-  const res = await fetch(API.scout_message, {
+  const body = { trip_state: tripState, message: message };
+
+  const res = await fetch(API.scout, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-  if (!res.ok) throw new Error(`Scout /message ${res.status}`);
+  if (!res.ok) throw new Error(`Scout ${res.status}: ${res.statusText}`);
   const data = await res.json();
-  logScoutTurn(userMsg, stateBefore, data, tripState);
+
+  applyStateDelta(data.state_delta);
+  saveState();
+  logScoutTurn(message, stateBefore, data, JSON.parse(JSON.stringify(tripState)));
   return data;
 }
 
-async function callMeridianMatch() {
+async function callMeridian() {
   const input = { trip_context: tripState.trip_context };
-  const res = await fetch(API.meridian_match, {
+  const res = await fetch(API.meridian, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
   });
-  if (!res.ok) throw new Error(`Meridian /match ${res.status}`);
+
+  if (!res.ok) {
+    // Infra failure — write API_ERROR to last_recommendations
+    const errPayload = { status: 'API_ERROR', http_status: res.status };
+    tripState.matcher_state.last_recommendations = errPayload;
+    saveState();
+    logMeridianTurn(input, errPayload);
+    return errPayload;
+  }
+
   const data = await res.json();
+  // Always write Meridian output (SUCCESS or FAILURE) to last_recommendations
+  tripState.matcher_state.last_recommendations = data;
+  saveState();
   logMeridianTurn(input, data);
   return data;
 }
 
-async function callScoutPresent(meridianOutput, context) {
-  const stateBefore = JSON.parse(JSON.stringify(tripState));
-  const body = { trip_state: tripState, meridian_output: meridianOutput, context };
-  const res = await fetch(API.scout_present, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(`Scout /present ${res.status}`);
-  const data = await res.json();
-  logScoutTurn('[present]', stateBefore, data, tripState);
-  return data;
-}
-
-// ── State bar render ──────────────────────────────────────────────────────────
+// ── State bar ─────────────────────────────────────────────────────────────────
 function renderStateBar() {
   const ri = tripState.trip_context.required_inputs;
   const prefs = tripState.trip_context.preferences;
   const ms = tripState.matcher_state;
 
-  const chip = (val, cls='') => {
-    if (val == null || val === '') return `<span class="state-chip empty">—</span>`;
-    return `<span class="state-chip ${cls}">${val}</span>`;
-  };
-  const boolChip = (v) => `<span class="state-chip ${v ? 'true-val' : 'false-val'}">${v}</span>`;
+  const chip = (val, cls='') => val != null && val !== ''
+    ? `<span class="state-chip ${cls}">${val}</span>`
+    : `<span class="state-chip empty">—</span>`;
+  const boolChip = v => `<span class="state-chip ${v ? 'true-val' : 'false-val'}">${v}</span>`;
 
   const prefKeys = Object.keys(prefs);
-  const prefChips = prefKeys.length === 0
-    ? chip(null)
-    : prefKeys.map(k => {
-        const v = prefs[k];
-        const disp = typeof v === 'object' && v.value ? v.value : (Array.isArray(v) ? v.join(', ') : String(v));
-        return `<span class="state-chip">${k}: ${disp}</span>`;
-      }).join('');
+  const prefChips = prefKeys.length === 0 ? chip(null) : prefKeys.map(k => {
+    const v = prefs[k];
+    const d = typeof v === 'object' && v !== null && !Array.isArray(v) && v.value ? v.value : (Array.isArray(v) ? v.join(', ') : String(v));
+    return `<span class="state-chip">${k}: ${d}</span>`;
+  }).join('');
 
   document.getElementById('stateBar').innerHTML = `
-    <div class="state-bar-group">
-      <div class="state-bar-label">Stage</div>
-      <div class="state-bar-section">${chip(tripState.stage, 'stage-chip')}</div>
-    </div>
+    <div class="state-bar-group"><div class="state-bar-label">Stage</div><div class="state-bar-section">${chip(tripState.stage, 'stage-chip')}</div></div>
     <div class="state-divider"></div>
-    <div class="state-bar-group">
-      <div class="state-bar-label">required_inputs</div>
-      <div class="state-bar-section">
-        ${chip(ri.origin_city)} ${chip(ri.num_travelers ? ri.num_travelers + ' pax' : null)}
-        ${chip(ri.travel_month)} ${chip(ri.duration_nights ? ri.duration_nights + ' nights' : null)}
-        ${chip(ri.budget ? '₹' + ri.budget.toLocaleString('en-IN') + (ri.budget_unit === 'per_person' ? '/pp' : ' total') : null)}
-      </div>
-    </div>
+    <div class="state-bar-group"><div class="state-bar-label">required_inputs</div><div class="state-bar-section">
+      ${chip(ri.origin_city)} ${chip(ri.num_travelers ? ri.num_travelers + ' pax' : null)}
+      ${chip(ri.travel_month)} ${chip(ri.duration_nights ? ri.duration_nights + 'n' : null)}
+      ${chip(ri.budget ? '₹' + ri.budget.toLocaleString('en-IN') + (ri.budget_unit === 'per_person' ? '/pp' : ' total') : null)}
+    </div></div>
     <div class="state-divider"></div>
-    <div class="state-bar-group">
-      <div class="state-bar-label">preferences</div>
-      <div class="state-bar-section">${prefChips}</div>
-    </div>
+    <div class="state-bar-group"><div class="state-bar-label">preferences</div><div class="state-bar-section">${prefChips}</div></div>
     <div class="state-divider"></div>
-    <div class="state-bar-group">
-      <div class="state-bar-label">generate_ready</div>
-      <div class="state-bar-section">${boolChip(ms.generate_ready)}</div>
-    </div>
-    <div class="state-bar-group">
-      <div class="state-bar-label">awaiting</div>
-      <div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div>
-    </div>
-    <div class="state-bar-group">
-      <div class="state-bar-label">selected_option</div>
-      <div class="state-bar-section">${chip(tripState.trip_context.selected_option?.id)}</div>
-    </div>
+    <div class="state-bar-group"><div class="state-bar-label">generate_ready</div><div class="state-bar-section">${boolChip(ms.generate_ready)}</div></div>
+    <div class="state-bar-group"><div class="state-bar-label">awaiting</div><div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div></div>
+    <div class="state-bar-group"><div class="state-bar-label">selected_option</div><div class="state-bar-section">${chip(tripState.trip_context.selected_option?.id)}</div></div>
   `;
 }
 
-// ── Recommendations panel ─────────────────────────────────────────────────────
-function renderRecos(options, finalRec) {
+// ── Recommendations panel (accordion) ────────────────────────────────────────
+function renderRecos(meridianData) {
   const panel = document.getElementById('recoPanel');
   panel.innerHTML = '';
+
+  if (!meridianData || !meridianData.options || meridianData.status !== 'SUCCESS') return;
 
   const label = document.createElement('div');
   label.className = 'reco-panel-label';
   label.innerHTML = `<div class="reco-panel-label-dot"></div>Recommendations`;
   panel.appendChild(label);
 
-  const cards = document.createElement('div');
-  cards.className = 'reco-cards';
-
-  options.forEach(opt => {
+  meridianData.options.forEach((opt, idx) => {
     const card = document.createElement('div');
-    card.className = `reco-card${opt.rank === 1 ? ' rank-1' : ''}`;
+    card.className = `acc-card${opt.rank === 1 ? ' rank-1' : ''}${idx === 0 ? ' open' : ''}`;
 
-    let html = `<div class="reco-head">
-      <div class="rank-badge">${opt.rank}</div>
-      <div class="reco-name">${opt.name}</div>
-      ${opt.rank === 1 ? `<span class="reco-best">Best match</span>` : ''}
-    </div><div class="match-sections">`;
+    // Budget section for summary tag
+    const budgetSec = (opt.match_sections || []).find(s => s.type === 'budget');
+    const summaryTag = budgetSec ? `<span class="acc-summary">₹${(budgetSec.per_person_total || 0).toLocaleString('en-IN')}/pp</span>` : '';
+
+    let bodyHtml = `<div class="match-sections">`;
 
     (opt.match_sections || []).forEach(sec => {
-      html += `<div class="match-section"><div class="match-heading">${sec.heading}</div>`;
-      if (sec.points) html += `<ul class="match-points">${sec.points.map(p=>`<li>${p}</li>`).join('')}</ul>`;
-      if (sec.per_person_total) {
-        html += `<div class="budget-row">
-          <span class="budget-chip">₹${sec.per_person_total.toLocaleString('en-IN')} / person</span>
-          ${sec.group_total ? `<span class="budget-chip">₹${sec.group_total.toLocaleString('en-IN')} total</span>` : ''}
-          ${sec.verdict ? `<span class="verdict-chip">${sec.verdict}</span>` : ''}
+      bodyHtml += `<div class="match-section"><div class="match-heading">${sec.heading}</div>`;
+
+      if (sec.type === 'budget') {
+        // Detailed breakdown table
+        bodyHtml += `<table class="budget-table">`;
+        const rows = [
+          ['Stay', sec.stay],
+          ['Food', sec.food],
+          ['Travel', sec.travel],
+          ['Activities', sec.activities],
+          ['Local transport', sec.local_transport],
+        ];
+        rows.forEach(([label, item]) => {
+          if (!item) return;
+          const est = item.estimate_per_person || item.estimate_group;
+          const pp = item.estimate_per_person;
+          const grp = item.estimate_group;
+          bodyHtml += `<tr><td>${label}${item.notes ? ` <span style="color:var(--ink-faint);font-size:11px;">— ${item.notes}</span>` : ''}</td><td>${pp ? '₹'+pp.toLocaleString('en-IN')+'/pp' : grp ? '₹'+grp.toLocaleString('en-IN')+' total' : ''}</td></tr>`;
+        });
+        bodyHtml += `<tr class="total-row"><td>Total per person</td><td>₹${(sec.per_person_total || 0).toLocaleString('en-IN')}</td></tr>`;
+        bodyHtml += `</table>`;
+        const verdictClass = sec.verdict === 'comfortable' ? 'comfortable' : sec.verdict === 'tight' ? 'tight' : 'stretch';
+        bodyHtml += `<div class="budget-tags">
+          <span class="budget-tag">₹${(sec.per_person_total||0).toLocaleString('en-IN')} / person</span>
+          <span class="budget-tag">₹${(sec.group_total||0).toLocaleString('en-IN')} total</span>
+          <span class="budget-tag">Budget: ₹${(sec.budget_given||0).toLocaleString('en-IN')}</span>
+          ${sec.verdict ? `<span class="verdict-tag ${verdictClass}">${sec.verdict}</span>` : ''}
         </div>`;
+      } else if (sec.points) {
+        bodyHtml += `<ul class="match-points">${sec.points.map(p=>`<li>${p}</li>`).join('')}</ul>`;
       }
-      html += `</div>`;
+
+      bodyHtml += `</div>`;
     });
 
-    html += `</div>`;
+    bodyHtml += `</div>`;
 
     if (opt.tradeoffs?.length) {
-      html += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>`;
-      opt.tradeoffs.forEach(t => { html += `<div class="tradeoff-item">${t.point}</div>`; });
-      html += `</div>`;
+      bodyHtml += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>`;
+      opt.tradeoffs.forEach(t => { bodyHtml += `<div class="tradeoff-item">${t.point}</div>`; });
+      bodyHtml += `</div>`;
     }
 
-    if (opt.rank === 1) {
-      html += `<button class="confirm-btn" onclick="quickConfirm('${opt.name}')">Confirm ${opt.name} →</button>`;
-    }
+    // Confirm button on ALL cards
+    const destName = opt.name;
+    bodyHtml += `<button class="confirm-btn" onclick="quickConfirm('${destName.replace(/'/g,"\\'")}')">
+      Choose ${destName} →
+    </button>`;
 
-    card.innerHTML = html;
-    cards.appendChild(card);
+    card.innerHTML = `
+      <div class="acc-header" onclick="toggleAcc(this.parentElement)">
+        <div class="rank-badge">${opt.rank}</div>
+        <div class="acc-name">${opt.name}</div>
+        ${opt.rank === 1 ? `<span class="acc-best">Best match</span>` : ''}
+        ${summaryTag}
+        <svg class="acc-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+      <div class="acc-body">${bodyHtml}</div>
+    `;
+
+    panel.appendChild(card);
   });
+}
 
-  panel.appendChild(cards);
+function toggleAcc(card) {
+  card.classList.toggle('open');
 }
 
 // ── Chat helpers ──────────────────────────────────────────────────────────────
@@ -618,10 +474,8 @@ function appendMsg(role, content) {
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.innerHTML = md(content);
-  div.appendChild(av);
-  div.appendChild(bubble);
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
+  div.appendChild(av); div.appendChild(bubble);
+  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
 }
 
 function appendError(text) {
@@ -629,63 +483,48 @@ function appendError(text) {
   const div = document.createElement('div');
   div.className = 'msg assistant';
   div.innerHTML = `<div class="avatar scout">S</div><div class="error-bubble">${text}</div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
+  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
 }
 
-function md(text) {
-  if (!text) return '';
-  return String(text).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-}
+function md(t) { return t ? String(t).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') : ''; }
 
 function showTyping() {
   const msgs = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = 'msg assistant'; div.id = 'typing-ind';
-  div.innerHTML = `<div class="avatar scout">S</div><div class="bubble"><div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
-  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
+  const d = document.createElement('div');
+  d.className = 'msg assistant'; d.id = 'typing-ind';
+  d.innerHTML = `<div class="avatar scout">S</div><div class="bubble"><div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
+  msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
 }
 function removeTyping() { document.getElementById('typing-ind')?.remove(); }
+
+function setGenerate(show) {
+  document.getElementById('generateWrap').classList.toggle('visible', show);
+}
+
+function setSendDisabled(v) { document.getElementById('sendBtn').disabled = v; }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 async function handleSend() {
   const input = document.getElementById('userInput');
   const msg = input.value.trim();
   if (!msg || busy) return;
-  busy = true;
-  input.value = ''; input.style.height = 'auto';
-  setSendDisabled(true);
+  busy = true; input.value = ''; input.style.height = 'auto'; setSendDisabled(true);
 
   appendMsg('user', msg);
   showTyping();
 
   try {
-    const res = await callScoutMessage(msg);
-
-    applyStateDelta(res.state_delta);
-    if (res.stage) tripState.stage = res.stage;
-    if (typeof res.generate_ready === 'boolean') tripState.matcher_state.generate_ready = res.generate_ready;
-    if (res.confirmed_destination) tripState.trip_context.selected_option = res.confirmed_destination;
-
-    // Log after applying delta
-    console.log('%cTrip state (after apply):', 'color:#3a6b4a;font-weight:600;', JSON.parse(JSON.stringify(tripState)));
-
-    saveState();
+    const res = await callScout(msg);
     removeTyping();
     appendMsg('assistant', res.message);
-
-    const gw = document.getElementById('generateWrap');
-    if (res.generate_ready) gw.classList.add('visible');
-    else gw.classList.remove('visible');
-
+    setGenerate(tripState.matcher_state.generate_ready === true);
   } catch (err) {
     removeTyping();
-    appendError(`Something went wrong: ${err.message}. Please try again.`);
-    console.error('[Scout/message error]', err);
+    appendError(`Something went wrong — try again. (${err.message})`);
+    console.error('[Scout error]', err);
   }
 
-  busy = false;
-  setSendDisabled(false);
+  busy = false; setSendDisabled(false);
 }
 
 async function handleGenerate() {
@@ -696,37 +535,25 @@ async function handleGenerate() {
   gBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Finding matches…`;
 
   try {
-    // POST /api/meridian/match
-    const meridianOut = await callMeridianMatch();
+    // 1. Call Meridian (always writes to last_recommendations regardless of outcome)
+    const meridianOut = await callMeridian();
 
-    // POST /api/scout/present
-    const presentRes = await callScoutPresent(meridianOut, 'first_presentation');
-
-    applyStateDelta(presentRes.state_delta);
-    if (presentRes.stage) tripState.stage = presentRes.stage;
-    if (typeof presentRes.generate_ready === 'boolean') tripState.matcher_state.generate_ready = presentRes.generate_ready;
-
-    // Store last_recommendations
-    if (meridianOut.options) {
-      tripState.matcher_state.last_recommendations = {
-        options: meridianOut.options.map(o => o.destination_id),
-        best_match: meridianOut.final_recommendation?.best_match,
-        generated_at: new Date().toISOString(),
-      };
-    }
-
-    saveState();
-    document.getElementById('generateWrap').classList.remove('visible');
+    // 2. Call Scout with message: null — Scout handles both SUCCESS and FAILURE
+    showTyping();
+    const presentRes = await callScout(null);
+    removeTyping();
     appendMsg('assistant', presentRes.message);
+    setGenerate(tripState.matcher_state.generate_ready === true);
 
-    // Render options to the right panel
-    if (meridianOut.options?.length) {
-      renderRecos(meridianOut.options, meridianOut.final_recommendation);
+    // 3. Render recos panel if Meridian returned options
+    if (meridianOut.status === 'SUCCESS' && meridianOut.options?.length) {
+      renderRecos(meridianOut);
     }
 
   } catch (err) {
-    appendError(`Couldn't reach the recommendation engine: ${err.message}. Want to try again?`);
-    console.error('[Meridian/Scout present error]', err);
+    removeTyping();
+    appendError(`Hit a snag — want to try again? (${err.message})`);
+    console.error('[Generate error]', err);
   }
 
   busy = false;
@@ -738,20 +565,16 @@ function quickConfirm(name) {
   document.getElementById('userInput').value = `Let's go with ${name}`;
   handleSend();
 }
-function fillInput(text) { document.getElementById('userInput').value = text; document.getElementById('userInput').focus(); }
-function setSendDisabled(v) { document.getElementById('sendBtn').disabled = v; }
 
 function resetTrip() {
-  localStorage.removeItem('twm_trip_state_v2');
+  localStorage.removeItem('twm_v3');
   tripState = DEFAULT_STATE();
   saveState();
   document.getElementById('messages').innerHTML = '';
-  document.getElementById('generateWrap').classList.remove('visible');
   document.getElementById('recoPanel').innerHTML = `<div class="reco-panel-empty" id="recoEmpty">Recommendations will appear here<br>once Scout is ready and you tap Generate.</div>`;
-  busy = false;
-  setSendDisabled(false);
+  setGenerate(false); busy = false; setSendDisabled(false);
   console.log('%c[Trip reset]', 'color:#c46b3a;font-weight:700;', tripState.trip_id);
-  setTimeout(() => appendMsg('assistant', "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest."), 200);
+  setTimeout(() => appendMsg('assistant', WELCOME), 200);
 }
 
 // ── Textarea ──────────────────────────────────────────────────────────────────
@@ -767,15 +590,44 @@ document.getElementById('userInput').addEventListener('keydown', function(e) {
 loadState();
 renderStateBar();
 
-setTimeout(() => {
-  const ctx = tripState.matcher_state.conversation_context;
-  if (ctx?.last_scout_message && tripState.stage !== 'new') {
-    appendMsg('assistant', `Welcome back. ${ctx.last_scout_message}`);
-    if (tripState.matcher_state.generate_ready) document.getElementById('generateWrap').classList.add('visible');
-  } else {
-    appendMsg('assistant', "Hey! I'm Scout. Tell me about the trip you have in mind — who's going, where you're thinking, or just a vibe — and I'll figure out the rest.");
+setTimeout(async () => {
+  const stage = tripState.stage;
+
+  if (stage === 'new' || !tripState.matcher_state.conversation_context?.last_scout_message) {
+    // Fresh session
+    appendMsg('assistant', WELCOME);
+    return;
   }
-}, 250);
+
+  if (stage === 'matched') {
+    // Destination already confirmed — just resume in chat, no Scout call
+    const sel = tripState.trip_context.selected_option;
+    appendMsg('assistant', `Welcome back — you'd confirmed ${sel?.id || 'a destination'} for your trip. Let me know if you'd like to plan further.`);
+    return;
+  }
+
+  // stage = matching or ready — call Scout with message: null to resume
+  showTyping();
+  try {
+    const res = await callScout(null);
+    removeTyping();
+    appendMsg('assistant', res.message);
+    setGenerate(tripState.matcher_state.generate_ready === true);
+
+    // If last_recommendations exist and had options, re-render
+    const lr = tripState.matcher_state.last_recommendations;
+    if (lr?.status === 'SUCCESS' && lr.options?.length) {
+      // Reconstruct from stored meridian output if available
+      if (lr.meridian_output) renderRecos(lr.meridian_output);
+      else renderRecos(lr);
+    }
+  } catch (err) {
+    removeTyping();
+    appendMsg('assistant', `Welcome back — ${tripState.matcher_state.conversation_context?.last_scout_message || "let's pick up where we left off."}`);
+    setGenerate(tripState.matcher_state.generate_ready === true);
+    console.error('[Resume error]', err);
+  }
+}, 300);
 </script>
 </body>
 </html>
