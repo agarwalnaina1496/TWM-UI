@@ -219,6 +219,19 @@
 
   .error-bubble { background: #fff0f0; border: 1px solid #f0c0c0; border-radius: var(--r-sm); padding: 10px 14px; font-size: 13px; color: #a03030; max-width: 80%; }
 
+  /* ── Resume card ── */
+  .resume-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); padding: 14px 16px; max-width: 82%; animation: fadeUp 0.22s ease; }
+  .resume-card-label { font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 10px; }
+  .resume-rows { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .resume-row { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
+  .resume-row-key { color: var(--ink-faint); min-width: 110px; flex-shrink: 0; font-size: 12px; }
+  .resume-row-val { color: var(--ink); font-weight: 500; }
+  .resume-row-val.empty { color: var(--ink-faint); font-style: italic; font-weight: 400; }
+  .resume-section-sep { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin: 8px 0 5px; }
+  .resume-continue-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); padding: 8px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .resume-continue-btn:hover { background: var(--accent-dim); }
+  .resume-continue-btn svg { width: 13px; height: 13px; }
+
   .messages::-webkit-scrollbar { width: 3px; }
   .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
@@ -565,14 +578,92 @@ function clearChat() {
   setSendDisabled(false);
 }
 
-async function resumeChat() {
+let resuming = false; // true when waiting for first user action after resume
+
+function resumeChat() {
   const stage = tripState?.stage;
   if (!stage || stage === 'new') { appendMsg('assistant', WELCOME); return; }
+
   if (stage === 'matched') {
     const sel = tripState.trip_context.selected_option;
-    appendMsg('assistant', `Welcome back — you've chosen ${sel?.id || 'a destination'}. Head to recommendations to explore further.`);
+    appendMsg('assistant', `Welcome back — you've confirmed ${sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`);
     return;
   }
+
+  // Show local resume summary card — no Scout call yet
+  resuming = true;
+  const ri = tripState.trip_context.required_inputs;
+  const prefs = tripState.trip_context.preferences;
+
+  const row = (key, val) => {
+    const hasVal = val != null && val !== '';
+    return `<div class="resume-row">
+      <span class="resume-row-key">${key}</span>
+      <span class="resume-row-val${hasVal ? '' : ' empty'}">${hasVal ? val : 'Not collected yet'}</span>
+    </div>`;
+  };
+
+  const budgetDisplay = ri.budget
+    ? `₹${ri.budget.toLocaleString('en-IN')} ${ri.budget_unit === 'per_person' ? 'per person' : 'total'}`
+    : null;
+
+  const prefKeys = Object.keys(prefs).filter(k => k !== 'rejections');
+  const rejections = prefs.rejections || [];
+
+  let prefRows = prefKeys.length === 0
+    ? `<div class="resume-row"><span class="resume-row-key">Preferences</span><span class="resume-row-val empty">None collected yet</span></div>`
+    : prefKeys.map(k => {
+        const v = prefs[k];
+        const d = typeof v === 'object' && v !== null && !Array.isArray(v) && v.value ? v.value : (Array.isArray(v) ? v.join(', ') : String(v));
+        return row(k.replace(/_/g, ' '), d);
+      }).join('');
+
+  const rejRow = rejections.length > 0
+    ? row('Rejected', rejections.map(r => r.destination).join(', '))
+    : '';
+
+  const awaitingMsg = tripState.matcher_state.conversation_context?.awaiting;
+  const nextStep = awaitingMsg
+    ? `Scout was last waiting for: <strong>${awaitingMsg.replace(/_/g, ' ')}</strong>`
+    : tripState.matcher_state.generate_ready
+      ? `Ready to generate recommendations`
+      : `Conversation in progress`;
+
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.id = 'resume-card-wrap';
+  div.innerHTML = `
+    <div class="avatar scout">S</div>
+    <div class="resume-card">
+      <div class="resume-card-label">Here's where we left off</div>
+      <div class="resume-rows">
+        ${row('From', ri.origin_city)}
+        ${row('Travellers', ri.num_travelers ? ri.num_travelers + ' people' : null)}
+        ${row('Month', ri.travel_month)}
+        ${row('Duration', ri.duration_nights ? ri.duration_nights + ' nights' : null)}
+        ${row('Budget', budgetDisplay)}
+        <div class="resume-section-sep">Preferences</div>
+        ${prefRows}
+        ${rejRow}
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:12px;">${nextStep}</div>
+      <button class="resume-continue-btn" onclick="handleContinue()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        Continue from here
+      </button>
+    </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  // Also show See Recommendations if it was ready
+  setRecoBtn(tripState.matcher_state.generate_ready === true);
+}
+
+async function handleContinue() {
+  // Remove resume card and call Scout with message: null
+  document.getElementById('resume-card-wrap')?.remove();
+  resuming = false;
   showTyping();
   try {
     const res = await callScout(null);
@@ -581,9 +672,8 @@ async function resumeChat() {
     setRecoBtn(tripState.matcher_state.generate_ready === true);
   } catch (err) {
     removeTyping();
-    const last = tripState.matcher_state.conversation_context?.last_scout_message;
-    appendMsg('assistant', last ? `Welcome back — ${last}` : WELCOME);
-    console.error('[Resume]', err);
+    appendError(`Couldn't reach Scout — try again. (${err.message})`);
+    console.error('[Resume/continue]', err);
   }
 }
 
@@ -627,6 +717,12 @@ async function handleSend() {
   const msg = input.value.trim();
   if (!msg || busy) return;
   busy = true; input.value = ''; input.style.height = 'auto'; setSendDisabled(true);
+
+  // Dismiss resume card if user typed instead of clicking Continue
+  if (resuming) {
+    document.getElementById('resume-card-wrap')?.remove();
+    resuming = false;
+  }
 
   // Create trip on first message
   if (!currentTripId) {
