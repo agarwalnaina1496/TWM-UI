@@ -661,9 +661,11 @@ function resumeChat() {
 }
 
 async function handleContinue() {
-  // Remove resume card and call Scout with message: null
-  document.getElementById('resume-card-wrap')?.remove();
+  if (busy) return;
+  busy = true;
+  setSendDisabled(true);
   resuming = false;
+  // Card stays — Scout response appends below it
   showTyping();
   try {
     const res = await callScout(null);
@@ -675,6 +677,8 @@ async function handleContinue() {
     appendError(`Couldn't reach Scout — try again. (${err.message})`);
     console.error('[Resume/continue]', err);
   }
+  busy = false;
+  setSendDisabled(false);
 }
 
 function appendMsg(role, content) {
@@ -718,11 +722,8 @@ async function handleSend() {
   if (!msg || busy) return;
   busy = true; input.value = ''; input.style.height = 'auto'; setSendDisabled(true);
 
-  // Dismiss resume card if user typed instead of clicking Continue
-  if (resuming) {
-    document.getElementById('resume-card-wrap')?.remove();
-    resuming = false;
-  }
+  // User typed instead of clicking Continue — just clear resuming flag, card stays
+  if (resuming) { resuming = false; }
 
   // Create trip on first message
   if (!currentTripId) {
