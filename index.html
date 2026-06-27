@@ -425,6 +425,7 @@ function syncTripFromState(id, state) {
   if (ri.duration_nights) inputs.push(ri.duration_nights + 'n');
   if (ri.budget) inputs.push('₹' + ri.budget.toLocaleString('en-IN'));
   const status = state.stage === 'matched' ? 'matched' : state.stage === 'new' ? 'new' : 'matching';
+  // note: 'ready' stage maps to 'matching' status for trip list display
   updateTrip(id, { status, inputs });
 }
 
@@ -442,7 +443,7 @@ function defaultState(tripId) {
       selected_option: null
     },
     matcher_state: {
-      generate_ready: false,
+      recommendation_intent: false,
       conversation_context: { last_scout_message: null, awaiting: null },
       last_recommendations: null
     },
@@ -625,7 +626,7 @@ function resumeChat() {
   const awaitingMsg = tripState.matcher_state.conversation_context?.awaiting;
   const nextStep = awaitingMsg
     ? `Scout was last waiting for: <strong>${awaitingMsg.replace(/_/g, ' ')}</strong>`
-    : tripState.matcher_state.generate_ready
+    : tripState.matcher_state.recommendation_intent
       ? `Ready to generate recommendations`
       : `Conversation in progress`;
 
@@ -657,7 +658,7 @@ function resumeChat() {
   msgs.scrollTop = msgs.scrollHeight;
 
   // Also show See Recommendations if it was ready
-  setRecoBtn(tripState.matcher_state.generate_ready === true);
+  setRecoBtn(tripState.matcher_state.recommendation_intent === true);
 }
 
 async function handleContinue() {
@@ -671,7 +672,7 @@ async function handleContinue() {
     const res = await callScout(null);
     removeTyping();
     appendMsg('assistant', res.message);
-    setRecoBtn(tripState.matcher_state.generate_ready === true);
+    setRecoBtn(tripState.matcher_state.recommendation_intent === true);
   } catch (err) {
     removeTyping();
     appendError(`Couldn't reach Scout — try again. (${err.message})`);
@@ -742,7 +743,7 @@ async function handleSend() {
     const res = await callScout(msg);
     removeTyping();
     appendMsg('assistant', res.message);
-    setRecoBtn(tripState.matcher_state.generate_ready === true);
+    setRecoBtn(tripState.matcher_state.recommendation_intent === true);
   } catch (err) {
     removeTyping();
     appendError(`Something went wrong — try again. (${err.message})`);
@@ -760,15 +761,9 @@ async function handleSeeRecos() {
 
   try {
     const meridianOut = await callMeridian();
-    showTyping();
-    const presentRes = await callScout(null);
-    removeTyping();
-    appendMsg('assistant', presentRes.message);
-    setRecoBtn(tripState.matcher_state.generate_ready === true);
 
     if (meridianOut.status === 'SUCCESS' && meridianOut.options?.length) {
       currentRecos = meridianOut;
-      updateTrip(currentTripId, { status: 'matched' });
       navigate('recos');
     }
   } catch (err) {
@@ -887,7 +882,7 @@ function notForMe(name) {
   if (tripState) {
     if (!tripState.trip_context.preferences.rejections) tripState.trip_context.preferences.rejections = [];
     tripState.trip_context.preferences.rejections.push({ destination: name, reason: 'user_rejected' });
-    tripState.matcher_state.generate_ready = false;
+    tripState.matcher_state.recommendation_intent = false;
     tripState.stage = 'matching';
     saveTripState();
   }
@@ -899,7 +894,7 @@ function notForMe(name) {
     callScout(`${name} isn't for me.`).then(res => {
       removeTyping();
       appendMsg('assistant', res.message);
-      setRecoBtn(tripState.matcher_state.generate_ready === true);
+      setRecoBtn(tripState.matcher_state.recommendation_intent === true);
     }).catch(err => {
       removeTyping();
       appendError(`Couldn't reach Scout — try again. (${err.message})`);
@@ -933,7 +928,7 @@ function renderStateBarEl(elId) {
     <div class="state-div"></div>
     <div class="state-bar-group"><div class="state-bar-label">Preferences</div><div class="state-bar-section">${prefChips}</div></div>
     <div class="state-div"></div>
-    <div class="state-bar-group"><div class="state-bar-label">generate_ready</div><div class="state-bar-section">${bool(ms.generate_ready)}</div></div>
+    <div class="state-bar-group"><div class="state-bar-label">recommendation_intent</div><div class="state-bar-section">${bool(ms.recommendation_intent)}</div></div>
     <div class="state-bar-group"><div class="state-bar-label">awaiting</div><div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div></div>
     <div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tripState.trip_context.selected_option?.id)}</div></div>`;
 }
