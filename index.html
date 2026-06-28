@@ -377,6 +377,7 @@ const API = {
 const WELCOME = "Hey there, I'm Scout. Tell me about the trip you have in mind, and I'll help you discover a destination that's the right fit for you and also tell you why it is the right fit for you.";
 const TRIPS_KEY = 'twm_trips_v1';
 const STATE_KEY  = 'twm_state_v1'; // prefix: STATE_KEY + trip_id
+const UI_STATE_KEY = 'twm_ui_state_v1'; // prefix: UI_STATE_KEY + trip_id
 
 let currentTripId = null;
 let tripState     = null;
@@ -414,6 +415,7 @@ function deleteTrip(id) {
   const trips = getTrips().filter(t => t.id !== id);
   saveTrips(trips);
   localStorage.removeItem(STATE_KEY + id);
+  localStorage.removeItem(UI_STATE_KEY + id);
 }
 
 function syncTripFromState(id, state) {
@@ -445,7 +447,7 @@ function defaultState(tripId) {
     matcher_state: {
       recommendation_intent: false,
       conversation_context: { last_scout_message: null, awaiting: null },
-      last_recommendations: null
+      recommendations: []
     },
     planner_state: null
   };
@@ -472,6 +474,43 @@ function deepMerge(target, source) {
       deepMerge(target[key], source[key]);
     } else { target[key] = source[key]; }
   }
+}
+
+function latestRecommendation() {
+  const recs = tripState?.matcher_state?.recommendations;
+  return Array.isArray(recs) && recs.length ? recs[recs.length - 1] : null;
+}
+
+function isMeridianBusinessStatus(status) {
+  return ['SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL', 'MISSING_INPUTS'].includes(status);
+}
+
+function loadUiState(tripId) {
+  const raw = localStorage.getItem(UI_STATE_KEY + tripId);
+  if (raw) { try { return JSON.parse(raw); } catch {} }
+  return { last_screen: 'chat', last_recommendation_index: null };
+}
+
+function saveUiState(screen, extra = {}) {
+  if (!currentTripId) return;
+  const uiState = { ...loadUiState(currentTripId), last_screen: screen, ...extra };
+  localStorage.setItem(UI_STATE_KEY + currentTripId, JSON.stringify(uiState));
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function jsArg(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r?\n/g, ' ');
 }
 
 function applyStateDelta(delta) {
@@ -522,15 +561,14 @@ async function callScout(message) {
 async function callMeridian() {
   const input = { trip_context: tripState.trip_context };
   const res = await fetch(API.meridian, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
-  if (!res.ok) {
-    const err = { status: 'API_ERROR', http_status: res.status };
-    tripState.matcher_state.last_recommendations = err;
-    saveTripState();
-    logMeridian(input, err);
-    return err;
-  }
+  if (!res.ok) throw new Error(`Meridian ${res.status}`);
+
   const data = await res.json();
-  tripState.matcher_state.last_recommendations = data;
+  if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
+
+  if (!Array.isArray(tripState.matcher_state.recommendations)) tripState.matcher_state.recommendations = [];
+  tripState.matcher_state.recommendations.push(data);
+  tripState.matcher_state.recommendation_intent = false;
   saveTripState();
   logMeridian(input, data);
   return data;
@@ -542,8 +580,12 @@ async function callMeridian() {
 function navigate(screen) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + screen).classList.add('active');
+  if (currentTripId && (screen === 'chat' || screen === 'recos')) saveUiState(screen);
   if (screen === 'trips') renderTripsList();
-  if (screen === 'recos') renderRecos(currentRecos);
+  if (screen === 'recos') {
+    currentRecos = currentRecos || latestRecommendation();
+    renderRecos(currentRecos);
+  }
 }
 
 function startMatch() {
@@ -560,11 +602,27 @@ function startMatch() {
 function openTrip(id) {
   currentTripId = id;
   tripState = loadTripState(id);
-  currentRecos = tripState.matcher_state.last_recommendations;
+  currentRecos = latestRecommendation();
   clearChat();
-  navigate('chat');
   const trip = getTripById(id);
   document.getElementById('chatTripName').textContent = trip?.title || '';
+
+  const uiState = loadUiState(id);
+
+  // Matched state: go straight to recos with CTA restored
+  if (tripState?.stage === 'matched' && currentRecos) {
+    navigate('recos');
+    const selectedName = uiState.selected_option_name || tripState.trip_context.selected_option?.id || null;
+    if (selectedName) renderPlanCta(selectedName);
+    return;
+  }
+
+  if (uiState.last_screen === 'recos' && currentRecos) {
+    navigate('recos');
+    return;
+  }
+
+  navigate('chat');
   renderStateBar();
   resumeChat();
 }
@@ -704,7 +762,7 @@ function appendError(text) {
   msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
 }
 
-function md(t) { return t ? String(t).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') : ''; }
+function md(t) { return t ? escapeHtml(t).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') : ''; }
 
 function showTyping() {
   const msgs = document.getElementById('messages');
@@ -734,8 +792,8 @@ async function handleSend() {
     document.getElementById('chatTripName').textContent = trip.title;
   }
 
-  // Ensure stage moves off 'new'
-  if (tripState.stage === 'new') { tripState.stage = 'matching'; saveTripState(); }
+  // Ensure stage moves off 'new'; also reset 'matched' back to 'matching' if user is refining
+  if (tripState.stage === 'new' || tripState.stage === 'matched') { tripState.stage = 'matching'; saveTripState(); }
 
   appendMsg('user', msg);
   showTyping();
@@ -762,7 +820,7 @@ async function handleSeeRecos() {
   try {
     const meridianOut = await callMeridian();
 
-    if (meridianOut.status === 'SUCCESS' && meridianOut.options?.length) {
+    if (isMeridianBusinessStatus(meridianOut.status)) {
       currentRecos = meridianOut;
       navigate('recos');
     }
@@ -785,7 +843,19 @@ function renderRecos(meridianData) {
   const container = document.getElementById('recosCards');
   container.innerHTML = '';
 
-  if (!meridianData || meridianData.status !== 'SUCCESS' || !meridianData.options?.length) {
+  if (!meridianData) {
+    container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;">No recommendations to show.</div>`;
+    renderPlanCta(null);
+    return;
+  }
+
+  if (meridianData.status !== 'SUCCESS') {
+    renderFailureRecos(container, meridianData);
+    renderPlanCta(null);
+    return;
+  }
+
+  if (!meridianData.options?.length) {
     container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;">No recommendations to show.</div>`;
     renderPlanCta(null);
     return;
@@ -799,41 +869,46 @@ function renderRecos(meridianData) {
 
     let bodyHtml = `<div class="match-sections">`;
     (opt.match_sections || []).forEach(sec => {
-      bodyHtml += `<div class="match-section"><div class="match-heading">${sec.heading}</div>`;
+      bodyHtml += `<div class="match-section"><div class="match-heading">${escapeHtml(sec.heading)}</div>`;
       if (sec.type === 'budget') {
         bodyHtml += `<table class="budget-table">`;
         [['Stay', sec.stay],['Food', sec.food],['Travel', sec.travel],['Activities', sec.activities],['Local transport', sec.local_transport]].forEach(([label, item]) => {
           if (!item) return;
           const pp = item.estimate_per_person;
           const grp = item.estimate_group;
-          const note = item.notes ? ` <span style="color:var(--ink-faint);font-size:11px;">— ${item.notes}</span>` : '';
+          const note = item.notes ? ` <span style="color:var(--ink-faint);font-size:11px;">- ${escapeHtml(item.notes)}</span>` : '';
           bodyHtml += `<tr><td>${label}${note}</td><td>${pp ? '₹'+pp.toLocaleString('en-IN')+'/pp' : grp ? '₹'+grp.toLocaleString('en-IN')+' total' : ''}</td></tr>`;
         });
         bodyHtml += `<tr class="total-row"><td>Total per person</td><td>₹${(sec.per_person_total||0).toLocaleString('en-IN')}</td></tr></table>`;
         const vc = sec.verdict === 'comfortable' ? 'comfortable' : sec.verdict === 'tight' ? 'tight' : 'stretch';
         bodyHtml += `<div class="budget-tags"><span class="budget-tag">₹${(sec.per_person_total||0).toLocaleString('en-IN')}/pp</span><span class="budget-tag">₹${(sec.group_total||0).toLocaleString('en-IN')} total</span>${sec.verdict ? `<span class="verdict-tag ${vc}">${sec.verdict}</span>` : ''}</div>`;
       } else if (sec.points) {
-        bodyHtml += `<ul class="match-points">${sec.points.map(p=>`<li>${p}</li>`).join('')}</ul>`;
+        bodyHtml += `<ul class="match-points">${sec.points.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
       }
       bodyHtml += `</div>`;
     });
     bodyHtml += `</div>`;
 
     if (opt.tradeoffs?.length) {
-      bodyHtml += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>${opt.tradeoffs.map(t=>`<div class="tradeoff-item">${t.point}</div>`).join('')}</div>`;
+      bodyHtml += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>${opt.tradeoffs.map(t=>`<div class="tradeoff-item">${escapeHtml(t.point)}</div>`).join('')}</div>`;
     }
 
     const destName = opt.name || '';
-    const safeDestName = destName.replace(/'/g, "\\'");
+    const optionType = opt.type === 'circuit' ? 'circuit' : 'destination';
+    const optionId = optionType === 'circuit' ? opt.circuit_id : opt.destination_id;
+    const safeDestName = jsArg(destName);
+    const safeOptionId = jsArg(optionId || '');
+    const safeOptionType = jsArg(optionType);
+    const destNameHtml = escapeHtml(destName);
     bodyHtml += `<div class="card-actions">
-      <button class="choose-btn" onclick="chooseDestination('${safeDestName}', '${opt.destination_id || ''}')">Choose ${destName} →</button>
+      <button class="choose-btn" onclick="chooseDestination('${safeDestName}', '${safeOptionId}', '${safeOptionType}')">Choose ${destNameHtml} -></button>
       <button class="not-for-me-btn" onclick="notForMe('${safeDestName}')">Not for me</button>
     </div>`;
 
     card.innerHTML = `
       <div class="acc-header" onclick="toggleAcc(this.parentElement)">
         <div class="rank-badge">${opt.rank}</div>
-        <div class="acc-name">${destName}</div>
+        <div class="acc-name">${escapeHtml(destName)}</div>
         ${opt.rank === 1 ? `<span class="acc-best">Best match</span>` : ''}
         ${summaryTag}
         <svg class="acc-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -843,6 +918,37 @@ function renderRecos(meridianData) {
   });
 
   renderPlanCta(null); // no destination chosen yet
+}
+
+function renderFailureRecos(container, meridianData) {
+  let html = `<div class="acc-card open"><div class="acc-body">`;
+  html += `<div class="match-sections">`;
+  html += `<div class="match-section"><div class="match-heading">${escapeHtml(meridianData.status || 'Recommendation result')}</div>`;
+  if (meridianData.message) html += `<p style="color:var(--ink-muted);line-height:1.6;">${escapeHtml(meridianData.message)}</p>`;
+  html += `</div>`;
+
+  (meridianData.failure_sections || []).forEach(sec => {
+    html += `<div class="match-section"><div class="match-heading">${escapeHtml(sec.heading)}</div>`;
+    if (sec.points?.length) html += `<ul class="match-points">${sec.points.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
+    html += `</div>`;
+  });
+
+  if (meridianData.relaxation_suggestions?.length) {
+    html += `<div class="match-section"><div class="match-heading">Ways to adjust</div>`;
+    html += `<ul class="match-points">${meridianData.relaxation_suggestions.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
+  }
+
+  if (meridianData.refinement_hooks && Object.keys(meridianData.refinement_hooks).length) {
+    html += `<div class="tradeoffs"><div class="tradeoff-label">Refinement hooks</div>`;
+    Object.entries(meridianData.refinement_hooks).forEach(([key, value]) => {
+      if (value == null || value === '') return;
+      html += `<div class="tradeoff-item"><strong>${escapeHtml(key.replace(/_/g, ' '))}:</strong> ${escapeHtml(value)}</div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `</div></div></div>`;
+  container.innerHTML = html;
 }
 
 function toggleAcc(card) { card.classList.toggle('open'); }
@@ -865,13 +971,14 @@ function renderPlanCta(destName) {
   </div>`;
 }
 
-function chooseDestination(name, id) {
+function chooseDestination(name, id, type = 'destination') {
   if (tripState) {
-    tripState.trip_context.selected_option = { type: 'destination', id: id || name };
+    tripState.trip_context.selected_option = { type, id: id || name };
     tripState.stage = 'matched';
     saveTripState();
     renderStateBarEl('stateBarRecos');
   }
+  saveUiState('recos', { selected_option_name: name });
   renderPlanCta(name);
   console.log(`%c[Destination chosen] ${name}`, 'color:#3a6b4a;font-weight:700;');
 }
