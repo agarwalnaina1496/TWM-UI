@@ -224,6 +224,7 @@
   ════════════════════════════════════════ */
   #screen-recos .scroll { padding: 24px 28px 28px; }
   .recos-inner { max-width: 900px; margin: 0 auto; display: flex; gap: 24px; align-items: flex-start; }
+  .recos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
   .recos-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
   .recos-right { width: 280px; flex-shrink: 0; position: sticky; top: 0; }
   .recos-heading { margin-bottom: 14px; }
@@ -443,6 +444,7 @@
     .days-grid { grid-template-columns: 1fr; }
     .cd-grid { grid-template-columns: 1fr; }
     .recos-inner { flex-direction: column; }
+    .recos-grid { grid-template-columns: 1fr; }
     .recos-right { width: 100%; position: static; }
     .tb { padding: 11px 16px; }
     #screen-trips .scroll { padding: 16px; }
@@ -479,13 +481,15 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </span>
       </div>
-      <div class="home-mod coming-soon">
+      <div class="home-mod" onclick="startPlanningConvo()">
         <div class="mod-icon mod-icon-plan">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         </div>
         <h2>I already have a place in mind</h2>
         <p>Know where you're headed? Let's design your trip — places, pace, then a full itinerary.</p>
-        <span class="coming-soon-tag">Coming soon</span>
+        <span class="mod-cta mod-cta-plan">Plan with Scout
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </span>
       </div>
     </div>
   </div>
@@ -547,6 +551,44 @@
 </div>
 
 <!-- ══════════════════════════════════════════
+     SCREEN 3B — PLANNING CHAT (coming soon)
+══════════════════════════════════════════ -->
+<div id="screen-planning-chat" class="screen">
+  <header class="tb">
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <div class="tb-right" style="gap:10px;">
+      <span id="planningTripName" style="font-size:13px;color:var(--ink-muted);"></span>
+      <button class="tb-btn" onclick="navigate('trips')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
+        My Trips
+      </button>
+    </div>
+  </header>
+  <div class="ctx-bar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>Scout is helping design your day-by-day plan.</span>
+  </div>
+  <div class="chat-wrap">
+    <div class="chat-inner">
+      <div class="mrow">
+        <div class="av">S</div>
+        <div class="bub bub-s">
+          <p>Planning with Scout is coming soon. We're building the experience that turns your chosen destination into a full day-by-day itinerary — hang tight!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="input-bar">
+    <div class="input-wrap" style="opacity:0.5;">
+      <textarea placeholder="Planning chat coming soon…" rows="1" disabled style="cursor:not-allowed;"></textarea>
+      <button class="send-btn" disabled style="cursor:not-allowed;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
      SCREEN 4 — RECOMMENDATIONS
 ══════════════════════════════════════════ -->
 <div id="screen-recos" class="screen">
@@ -559,12 +601,13 @@
   </header>
   <div class="state-bar" id="stateBarRecos"></div>
   <div class="scroll">
-    <div class="recos-inner" style="display:block;max-width:720px;margin:0 auto;padding:24px 28px 28px;">
+    <div class="recos-inner" style="display:block;max-width:920px;margin:0 auto;padding:24px 28px 28px;">
       <div class="recos-heading">
         <div class="recos-label"><div class="recos-label-dot"></div>Your destination matches</div>
         <div id="recosSubheading" style="font-size:13px;color:var(--ink-muted);margin-top:3px;"></div>
       </div>
-      <div id="recosCards"></div>
+      <div id="recosCards" class="recos-grid"></div>
+      <div id="inlinePlanCtaWrap"></div>
       <div class="refine-row" id="refineRow" style="display:none;">
         <p>None of these feel right? Tell Scout what's missing.</p>
         <button class="refine-btn" onclick="navigate('chat')">Refine with Scout</button>
@@ -791,7 +834,7 @@ let currentTripId = null;
 let tripState     = null;
 let busy          = false;
 let currentRecos  = null;
-let tripFilter    = 'upcoming'; // default filter
+let tripFilter    = 'active'; // default filter
 
 // ══════════════════════════════════════════
 // TRIPS LIST (localStorage)
@@ -835,7 +878,8 @@ function syncTripFromState(id, state) {
   if (ri.travel_month)    inputs.push(ri.travel_month);
   if (ri.duration_nights) inputs.push(ri.duration_nights + 'n');
   if (ri.budget)          inputs.push('₹' + ri.budget.toLocaleString('en-IN'));
-  const status = state.stage === 'matched' ? 'matched' : state.stage === 'new' ? 'new' : 'matching';
+  const knownStages = ['new', 'matching', 'ready', 'recommended', 'matched', 'planning'];
+  const status = knownStages.includes(state.stage) ? state.stage : 'matching';
   updateTrip(id, { status, inputs });
 }
 
@@ -855,7 +899,11 @@ function defaultState(tripId) {
     matcher_state: {
       recommendation_intent: false,
       conversation_context: { last_scout_message: null, awaiting: null },
-      recommendations: []
+      recommendations: [],
+      rejected_options: [],
+      nuanced_preferences: [],
+      travel_style: [],
+      explicit_exclusions: []
     },
     planner_state: null
   };
@@ -923,7 +971,40 @@ function applyStateDelta(delta) {
     if (delta.trip_context.preferences) deepMerge(tripState.trip_context.preferences, delta.trip_context.preferences);
     if ('selected_option' in delta.trip_context) tripState.trip_context.selected_option = delta.trip_context.selected_option;
   }
-  if (delta.matcher_state) deepMerge(tripState.matcher_state, delta.matcher_state);
+  if (delta.matcher_state) deepMergeMatcherState(tripState.matcher_state, delta.matcher_state);
+  syncStageFromIntent();
+}
+
+// Client-side stage refinement: once Scout signals recommendation_intent, and the
+// server hasn't already moved us into a more advanced stage, mark stage as 'ready'
+// so My Trips / chat resume can show a direct "Generate Recommendations" CTA.
+function syncStageFromIntent() {
+  if (!tripState) return;
+  const advancedStages = ['recommended', 'matched', 'planning'];
+  if (tripState.matcher_state?.recommendation_intent === true && !advancedStages.includes(tripState.stage)) {
+    tripState.stage = 'ready';
+  }
+}
+
+// Append/dedupe known array fields instead of letting deepMerge clobber them.
+const ARRAY_MERGE_KEYS = ['nuanced_preferences', 'travel_style', 'explicit_exclusions', 'rejected_options'];
+function deepMergeMatcherState(target, source) {
+  if (!source || typeof source !== 'object') return;
+  for (const key of Object.keys(source)) {
+    const val = source[key];
+    if (ARRAY_MERGE_KEYS.includes(key) && Array.isArray(val)) {
+      if (!Array.isArray(target[key])) target[key] = [];
+      val.forEach(item => {
+        const exists = target[key].some(existing => JSON.stringify(existing) === JSON.stringify(item));
+        if (!exists) target[key].push(item);
+      });
+    } else if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      if (!target[key] || typeof target[key] !== 'object') target[key] = {};
+      deepMerge(target[key], val);
+    } else {
+      target[key] = val;
+    }
+  }
 }
 
 // ══════════════════════════════════════════
@@ -931,7 +1012,7 @@ function applyStateDelta(delta) {
 // ══════════════════════════════════════════
 function logScoutTurn(userMsg, before, response, after) {
   console.group(`%c trip id: ${tripState.trip_id}`, 'color:#c46b3a;font-weight:700;font-size:13px;');
-  console.log('%cUser message:', 'color:#6b6460;font-weight:600;', userMsg ?? '(null — post-Meridian)');
+  console.log('%cUser message:', 'color:#6b6460;font-weight:600;', userMsg ?? 'resume');
   console.log('%cTrip state before:', 'color:#6b6460;font-weight:600;', JSON.parse(JSON.stringify(before)));
   console.log('%cScout response:', 'color:#3a6b4a;font-weight:600;', response);
   console.log('%cTrip state after:', 'color:#3a6b4a;font-weight:600;', JSON.parse(JSON.stringify(after)));
@@ -967,6 +1048,7 @@ async function callMeridian() {
   if (!Array.isArray(tripState.matcher_state.recommendations)) tripState.matcher_state.recommendations = [];
   tripState.matcher_state.recommendations.push(data);
   tripState.matcher_state.recommendation_intent = false;
+  tripState.stage = 'recommended';
   saveTripState();
   logMeridian(input, data);
   return data;
@@ -978,7 +1060,7 @@ async function callMeridian() {
 function navigate(screen) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + screen).classList.add('active');
-  if (currentTripId && (screen === 'chat' || screen === 'recos')) saveUiState(screen);
+  if (currentTripId && (screen === 'chat' || screen === 'recos' || screen === 'planning-chat')) saveUiState(screen);
   if (screen === 'trips') renderTripsList();
   if (screen === 'home') { /* nothing extra */ }
   if (screen === 'recos') {
@@ -998,14 +1080,29 @@ function startMatch() {
   setTimeout(() => appendMsg('assistant', WELCOME), 200);
 }
 
+function startPlanningConvo() {
+  // Called either from the recos screen (tripState/currentTripId already set)
+  // or from Home's "I already have a place in mind" module (no trip yet).
+  if (!currentTripId) {
+    const trip = createTrip();
+    currentTripId = trip.id;
+    tripState = defaultState(trip.id);
+  }
+  tripState.stage = 'planning';
+  saveTripState();
+  const trip = getTripById(currentTripId);
+  document.getElementById('planningTripName').textContent = trip?.title || '';
+  navigate('planning-chat');
+}
+
 function openTripForPlanning(id) {
   currentTripId = id;
   tripState = loadTripState(id);
   currentRecos = latestRecommendation();
   const trip = getTripById(id);
-  document.getElementById('chatTripName').textContent = trip?.title || '';
-  window._chosenDest = tripState?.trip_context?.selected_option?.id || '';
-  navigate('plans');
+  document.getElementById('planningTripName').textContent = trip?.title || '';
+  window._chosenDest = tripState?.trip_context?.selected_option?.name || tripState?.trip_context?.selected_option?.id || '';
+  startPlanningConvo();
 }
 
 function openTrip(id) {
@@ -1020,9 +1117,8 @@ function openTrip(id) {
 
   if (tripState?.stage === 'matched' && currentRecos) {
     navigate('recos');
-    const selectedName = uiState.selected_option_name || tripState.trip_context.selected_option?.id || null;
+    const selectedName = uiState.selected_option_name || tripState.trip_context.selected_option?.name || tripState.trip_context.selected_option?.id || null;
     if (selectedName) {
-      // Re-inject the inline plan CTA after recos render
       setTimeout(() => chooseDestination(selectedName, tripState.trip_context.selected_option?.id, tripState.trip_context.selected_option?.type || 'destination'), 50);
     }
     return;
@@ -1055,9 +1151,22 @@ function resumeChat() {
   const stage = tripState?.stage;
   if (!stage || stage === 'new') { appendMsg('assistant', WELCOME); return; }
 
-  if (stage === 'matched') {
+  if (stage === 'matched' || stage === 'planning') {
     const sel = tripState.trip_context.selected_option;
-    appendMsg('assistant', `Welcome back — you've confirmed ${sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`);
+    appendMsg('assistant', `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`);
+    return;
+  }
+
+  if (stage === 'recommended') {
+    appendMsg('assistant', `Welcome back — Scout already found some great matches for this trip. Head to recommendations to pick one.`);
+    setRecoBtn(false);
+    return;
+  }
+
+  if (stage === 'ready') {
+    // Recommendation intent is set — show Generate Recommendations CTA directly, no Scout resume call needed.
+    appendMsg('assistant', `Welcome back — Scout has everything needed to find your matches. Tap below to generate recommendations.`);
+    setRecoBtn(true);
     return;
   }
 
@@ -1078,7 +1187,7 @@ function resumeChat() {
     : null;
 
   const prefKeys   = Object.keys(prefs).filter(k => k !== 'rejections');
-  const rejections = prefs.rejections || [];
+  const rejections = tripState.matcher_state.rejected_options || [];
   let prefRows = prefKeys.length === 0
     ? `<div class="resume-row"><span class="resume-row-key">Preferences</span><span class="resume-row-val empty">None collected yet</span></div>`
     : prefKeys.map(k => {
@@ -1211,7 +1320,20 @@ async function handleSend() {
     document.getElementById('chatTripName').textContent = trip.title;
   }
 
-  if (tripState.stage === 'new' || tripState.stage === 'matched') { tripState.stage = 'matching'; saveTripState(); }
+  if (tripState.stage === 'new') {
+    tripState.stage = 'matching';
+    saveTripState();
+  } else if (tripState.stage === 'ready') {
+    // New info arrived after Scout was ready to generate — go back to matching.
+    tripState.stage = 'matching';
+    tripState.matcher_state.recommendation_intent = false;
+    saveTripState();
+  } else if (tripState.stage === 'matched') {
+    // User is refining after already confirming a destination — clear the selection.
+    tripState.stage = 'matching';
+    tripState.trip_context.selected_option = null;
+    saveTripState();
+  }
 
   appendMsg('user', msg);
   showTyping();
@@ -1268,6 +1390,7 @@ function renderRecos(meridianData) {
   renderStateBarEl('stateBarRecos');
   const container = document.getElementById('recosCards');
   container.innerHTML = '';
+  document.getElementById('inlinePlanCtaWrap').innerHTML = '';
   document.getElementById('refineRow').style.display = 'none';
 
   // Subheading from trip context
@@ -1282,7 +1405,7 @@ function renderRecos(meridianData) {
   }
 
   if (!meridianData) {
-    container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;">No recommendations to show.</div>`;
+    container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">No recommendations to show.</div>`;
     return;
   }
 
@@ -1292,7 +1415,7 @@ function renderRecos(meridianData) {
   }
 
   if (!meridianData.options?.length) {
-    container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;">No recommendations to show.</div>`;
+    container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">No recommendations to show.</div>`;
     return;
   }
 
@@ -1355,7 +1478,7 @@ function renderRecos(meridianData) {
 }
 
 function renderFailureRecos(container, meridianData) {
-  let html = `<div class="acc-card open"><div class="acc-body"><div class="match-sections">`;
+  let html = `<div class="acc-card open" style="grid-column:1/-1;"><div class="acc-body"><div class="match-sections">`;
   html += `<div class="match-section"><div class="match-heading">${escapeHtml(meridianData.status || 'Result')}</div>`;
   if (meridianData.message) html += `<p style="color:var(--ink-muted);line-height:1.6;">${escapeHtml(meridianData.message)}</p>`;
   html += `</div>`;
@@ -1373,26 +1496,9 @@ function renderFailureRecos(container, meridianData) {
 
 function toggleAcc(card) { card.classList.toggle('open'); }
 
-function renderPlanCta(destName) {
-  const el = document.getElementById('planCta');
-  if (!destName) {
-    el.innerHTML = `<div class="plan-cta-placeholder">Select a destination<br>to see planning options.</div>`;
-    return;
-  }
-  el.innerHTML = `<div class="plan-cta-card">
-    <div class="plan-cta-dest-label">Selected destination</div>
-    <div class="plan-cta-title">${escapeHtml(destName)}</div>
-    <div class="plan-cta-desc">Ready to turn this into a full trip plan? Get an itinerary, logistics, and recommendations built around your group.</div>
-    <button class="plan-cta-btn" onclick="navigate('plans')">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Plan This Trip
-    </button>
-  </div>`;
-}
-
 function chooseDestination(name, id, type = 'destination') {
   if (tripState) {
-    tripState.trip_context.selected_option = { type, id: id || name };
+    tripState.trip_context.selected_option = { type, id: id || name, name };
     tripState.stage = 'matched';
     saveTripState();
     renderStateBarEl('stateBarRecos');
@@ -1401,35 +1507,29 @@ function chooseDestination(name, id, type = 'destination') {
   window._chosenDest = name;
   console.log(`%c[Destination chosen] ${name}`, 'color:#3a6b4a;font-weight:700;');
 
-  // Remove any existing plan CTA row
-  document.getElementById('inlinePlanCta')?.remove();
+  const wrap = document.getElementById('inlinePlanCtaWrap');
+  if (!wrap) return;
+  wrap.innerHTML = `
+    <div id="inlinePlanCta" style="margin-top:16px;background:var(--card);border:1.5px solid var(--accent);border-radius:var(--r-lg);padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;animation:fadeUp 0.22s ease;">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--accent);margin-bottom:3px;">Destination confirmed</div>
+        <div style="font-size:15px;font-weight:600;color:var(--ink);">${escapeHtml(name)}</div>
+        <div style="font-size:13px;color:var(--ink-muted);margin-top:3px;">Would you like to plan this trip?</div>
+      </div>
+      <button onclick="startPlanningConvo()" style="flex-shrink:0;background:var(--accent);color:#fff;border:none;border-radius:var(--r-sm);padding:10px 20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:background 0.15s;" onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--accent)'">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Plan this trip →
+      </button>
+    </div>`;
 
-  // Inject "Would you like to plan this trip?" below all the cards
-  const container = document.getElementById('recosCards');
-  const ctaDiv = document.createElement('div');
-  ctaDiv.id = 'inlinePlanCta';
-  ctaDiv.style.cssText = 'margin-top:16px;background:var(--card);border:1.5px solid var(--accent);border-radius:var(--r-lg);padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;animation:fadeUp 0.22s ease;';
-  ctaDiv.innerHTML = `
-    <div>
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--accent);margin-bottom:3px;">Destination confirmed</div>
-      <div style="font-size:15px;font-weight:600;color:var(--ink);">${escapeHtml(name)}</div>
-      <div style="font-size:13px;color:var(--ink-muted);margin-top:3px;">Would you like to plan this trip?</div>
-    </div>
-    <button onclick="navigate('plans')" style="flex-shrink:0;background:var(--accent);color:#fff;border:none;border-radius:var(--r-sm);padding:10px 20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:background 0.15s;" onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--accent)'">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Plan this trip →
-    </button>`;
-  container.appendChild(ctaDiv);
-
-  // Scroll into view
-  setTimeout(() => ctaDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+  setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
 }
 
 function notForMe(name) {
   console.log(`%c[Not for me] ${name}`, 'color:#c46b3a;font-weight:700;');
   if (tripState) {
-    if (!tripState.trip_context.preferences.rejections) tripState.trip_context.preferences.rejections = [];
-    tripState.trip_context.preferences.rejections.push({ destination: name, reason: 'user_rejected' });
+    if (!Array.isArray(tripState.matcher_state.rejected_options)) tripState.matcher_state.rejected_options = [];
+    tripState.matcher_state.rejected_options.push({ destination: name, reason: 'user_rejected' });
     tripState.matcher_state.recommendation_intent = false;
     tripState.stage = 'matching';
     saveTripState();
@@ -1453,7 +1553,7 @@ function notForMe(name) {
 // PLANS & PRICING
 // ══════════════════════════════════════════
 function showPaymentModal(planType) {
-  const destName = window._chosenDest || tripState?.trip_context?.selected_option?.id || 'your destination';
+  const destName = window._chosenDest || tripState?.trip_context?.selected_option?.name || tripState?.trip_context?.selected_option?.id || 'your destination';
   const isPlanning = planType === 'planning';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -1480,7 +1580,8 @@ function closePaymentModal() {
 
 function confirmPayment(planType) {
   closePaymentModal();
-  const destName = window._chosenDest || tripState?.trip_context?.selected_option?.id || 'Your Trip';
+  const destName = window._chosenDest || tripState?.trip_context?.selected_option?.name || tripState?.trip_context?.selected_option?.id || 'Your Trip';
+  if (currentTripId) updateTrip(currentTripId, { paid_plan: planType });
   if (planType === 'planning') {
     renderItinerary(destName);
     navigate('itin');
@@ -1578,7 +1679,7 @@ function renderStateBarEl(elId) {
     <div class="state-div"></div>
     <div class="state-bar-group"><div class="state-bar-label">reco_intent</div><div class="state-bar-section">${bool(ms.recommendation_intent)}</div></div>
     <div class="state-bar-group"><div class="state-bar-label">awaiting</div><div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div></div>
-    <div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tripState.trip_context.selected_option?.id)}</div></div>`;
+    <div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tripState.trip_context.selected_option?.name || tripState.trip_context.selected_option?.id)}</div></div>`;
 }
 
 // ══════════════════════════════════════════
@@ -1608,19 +1709,21 @@ function renderTripsList() {
   }
 
   // ── ONE OR MORE TRIPS ──
-  const activeTr    = trips.filter(t => t.paid_plan === 'concierge' && t.status === 'active');
-  const upcomingTr  = trips.filter(t => t.status === 'matching' || t.status === 'matched' || t.paid_plan === 'planning');
-  const newTr       = trips.filter(t => t.status === 'new' && !t.paid_plan);
+  // Active   = anything not yet paid (new / matching / matched, no plan purchased)
+  // Upcoming = payment confirmed (planning ₹499 paid, or concierge quote requested), trip not yet completed
+  // Completed = concierge trips marked done
   const completedTr = trips.filter(t => t.paid_plan === 'concierge' && t.status === 'done');
+  const upcomingTr  = trips.filter(t => t.paid_plan && !completedTr.includes(t));
+  const activeTr    = trips.filter(t => !t.paid_plan);
 
   const allCount       = trips.length;
-  const upcomingCount  = upcomingTr.length + newTr.length;
+  const upcomingCount  = upcomingTr.length;
   const completedCount = completedTr.length;
   const activeCount    = activeTr.length;
 
   const filters = [
-    { key: 'upcoming',  label: `Upcoming${upcomingCount ? ` (${upcomingCount})` : ''}` },
     { key: 'active',    label: `Active${activeCount ? ` (${activeCount})` : ''}` },
+    { key: 'upcoming',  label: `Upcoming${upcomingCount ? ` (${upcomingCount})` : ''}` },
     { key: 'completed', label: `Completed${completedCount ? ` (${completedCount})` : ''}` },
     { key: 'all',       label: `All (${allCount})` },
   ];
@@ -1635,32 +1738,16 @@ function renderTripsList() {
       ${filters.map(f => `<button class="fc${tripFilter === f.key ? ' active' : ''}" onclick="setFilter('${f.key}')">${f.label}</button>`).join('')}
     </div>`;
 
-  // Active concierge banner
-  const activeBannerHtml = activeTr.length ? `
-    <div class="active-banner">
-      <div class="ab-info">
-        <div class="ab-eye">Active · Travel Concierge</div>
-        <div class="ab-title">${escapeHtml(activeTr[0].title)}</div>
-        <div class="ab-sub">${escapeHtml(activeTr[0].inputs?.join(' · ') || '')}</div>
-      </div>
-      <button class="ab-cta" onclick="navigate('concierge')">
-        See trip details
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-      </button>
-    </div>` : '';
-
   // Which trips to show
   let sections = [];
   if (tripFilter === 'all') {
     if (activeTr.length)    sections.push({ label: 'Active', trips: activeTr });
     if (upcomingTr.length)  sections.push({ label: 'Upcoming', trips: upcomingTr });
-    if (newTr.length)       sections.push({ label: 'New', trips: newTr });
     if (completedTr.length) sections.push({ label: 'Completed', trips: completedTr });
   } else if (tripFilter === 'active') {
     if (activeTr.length) sections = [{ label: 'Active', trips: activeTr }];
   } else if (tripFilter === 'upcoming') {
-    const combined = [...upcomingTr, ...newTr];
-    if (combined.length) sections = [{ label: 'Upcoming', trips: combined }];
+    if (upcomingTr.length) sections = [{ label: 'Upcoming', trips: upcomingTr }];
   } else if (tripFilter === 'completed') {
     if (completedTr.length) sections = [{ label: 'Completed', trips: completedTr }];
   }
@@ -1674,24 +1761,32 @@ function renderTripsList() {
       `).join('')
     : emptyHtml;
 
-  el.innerHTML = headerHtml + activeBannerHtml + sectionsHtml;
+  el.innerHTML = headerHtml + sectionsHtml;
 }
 
 function tripBadge(trip, fullState) {
-  if (trip.status === 'matched')  return { cls: 'b-matched', text: 'Destination chosen' };
-  if (fullState?.matcher_state?.recommendations?.length) return { cls: 'b-reco', text: 'Recommendations ready' };
-  if (trip.status === 'matching') return { cls: 'b-chat', text: 'In conversation' };
-  if (trip.status === 'new')      return { cls: 'b-new', text: 'New' };
-  if (trip.paid_plan === 'planning') return { cls: 'b-reco', text: 'Itinerary ready' };
+  if (trip.paid_plan === 'planning')  return { cls: 'b-done', text: 'Itinerary ready' };
+  if (trip.paid_plan === 'concierge') return { cls: 'b-done', text: 'Concierge requested' };
+  const stage = fullState?.stage;
+  if (stage === 'planning') return { cls: 'b-matched', text: 'Planning in progress' };
+  if (stage === 'matched')  return { cls: 'b-matched', text: 'Destination chosen' };
+  if (stage === 'recommended' || fullState?.matcher_state?.recommendations?.length) return { cls: 'b-reco', text: 'Recommendations ready' };
+  if (stage === 'ready' && fullState?.matcher_state?.recommendation_intent) return { cls: 'b-chat', text: 'Ready to generate' };
+  if (stage === 'matching') return { cls: 'b-chat', text: 'In conversation' };
+  if (stage === 'new' || trip.status === 'new') return { cls: 'b-new', text: 'New' };
   return { cls: 'b-new', text: trip.status };
 }
 
 function tripCtaConfig(trip, fullState) {
-  if (trip.status === 'matched')  return { label: 'Plan this trip', style: 'cta-green', action: `openTripForPlanning('${trip.id}')` };
-  if (fullState?.matcher_state?.recommendations?.length) return { label: 'Review recommendations', style: 'cta-blue', action: `openTrip('${trip.id}')` };
-  if (trip.status === 'matching') return { label: 'Resume with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  if (trip.status === 'new')      return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  if (trip.paid_plan === 'planning') return { label: 'See itinerary', style: 'cta-green', action: `navigate('itin')` };
+  if (trip.paid_plan === 'planning')  return { label: 'See itinerary', style: 'cta-green', action: `navigate('itin')` };
+  if (trip.paid_plan === 'concierge') return { label: 'View trip status', style: 'cta-green', action: `navigate('concierge')` };
+  const stage = fullState?.stage;
+  if (stage === 'planning') return { label: 'Resume planning with Scout', style: 'cta-green', action: `openTripForPlanning('${trip.id}')` };
+  if (stage === 'matched')  return { label: 'Plan this trip', style: 'cta-green', action: `openTripForPlanning('${trip.id}')` };
+  if (stage === 'recommended' || fullState?.matcher_state?.recommendations?.length) return { label: 'Review recommendations', style: 'cta-blue', action: `openTrip('${trip.id}')` };
+  if (stage === 'ready' && fullState?.matcher_state?.recommendation_intent) return { label: 'Generate recommendations', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  if (stage === 'matching') return { label: 'Resume with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  if (stage === 'new' || trip.status === 'new') return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
   return { label: 'Open trip', style: 'cta-accent', action: `openTrip('${trip.id}')` };
 }
 
@@ -1701,7 +1796,7 @@ function tripCardHTML(trip) {
   const cta    = tripCtaConfig(trip, fullState);
   const tags   = (trip.inputs || []).map(t => `<span class="tc-tag">${escapeHtml(t)}</span>`).join('');
   const updated = new Date(trip.updated_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
-  const sel    = fullState?.trip_context?.selected_option?.id || null;
+  const sel    = fullState?.trip_context?.selected_option?.name || fullState?.trip_context?.selected_option?.id || null;
   return `<div class="tc" onclick="${cta.action}">
     <div class="tc-top">
       <div>
