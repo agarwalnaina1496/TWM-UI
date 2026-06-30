@@ -1087,12 +1087,24 @@ function startPlanningConvo() {
     const trip = createTrip();
     currentTripId = trip.id;
     tripState = defaultState(trip.id);
+    saveTripState();
   }
-  tripState.stage = 'planning';
-  saveTripState();
+  // NOTE: stage stays as-is here (e.g. 'matched') until the user actually sends
+  // their first message in the planner chat — see markPlanningStarted().
   const trip = getTripById(currentTripId);
   document.getElementById('planningTripName').textContent = trip?.title || '';
   navigate('planning-chat');
+}
+
+// Call this once the user sends their first message in the planner chat.
+// Per the stage-transition spec: matched -> planning triggers on the first
+// Scout planner message, not on merely opening the planner screen.
+function markPlanningStarted() {
+  if (!tripState) return;
+  if (tripState.stage !== 'planning') {
+    tripState.stage = 'planning';
+    saveTripState();
+  }
 }
 
 function openTripForPlanning(id) {
