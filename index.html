@@ -12,32 +12,39 @@
     --paper: #faf8f5; --paper-warm: #f3ede6; --card: #ffffff;
     --accent: #c46b3a; --accent-light: #f6e9df; --accent-dim: #8a4b28;
     --green: #3a6b4a; --green-light: #dff0e5;
+    --blue: #2563eb; --blue-light: #edf4fb; --blue-border: #bfdbfe;
+    --dark: #2b2520;
     --border: #e8e2db;
     --shadow: 0 1px 3px rgba(26,22,18,0.07), 0 4px 16px rgba(26,22,18,0.04);
-    --r: 12px; --r-sm: 8px;
+    --r: 12px; --r-sm: 8px; --r-lg: 14px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; display: flex; flex-direction: column; }
 
   /* ── Screens ── */
-  .screen { display: none; flex-direction: column; flex: 1; min-height: 100vh; }
+  .screen { display: none; flex-direction: column; height: 100vh; overflow: hidden; }
   .screen.active { display: flex; }
+  .scroll { flex: 1; overflow-y: auto; }
+  .scroll::-webkit-scrollbar { width: 3px; }
+  .scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-  /* ── Shared Header ── */
-  .hdr { display: flex; align-items: center; justify-content: space-between; padding: 13px 24px; border-bottom: 1px solid var(--border); background: var(--paper); position: sticky; top: 0; z-index: 20; flex-shrink: 0; }
-  .brand { display: flex; flex-direction: column; gap: 1px; cursor: pointer; }
-  .brand-name { font-family: 'DM Serif Display', serif; font-size: 17px; letter-spacing: -0.01em; color: var(--ink); line-height: 1; }
-  .brand-name span { color: var(--accent); }
-  .brand-tagline { font-size: 11px; color: var(--ink-faint); }
-  .hdr-actions { display: flex; gap: 8px; align-items: center; }
-  .ghost-btn { font-size: 12px; font-weight: 500; color: var(--ink-muted); background: none; border: 1px solid var(--border); padding: 5px 12px; border-radius: 20px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-  .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .ghost-btn svg { width: 11px; height: 11px; }
-  .back-btn { font-size: 13px; color: var(--ink-muted); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; display: flex; align-items: center; gap: 5px; padding: 4px 0; transition: color 0.15s; }
+  /* ── Shared Topbar ── */
+  .tb { display: flex; align-items: center; justify-content: space-between; padding: 13px 28px; border-bottom: 1px solid var(--border); background: var(--paper); flex-shrink: 0; z-index: 20; }
+  .tb-left { display: flex; align-items: center; gap: 12px; }
+  .tb-right { display: flex; align-items: center; gap: 8px; }
+  .brand { font-family: 'DM Serif Display', serif; font-size: 17px; letter-spacing: -0.01em; color: var(--ink); cursor: pointer; text-decoration: none; }
+  .brand em { color: var(--accent); font-style: normal; }
+  .tb-divider { width: 1px; height: 15px; background: var(--border); }
+  .back-btn { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--ink-muted); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: color 0.15s; }
   .back-btn:hover { color: var(--accent); }
   .back-btn svg { width: 14px; height: 14px; }
+  .tb-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--card); color: var(--ink-muted); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; white-space: nowrap; }
+  .tb-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .tb-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+  .tb-btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tb-btn-primary:hover { background: var(--accent-dim); color: #fff; border-color: var(--accent-dim); }
 
-  /* ── State bar ── */
+  /* ── State bar (debug) ── */
   .state-bar { width: 100%; background: var(--card); border-bottom: 1px solid var(--border); padding: 9px 24px; display: flex; flex-wrap: wrap; gap: 5px 18px; align-items: flex-start; flex-shrink: 0; }
   .state-bar-group { display: flex; flex-direction: column; gap: 2px; }
   .state-bar-label { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
@@ -50,115 +57,180 @@
   .state-div { width: 1px; background: var(--border); align-self: stretch; margin: 0 2px; }
 
   /* ════════════════════════════════════════
-     SCREEN 1 — MY TRIPS
+     SCREEN 1 — HOME
   ════════════════════════════════════════ */
-  #screen-trips .body { flex: 1; max-width: 860px; margin: 0 auto; width: 100%; padding: 32px 24px; }
-  .trips-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
-  .trips-title { font-family: 'DM Serif Display', serif; font-size: 24px; letter-spacing: -0.02em; }
-  .new-trip-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); padding: 9px 18px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: background 0.15s; }
-  .new-trip-btn:hover { background: var(--accent-dim); }
-  .new-trip-btn svg { width: 14px; height: 14px; }
+  #screen-home .scroll { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; }
+  .hero { text-align: center; margin-bottom: 40px; }
+  .hero-eye { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 12px; }
+  .hero h1 { font-family: 'DM Serif Display', serif; font-size: 34px; letter-spacing: -0.03em; line-height: 1.2; margin-bottom: 12px; }
+  .hero h1 em { color: var(--accent); font-style: normal; }
+  .hero p { font-size: 14.5px; color: var(--ink-muted); max-width: 420px; margin: 0 auto; line-height: 1.7; }
+  .home-modules { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; max-width: 680px; }
+  .home-mod { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; gap: 14px; }
+  .home-mod:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(196,107,58,0.1); }
+  .home-mod.coming-soon { opacity: 0.5; cursor: not-allowed; }
+  .home-mod.coming-soon:hover { border-color: var(--border); transform: none; box-shadow: none; }
+  .mod-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+  .mod-icon svg { width: 20px; height: 20px; }
+  .mod-icon-discover { background: var(--accent-light); color: var(--accent); }
+  .mod-icon-plan { background: var(--green-light); color: var(--green); }
+  .home-mod h2 { font-size: 15.5px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+  .home-mod p { font-size: 13px; color: var(--ink-muted); line-height: 1.6; flex: 1; }
+  .mod-cta { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; }
+  .mod-cta svg { width: 12px; height: 12px; }
+  .mod-cta-discover { color: var(--accent); }
+  .mod-cta-plan { color: var(--green); }
+  .coming-soon-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-faint); background: var(--paper-warm); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; align-self: flex-start; }
 
-  .trips-empty { text-align: center; padding: 80px 20px; color: var(--ink-faint); }
-  .trips-empty svg { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.3; }
-  .trips-empty p { font-size: 15px; margin-bottom: 6px; color: var(--ink-muted); }
-  .trips-empty span { font-size: 13px; }
+  /* ════════════════════════════════════════
+     SCREEN 2 — MY TRIPS
+  ════════════════════════════════════════ */
+  #screen-trips .scroll { padding: 20px 32px 32px; }
+  .trips-inner { max-width: 960px; margin: 0 auto; }
+  .trips-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .trips-top h2 { font-family: 'DM Serif Display', serif; font-size: 22px; letter-spacing: -0.02em; }
+  .filter-bar { margin-bottom: 0; }
 
-  .trips-grid { display: flex; flex-direction: column; gap: 12px; }
+  /* filter chips */
+  .filter-bar { display: flex; gap: 6px; margin-bottom: 16px; }
+  .fc { font-size: 12.5px; font-weight: 500; padding: 5px 14px; border-radius: 100px; border: 1px solid var(--border); background: var(--card); color: var(--ink-muted); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
+  .fc:hover { border-color: var(--accent); color: var(--accent); }
+  .fc.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-  .trip-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 18px 20px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; display: flex; align-items: flex-start; gap: 16px; }
-  .trip-card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
-  .trip-card-main { flex: 1; min-width: 0; }
-  .trip-card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  /* active banner */
+  .active-banner { background: linear-gradient(135deg, var(--dark), #4a3728); border-radius: var(--r-lg); padding: 16px 20px; margin-bottom: 16px; color: #fff; display: flex; align-items: center; gap: 16px; }
+  .ab-info { flex: 1; }
+  .ab-eye { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; opacity: 0.5; margin-bottom: 3px; }
+  .ab-title { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .ab-sub { font-size: 12.5px; opacity: 0.65; }
+  .ab-cta { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: var(--r-sm); background: rgba(255,255,255,0.15); color: #fff; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; white-space: nowrap; transition: background 0.15s; }
+  .ab-cta:hover { background: rgba(255,255,255,0.25); }
+  .ab-cta svg { width: 13px; height: 13px; }
 
-  .trip-title-wrap { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
-  .trip-title { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .trip-title-input { font-weight: 600; font-size: 15px; border: none; outline: none; background: transparent; font-family: 'DM Sans', sans-serif; color: var(--ink); padding: 0; width: 100%; border-bottom: 1.5px solid var(--accent); }
+  /* section label */
+  .sec-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink-faint); margin-bottom: 10px; margin-top: 18px; }
+  .sec-label:first-child { margin-top: 0; }
+
+  /* trip cards grid */
+  .tc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tc { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; transition: border-color 0.15s; cursor: pointer; }
+  .tc:hover { border-color: #ccc7bf; }
+  .tc-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .tc-name { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+  .tc-dest { font-size: 12.5px; color: var(--ink-muted); }
+  .tc-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+  .tc-tag { font-size: 11px; padding: 2px 8px; border-radius: 100px; background: var(--paper); border: 1px solid var(--border); color: var(--ink-muted); }
+  .tc-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tc-date { font-size: 11px; color: var(--ink-faint); }
+  .tc-cta { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 6px 13px; border-radius: var(--r-sm); border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; white-space: nowrap; }
+  .tc-cta svg { width: 12px; height: 12px; }
+  .cta-accent { background: var(--accent-light); color: var(--accent); }
+  .cta-accent:hover { background: var(--accent); color: #fff; }
+  .cta-blue { background: var(--blue-light); color: var(--blue); }
+  .cta-blue:hover { background: var(--blue); color: #fff; }
+  .cta-green { background: var(--green-light); color: var(--green); }
+  .cta-green:hover { background: var(--green); color: #fff; }
+  .cta-dark { background: var(--dark); color: #fff; }
+  .cta-dark:hover { background: #1a1410; color: #fff; }
+
+  /* badges */
+  .badge { font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 100px; white-space: nowrap; letter-spacing: 0.03em; flex-shrink: 0; }
+  .b-new { background: var(--paper-warm); color: var(--ink-faint); border: 1px solid var(--border); }
+  .b-chat { background: #f3e8ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+  .b-reco { background: var(--blue-light); color: var(--blue); border: 1px solid var(--blue-border); }
+  .b-matched { background: var(--green-light); color: var(--green); border: 1px solid #b0d9be; }
+  .b-done { background: var(--paper-warm); color: var(--ink-faint); border: 1px solid var(--border); }
+
+  /* rename input */
+  .tc-name-input { font-size: 14px; font-weight: 600; border: none; outline: none; background: transparent; font-family: 'DM Sans', sans-serif; color: var(--ink); padding: 0; border-bottom: 1.5px solid var(--accent); width: 100%; }
   .rename-btn { background: none; border: none; cursor: pointer; color: var(--ink-faint); padding: 2px; transition: color 0.15s; flex-shrink: 0; }
   .rename-btn:hover { color: var(--accent); }
-  .rename-btn svg { width: 12px; height: 12px; display: block; }
+  .rename-btn svg { width: 11px; height: 11px; display: block; }
+  .icon-btn { width: 28px; height: 28px; border-radius: 7px; background: none; border: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; color: var(--ink-faint); flex-shrink: 0; }
+  .icon-btn:hover.danger { border-color: #c04040; color: #c04040; background: #fff0f0; }
+  .icon-btn svg { width: 12px; height: 12px; }
 
-  .status-badge { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; flex-shrink: 0; }
-  .status-badge.new { background: var(--paper-warm); color: var(--ink-faint); border: 1px solid var(--border); }
-  .status-badge.matching { background: var(--accent-light); color: var(--accent-dim); border: 1px solid #e0c0a8; }
-  .status-badge.matched { background: var(--green-light); color: var(--green); border: 1px solid #b0d9be; }
-
-  .trip-inputs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
-  .trip-input-tag { font-size: 11.5px; color: var(--ink-muted); background: var(--paper-warm); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; font-family: 'DM Mono', monospace; }
-
-  .trip-meta { font-size: 11px; color: var(--ink-faint); }
-
-  .trip-card-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
-  .icon-btn { width: 30px; height: 30px; border-radius: 8px; background: none; border: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; color: var(--ink-faint); }
-  .icon-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
-  .icon-btn.danger:hover { border-color: #c04040; color: #c04040; background: #fff0f0; }
-  .icon-btn svg { width: 13px; height: 13px; }
+  /* empty state */
+  .trips-empty { text-align: center; padding: 64px 20px; color: var(--ink-faint); display: flex; flex-direction: column; align-items: center; }
+  .trips-empty svg { width: 44px; height: 44px; margin-bottom: 14px; opacity: 0.25; }
+  .trips-empty p { font-size: 14px; color: var(--ink-muted); margin-bottom: 5px; }
+  .trips-empty span { font-size: 13px; }
 
   /* ════════════════════════════════════════
-     SCREEN 2 — ENTRY POINT
+     SCREEN 3 — CHAT (Scout)
   ════════════════════════════════════════ */
-  #screen-entry .body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .entry-box { max-width: 480px; width: 100%; text-align: center; }
-  .entry-box h2 { font-family: 'DM Serif Display', serif; font-size: 26px; letter-spacing: -0.02em; margin-bottom: 8px; }
-  .entry-box p { font-size: 14px; color: var(--ink-muted); margin-bottom: 32px; line-height: 1.6; }
-  .entry-options { display: flex; flex-direction: column; gap: 12px; }
-  .entry-option { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--r); padding: 22px 24px; cursor: pointer; text-align: left; transition: all 0.18s; }
-  .entry-option:hover { border-color: var(--accent); box-shadow: var(--shadow); }
-  .entry-option.coming-soon { opacity: 0.5; cursor: not-allowed; }
-  .entry-option.coming-soon:hover { border-color: var(--border); box-shadow: none; }
-  .entry-option-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-  .entry-option-title { font-weight: 600; font-size: 15px; }
-  .coming-soon-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-faint); background: var(--paper-warm); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; }
-  .entry-option-desc { font-size: 13px; color: var(--ink-muted); line-height: 1.5; }
-
-  /* ════════════════════════════════════════
-     SCREEN 3 — CHAT
-  ════════════════════════════════════════ */
-  #screen-chat .body { flex: 1; display: flex; flex-direction: column; max-width: 680px; margin: 0 auto; width: 100%; padding: 20px 24px; }
-  .messages { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; flex: 1; min-height: 0; padding-bottom: 8px; }
-  .msg { display: flex; gap: 10px; animation: fadeUp 0.22s ease; }
+  #screen-chat { background: var(--paper); }
+  .ctx-bar { padding: 7px 28px; background: var(--accent-light); border-bottom: 1px solid #e8d0bc; display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+  .ctx-bar svg { width: 13px; height: 13px; color: var(--accent); flex-shrink: 0; }
+  .ctx-bar span { font-size: 12px; color: var(--accent); font-weight: 500; }
+  .chat-wrap { flex: 1; overflow-y: auto; padding: 20px 0; }
+  .chat-wrap::-webkit-scrollbar { width: 3px; }
+  .chat-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .chat-inner { display: flex; flex-direction: column; gap: 14px; max-width: 660px; width: 100%; margin: 0 auto; padding: 0 28px; }
+  .mrow { display: flex; align-items: flex-start; gap: 8px; animation: fadeUp 0.22s ease; }
+  .mrow.u { flex-direction: row-reverse; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-  .msg.user { flex-direction: row-reverse; }
-  .avatar { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
-  .avatar.scout { background: var(--accent-light); color: var(--accent-dim); }
-  .avatar.user-av { background: var(--ink); color: var(--paper); }
-  .bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--r); font-size: 13.5px; line-height: 1.65; border: 1px solid transparent; }
-  .msg.assistant .bubble { background: var(--card); border-color: var(--border); box-shadow: var(--shadow); border-bottom-left-radius: 4px; }
-  .msg.user .bubble { background: var(--ink); color: var(--paper); border-bottom-right-radius: 4px; }
+  .av { width: 27px; height: 27px; border-radius: 50%; background: var(--accent-light); border: 1px solid #e8d0bc; display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; color: var(--accent-dim); flex-shrink: 0; font-family: 'DM Serif Display', serif; }
+  .av-u { background: var(--dark); color: #faf8f5; border-color: var(--dark); }
+  .bub { padding: 10px 14px; font-size: 13.5px; line-height: 1.65; max-width: 480px; }
+  .bub-s { background: var(--card); border: 1px solid var(--border); border-radius: 3px 13px 13px 13px; color: var(--ink); box-shadow: var(--shadow); }
+  .bub-u { background: var(--dark); color: #faf8f5; border-radius: 13px 3px 13px 13px; }
+  .bub p + p { margin-top: 6px; }
 
-  .typing-bubble { display: flex; gap: 5px; align-items: center; padding: 10px 14px; }
-  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); animation: pulse 1.2s ease infinite; }
-  .dot:nth-child(2) { animation-delay: 0.2s; }
-  .dot:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes pulse { 0%,80%,100% { transform: scale(0.75); opacity: 0.45; } 40% { transform: scale(1); opacity: 1; } }
-
-  .chat-bottom { flex-shrink: 0; padding-top: 12px; }
-  .see-recos-wrap { display: none; margin-bottom: 12px; padding-left: 38px; }
-  .see-recos-wrap.visible { display: block; animation: fadeUp 0.25s ease; }
-  .see-recos-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); padding: 10px 20px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: background 0.15s, transform 0.1s; }
+  /* See Recos — inline in chat after Scout message */
+  .see-recos-row { display: flex; align-items: flex-start; gap: 8px; animation: fadeUp 0.22s ease; }
+  .see-recos-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); padding: 10px 20px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: background 0.15s; }
   .see-recos-btn:hover { background: var(--accent-dim); }
-  .see-recos-btn:active { transform: scale(0.97); }
   .see-recos-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
   .see-recos-btn svg { width: 14px; height: 14px; }
 
-  .input-area { display: flex; gap: 8px; align-items: flex-end; }
-  .input-wrap { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: var(--r); display: flex; padding: 9px 13px; box-shadow: var(--shadow); transition: border-color 0.15s; }
+  /* Typing indicator */
+  .typing-row { display: flex; align-items: center; gap: 8px; }
+  .tdots { display: flex; gap: 4px; padding: 11px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 3px 13px 13px 13px; }
+  .tdots span { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); animation: td 1.2s ease-in-out infinite; }
+  .tdots span:nth-child(2) { animation-delay: 0.2s; }
+  .tdots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes td { 0%,60%,100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+  /* Input bar */
+  .input-bar { padding: 10px 28px 14px; background: var(--paper); border-top: 1px solid var(--border); flex-shrink: 0; }
+  .input-wrap { display: flex; align-items: flex-end; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 8px 8px 8px 14px; max-width: 660px; margin: 0 auto; transition: border-color 0.15s; box-shadow: var(--shadow); }
   .input-wrap:focus-within { border-color: var(--accent); }
-  textarea { flex: 1; border: none; outline: none; resize: none; background: transparent; font-family: 'DM Sans', sans-serif; font-size: 13.5px; line-height: 1.5; color: var(--ink); min-height: 22px; max-height: 110px; }
-  textarea::placeholder { color: var(--ink-faint); }
-  .send-btn { width: 38px; height: 38px; border-radius: 10px; background: var(--accent); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s, transform 0.1s; }
+  #userInput { flex: 1; border: none; background: transparent; font-size: 13.5px; font-family: 'DM Sans', sans-serif; color: var(--ink); outline: none; resize: none; line-height: 1.5; max-height: 100px; min-height: 21px; }
+  #userInput::placeholder { color: var(--ink-faint); }
+  .send-btn { width: 30px; height: 30px; border-radius: 7px; background: var(--accent); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; }
   .send-btn:hover { background: var(--accent-dim); }
-  .send-btn:active { transform: scale(0.95); }
   .send-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
-  .send-btn svg { width: 16px; height: 16px; }
+  .send-btn svg { width: 13px; height: 13px; color: #fff; }
+
+  /* Error bubble */
+  .error-bub { background: #fff0f0; border: 1px solid #f0c0c0; border-radius: var(--r-sm); padding: 10px 14px; font-size: 13px; color: #a03030; max-width: 80%; }
+
+  /* Resume card */
+  .resume-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); padding: 14px 16px; max-width: 82%; }
+  .resume-card-label { font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 10px; }
+  .resume-rows { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .resume-row { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
+  .resume-row-key { color: var(--ink-faint); min-width: 110px; flex-shrink: 0; font-size: 12px; }
+  .resume-row-val { color: var(--ink); font-weight: 500; }
+  .resume-row-val.empty { color: var(--ink-faint); font-style: italic; font-weight: 400; }
+  .resume-section-sep { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin: 8px 0 5px; }
+  .resume-continue-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); padding: 8px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .resume-continue-btn:hover { background: var(--accent-dim); }
+  .resume-continue-btn svg { width: 13px; height: 13px; }
 
   /* ════════════════════════════════════════
      SCREEN 4 — RECOMMENDATIONS
   ════════════════════════════════════════ */
-  #screen-recos .body { flex: 1; display: flex; gap: 24px; max-width: 1200px; margin: 0 auto; width: 100%; padding: 24px; align-items: flex-start; }
+  #screen-recos .scroll { padding: 24px 28px 28px; }
+  .recos-inner { max-width: 900px; margin: 0 auto; display: flex; gap: 24px; align-items: flex-start; }
+  .recos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
   .recos-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-  .recos-right { width: 280px; flex-shrink: 0; }
-  .recos-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-muted); display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+  .recos-right { width: 280px; flex-shrink: 0; position: sticky; top: 0; }
+  .recos-heading { margin-bottom: 14px; }
+  .recos-heading h2 { font-family: 'DM Serif Display', serif; font-size: 20px; letter-spacing: -0.02em; margin-bottom: 3px; }
+  .recos-heading p { font-size: 13px; color: var(--ink-muted); }
+  .recos-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-muted); display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
   .recos-label-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 
   /* Accordion */
@@ -175,154 +247,343 @@
   .acc-card.open .acc-chevron { transform: rotate(180deg); color: var(--accent); }
   .acc-body { display: none; padding: 14px 16px 16px; border-top: 1px solid var(--border); }
   .acc-card.open .acc-body { display: block; animation: fadeUp 0.18s ease; }
-
   .match-sections { display: flex; flex-direction: column; gap: 12px; }
   .match-section { font-size: 12.5px; }
   .match-heading { font-weight: 600; color: var(--ink); margin-bottom: 4px; font-size: 13px; }
   .match-points { padding-left: 15px; color: var(--ink-muted); }
   .match-points li { margin-bottom: 2px; }
-
   .budget-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
   .budget-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
   .budget-table td:first-child { color: var(--ink-muted); }
   .budget-table td:last-child { font-family: 'DM Mono', monospace; text-align: right; color: var(--ink); }
   .budget-table tr.total-row td { font-weight: 700; border-bottom: none; padding-top: 7px; }
   .budget-table tr.total-row td:last-child { color: var(--accent-dim); }
-
   .budget-tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   .budget-tag { font-family: 'DM Mono', monospace; font-size: 11px; background: var(--accent-light); color: var(--accent-dim); padding: 2px 8px; border-radius: 4px; }
   .verdict-tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; }
   .verdict-tag.comfortable { background: var(--green-light); color: var(--green); }
   .verdict-tag.tight { background: #fff3e0; color: #b06000; }
   .verdict-tag.stretch { background: #ffeaea; color: #a03030; }
-
   .tradeoffs { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
   .tradeoff-label { font-size: 10px; font-weight: 600; color: var(--ink-faint); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 5px; }
   .tradeoff-item { font-size: 12px; color: var(--ink-muted); display: flex; gap: 5px; align-items: flex-start; margin-bottom: 3px; }
   .tradeoff-item::before { content: "↗"; font-size: 10px; margin-top: 1px; flex-shrink: 0; color: var(--ink-faint); }
-
   .card-actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
   .choose-btn { background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 500; padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
   .choose-btn:hover { background: var(--accent); }
   .not-for-me-btn { background: none; border: none; font-size: 12px; color: var(--ink-faint); cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 7px 4px; transition: color 0.15s; text-decoration: underline; text-underline-offset: 2px; }
   .not-for-me-btn:hover { color: var(--ink-muted); }
 
-  /* Right CTA */
-  .plan-cta-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 24px; box-shadow: var(--shadow); position: sticky; top: 80px; }
-  .plan-cta-card.hidden { display: none; }
+  /* Right CTA panel */
   .plan-cta-placeholder { border: 2px dashed var(--border); border-radius: var(--r); padding: 32px 20px; text-align: center; color: var(--ink-faint); font-size: 13px; line-height: 1.6; }
-  .plan-cta-dest { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+  .plan-cta-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 24px; box-shadow: var(--shadow); }
+  .plan-cta-dest-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
   .plan-cta-title { font-family: 'DM Serif Display', serif; font-size: 20px; letter-spacing: -0.01em; margin-bottom: 8px; }
-  .plan-cta-desc { font-size: 13px; color: var(--ink-muted); line-height: 1.6; margin-bottom: 20px; }
-  .plan-cta-btn { width: 100%; padding: 11px; background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: not-allowed; opacity: 0.6; display: flex; align-items: center; justify-content: center; gap: 6px; }
-  .plan-cta-soon { font-size: 11px; color: var(--ink-faint); text-align: center; margin-top: 8px; }
+  .plan-cta-desc { font-size: 13px; color: var(--ink-muted); line-height: 1.6; margin-bottom: 16px; }
+  .plan-cta-btn { width: 100%; padding: 11px; background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.15s; }
+  .plan-cta-btn:hover { background: var(--accent-dim); }
 
-  .error-bubble { background: #fff0f0; border: 1px solid #f0c0c0; border-radius: var(--r-sm); padding: 10px 14px; font-size: 13px; color: #a03030; max-width: 80%; }
+  /* Refine row */
+  .refine-row { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 13px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+  .refine-row p { font-size: 13px; color: var(--ink-muted); }
+  .refine-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 7px 14px; border-radius: var(--r-sm); background: var(--accent); color: #fff; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
+  .refine-btn:hover { background: var(--accent-dim); }
 
-  .messages::-webkit-scrollbar { width: 3px; }
-  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  /* ════════════════════════════════════════
+     SCREEN 5 — PLANS & PRICING
+  ════════════════════════════════════════ */
+  #screen-plans .scroll { padding: 24px 28px; }
+  .plans-inner { max-width: 900px; margin: 0 auto; }
+  .plans-hero { margin-bottom: 20px; }
+  .plans-pill { display: inline-flex; align-items: center; gap: 5px; background: var(--green-light); border: 1px solid #b0d9be; border-radius: 100px; padding: 4px 11px; font-size: 11.5px; color: var(--green); font-weight: 600; margin-bottom: 10px; }
+  .plans-pill svg { width: 11px; height: 11px; }
+  .plans-hero h2 { font-family: 'DM Serif Display', serif; font-size: 22px; letter-spacing: -0.02em; margin-bottom: 5px; }
+  .plans-hero p { font-size: 13.5px; color: var(--ink-muted); max-width: 520px; line-height: 1.6; }
+  .plans-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px; }
+  .plan-card { border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+  .plan-a { background: var(--card); border: 1.5px solid var(--border); }
+  .plan-b { background: var(--dark); border: 1.5px solid var(--dark); position: relative; }
+  .plan-rec { position: absolute; top: 13px; right: 13px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 100px; letter-spacing: 0.05em; }
+  .plan-top { padding: 20px 20px 0; }
+  .plan-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; }
+  .plan-type-a { color: var(--ink-faint); }
+  .plan-type-b { color: rgba(255,255,255,0.4); }
+  .plan-price { font-family: 'DM Serif Display', serif; font-size: 28px; font-weight: 700; line-height: 1.1; }
+  .plan-price-a { color: var(--ink); }
+  .plan-price-b { color: #fff; }
+  .plan-period { font-size: 12px; margin-bottom: 12px; margin-top: 2px; }
+  .plan-period-a { color: var(--ink-faint); }
+  .plan-period-b { color: rgba(255,255,255,0.4); }
+  .plan-tagline { font-size: 13px; font-weight: 600; padding-bottom: 13px; border-bottom: 1px solid; margin-bottom: 13px; line-height: 1.5; }
+  .plan-tagline-a { color: var(--ink); border-color: var(--border); }
+  .plan-tagline-b { color: #fff; border-color: rgba(255,255,255,0.12); }
+  .plan-feats { display: flex; flex-direction: column; gap: 9px; margin-bottom: 16px; }
+  .pf { display: flex; align-items: flex-start; gap: 8px; }
+  .pf-icon { font-size: 14px; flex-shrink: 0; width: 20px; text-align: center; margin-top: 1px; }
+  .pf-text-a { font-size: 13px; color: var(--ink-muted); line-height: 1.45; }
+  .pf-text-a strong { color: var(--ink); }
+  .pf-text-b { font-size: 13px; color: rgba(255,255,255,0.6); line-height: 1.45; }
+  .pf-text-b strong { color: #fff; }
+  .plan-divider { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
+  .plan-divider-b { color: rgba(255,255,255,0.3); }
+  .plan-bottom { margin-top: auto; padding: 0 20px 20px; }
+  .plan-btn-a { width: 100%; padding: 10px 20px; border-radius: var(--r-lg); font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif; background: var(--green); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.15s; }
+  .plan-btn-a:hover { background: #2d5c3a; }
+  .plan-btn-b { width: 100%; padding: 10px 20px; border-radius: var(--r-lg); font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif; background: var(--accent); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.15s; }
+  .plan-btn-b:hover { background: var(--accent-dim); }
+  .plans-skip { text-align: center; font-size: 12.5px; color: var(--ink-faint); cursor: pointer; margin-top: 6px; }
+  .plans-skip:hover { color: var(--accent); }
+  .plans-note { font-size: 12px; color: var(--ink-faint); text-align: center; margin-top: 10px; line-height: 1.55; }
 
-  @media (max-width: 780px) {
-    #screen-recos .body { flex-direction: column; }
-    .recos-right { width: 100%; }
-    .plan-cta-card { position: static; }
+  /* Payment modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(26,22,18,0.55); display: flex; align-items: center; justify-content: center; z-index: 100; animation: fadeUp 0.18s ease; }
+  .modal { background: var(--card); border-radius: var(--r-lg); padding: 28px; width: 380px; max-width: 92vw; box-shadow: 0 20px 60px rgba(26,22,18,0.2); }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 18px; margin-bottom: 6px; }
+  .modal-sub { font-size: 13px; color: var(--ink-muted); margin-bottom: 20px; line-height: 1.5; }
+  .modal-amount { font-family: 'DM Serif Display', serif; font-size: 26px; color: var(--accent); margin-bottom: 20px; }
+  .modal-actions { display: flex; gap: 10px; }
+  .modal-btn-pay { flex: 1; padding: 11px; background: var(--green); color: #fff; border: none; border-radius: var(--r-sm); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+  .modal-btn-pay:hover { background: #2d5c3a; }
+  .modal-btn-cancel { padding: 11px 16px; background: none; color: var(--ink-muted); border: 1px solid var(--border); border-radius: var(--r-sm); font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+  .modal-btn-cancel:hover { border-color: var(--ink-muted); }
+
+  /* ════════════════════════════════════════
+     SCREEN 6 — ITINERARY
+  ════════════════════════════════════════ */
+  #screen-itin .scroll { padding: 20px 28px 28px; }
+  .itin-inner { max-width: 860px; margin: 0 auto; }
+  .itin-banner { background: linear-gradient(135deg, var(--dark), #4a3728); border-radius: var(--r-lg); padding: 18px 22px; margin-bottom: 14px; color: #fff; }
+  .ib-eye { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; opacity: 0.5; margin-bottom: 4px; }
+  .ib-title { font-family: 'DM Serif Display', serif; font-size: 22px; font-weight: 700; margin-bottom: 3px; }
+  .ib-sub { font-size: 12.5px; opacity: 0.65; line-height: 1.5; }
+  .ib-meta { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .ib-tag { font-size: 11px; padding: 2px 9px; border-radius: 100px; background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
+  .itin-note { background: var(--accent-light); border: 1px solid #e8d0bc; border-radius: var(--r-sm); padding: 9px 14px; margin-bottom: 14px; font-size: 12.5px; color: var(--accent); display: flex; align-items: center; gap: 7px; }
+  .itin-note svg { width: 13px; height: 13px; flex-shrink: 0; }
+  .itin-actions { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+  .itin-action-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--card); color: var(--ink-muted); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
+  .itin-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .itin-action-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .itin-action-btn.primary:hover { background: var(--accent-dim); }
+  .itin-action-btn svg { width: 13px; height: 13px; }
+  .days-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .day-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+  .day-head { background: var(--accent-light); padding: 9px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e8d0bc; }
+  .day-lbl { font-size: 10px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.07em; }
+  .day-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .act { display: flex; align-items: flex-start; gap: 9px; padding: 9px 16px; border-bottom: 1px solid var(--border); }
+  .act:last-child { border-bottom: none; }
+  .act-time { font-size: 10.5px; color: var(--ink-faint); width: 40px; flex-shrink: 0; padding-top: 2px; font-weight: 500; }
+  .act-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 5px; }
+  .act-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .act-desc { font-size: 12px; color: var(--ink-muted); margin-top: 1px; line-height: 1.45; }
+  .act-link { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--accent); margin-top: 3px; cursor: pointer; font-weight: 500; }
+  .act-link:hover { text-decoration: underline; }
+  .act-link svg { width: 9px; height: 9px; }
+  .act-tags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+  .at { font-size: 10px; padding: 1px 6px; border-radius: 100px; background: var(--paper); border: 1px solid var(--border); color: var(--ink-muted); }
+  .at-food { background: #fef9c3; border-color: #fde68a; color: #92400e; }
+  .at-ticket { background: var(--blue-light); border-color: var(--blue-border); color: #1d4ed8; }
+  .at-stay { background: #f3e8ff; border-color: #ddd6fe; color: #6d28d9; }
+  .at-flight { background: #f1f5f9; border-color: #cbd5e1; color: #334155; }
+
+  /* ════════════════════════════════════════
+     SCREEN 7 — CONCIERGE DASHBOARD
+  ════════════════════════════════════════ */
+  #screen-concierge .scroll { padding: 20px 28px 28px; }
+  .cd-inner { max-width: 900px; margin: 0 auto; }
+  .cd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .today-banner { background: linear-gradient(135deg, var(--dark), #4a3728); border-radius: var(--r-lg); padding: 18px 22px; margin-bottom: 14px; color: #fff; }
+  .tb2-eye { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; opacity: 0.5; margin-bottom: 4px; }
+  .tb2-title { font-family: 'DM Serif Display', serif; font-size: 19px; font-weight: 700; margin-bottom: 5px; }
+  .tb2-body { font-size: 13px; opacity: 0.7; line-height: 1.6; }
+  .tb2-wa { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; margin-top: 9px; background: rgba(255,255,255,0.1); padding: 3px 9px; border-radius: 100px; opacity: 0.8; }
+  .tb2-wa svg { width: 11px; height: 11px; }
+  .tb2-acts { display: flex; gap: 6px; margin-top: 11px; flex-wrap: wrap; }
+  .tb2-btn { display: flex; align-items: center; gap: 5px; font-size: 12px; padding: 6px 12px; border-radius: var(--r-sm); background: rgba(255,255,255,0.1); color: #fff; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
+  .tb2-btn:hover { background: rgba(255,255,255,0.2); }
+  .tb2-btn svg { width: 12px; height: 12px; }
+  .cd-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; }
+  .cd-card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); margin-bottom: 12px; }
+  .bk-row { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .bk-row:last-child { border-bottom: none; }
+  .bk-icon { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+  .bk-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .bk-detail { font-size: 11.5px; color: var(--ink-muted); }
+  .bs-ok { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 100px; background: var(--green-light); color: var(--green); border: 1px solid #b0d9be; white-space: nowrap; }
+  .bs-pend { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 100px; background: #fef9c3; color: #b45309; border: 1px solid #fde68a; white-space: nowrap; }
+  .coord-head { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
+  .coord-av { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; color: #fff; font-family: 'DM Serif Display', serif; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+  .coord-name { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .coord-role { font-size: 11.5px; color: var(--ink-muted); }
+  .coord-avail { font-size: 11px; color: var(--ink-faint); margin-top: 1px; }
+  .coord-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .coord-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 500; padding: 6px 12px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--card); color: var(--ink-muted); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
+  .coord-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .coord-btn svg { width: 12px; height: 12px; }
+  .help-list { display: flex; flex-direction: column; gap: 5px; }
+  .help-item { text-align: left; font-size: 12.5px; font-weight: 500; padding: 6px 8px; border-radius: var(--r-sm); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; color: var(--ink-muted); transition: all 0.15s; }
+  .help-item:hover { background: var(--accent-light); color: var(--accent); }
+  .doc-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .doc-card { background: var(--paper); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 12px; cursor: pointer; transition: all 0.15s; }
+  .doc-card:hover { border-color: var(--accent); }
+  .doc-icon { font-size: 18px; margin-bottom: 6px; }
+  .doc-name { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 1px; }
+  .doc-meta { font-size: 10.5px; color: var(--ink-faint); }
+  .doc-dl { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 100px; margin-top: 5px; background: var(--green-light); color: var(--green); border: 1px solid #b0d9be; }
+  .itin-day-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .itin-day-row { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .itin-day-row:last-child { border-bottom: none; }
+  .itin-day-lbl { font-size: 11.5px; font-weight: 600; color: var(--accent); width: 100px; flex-shrink: 0; }
+  .itin-day-text { font-size: 12.5px; color: var(--ink-muted); }
+
+  @media (max-width: 760px) {
+    .home-modules { grid-template-columns: 1fr; }
+    .tc-grid { grid-template-columns: 1fr; }
+    .plans-grid { grid-template-columns: 1fr; }
+    .days-grid { grid-template-columns: 1fr; }
+    .cd-grid { grid-template-columns: 1fr; }
+    .recos-inner { flex-direction: column; }
+    .recos-grid { grid-template-columns: 1fr; }
+    .recos-right { width: 100%; position: static; }
+    .tb { padding: 11px 16px; }
+    #screen-trips .scroll { padding: 16px; }
   }
 </style>
 </head>
 <body>
 
 <!-- ══════════════════════════════════════════
-     SCREEN 1 — MY TRIPS
+     SCREEN 1 — HOME
 ══════════════════════════════════════════ -->
-<div id="screen-trips" class="screen active">
-  <div class="hdr">
-    <div class="brand" onclick="navigate('trips')">
-      <div class="brand-name">Travel<span>WithMe</span></div>
-      <div class="brand-tagline">Helping you choose your destination and plan your trip with confidence.</div>
-    </div>
-  </div>
-  <div class="body">
-    <div class="trips-head">
-      <div class="trips-title">My Trips</div>
-      <button class="new-trip-btn" onclick="navigate('entry')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New Trip
-      </button>
-    </div>
-    <div id="tripsList"></div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     SCREEN 2 — ENTRY POINT
-══════════════════════════════════════════ -->
-<div id="screen-entry" class="screen">
-  <div class="hdr">
-    <div class="brand" onclick="navigate('trips')">
-      <div class="brand-name">Travel<span>WithMe</span></div>
-      <div class="brand-tagline">Helping you choose your destination and plan your trip with confidence.</div>
-    </div>
-    <button class="back-btn" onclick="navigate('trips')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+<div id="screen-home" class="screen">
+  <header class="tb">
+    <a class="brand">Travel<em>With</em>Me</a>
+    <button class="tb-btn" onclick="navigate('trips')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
     </button>
-  </div>
-  <div class="body">
-    <div class="entry-box">
-      <h2>What would you like help with?</h2>
-      <p>Choose how you'd like to start planning your trip.</p>
-      <div class="entry-options">
-        <div class="entry-option" onclick="startMatch()">
-          <div class="entry-option-head"><div class="entry-option-title">I don't know where to go</div></div>
-          <div class="entry-option-desc">Tell Scout what you're looking for — group, budget, vibe — and get destination recommendations tailored to you.</div>
+  </header>
+  <div class="scroll">
+    <div class="hero">
+      <div class="hero-eye">Plan your next adventure</div>
+      <h1>Travel the way you want,<br><em>effortlessly.</em></h1>
+      <p>From wondering where to go to stepping off the plane — TWM handles every detail so you don't have to.</p>
+    </div>
+    <div class="home-modules">
+      <div class="home-mod" onclick="startMatch()">
+        <div class="mod-icon mod-icon-discover">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
         </div>
-        <div class="entry-option coming-soon">
-          <div class="entry-option-head">
-            <div class="entry-option-title">I know where I'm going and want to plan</div>
-            <span class="coming-soon-tag">Coming soon</span>
-          </div>
-          <div class="entry-option-desc">Jump straight into planning — itinerary, logistics, and bookings for a destination you've already picked.</div>
+        <h2>Help me decide where to go</h2>
+        <p>Tell Scout your vibe, travel style, and budget — we'll find the perfect destination and explain why.</p>
+        <span class="mod-cta mod-cta-discover">Discover with Scout
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </span>
+      </div>
+      <div class="home-mod" onclick="startPlanningConvo()">
+        <div class="mod-icon mod-icon-plan">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         </div>
+        <h2>I already have a place in mind</h2>
+        <p>Know where you're headed? Let's design your trip — places, pace, then a full itinerary.</p>
+        <span class="mod-cta mod-cta-plan">Plan with Scout
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </span>
       </div>
     </div>
   </div>
 </div>
 
 <!-- ══════════════════════════════════════════
-     SCREEN 3 — CHAT
+     SCREEN 2 — MY TRIPS
+══════════════════════════════════════════ -->
+<div id="screen-trips" class="screen">
+  <header class="tb">
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <button class="tb-btn" onclick="navigate('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
+      My Trips
+    </button>
+  </header>
+  <div class="scroll">
+    <div class="trips-inner">
+      <div id="tripsPageContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCREEN 3 — CHAT (Scout)
 ══════════════════════════════════════════ -->
 <div id="screen-chat" class="screen">
-  <div class="hdr">
-    <div class="brand" onclick="navigate('trips')">
-      <div class="brand-name">Travel<span>WithMe</span></div>
-      <div class="brand-tagline">Helping you choose your destination and plan your trip with confidence.</div>
-    </div>
-    <div class="hdr-actions">
+  <header class="tb">
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <div class="tb-right" style="gap:10px;">
       <span id="chatTripName" style="font-size:13px;color:var(--ink-muted);"></span>
-      <button class="back-btn" onclick="navigate('trips')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      <button class="tb-btn" onclick="navigate('trips')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
         My Trips
       </button>
     </div>
+  </header>
+  <div class="ctx-bar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span id="ctxText">Scout will help you find the perfect destination.</span>
   </div>
   <div class="state-bar" id="stateBar"></div>
-  <div class="body">
-    <div class="messages" id="messages"></div>
-    <div class="chat-bottom">
-      <div class="see-recos-wrap" id="seeRecosWrap">
-        <button class="see-recos-btn" id="seeRecosBtn" onclick="handleSeeRecos()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          See Recommendations
-        </button>
+  <div class="chat-wrap" id="chatWrap">
+    <div class="chat-inner" id="chatInner">
+      <div class="typing-row" id="typingRow" style="display:none;">
+        <div class="av">S</div>
+        <div class="tdots"><span></span><span></span><span></span></div>
       </div>
-      <div class="input-area">
-        <div class="input-wrap">
-          <textarea id="userInput" placeholder="Tell Scout about your trip…" rows="1"></textarea>
+    </div>
+  </div>
+  <div class="input-bar">
+    <div class="input-wrap">
+      <textarea id="userInput" placeholder="Tell Scout about your trip…" rows="1"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="handleSend()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCREEN 3B — PLANNING CHAT (coming soon)
+══════════════════════════════════════════ -->
+<div id="screen-planning-chat" class="screen">
+  <header class="tb">
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <div class="tb-right" style="gap:10px;">
+      <span id="planningTripName" style="font-size:13px;color:var(--ink-muted);"></span>
+      <button class="tb-btn" onclick="navigate('trips')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
+        My Trips
+      </button>
+    </div>
+  </header>
+  <div class="ctx-bar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>Scout is helping design your day-by-day plan.</span>
+  </div>
+  <div class="chat-wrap">
+    <div class="chat-inner">
+      <div class="mrow">
+        <div class="av">S</div>
+        <div class="bub bub-s">
+          <p>Planning with Scout is coming soon. We're building the experience that turns your chosen destination into a full day-by-day itinerary — hang tight!</p>
         </div>
-        <button class="send-btn" id="sendBtn" onclick="handleSend()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
       </div>
+    </div>
+  </div>
+  <div class="input-bar">
+    <div class="input-wrap" style="opacity:0.5;">
+      <textarea placeholder="Planning chat coming soon…" rows="1" disabled style="cursor:not-allowed;"></textarea>
+      <button class="send-btn" disabled style="cursor:not-allowed;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
     </div>
   </div>
 </div>
@@ -331,24 +592,227 @@
      SCREEN 4 — RECOMMENDATIONS
 ══════════════════════════════════════════ -->
 <div id="screen-recos" class="screen">
-  <div class="hdr">
-    <div class="brand" onclick="navigate('trips')">
-      <div class="brand-name">Travel<span>WithMe</span></div>
-      <div class="brand-tagline">Helping you choose your destination and plan your trip with confidence.</div>
-    </div>
-    <button class="back-btn" onclick="navigate('chat')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      Back to Chat
+  <header class="tb">
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <button class="tb-btn" onclick="navigate('trips')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
+      My Trips
     </button>
-  </div>
+  </header>
   <div class="state-bar" id="stateBarRecos"></div>
-  <div class="body">
-    <div class="recos-left">
-      <div class="recos-label"><div class="recos-label-dot"></div>Recommendations</div>
-      <div id="recosCards"></div>
+  <div class="scroll">
+    <div class="recos-inner" style="display:block;max-width:920px;margin:0 auto;padding:24px 28px 28px;">
+      <div class="recos-heading">
+        <div class="recos-label"><div class="recos-label-dot"></div>Your destination matches</div>
+        <div id="recosSubheading" style="font-size:13px;color:var(--ink-muted);margin-top:3px;"></div>
+      </div>
+      <div id="recosCards" class="recos-grid"></div>
+      <div id="inlinePlanCtaWrap"></div>
+      <div class="refine-row" id="refineRow" style="display:none;">
+        <p>None of these feel right? Tell Scout what's missing.</p>
+        <button class="refine-btn" onclick="navigate('chat')">Refine with Scout</button>
+      </div>
     </div>
-    <div class="recos-right">
-      <div id="planCta"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCREEN 5 — PLANS & PRICING
+══════════════════════════════════════════ -->
+<div id="screen-plans" class="screen">
+  <header class="tb">
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <button class="tb-btn" onclick="navigate('trips')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
+      My Trips
+    </button>
+  </header>
+  <div class="scroll">
+    <div class="plans-inner">
+      <div class="plans-hero">
+        <div class="plans-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Destination confirmed
+        </div>
+        <h2>How would you like to move forward?</h2>
+        <p>Get a detailed itinerary to plan yourself, or let TWM take full ownership of your trip.</p>
+      </div>
+      <div class="plans-grid">
+        <!-- Plan A: Planning Only -->
+        <div class="plan-card plan-a">
+          <div class="plan-top">
+            <div class="plan-type plan-type-a">Planning Only</div>
+            <div class="plan-price plan-price-a">₹499</div>
+            <div class="plan-period plan-period-a">One-time · Per trip · Delivered in 24 hrs</div>
+            <div class="plan-tagline plan-tagline-a">Everything you need to execute your trip yourself.</div>
+            <div class="plan-feats">
+              <div class="pf"><div class="pf-icon">🗓️</div><div class="pf-text-a"><strong>Day-by-day itinerary</strong> — departure to return, with timings</div></div>
+              <div class="pf"><div class="pf-icon">🔗</div><div class="pf-text-a"><strong>Booking links for everything</strong> — flights, hotels, tickets, transfers</div></div>
+              <div class="pf"><div class="pf-icon">🍽️</div><div class="pf-text-a"><strong>Restaurant picks</strong> — curated for your preferences</div></div>
+              <div class="pf"><div class="pf-icon">💰</div><div class="pf-text-a"><strong>Budget breakdown</strong> — estimated costs per category</div></div>
+              <div class="pf"><div class="pf-icon">📄</div><div class="pf-text-a"><strong>PDF to your email</strong> — yours to keep and share</div></div>
+            </div>
+          </div>
+          <div class="plan-bottom">
+            <button class="plan-btn-a" onclick="showPaymentModal('planning')">Get my itinerary · ₹499 →</button>
+          </div>
+        </div>
+        <!-- Plan B: Concierge -->
+        <div class="plan-card plan-b">
+          <div class="plan-rec">RECOMMENDED</div>
+          <div class="plan-top">
+            <div class="plan-type plan-type-b">Travel Concierge</div>
+            <div class="plan-price plan-price-b">₹X,XXX</div>
+            <div class="plan-period plan-period-b">Custom quote · Depends on dates & group size</div>
+            <div class="plan-tagline plan-tagline-b">Your trip, fully managed by TWM. You just show up.</div>
+            <div class="plan-divider plan-divider-b">Everything in Planning Only, plus:</div>
+            <div class="plan-feats">
+              <div class="pf"><div class="pf-icon">📋</div><div class="pf-text-b"><strong>We handle all bookings</strong> — you don't click a single link</div></div>
+              <div class="pf"><div class="pf-icon">👤</div><div class="pf-text-b"><strong>Dedicated coordinator</strong> — one person, always reachable</div></div>
+              <div class="pf"><div class="pf-icon">🔄</div><div class="pf-text-b"><strong>Changes & delays handled</strong> — we track and manage proactively</div></div>
+              <div class="pf"><div class="pf-icon">📱</div><div class="pf-text-b"><strong>Daily WhatsApp plan</strong> — what to do, where to go, driver details</div></div>
+              <div class="pf"><div class="pf-icon">🏠</div><div class="pf-text-b"><strong>With you till you're home</strong> — before and during the trip</div></div>
+            </div>
+          </div>
+          <div class="plan-bottom">
+            <button class="plan-btn-b" onclick="showPaymentModal('concierge')">Request a quote →</button>
+          </div>
+        </div>
+      </div>
+      <div class="plans-note">
+        Concierge pricing varies by group size, destinations, and trip duration — we'll send a quote after a quick call.
+        <br><br>
+        <span class="plans-skip" onclick="navigate('trips')">Not ready yet — save to My Trips and decide later</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCREEN 6 — ITINERARY
+══════════════════════════════════════════ -->
+<div id="screen-itin" class="screen">
+  <header class="tb">
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <button class="tb-btn" onclick="navigate('trips')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
+      My Trips
+    </button>
+  </header>
+  <div class="scroll">
+    <div class="itin-inner">
+      <div class="itin-banner">
+        <div class="ib-eye">Planning Only · Paid · ₹499</div>
+        <div class="ib-title" id="itinTitle">Your Trip</div>
+        <div class="ib-sub" id="itinSub">Your itinerary is being prepared</div>
+        <div class="ib-meta" id="itinMeta"></div>
+      </div>
+      <div class="itin-note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        This is your compiled plan. To make changes — call us: <strong>+91 98765 43210</strong>
+      </div>
+      <div class="itin-actions">
+        <button class="itin-action-btn primary" onclick="alert('PDF download coming soon')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download PDF
+        </button>
+        <button class="itin-action-btn" onclick="alert('Calendar export coming soon')">📅 Add to calendar</button>
+      </div>
+      <div class="days-grid" id="itinDaysGrid">
+        <!-- Populated by renderItinerary() -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCREEN 7 — CONCIERGE DASHBOARD
+══════════════════════════════════════════ -->
+<div id="screen-concierge" class="screen">
+  <header class="tb">
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <button class="tb-btn" onclick="navigate('trips')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
+      My Trips
+    </button>
+  </header>
+  <div class="scroll">
+    <div class="cd-inner">
+      <div class="today-banner">
+        <div class="tb2-eye">Travel Concierge · <span id="conciergeDestLabel">Your Trip</span></div>
+        <div class="tb2-title">Your coordinator will be in touch shortly.</div>
+        <div class="tb2-body">We've received your request. Priya will reach out within a few hours with a custom quote and a plan of action for your trip.</div>
+        <div class="tb2-wa">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          WhatsApp confirmation sent
+        </div>
+        <div class="tb2-acts">
+          <button class="tb2-btn" onclick="alert('We will send tomorrow\'s plan to your WhatsApp the night before.')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Tomorrow's plan
+          </button>
+          <button class="tb2-btn" onclick="alert('Calling Priya…')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.81 19.79 19.79 0 01.12 2.2 2 2 0 012.11 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14.92z"/></svg>
+            Call Priya
+          </button>
+          <button class="tb2-btn" onclick="alert('Opening WhatsApp…')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            WhatsApp
+          </button>
+        </div>
+      </div>
+      <div class="cd-grid">
+        <!-- Coordinator -->
+        <div class="cd-card">
+          <div class="cd-card-title">Your coordinator</div>
+          <div class="coord-head">
+            <div class="coord-av">P</div>
+            <div>
+              <div class="coord-name">Priya Menon</div>
+              <div class="coord-role">Senior Coordinator · TWM</div>
+              <div class="coord-avail">8am–10pm IST · replies in 15 min</div>
+            </div>
+          </div>
+          <div class="coord-acts">
+            <button class="coord-btn" onclick="alert('Calling Priya…')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.81 19.79 19.79 0 01.12 2.2 2 2 0 012.11 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14.92z"/></svg>
+              Call
+            </button>
+            <button class="coord-btn" onclick="alert('Opening WhatsApp…')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              WhatsApp
+            </button>
+            <button class="coord-btn" onclick="alert('Opening email…')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              Email
+            </button>
+          </div>
+          <div class="help-list">
+            <button class="help-item" onclick="alert('WhatsApp: Change a booking')">Change a booking →</button>
+            <button class="help-item" onclick="alert('WhatsApp: Flight delay/cancellation')">Flight delay / cancellation →</button>
+            <button class="help-item" onclick="alert('WhatsApp: Add an activity')">Add an activity →</button>
+            <button class="help-item" onclick="alert('WhatsApp: Something went wrong')">Something went wrong →</button>
+          </div>
+        </div>
+        <!-- Documents -->
+        <div class="cd-card">
+          <div class="cd-card-title">Documents</div>
+          <div class="doc-grid">
+            <div class="doc-card" onclick="alert('Download: Quote')"><div class="doc-icon">📄</div><div class="doc-name">Quote</div><div class="doc-meta">PDF</div><span class="doc-dl">↓ Download</span></div>
+            <div class="doc-card" onclick="alert('Download: Trip brief')"><div class="doc-icon">🗺️</div><div class="doc-name">Trip brief</div><div class="doc-meta">Draft</div><span class="doc-dl">↓ Download</span></div>
+            <div class="doc-card" onclick="alert('Download: Insurance')"><div class="doc-icon">📋</div><div class="doc-name">Insurance</div><div class="doc-meta">Group</div><span class="doc-dl">↓ Download</span></div>
+          </div>
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+            <div class="cd-card-title">Next steps</div>
+            <div class="itin-day-list">
+              <div class="itin-day-row"><div class="itin-day-lbl">Today</div><div class="itin-day-text">Coordinator reviews your trip context & preferences</div></div>
+              <div class="itin-day-row"><div class="itin-day-lbl">Within 4 hrs</div><div class="itin-day-text">Custom quote sent to your WhatsApp + email</div></div>
+              <div class="itin-day-row"><div class="itin-day-lbl">After approval</div><div class="itin-day-text">Bookings begin — flights, hotels, activities</div></div>
+              <div class="itin-day-row"><div class="itin-day-lbl">1 day before</div><div class="itin-day-text">Daily briefing sent to WhatsApp each morning</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -362,13 +826,15 @@ const API = {
   meridian: 'https://travelwithme-zf9f.onrender.com/meridian',
 };
 const WELCOME = "Hey there, I'm Scout. Tell me about the trip you have in mind, and I'll help you discover a destination that's the right fit for you and also tell you why it is the right fit for you.";
-const TRIPS_KEY = 'twm_trips_v1';
-const STATE_KEY  = 'twm_state_v1'; // prefix: STATE_KEY + trip_id
+const TRIPS_KEY    = 'twm_trips_v1';
+const STATE_KEY    = 'twm_state_v1';
+const UI_STATE_KEY = 'twm_ui_state_v1';
 
 let currentTripId = null;
 let tripState     = null;
 let busy          = false;
-let currentRecos  = null; // latest meridian output
+let currentRecos  = null;
+let tripFilter    = 'active'; // default filter
 
 // ══════════════════════════════════════════
 // TRIPS LIST (localStorage)
@@ -380,7 +846,7 @@ function saveTrips(trips) { localStorage.setItem(TRIPS_KEY, JSON.stringify(trips
 function getTripById(id) { return getTrips().find(t => t.id === id) || null; }
 
 function createTrip() {
-  const id = 'trip_' + Math.random().toString(36).slice(2, 8);
+  const id  = 'trip_' + Math.random().toString(36).slice(2, 8);
   const now = Date.now();
   const trip = { id, title: 'Untitled Trip', status: 'new', created_at: now, updated_at: now };
   const trips = getTrips();
@@ -401,17 +867,19 @@ function deleteTrip(id) {
   const trips = getTrips().filter(t => t.id !== id);
   saveTrips(trips);
   localStorage.removeItem(STATE_KEY + id);
+  localStorage.removeItem(UI_STATE_KEY + id);
 }
 
 function syncTripFromState(id, state) {
   const ri = state.trip_context.required_inputs;
   const inputs = [];
-  if (ri.origin_city) inputs.push(ri.origin_city);
-  if (ri.num_travelers) inputs.push(ri.num_travelers + ' pax');
-  if (ri.travel_month) inputs.push(ri.travel_month);
+  if (ri.origin_city)     inputs.push(ri.origin_city);
+  if (ri.num_travelers)   inputs.push(ri.num_travelers + ' pax');
+  if (ri.travel_month)    inputs.push(ri.travel_month);
   if (ri.duration_nights) inputs.push(ri.duration_nights + 'n');
-  if (ri.budget) inputs.push('₹' + ri.budget.toLocaleString('en-IN'));
-  const status = state.stage === 'matched' ? 'matched' : state.stage === 'new' ? 'new' : 'matching';
+  if (ri.budget)          inputs.push('₹' + ri.budget.toLocaleString('en-IN'));
+  const knownStages = ['new', 'matching', 'recommendation_ready', 'recommended', 'matched', 'planning'];
+  const status = knownStages.includes(state.stage) ? state.stage : 'matching';
   updateTrip(id, { status, inputs });
 }
 
@@ -429,9 +897,13 @@ function defaultState(tripId) {
       selected_option: null
     },
     matcher_state: {
-      generate_ready: false,
+      recommendation_intent: false,
       conversation_context: { last_scout_message: null, awaiting: null },
-      last_recommendations: null
+      recommendations: [],
+      rejected_options: [],
+      nuanced_preferences: [],
+      travel_style: [],
+      explicit_exclusions: []
     },
     planner_state: null
   };
@@ -460,6 +932,37 @@ function deepMerge(target, source) {
   }
 }
 
+function latestRecommendation() {
+  const recs = tripState?.matcher_state?.recommendations;
+  return Array.isArray(recs) && recs.length ? recs[recs.length - 1] : null;
+}
+
+function isMeridianBusinessStatus(status) {
+  return ['SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL', 'MISSING_INPUTS'].includes(status);
+}
+
+function loadUiState(tripId) {
+  const raw = localStorage.getItem(UI_STATE_KEY + tripId);
+  if (raw) { try { return JSON.parse(raw); } catch {} }
+  return { last_screen: 'chat', last_recommendation_index: null };
+}
+
+function saveUiState(screen, extra = {}) {
+  if (!currentTripId) return;
+  const uiState = { ...loadUiState(currentTripId), last_screen: screen, ...extra };
+  localStorage.setItem(UI_STATE_KEY + currentTripId, JSON.stringify(uiState));
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function jsArg(value) {
+  return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
+}
+
 function applyStateDelta(delta) {
   if (!delta) return;
   if (delta.stage) tripState.stage = delta.stage;
@@ -468,7 +971,40 @@ function applyStateDelta(delta) {
     if (delta.trip_context.preferences) deepMerge(tripState.trip_context.preferences, delta.trip_context.preferences);
     if ('selected_option' in delta.trip_context) tripState.trip_context.selected_option = delta.trip_context.selected_option;
   }
-  if (delta.matcher_state) deepMerge(tripState.matcher_state, delta.matcher_state);
+  if (delta.matcher_state) deepMergeMatcherState(tripState.matcher_state, delta.matcher_state);
+  syncStageFromIntent();
+}
+
+// Client-side stage refinement: once Scout signals recommendation_intent, and the
+// server hasn't already moved us into a more advanced stage, mark stage as 'recommendation_ready'
+// so My Trips / chat resume can show a direct "Generate Recommendations" CTA.
+function syncStageFromIntent() {
+  if (!tripState) return;
+  const advancedStages = ['recommended', 'matched', 'planning'];
+  if (tripState.matcher_state?.recommendation_intent === true && !advancedStages.includes(tripState.stage)) {
+    tripState.stage = 'recommendation_ready';
+  }
+}
+
+// Append/dedupe known array fields instead of letting deepMerge clobber them.
+const ARRAY_MERGE_KEYS = ['nuanced_preferences', 'travel_style', 'explicit_exclusions', 'rejected_options'];
+function deepMergeMatcherState(target, source) {
+  if (!source || typeof source !== 'object') return;
+  for (const key of Object.keys(source)) {
+    const val = source[key];
+    if (ARRAY_MERGE_KEYS.includes(key) && Array.isArray(val)) {
+      if (!Array.isArray(target[key])) target[key] = [];
+      val.forEach(item => {
+        const exists = target[key].some(existing => JSON.stringify(existing) === JSON.stringify(item));
+        if (!exists) target[key].push(item);
+      });
+    } else if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      if (!target[key] || typeof target[key] !== 'object') target[key] = {};
+      deepMerge(target[key], val);
+    } else {
+      target[key] = val;
+    }
+  }
 }
 
 // ══════════════════════════════════════════
@@ -476,12 +1012,10 @@ function applyStateDelta(delta) {
 // ══════════════════════════════════════════
 function logScoutTurn(userMsg, before, response, after) {
   console.group(`%c trip id: ${tripState.trip_id}`, 'color:#c46b3a;font-weight:700;font-size:13px;');
-  console.log('%c___', 'color:#bdb8b3;');
-  console.log('%cUser message:', 'color:#6b6460;font-weight:600;', userMsg ?? '(null — post-Meridian)');
-  console.log('%cTrip state:', 'color:#6b6460;font-weight:600;', JSON.parse(JSON.stringify(before)));
-  console.log('%c---', 'color:#bdb8b3;');
+  console.log('%cUser message:', 'color:#6b6460;font-weight:600;', userMsg ?? 'resume');
+  console.log('%cTrip state before:', 'color:#6b6460;font-weight:600;', JSON.parse(JSON.stringify(before)));
   console.log('%cScout response:', 'color:#3a6b4a;font-weight:600;', response);
-  console.log('%cTrip state:', 'color:#3a6b4a;font-weight:600;', JSON.parse(JSON.stringify(after)));
+  console.log('%cTrip state after:', 'color:#3a6b4a;font-weight:600;', JSON.parse(JSON.stringify(after)));
   console.groupEnd();
 }
 function logMeridian(input, output) {
@@ -508,15 +1042,13 @@ async function callScout(message) {
 async function callMeridian() {
   const input = { trip_context: tripState.trip_context };
   const res = await fetch(API.meridian, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
-  if (!res.ok) {
-    const err = { status: 'API_ERROR', http_status: res.status };
-    tripState.matcher_state.last_recommendations = err;
-    saveTripState();
-    logMeridian(input, err);
-    return err;
-  }
+  if (!res.ok) throw new Error(`Meridian ${res.status}`);
   const data = await res.json();
-  tripState.matcher_state.last_recommendations = data;
+  if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
+  if (!Array.isArray(tripState.matcher_state.recommendations)) tripState.matcher_state.recommendations = [];
+  tripState.matcher_state.recommendations.push(data);
+  tripState.matcher_state.recommendation_intent = false;
+  tripState.stage = 'recommended';
   saveTripState();
   logMeridian(input, data);
   return data;
@@ -528,29 +1060,104 @@ async function callMeridian() {
 function navigate(screen) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + screen).classList.add('active');
+  if (currentTripId && (screen === 'chat' || screen === 'recos' || screen === 'planning-chat')) saveUiState(screen);
   if (screen === 'trips') renderTripsList();
-  if (screen === 'recos') renderRecos(currentRecos);
+  if (screen === 'home') { /* nothing extra */ }
+  if (screen === 'recos') {
+    currentRecos = currentRecos || latestRecommendation();
+    renderRecos(currentRecos);
+  }
 }
 
 function startMatch() {
-  // Trip created on first message — just open chat with null tripId (will create on first message)
   currentTripId = null;
   tripState = null;
   clearChat();
   navigate('chat');
   document.getElementById('chatTripName').textContent = '';
+  document.getElementById('ctxText').textContent = 'Scout will help you find the perfect destination — takes 2–3 minutes.';
   renderStateBar();
   setTimeout(() => appendMsg('assistant', WELCOME), 200);
+}
+
+function startPlanningConvo() {
+  // Called either from the recos screen (tripState/currentTripId already set)
+  // or from Home's "I already have a place in mind" module (no trip yet).
+  if (!currentTripId) {
+    const trip = createTrip();
+    currentTripId = trip.id;
+    tripState = defaultState(trip.id);
+    saveTripState();
+  }
+  // NOTE: stage stays as-is here (e.g. 'matched') until the user actually sends
+  // their first message in the planner chat — see markPlanningStarted().
+  const trip = getTripById(currentTripId);
+  document.getElementById('planningTripName').textContent = trip?.title || '';
+  navigate('planning-chat');
+}
+
+// Call this once the user sends their first message in the planner chat.
+// Per the stage-transition spec: matched -> planning triggers on the first
+// Scout planner message, not on merely opening the planner screen.
+function markPlanningStarted() {
+  if (!tripState) return;
+  if (tripState.stage !== 'planning') {
+    tripState.stage = 'planning';
+    saveTripState();
+  }
+}
+
+function openTripForPlanning(id) {
+  currentTripId = id;
+  tripState = loadTripState(id);
+  currentRecos = latestRecommendation();
+  const trip = getTripById(id);
+  document.getElementById('planningTripName').textContent = trip?.title || '';
+  window._chosenDest = tripState?.trip_context?.selected_option?.name || tripState?.trip_context?.selected_option?.id || '';
+  startPlanningConvo();
+}
+
+function openTripRecos(id) {
+  currentTripId = id;
+  tripState = loadTripState(id);
+  currentRecos = latestRecommendation();
+  const trip = getTripById(id);
+  document.getElementById('chatTripName').textContent = trip?.title || '';
+
+  navigate('recos');
+  saveUiState('recos');
+
+  const selectedName = tripState.trip_context.selected_option?.name || tripState.trip_context.selected_option?.id || null;
+  if (selectedName && (tripState.stage === 'matched' || tripState.stage === 'planning')) {
+    setTimeout(() => chooseDestination(selectedName, tripState.trip_context.selected_option?.id, tripState.trip_context.selected_option?.type || 'destination'), 50);
+  }
 }
 
 function openTrip(id) {
   currentTripId = id;
   tripState = loadTripState(id);
-  currentRecos = tripState.matcher_state.last_recommendations;
+  currentRecos = latestRecommendation();
   clearChat();
-  navigate('chat');
   const trip = getTripById(id);
   document.getElementById('chatTripName').textContent = trip?.title || '';
+
+  const uiState = loadUiState(id);
+
+  if ((tripState?.stage === 'matched' || tripState?.stage === 'planning') && currentRecos) {
+    navigate('recos');
+    const selectedName = uiState.selected_option_name || tripState.trip_context.selected_option?.name || tripState.trip_context.selected_option?.id || null;
+    if (selectedName) {
+      setTimeout(() => chooseDestination(selectedName, tripState.trip_context.selected_option?.id, tripState.trip_context.selected_option?.type || 'destination'), 50);
+    }
+    return;
+  }
+
+  if (uiState.last_screen === 'recos' && currentRecos) {
+    navigate('recos');
+    return;
+  }
+
+  navigate('chat');
   renderStateBar();
   resumeChat();
 }
@@ -559,76 +1166,181 @@ function openTrip(id) {
 // CHAT
 // ══════════════════════════════════════════
 function clearChat() {
-  document.getElementById('messages').innerHTML = '';
-  setRecoBtn(false);
+  const inner = document.getElementById('chatInner');
+  inner.innerHTML = `<div class="typing-row" id="typingRow" style="display:none;"><div class="av">S</div><div class="tdots"><span></span><span></span><span></span></div></div>`;
+  document.getElementById('inlineRecoBtnRow')?.remove();
   busy = false;
   setSendDisabled(false);
 }
 
-async function resumeChat() {
+let resuming = false;
+
+function resumeChat() {
   const stage = tripState?.stage;
   if (!stage || stage === 'new') { appendMsg('assistant', WELCOME); return; }
-  if (stage === 'matched') {
+
+  if (stage === 'matched' || stage === 'planning') {
     const sel = tripState.trip_context.selected_option;
-    appendMsg('assistant', `Welcome back — you've chosen ${sel?.id || 'a destination'}. Head to recommendations to explore further.`);
+    appendMsg('assistant', `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`);
     return;
   }
+
+  if (stage === 'recommended') {
+    appendMsg('assistant', `Welcome back — Scout already found some great matches for this trip. Head to recommendations to pick one.`);
+    setRecoBtn(false);
+    return;
+  }
+
+  if (stage === 'recommendation_ready') {
+    // Recommendation intent is set — show Generate Recommendations CTA directly, no Scout resume call needed.
+    appendMsg('assistant', `Welcome back — Scout has everything needed to find your matches. Tap below to generate recommendations.`);
+    setRecoBtn(true);
+    return;
+  }
+
+  resuming = true;
+  const ri    = tripState.trip_context.required_inputs;
+  const prefs = tripState.trip_context.preferences;
+
+  const row = (key, val) => {
+    const hasVal = val != null && val !== '';
+    return `<div class="resume-row">
+      <span class="resume-row-key">${key}</span>
+      <span class="resume-row-val${hasVal ? '' : ' empty'}">${hasVal ? val : 'Not collected yet'}</span>
+    </div>`;
+  };
+
+  const budgetDisplay = ri.budget
+    ? `₹${ri.budget.toLocaleString('en-IN')} ${ri.budget_unit === 'per_person' ? 'per person' : 'total'}`
+    : null;
+
+  const prefKeys   = Object.keys(prefs).filter(k => k !== 'rejections');
+  const rejections = tripState.matcher_state.rejected_options || [];
+  let prefRows = prefKeys.length === 0
+    ? `<div class="resume-row"><span class="resume-row-key">Preferences</span><span class="resume-row-val empty">None collected yet</span></div>`
+    : prefKeys.map(k => {
+        const v = prefs[k];
+        const d = typeof v === 'object' && v !== null && !Array.isArray(v) && v.value ? v.value : (Array.isArray(v) ? v.join(', ') : String(v));
+        return row(k.replace(/_/g, ' '), d);
+      }).join('');
+
+  const rejRow      = rejections.length > 0 ? row('Rejected', rejections.map(r => r.destination).join(', ')) : '';
+  const awaitingMsg = tripState.matcher_state.conversation_context?.awaiting;
+  const nextStep    = awaitingMsg
+    ? `Scout was last waiting for: <strong>${awaitingMsg.replace(/_/g, ' ')}</strong>`
+    : tripState.matcher_state.recommendation_intent
+      ? `Ready to generate recommendations`
+      : `Conversation in progress`;
+
+  const inner = document.getElementById('chatInner');
+  const typing = document.getElementById('typingRow');
+  const div = document.createElement('div');
+  div.className = 'mrow';
+  div.id = 'resume-card-wrap';
+  div.innerHTML = `
+    <div class="av">S</div>
+    <div class="resume-card">
+      <div class="resume-card-label">Here's where we left off</div>
+      <div class="resume-rows">
+        ${row('From', ri.origin_city)}
+        ${row('Travellers', ri.num_travelers ? ri.num_travelers + ' people' : null)}
+        ${row('Month', ri.travel_month)}
+        ${row('Duration', ri.duration_nights ? ri.duration_nights + ' nights' : null)}
+        ${row('Budget', budgetDisplay)}
+        <div class="resume-section-sep">Preferences</div>
+        ${prefRows}${rejRow}
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:12px;">${nextStep}</div>
+      <button class="resume-continue-btn" onclick="handleContinue()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        Continue from here
+      </button>
+    </div>`;
+  inner.insertBefore(div, typing);
+  scrollChat();
+  setRecoBtn(tripState.matcher_state.recommendation_intent === true);
+}
+
+async function handleContinue() {
+  if (busy) return;
+  busy = true; setSendDisabled(true); resuming = false;
   showTyping();
   try {
     const res = await callScout(null);
     removeTyping();
     appendMsg('assistant', res.message);
-    setRecoBtn(tripState.matcher_state.generate_ready === true);
+    setRecoBtn(tripState.matcher_state.recommendation_intent === true);
   } catch (err) {
     removeTyping();
-    const last = tripState.matcher_state.conversation_context?.last_scout_message;
-    appendMsg('assistant', last ? `Welcome back — ${last}` : WELCOME);
-    console.error('[Resume]', err);
+    appendError(`Couldn't reach Scout — try again. (${err.message})`);
+    console.error('[Resume/continue]', err);
   }
+  busy = false; setSendDisabled(false);
 }
 
 function appendMsg(role, content) {
-  const msgs = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  const av = document.createElement('div');
-  av.className = `avatar ${role === 'assistant' ? 'scout' : 'user-av'}`;
+  const inner  = document.getElementById('chatInner');
+  const typing = document.getElementById('typingRow');
+  const div  = document.createElement('div');
+  div.className = `mrow${role === 'user' ? ' u' : ''}`;
+  const av   = document.createElement('div');
+  av.className = `av${role === 'user' ? ' av-u' : ''}`;
   av.textContent = role === 'assistant' ? 'S' : 'U';
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble';
-  bubble.innerHTML = md(content);
-  div.appendChild(av); div.appendChild(bubble);
-  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
+  const bub  = document.createElement('div');
+  bub.className = `bub ${role === 'assistant' ? 'bub-s' : 'bub-u'}`;
+  bub.innerHTML  = `<p>${md(content)}</p>`;
+  div.appendChild(av); div.appendChild(bub);
+  inner.insertBefore(div, typing);
+  scrollChat();
 }
 
 function appendError(text) {
-  const msgs = document.getElementById('messages');
+  const inner  = document.getElementById('chatInner');
+  const typing = document.getElementById('typingRow');
   const div = document.createElement('div');
-  div.className = 'msg assistant';
-  div.innerHTML = `<div class="avatar scout">S</div><div class="error-bubble">${text}</div>`;
-  msgs.appendChild(div); msgs.scrollTop = msgs.scrollHeight;
+  div.className = 'mrow';
+  div.innerHTML = `<div class="av">S</div><div class="error-bub">${text}</div>`;
+  inner.insertBefore(div, typing);
+  scrollChat();
 }
 
-function md(t) { return t ? String(t).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') : ''; }
+function md(t) { return t ? escapeHtml(t).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') : ''; }
 
-function showTyping() {
-  const msgs = document.getElementById('messages');
-  const d = document.createElement('div');
-  d.id = 'typing-ind'; d.className = 'msg assistant';
-  d.innerHTML = `<div class="avatar scout">S</div><div class="bubble"><div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
-  msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
-}
-function removeTyping() { document.getElementById('typing-ind')?.remove(); }
-function setRecoBtn(show) { document.getElementById('seeRecosWrap').classList.toggle('visible', show); }
+function showTyping() { document.getElementById('typingRow').style.display = 'flex'; scrollChat(); }
+function removeTyping() { document.getElementById('typingRow').style.display = 'none'; }
 function setSendDisabled(v) { document.getElementById('sendBtn').disabled = v; }
+function scrollChat() {
+  const w = document.getElementById('chatWrap');
+  if (w) setTimeout(() => { w.scrollTop = w.scrollHeight; }, 50);
+}
+
+function setRecoBtn(show) {
+  // Remove any existing inline reco row first
+  document.getElementById('inlineRecoBtnRow')?.remove();
+  if (!show) return;
+  const inner  = document.getElementById('chatInner');
+  const typing = document.getElementById('typingRow');
+  const row = document.createElement('div');
+  row.className = 'see-recos-row';
+  row.id = 'inlineRecoBtnRow';
+  row.innerHTML = `
+    <div class="av">S</div>
+    <button class="see-recos-btn" id="seeRecosBtn" onclick="handleSeeRecos()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      See Recommendations
+    </button>`;
+  inner.insertBefore(row, typing);
+  scrollChat();
+}
 
 async function handleSend() {
   const input = document.getElementById('userInput');
-  const msg = input.value.trim();
+  const msg   = input.value.trim();
   if (!msg || busy) return;
   busy = true; input.value = ''; input.style.height = 'auto'; setSendDisabled(true);
 
-  // Create trip on first message
+  if (resuming) { resuming = false; }
+
   if (!currentTripId) {
     const trip = createTrip();
     currentTripId = trip.id;
@@ -636,8 +1348,20 @@ async function handleSend() {
     document.getElementById('chatTripName').textContent = trip.title;
   }
 
-  // Ensure stage moves off 'new'
-  if (tripState.stage === 'new') { tripState.stage = 'matching'; saveTripState(); }
+  if (tripState.stage === 'new') {
+    tripState.stage = 'matching';
+    saveTripState();
+  } else if (tripState.stage === 'recommendation_ready') {
+    // New info arrived after Scout was ready to generate — go back to matching.
+    tripState.stage = 'matching';
+    tripState.matcher_state.recommendation_intent = false;
+    saveTripState();
+  } else if (tripState.stage === 'matched') {
+    // User is refining after already confirming a destination — clear the selection.
+    tripState.stage = 'matching';
+    tripState.trip_context.selected_option = null;
+    saveTripState();
+  }
 
   appendMsg('user', msg);
   showTyping();
@@ -645,7 +1369,16 @@ async function handleSend() {
     const res = await callScout(msg);
     removeTyping();
     appendMsg('assistant', res.message);
-    setRecoBtn(tripState.matcher_state.generate_ready === true);
+    setRecoBtn(tripState.matcher_state.recommendation_intent === true);
+    // Update ctx bar
+    const ri = tripState.trip_context.required_inputs;
+    if (ri.origin_city || ri.num_travelers) {
+      const parts = [];
+      if (ri.origin_city)   parts.push(ri.origin_city);
+      if (ri.num_travelers) parts.push(ri.num_travelers + ' travellers');
+      if (ri.travel_month)  parts.push(ri.travel_month);
+      document.getElementById('ctxText').textContent = parts.join(' · ') || 'Scout will help you find the perfect destination.';
+    }
   } catch (err) {
     removeTyping();
     appendError(`Something went wrong — try again. (${err.message})`);
@@ -658,31 +1391,24 @@ async function handleSeeRecos() {
   if (busy) return;
   busy = true;
   const btn = document.getElementById('seeRecosBtn');
-  btn.disabled = true;
-  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Finding matches…`;
+  if (btn) { btn.disabled = true; btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Finding matches…`; }
 
   try {
     const meridianOut = await callMeridian();
-    showTyping();
-    const presentRes = await callScout(null);
-    removeTyping();
-    appendMsg('assistant', presentRes.message);
-    setRecoBtn(tripState.matcher_state.generate_ready === true);
-
-    if (meridianOut.status === 'SUCCESS' && meridianOut.options?.length) {
+    if (isMeridianBusinessStatus(meridianOut.status)) {
       currentRecos = meridianOut;
-      updateTrip(currentTripId, { status: 'matched' });
       navigate('recos');
     }
   } catch (err) {
-    removeTyping();
     appendError(`Hit a snag — want to try again? (${err.message})`);
     console.error('[Generate]', err);
   }
 
   busy = false;
-  btn.disabled = false;
-  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> See Recommendations`;
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> See Recommendations`;
+  }
 }
 
 // ══════════════════════════════════════════
@@ -692,56 +1418,82 @@ function renderRecos(meridianData) {
   renderStateBarEl('stateBarRecos');
   const container = document.getElementById('recosCards');
   container.innerHTML = '';
+  document.getElementById('inlinePlanCtaWrap').innerHTML = '';
+  document.getElementById('refineRow').style.display = 'none';
 
-  if (!meridianData || meridianData.status !== 'SUCCESS' || !meridianData.options?.length) {
-    container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;">No recommendations to show.</div>`;
-    renderPlanCta(null);
+  // Subheading from trip context
+  const ri = tripState?.trip_context?.required_inputs;
+  if (ri) {
+    const parts = [];
+    if (ri.num_travelers) parts.push(ri.num_travelers + ' travellers');
+    if (ri.origin_city)   parts.push(ri.origin_city);
+    if (ri.travel_month)  parts.push(ri.travel_month);
+    if (ri.duration_nights) parts.push(ri.duration_nights + ' nights');
+    document.getElementById('recosSubheading').textContent = parts.join(' · ');
+  }
+
+  if (!meridianData) {
+    container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">No recommendations to show.</div>`;
+    return;
+  }
+
+  if (meridianData.status !== 'SUCCESS') {
+    renderFailureRecos(container, meridianData);
+    return;
+  }
+
+  if (!meridianData.options?.length) {
+    container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">No recommendations to show.</div>`;
     return;
   }
 
   meridianData.options.forEach((opt, idx) => {
     const card = document.createElement('div');
     card.className = `acc-card${opt.rank === 1 ? ' rank-1' : ''}${idx === 0 ? ' open' : ''}`;
-    const budgetSec = (opt.match_sections || []).find(s => s.type === 'budget');
+    const budgetSec  = (opt.match_sections || []).find(s => s.type === 'budget');
     const summaryTag = budgetSec?.per_person_total ? `<span class="acc-summary">₹${budgetSec.per_person_total.toLocaleString('en-IN')}/pp</span>` : '';
 
     let bodyHtml = `<div class="match-sections">`;
     (opt.match_sections || []).forEach(sec => {
-      bodyHtml += `<div class="match-section"><div class="match-heading">${sec.heading}</div>`;
+      bodyHtml += `<div class="match-section"><div class="match-heading">${escapeHtml(sec.heading)}</div>`;
       if (sec.type === 'budget') {
         bodyHtml += `<table class="budget-table">`;
         [['Stay', sec.stay],['Food', sec.food],['Travel', sec.travel],['Activities', sec.activities],['Local transport', sec.local_transport]].forEach(([label, item]) => {
           if (!item) return;
-          const pp = item.estimate_per_person;
-          const grp = item.estimate_group;
-          const note = item.notes ? ` <span style="color:var(--ink-faint);font-size:11px;">— ${item.notes}</span>` : '';
-          bodyHtml += `<tr><td>${label}${note}</td><td>${pp ? '₹'+pp.toLocaleString('en-IN')+'/pp' : grp ? '₹'+grp.toLocaleString('en-IN')+' total' : ''}</td></tr>`;
+          const pp   = item.estimate_per_person;
+          const grp  = item.estimate_group;
+          const note = item.notes ? ` <span style="color:var(--ink-faint);font-size:11px;">- ${escapeHtml(item.notes)}</span>` : '';
+          bodyHtml  += `<tr><td>${label}${note}</td><td>${pp ? '₹'+pp.toLocaleString('en-IN')+'/pp' : grp ? '₹'+grp.toLocaleString('en-IN')+' total' : ''}</td></tr>`;
         });
         bodyHtml += `<tr class="total-row"><td>Total per person</td><td>₹${(sec.per_person_total||0).toLocaleString('en-IN')}</td></tr></table>`;
-        const vc = sec.verdict === 'comfortable' ? 'comfortable' : sec.verdict === 'tight' ? 'tight' : 'stretch';
-        bodyHtml += `<div class="budget-tags"><span class="budget-tag">₹${(sec.per_person_total||0).toLocaleString('en-IN')}/pp</span><span class="budget-tag">₹${(sec.group_total||0).toLocaleString('en-IN')} total</span>${sec.verdict ? `<span class="verdict-tag ${vc}">${sec.verdict}</span>` : ''}</div>`;
+        const vc   = sec.verdict === 'comfortable' ? 'comfortable' : sec.verdict === 'tight' ? 'tight' : 'stretch';
+        bodyHtml  += `<div class="budget-tags"><span class="budget-tag">₹${(sec.per_person_total||0).toLocaleString('en-IN')}/pp</span><span class="budget-tag">₹${(sec.group_total||0).toLocaleString('en-IN')} total</span>${sec.verdict ? `<span class="verdict-tag ${vc}">${sec.verdict}</span>` : ''}</div>`;
       } else if (sec.points) {
-        bodyHtml += `<ul class="match-points">${sec.points.map(p=>`<li>${p}</li>`).join('')}</ul>`;
+        bodyHtml += `<ul class="match-points">${sec.points.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
       }
       bodyHtml += `</div>`;
     });
     bodyHtml += `</div>`;
 
     if (opt.tradeoffs?.length) {
-      bodyHtml += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>${opt.tradeoffs.map(t=>`<div class="tradeoff-item">${t.point}</div>`).join('')}</div>`;
+      bodyHtml += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>${opt.tradeoffs.map(t=>`<div class="tradeoff-item">${escapeHtml(t.point)}</div>`).join('')}</div>`;
     }
 
-    const destName = opt.name || '';
-    const safeDestName = destName.replace(/'/g, "\\'");
+    const destName     = opt.name || '';
+    const optionType   = opt.type === 'circuit' ? 'circuit' : 'destination';
+    const optionId     = optionType === 'circuit' ? opt.circuit_id : opt.destination_id;
+    const safeDestName = jsArg(destName);
+    const safeOptionId = jsArg(optionId || '');
+    const safeOptType  = jsArg(optionType);
     bodyHtml += `<div class="card-actions">
-      <button class="choose-btn" onclick="chooseDestination('${safeDestName}', '${opt.destination_id || ''}')">Choose ${destName} →</button>
+      <button class="choose-btn" onclick="chooseDestination('${safeDestName}','${safeOptionId}','${safeOptType}')">Choose ${escapeHtml(destName)} →</button>
       <button class="not-for-me-btn" onclick="notForMe('${safeDestName}')">Not for me</button>
     </div>`;
 
     card.innerHTML = `
       <div class="acc-header" onclick="toggleAcc(this.parentElement)">
         <div class="rank-badge">${opt.rank}</div>
-        <div class="acc-name">${destName}</div>
+        <div class="acc-name">${escapeHtml(destName)}</div>
         ${opt.rank === 1 ? `<span class="acc-best">Best match</span>` : ''}
         ${summaryTag}
         <svg class="acc-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -750,64 +1502,180 @@ function renderRecos(meridianData) {
     container.appendChild(card);
   });
 
-  renderPlanCta(null); // no destination chosen yet
+  document.getElementById('refineRow').style.display = 'flex';
+}
+
+function renderFailureRecos(container, meridianData) {
+  let html = `<div class="acc-card open" style="grid-column:1/-1;"><div class="acc-body"><div class="match-sections">`;
+  html += `<div class="match-section"><div class="match-heading">${escapeHtml(meridianData.status || 'Result')}</div>`;
+  if (meridianData.message) html += `<p style="color:var(--ink-muted);line-height:1.6;">${escapeHtml(meridianData.message)}</p>`;
+  html += `</div>`;
+  (meridianData.failure_sections || []).forEach(sec => {
+    html += `<div class="match-section"><div class="match-heading">${escapeHtml(sec.heading)}</div>`;
+    if (sec.points?.length) html += `<ul class="match-points">${sec.points.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
+    html += `</div>`;
+  });
+  if (meridianData.relaxation_suggestions?.length) {
+    html += `<div class="match-section"><div class="match-heading">Ways to adjust</div><ul class="match-points">${meridianData.relaxation_suggestions.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
+  }
+  html += `</div></div></div>`;
+  container.innerHTML = html;
 }
 
 function toggleAcc(card) { card.classList.toggle('open'); }
 
-function renderPlanCta(destName) {
-  const el = document.getElementById('planCta');
-  if (!destName) {
-    el.innerHTML = `<div class="plan-cta-placeholder">Select a destination<br>to see planning options.</div>`;
-    return;
-  }
-  el.innerHTML = `<div class="plan-cta-card">
-    <div class="plan-cta-dest">Selected destination</div>
-    <div class="plan-cta-title">${destName}</div>
-    <div class="plan-cta-desc">Ready to turn this into a full trip plan? Get an itinerary, logistics, and recommendations built around your group.</div>
-    <button class="plan-cta-btn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Plan This Trip
-    </button>
-    <div class="plan-cta-soon">Coming soon — Trip Planner</div>
-  </div>`;
-}
-
-function chooseDestination(name, id) {
+function chooseDestination(name, id, type = 'destination') {
   if (tripState) {
-    tripState.trip_context.selected_option = { type: 'destination', id: id || name };
+    tripState.trip_context.selected_option = { type, id: id || name, name };
     tripState.stage = 'matched';
     saveTripState();
     renderStateBarEl('stateBarRecos');
   }
-  renderPlanCta(name);
+  saveUiState('recos', { selected_option_name: name });
+  window._chosenDest = name;
   console.log(`%c[Destination chosen] ${name}`, 'color:#3a6b4a;font-weight:700;');
+
+  const wrap = document.getElementById('inlinePlanCtaWrap');
+  if (!wrap) return;
+  wrap.innerHTML = `
+    <div id="inlinePlanCta" style="margin-top:16px;background:var(--card);border:1.5px solid var(--accent);border-radius:var(--r-lg);padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;animation:fadeUp 0.22s ease;">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--accent);margin-bottom:3px;">Destination confirmed</div>
+        <div style="font-size:15px;font-weight:600;color:var(--ink);">${escapeHtml(name)}</div>
+        <div style="font-size:13px;color:var(--ink-muted);margin-top:3px;">Would you like to plan this trip?</div>
+      </div>
+      <button onclick="startPlanningConvo()" style="flex-shrink:0;background:var(--accent);color:#fff;border:none;border-radius:var(--r-sm);padding:10px 20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:background 0.15s;" onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--accent)'">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Plan this trip →
+      </button>
+    </div>`;
+
+  setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
 }
 
 function notForMe(name) {
   console.log(`%c[Not for me] ${name}`, 'color:#c46b3a;font-weight:700;');
-  // Write rejection to trip state, return to chat so Scout can refine
   if (tripState) {
-    if (!tripState.trip_context.preferences.rejections) tripState.trip_context.preferences.rejections = [];
-    tripState.trip_context.preferences.rejections.push({ destination: name, reason: 'user_rejected' });
-    tripState.matcher_state.generate_ready = false;
+    if (!Array.isArray(tripState.matcher_state.rejected_options)) tripState.matcher_state.rejected_options = [];
+    tripState.matcher_state.rejected_options.push({ destination: name, reason: 'user_rejected' });
+    tripState.matcher_state.recommendation_intent = false;
     tripState.stage = 'matching';
     saveTripState();
   }
   navigate('chat');
-  // Append a synthetic user message so Scout has context
   setTimeout(() => {
     appendMsg('user', `${name} isn't for me.`);
     showTyping();
     callScout(`${name} isn't for me.`).then(res => {
       removeTyping();
       appendMsg('assistant', res.message);
-      setRecoBtn(tripState.matcher_state.generate_ready === true);
+      setRecoBtn(tripState.matcher_state.recommendation_intent === true);
     }).catch(err => {
       removeTyping();
       appendError(`Couldn't reach Scout — try again. (${err.message})`);
     });
   }, 300);
+}
+
+// ══════════════════════════════════════════
+// PLANS & PRICING
+// ══════════════════════════════════════════
+function showPaymentModal(planType) {
+  const destName = window._chosenDest || tripState?.trip_context?.selected_option?.name || tripState?.trip_context?.selected_option?.id || 'your destination';
+  const isPlanning = planType === 'planning';
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'paymentModal';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-title">${isPlanning ? 'Planning Only · ₹499' : 'Concierge · Custom quote'}</div>
+      <div class="modal-sub">${isPlanning
+        ? `You'll receive a detailed day-by-day itinerary for <strong>${escapeHtml(destName)}</strong> within 24 hours.`
+        : `We'll prepare a custom quote for <strong>${escapeHtml(destName)}</strong> and reach out within a few hours.`
+      }</div>
+      ${isPlanning ? `<div class="modal-amount">₹499</div>` : ''}
+      <div class="modal-actions">
+        <button class="modal-btn-pay" onclick="confirmPayment('${planType}')">${isPlanning ? '✓ Confirm & Pay' : '✓ Request Quote'}</button>
+        <button class="modal-btn-cancel" onclick="closePaymentModal()">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function closePaymentModal() {
+  document.getElementById('paymentModal')?.remove();
+}
+
+function confirmPayment(planType) {
+  closePaymentModal();
+  const destName = window._chosenDest || tripState?.trip_context?.selected_option?.name || tripState?.trip_context?.selected_option?.id || 'Your Trip';
+  if (currentTripId) updateTrip(currentTripId, { paid_plan: planType });
+  if (planType === 'planning') {
+    renderItinerary(destName);
+    navigate('itin');
+  } else {
+    document.getElementById('conciergeDestLabel').textContent = destName;
+    navigate('concierge');
+  }
+}
+
+// ══════════════════════════════════════════
+// ITINERARY (static sample seeded from chosen dest)
+// ══════════════════════════════════════════
+function renderItinerary(destName) {
+  const ri    = tripState?.trip_context?.required_inputs || {};
+  const title = destName || 'Your Trip';
+  const pax   = ri.num_travelers ? `${ri.num_travelers} travellers` : '';
+  const nights = ri.duration_nights ? `${ri.duration_nights} nights` : '';
+  const month  = ri.travel_month || '';
+
+  document.getElementById('itinTitle').textContent = title;
+  document.getElementById('itinSub').textContent   = [pax, nights, 'Curated by TWM'].filter(Boolean).join(' · ');
+
+  const meta = document.getElementById('itinMeta');
+  meta.innerHTML = [month, ri.origin_city ? `From ${ri.origin_city}` : '', ri.budget ? `₹${ri.budget.toLocaleString('en-IN')} budget` : '']
+    .filter(Boolean).map(t => `<span class="ib-tag">${escapeHtml(t)}</span>`).join('');
+
+  // Sample days — real implementation would come from planner API
+  const days = [
+    { lbl: 'Day 1', title: 'Arrival & settle in', acts: [
+      { time: '12:00', name: 'Check-in', desc: 'Hotel or homestay', tags: ['🏨 Stay'] },
+      { time: '15:00', name: 'Explore the neighbourhood', desc: 'Orientation walk', tags: [] },
+      { time: '19:30', name: 'Welcome dinner', desc: 'Local speciality restaurant', tags: ['🍽 Dinner'] },
+    ]},
+    { lbl: 'Day 2', title: 'Key sights', acts: [
+      { time: '09:00', name: 'Morning highlights tour', desc: 'Top spots in the area', tags: ['🎟 Activity'] },
+      { time: '13:00', name: 'Lunch', desc: 'Curated for your preferences', tags: ['🍽 Lunch'] },
+      { time: '16:00', name: 'Leisure time', desc: 'Explore at your own pace', tags: [] },
+    ]},
+    { lbl: 'Day 3', title: 'Hidden gems', acts: [
+      { time: '10:00', name: 'Off-the-beaten-path experience', desc: 'Scout-curated local pick', tags: ['🎟 Activity'] },
+      { time: '14:00', name: 'Lunch', desc: 'Local favourite', tags: ['🍽 Lunch'] },
+      { time: '20:00', name: 'Farewell dinner', desc: 'Best restaurant in town', tags: ['🍽 Dinner'] },
+    ]},
+    { lbl: 'Day 4', title: 'Departure', acts: [
+      { time: '09:00', name: 'Morning at leisure', desc: 'Last-minute shopping or relaxing', tags: [] },
+      { time: '12:00', name: 'Check-out', desc: 'Luggage storage available', tags: ['🏨 Check-out'] },
+    ]},
+  ];
+
+  document.getElementById('itinDaysGrid').innerHTML = days.map(d => `
+    <div class="day-card">
+      <div class="day-head">
+        <div class="day-lbl">${escapeHtml(d.lbl)}</div>
+        <div class="day-title">${escapeHtml(d.title)}</div>
+      </div>
+      ${d.acts.map(a => `
+        <div class="act">
+          <div class="act-time">${escapeHtml(a.time)}</div>
+          <div class="act-dot"></div>
+          <div style="flex:1;">
+            <div class="act-name">${escapeHtml(a.name)}</div>
+            ${a.desc ? `<div class="act-desc">${escapeHtml(a.desc)}</div>` : ''}
+            ${a.tags.length ? `<div class="act-tags">${a.tags.map(t=>`<span class="at">${t}</span>`).join('')}</div>` : ''}
+          </div>
+        </div>`).join('')}
+    </div>`).join('');
 }
 
 // ══════════════════════════════════════════
@@ -817,15 +1685,16 @@ function renderStateBar() { renderStateBarEl('stateBar'); }
 function renderStateBarEl(elId) {
   const el = document.getElementById(elId);
   if (!el || !tripState) { if (el) el.innerHTML = ''; return; }
-  const ri = tripState.trip_context.required_inputs;
+  const ri    = tripState.trip_context.required_inputs;
   const prefs = tripState.trip_context.preferences;
-  const ms = tripState.matcher_state;
-  const chip = (val, cls='') => val != null && val !== '' ? `<span class="sc ${cls}">${val}</span>` : `<span class="sc empty">—</span>`;
-  const bool = v => `<span class="sc ${v ? 'tv' : 'fv'}">${v}</span>`;
-  const prefKeys = Object.keys(prefs).filter(k => k !== 'rejections');
+  const ms    = tripState.matcher_state;
+  const chip  = (val, cls='') => val != null && val !== '' ? `<span class="sc ${cls}">${escapeHtml(String(val))}</span>` : `<span class="sc empty">—</span>`;
+  const bool  = v => `<span class="sc ${v ? 'tv' : 'fv'}">${v}</span>`;
+  const prefKeys  = Object.keys(prefs).filter(k => k !== 'rejections');
   const prefChips = prefKeys.length === 0 ? chip(null) : prefKeys.map(k => {
-    const v = prefs[k]; const d = typeof v === 'object' && v !== null && !Array.isArray(v) && v.value ? v.value : (Array.isArray(v) ? v.join(',') : String(v));
-    return `<span class="sc">${k}: ${d}</span>`;
+    const v = prefs[k];
+    const d = typeof v === 'object' && v !== null && !Array.isArray(v) && v.value ? v.value : (Array.isArray(v) ? v.join(',') : String(v));
+    return `<span class="sc">${escapeHtml(k)}: ${escapeHtml(d)}</span>`;
   }).join('');
   el.innerHTML = `
     <div class="state-bar-group"><div class="state-bar-label">Stage</div><div class="state-bar-section">${chip(tripState.stage,'stg')}</div></div>
@@ -836,61 +1705,183 @@ function renderStateBarEl(elId) {
     <div class="state-div"></div>
     <div class="state-bar-group"><div class="state-bar-label">Preferences</div><div class="state-bar-section">${prefChips}</div></div>
     <div class="state-div"></div>
-    <div class="state-bar-group"><div class="state-bar-label">generate_ready</div><div class="state-bar-section">${bool(ms.generate_ready)}</div></div>
+    <div class="state-bar-group"><div class="state-bar-label">reco_intent</div><div class="state-bar-section">${bool(ms.recommendation_intent)}</div></div>
     <div class="state-bar-group"><div class="state-bar-label">awaiting</div><div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div></div>
-    <div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tripState.trip_context.selected_option?.id)}</div></div>`;
+    <div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tripState.trip_context.selected_option?.name || tripState.trip_context.selected_option?.id)}</div></div>`;
 }
 
 // ══════════════════════════════════════════
-// MY TRIPS RENDER
+// MY TRIPS — RENDER
 // ══════════════════════════════════════════
+function setFilter(f) { tripFilter = f; renderTripsList(); }
+
+const NEW_TRIP_BTN = `<button class="tb-btn" onclick="navigate('home')" style="display:inline-flex;align-items:center;gap:6px;">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
+  New Trip
+</button>`;
+
 function renderTripsList() {
   const trips = getTrips();
-  const el = document.getElementById('tripsList');
+  const el    = document.getElementById('tripsPageContent');
+
+  // ── ZERO TRIPS: no header, just empty state + New Trip below ──
   if (trips.length === 0) {
-    el.innerHTML = `<div class="trips-empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      <p>No trips yet</p><span>Tap "+ New Trip" to start planning.</span>
-    </div>`;
+    el.innerHTML = `
+      <div class="trips-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <p>No trips yet</p>
+        <span>Start planning your next adventure.</span>
+        <div style="margin-top:18px;">${NEW_TRIP_BTN}</div>
+      </div>`;
     return;
   }
-  el.innerHTML = `<div class="trips-grid">${trips.map(trip => tripCardHTML(trip)).join('')}</div>`;
+
+  // ── ONE OR MORE TRIPS ──
+  // Active   = anything not yet paid (new / matching / matched, no plan purchased)
+  // Upcoming = payment confirmed (planning ₹499 paid, or concierge quote requested), trip not yet completed
+  // Completed = concierge trips marked done
+  const completedTr = trips.filter(t => t.paid_plan === 'concierge' && t.status === 'done');
+  const upcomingTr  = trips.filter(t => t.paid_plan && !completedTr.includes(t));
+  const activeTr    = trips.filter(t => !t.paid_plan);
+
+  const allCount       = trips.length;
+  const upcomingCount  = upcomingTr.length;
+  const completedCount = completedTr.length;
+  const activeCount    = activeTr.length;
+
+  const filters = [
+    { key: 'active',    label: `Active${activeCount ? ` (${activeCount})` : ''}` },
+    { key: 'upcoming',  label: `Upcoming${upcomingCount ? ` (${upcomingCount})` : ''}` },
+    { key: 'completed', label: `Completed${completedCount ? ` (${completedCount})` : ''}` },
+    { key: 'all',       label: `All (${allCount})` },
+  ];
+
+  // Header row: "My Trips" h2 on left, New Trip button on right; filter chips below
+  const headerHtml = `
+    <div class="trips-top" style="margin-bottom:10px;">
+      <h2 style="font-family:'DM Serif Display',serif;font-size:22px;letter-spacing:-0.02em;">My Trips</h2>
+      ${NEW_TRIP_BTN}
+    </div>
+    <div class="filter-bar" style="margin-bottom:16px;">
+      ${filters.map(f => `<button class="fc${tripFilter === f.key ? ' active' : ''}" onclick="setFilter('${f.key}')">${f.label}</button>`).join('')}
+    </div>`;
+
+  // Which trips to show
+  let sections = [];
+  if (tripFilter === 'all') {
+    if (activeTr.length)    sections.push({ label: 'Active', trips: activeTr });
+    if (upcomingTr.length)  sections.push({ label: 'Upcoming', trips: upcomingTr });
+    if (completedTr.length) sections.push({ label: 'Completed', trips: completedTr });
+  } else if (tripFilter === 'active') {
+    if (activeTr.length) sections = [{ label: 'Active', trips: activeTr }];
+  } else if (tripFilter === 'upcoming') {
+    if (upcomingTr.length) sections = [{ label: 'Upcoming', trips: upcomingTr }];
+  } else if (tripFilter === 'completed') {
+    if (completedTr.length) sections = [{ label: 'Completed', trips: completedTr }];
+  }
+
+  const emptyHtml = `<div style="text-align:center;padding:32px 20px;color:var(--ink-faint);font-size:14px;">No trips here yet.</div>`;
+
+  const sectionsHtml = sections.length
+    ? sections.map(s => `
+        <div class="sec-label">${s.label}</div>
+        <div class="tc-grid">${s.trips.map(t => tripCardHTML(t)).join('')}</div>
+      `).join('')
+    : emptyHtml;
+
+  el.innerHTML = headerHtml + sectionsHtml;
+}
+
+function tripBadge(trip, fullState) {
+  if (trip.paid_plan === 'planning')  return { cls: 'b-done', text: 'Itinerary ready' };
+  if (trip.paid_plan === 'concierge') return { cls: 'b-done', text: 'Concierge requested' };
+  const stage = fullState?.stage;
+  if (stage === 'planning') return { cls: 'b-matched', text: 'Planning in progress' };
+  if (stage === 'matched')  return { cls: 'b-matched', text: 'Destination chosen' };
+  if (stage === 'recommended' || fullState?.matcher_state?.recommendations?.length) return { cls: 'b-reco', text: 'Recommendations ready' };
+  if (stage === 'recommendation_ready' && fullState?.matcher_state?.recommendation_intent) return { cls: 'b-chat', text: 'Ready to generate' };
+  if (stage === 'matching') return { cls: 'b-chat', text: 'In conversation' };
+  if (stage === 'new' || trip.status === 'new') return { cls: 'b-new', text: 'New' };
+  return { cls: 'b-new', text: trip.status };
+}
+
+function tripCtaConfig(trip, fullState) {
+  if (trip.paid_plan === 'planning')  return { label: 'See itinerary', style: 'cta-green', action: `navigate('itin')` };
+  if (trip.paid_plan === 'concierge') return { label: 'View trip status', style: 'cta-green', action: `navigate('concierge')` };
+  const stage = fullState?.stage;
+  if (stage === 'planning') return { label: 'Resume planning with Scout', style: 'cta-green', action: `openTripForPlanning('${trip.id}')` };
+  if (stage === 'matched')  return { label: 'Plan this trip', style: 'cta-green', action: `openTripForPlanning('${trip.id}')` };
+  if (stage === 'recommended' || fullState?.matcher_state?.recommendations?.length) return { label: 'Review recommendations', style: 'cta-blue', action: `openTripRecos('${trip.id}')` };
+  if (stage === 'recommendation_ready' && fullState?.matcher_state?.recommendation_intent) return { label: 'Generate recommendations', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  if (stage === 'matching') return { label: 'Resume with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  if (stage === 'new' || trip.status === 'new') return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  return { label: 'Open trip', style: 'cta-accent', action: `openTrip('${trip.id}')` };
 }
 
 function tripCardHTML(trip) {
-  const status = trip.status || 'new';
-  const inputs = (trip.inputs || []).map(t => `<span class="trip-input-tag">${t}</span>`).join('');
-  const created = new Date(trip.created_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+  const fullState = (() => { try { return loadTripState(trip.id); } catch { return null; } })();
+  const badge  = tripBadge(trip, fullState);
+  const cta    = tripCtaConfig(trip, fullState);
+  const tags   = (trip.inputs || []).map(t => `<span class="tc-tag">${escapeHtml(t)}</span>`).join('');
   const updated = new Date(trip.updated_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
-  return `<div class="trip-card" onclick="openTrip('${trip.id}')">
-    <div class="trip-card-main">
-      <div class="trip-card-top">
-        <div class="trip-title-wrap">
-          <span class="trip-title" id="title-${trip.id}">${trip.title}</span>
+  const sel    = fullState?.trip_context?.selected_option?.name || fullState?.trip_context?.selected_option?.id || null;
+  const isMatched  = !trip.paid_plan && fullState?.stage === 'matched';
+  const isPlanning = !trip.paid_plan && fullState?.stage === 'planning';
+
+  const ctaHtml = isMatched
+    ? `<div style="display:flex;gap:6px;">
+        <button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
+          Review recommendations
+        </button>
+        <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
+          Want to plan?
+        </button>
+      </div>`
+    : isPlanning
+    ? `<div style="display:flex;gap:6px;">
+        <button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
+          Review recommendations
+        </button>
+        <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
+          Resume planning with Scout
+        </button>
+      </div>`
+    : `<button class="tc-cta ${cta.style}" onclick="${cta.action}; event.stopPropagation()">
+        ${escapeHtml(cta.label)}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>`;
+
+  return `<div class="tc" ${(isMatched || isPlanning) ? '' : `onclick="${cta.action}"`}>
+    <div class="tc-top">
+      <div>
+        <div class="tc-name">
+          <span id="tc-title-${trip.id}">${escapeHtml(trip.title)}</span>
           <button class="rename-btn" onclick="startRename('${trip.id}',event)" title="Rename">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
+          <button class="icon-btn danger" onclick="confirmDeleteTrip('${trip.id}', event)" title="Delete" style="margin-left:auto;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
         </div>
-        <span class="status-badge ${status}">${status.charAt(0).toUpperCase()+status.slice(1)}</span>
+        <div class="tc-dest">${sel ? escapeHtml(sel) : 'Destination: TBD'}</div>
       </div>
-      ${inputs ? `<div class="trip-inputs">${inputs}</div>` : ''}
-      <div class="trip-meta">Created ${created} · Updated ${updated}</div>
+      <span class="badge ${badge.cls}">${badge.text}</span>
     </div>
-    <div class="trip-card-actions" onclick="event.stopPropagation()">
-      <button class="icon-btn danger" onclick="confirmDeleteTrip('${trip.id}')" title="Delete">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-      </button>
+    ${tags ? `<div class="tc-tags">${tags}</div>` : ''}
+    <div class="tc-bottom">
+      <div class="tc-date">${updated}</div>
+      ${ctaHtml}
     </div>
   </div>`;
 }
 
 function startRename(id, e) {
   e.stopPropagation();
-  const titleEl = document.getElementById('title-' + id);
+  const titleEl = document.getElementById('tc-title-' + id);
   if (!titleEl) return;
   const current = titleEl.textContent;
   const input = document.createElement('input');
-  input.className = 'trip-title-input';
+  input.className = 'tc-name-input';
   input.value = current;
   titleEl.replaceWith(input);
   input.focus(); input.select();
@@ -898,16 +1889,19 @@ function startRename(id, e) {
     const newTitle = input.value.trim() || current;
     updateTrip(id, { title: newTitle });
     const span = document.createElement('span');
-    span.id = 'title-' + id; span.className = 'trip-title'; span.textContent = newTitle;
+    span.id = 'tc-title-' + id; span.className = ''; span.textContent = newTitle;
     input.replaceWith(span);
-    // Update chat header if this is the open trip
     if (currentTripId === id) document.getElementById('chatTripName').textContent = newTitle;
   };
   input.addEventListener('blur', finish);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } if (e.key === 'Escape') { input.value = current; input.blur(); } });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = current; input.blur(); }
+  });
 }
 
-function confirmDeleteTrip(id) {
+function confirmDeleteTrip(id, e) {
+  e.stopPropagation();
   const trip = getTripById(id);
   if (!trip) return;
   if (!confirm(`Delete "${trip.title}"? This can't be undone.`)) return;
@@ -930,7 +1924,15 @@ document.getElementById('userInput').addEventListener('keydown', function(e) {
 // ══════════════════════════════════════════
 // BOOT
 // ══════════════════════════════════════════
-navigate('trips');
+(function boot() {
+  const trips = getTrips();
+  // If there are real trips, go to My Trips; otherwise show home
+  if (trips.length > 0) {
+    navigate('trips');
+  } else {
+    navigate('home');
+  }
+})();
 </script>
 </body>
 </html>
