@@ -878,7 +878,7 @@ function syncTripFromState(id, state) {
   if (ri.travel_month)    inputs.push(ri.travel_month);
   if (ri.duration_nights) inputs.push(ri.duration_nights + 'n');
   if (ri.budget)          inputs.push('₹' + ri.budget.toLocaleString('en-IN'));
-  const knownStages = ['new', 'matching', 'ready', 'recommended', 'matched', 'planning'];
+  const knownStages = ['new', 'matching', 'recommendation_ready', 'recommended', 'matched', 'planning'];
   const status = knownStages.includes(state.stage) ? state.stage : 'matching';
   updateTrip(id, { status, inputs });
 }
@@ -976,13 +976,13 @@ function applyStateDelta(delta) {
 }
 
 // Client-side stage refinement: once Scout signals recommendation_intent, and the
-// server hasn't already moved us into a more advanced stage, mark stage as 'ready'
+// server hasn't already moved us into a more advanced stage, mark stage as 'recommendation_ready'
 // so My Trips / chat resume can show a direct "Generate Recommendations" CTA.
 function syncStageFromIntent() {
   if (!tripState) return;
   const advancedStages = ['recommended', 'matched', 'planning'];
   if (tripState.matcher_state?.recommendation_intent === true && !advancedStages.includes(tripState.stage)) {
-    tripState.stage = 'ready';
+    tripState.stage = 'recommendation_ready';
   }
 }
 
@@ -1105,6 +1105,22 @@ function openTripForPlanning(id) {
   startPlanningConvo();
 }
 
+function openTripRecos(id) {
+  currentTripId = id;
+  tripState = loadTripState(id);
+  currentRecos = latestRecommendation();
+  const trip = getTripById(id);
+  document.getElementById('chatTripName').textContent = trip?.title || '';
+
+  navigate('recos');
+  saveUiState('recos');
+
+  const selectedName = tripState.trip_context.selected_option?.name || tripState.trip_context.selected_option?.id || null;
+  if (selectedName && (tripState.stage === 'matched' || tripState.stage === 'planning')) {
+    setTimeout(() => chooseDestination(selectedName, tripState.trip_context.selected_option?.id, tripState.trip_context.selected_option?.type || 'destination'), 50);
+  }
+}
+
 function openTrip(id) {
   currentTripId = id;
   tripState = loadTripState(id);
@@ -1163,7 +1179,7 @@ function resumeChat() {
     return;
   }
 
-  if (stage === 'ready') {
+  if (stage === 'recommendation_ready') {
     // Recommendation intent is set — show Generate Recommendations CTA directly, no Scout resume call needed.
     appendMsg('assistant', `Welcome back — Scout has everything needed to find your matches. Tap below to generate recommendations.`);
     setRecoBtn(true);
@@ -1323,7 +1339,7 @@ async function handleSend() {
   if (tripState.stage === 'new') {
     tripState.stage = 'matching';
     saveTripState();
-  } else if (tripState.stage === 'ready') {
+  } else if (tripState.stage === 'recommendation_ready') {
     // New info arrived after Scout was ready to generate — go back to matching.
     tripState.stage = 'matching';
     tripState.matcher_state.recommendation_intent = false;
@@ -1771,7 +1787,7 @@ function tripBadge(trip, fullState) {
   if (stage === 'planning') return { cls: 'b-matched', text: 'Planning in progress' };
   if (stage === 'matched')  return { cls: 'b-matched', text: 'Destination chosen' };
   if (stage === 'recommended' || fullState?.matcher_state?.recommendations?.length) return { cls: 'b-reco', text: 'Recommendations ready' };
-  if (stage === 'ready' && fullState?.matcher_state?.recommendation_intent) return { cls: 'b-chat', text: 'Ready to generate' };
+  if (stage === 'recommendation_ready' && fullState?.matcher_state?.recommendation_intent) return { cls: 'b-chat', text: 'Ready to generate' };
   if (stage === 'matching') return { cls: 'b-chat', text: 'In conversation' };
   if (stage === 'new' || trip.status === 'new') return { cls: 'b-new', text: 'New' };
   return { cls: 'b-new', text: trip.status };
@@ -1783,8 +1799,8 @@ function tripCtaConfig(trip, fullState) {
   const stage = fullState?.stage;
   if (stage === 'planning') return { label: 'Resume planning with Scout', style: 'cta-green', action: `openTripForPlanning('${trip.id}')` };
   if (stage === 'matched')  return { label: 'Plan this trip', style: 'cta-green', action: `openTripForPlanning('${trip.id}')` };
-  if (stage === 'recommended' || fullState?.matcher_state?.recommendations?.length) return { label: 'Review recommendations', style: 'cta-blue', action: `openTrip('${trip.id}')` };
-  if (stage === 'ready' && fullState?.matcher_state?.recommendation_intent) return { label: 'Generate recommendations', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  if (stage === 'recommended' || fullState?.matcher_state?.recommendations?.length) return { label: 'Review recommendations', style: 'cta-blue', action: `openTripRecos('${trip.id}')` };
+  if (stage === 'recommendation_ready' && fullState?.matcher_state?.recommendation_intent) return { label: 'Generate recommendations', style: 'cta-accent', action: `openTrip('${trip.id}')` };
   if (stage === 'matching') return { label: 'Resume with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
   if (stage === 'new' || trip.status === 'new') return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
   return { label: 'Open trip', style: 'cta-accent', action: `openTrip('${trip.id}')` };
@@ -1802,8 +1818,8 @@ function tripCardHTML(trip) {
 
   const ctaHtml = isMatched
     ? `<div style="display:flex;gap:6px;">
-        <button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTrip('${trip.id}'); event.stopPropagation()">
-          See recommendations
+        <button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
+          Review recommendations
         </button>
         <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
           Want to plan?
@@ -1811,8 +1827,8 @@ function tripCardHTML(trip) {
       </div>`
     : isPlanning
     ? `<div style="display:flex;gap:6px;">
-        <button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTrip('${trip.id}'); event.stopPropagation()">
-          See recommendations
+        <button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
+          Review recommendations
         </button>
         <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
           Resume planning with Scout
