@@ -1115,7 +1115,7 @@ function openTrip(id) {
 
   const uiState = loadUiState(id);
 
-  if (tripState?.stage === 'matched' && currentRecos) {
+  if ((tripState?.stage === 'matched' || tripState?.stage === 'planning') && currentRecos) {
     navigate('recos');
     const selectedName = uiState.selected_option_name || tripState.trip_context.selected_option?.name || tripState.trip_context.selected_option?.id || null;
     if (selectedName) {
