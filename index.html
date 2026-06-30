@@ -998,6 +998,16 @@ function startMatch() {
   setTimeout(() => appendMsg('assistant', WELCOME), 200);
 }
 
+function openTripForPlanning(id) {
+  currentTripId = id;
+  tripState = loadTripState(id);
+  currentRecos = latestRecommendation();
+  const trip = getTripById(id);
+  document.getElementById('chatTripName').textContent = trip?.title || '';
+  window._chosenDest = tripState?.trip_context?.selected_option?.id || '';
+  navigate('plans');
+}
+
 function openTrip(id) {
   currentTripId = id;
   tripState = loadTripState(id);
@@ -1667,30 +1677,31 @@ function renderTripsList() {
   el.innerHTML = headerHtml + activeBannerHtml + sectionsHtml;
 }
 
-function tripBadge(trip) {
-  if (trip.status === 'new')      return { cls: 'b-new', text: 'New' };
-  if (trip.status === 'matching') return { cls: 'b-chat', text: 'In conversation' };
+function tripBadge(trip, fullState) {
   if (trip.status === 'matched')  return { cls: 'b-matched', text: 'Destination chosen' };
+  if (fullState?.matcher_state?.recommendations?.length) return { cls: 'b-reco', text: 'Recommendations ready' };
+  if (trip.status === 'matching') return { cls: 'b-chat', text: 'In conversation' };
+  if (trip.status === 'new')      return { cls: 'b-new', text: 'New' };
   if (trip.paid_plan === 'planning') return { cls: 'b-reco', text: 'Itinerary ready' };
   return { cls: 'b-new', text: trip.status };
 }
 
-function tripCtaConfig(trip) {
+function tripCtaConfig(trip, fullState) {
+  if (trip.status === 'matched')  return { label: 'Plan this trip', style: 'cta-green', action: `openTripForPlanning('${trip.id}')` };
+  if (fullState?.matcher_state?.recommendations?.length) return { label: 'Review recommendations', style: 'cta-blue', action: `openTrip('${trip.id}')` };
   if (trip.status === 'matching') return { label: 'Resume with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  if (trip.status === 'matched')  return { label: 'Plan this trip', style: 'cta-green', action: `openTrip('${trip.id}')` };
   if (trip.status === 'new')      return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
   if (trip.paid_plan === 'planning') return { label: 'See itinerary', style: 'cta-green', action: `navigate('itin')` };
   return { label: 'Open trip', style: 'cta-accent', action: `openTrip('${trip.id}')` };
 }
 
 function tripCardHTML(trip) {
-  const badge  = tripBadge(trip);
-  const cta    = tripCtaConfig(trip);
+  const fullState = (() => { try { return loadTripState(trip.id); } catch { return null; } })();
+  const badge  = tripBadge(trip, fullState);
+  const cta    = tripCtaConfig(trip, fullState);
   const tags   = (trip.inputs || []).map(t => `<span class="tc-tag">${escapeHtml(t)}</span>`).join('');
   const updated = new Date(trip.updated_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
-  const sel    = (() => {
-    try { const s = loadTripState(trip.id); return s?.trip_context?.selected_option?.id || null; } catch { return null; }
-  })();
+  const sel    = fullState?.trip_context?.selected_option?.id || null;
   return `<div class="tc" onclick="${cta.action}">
     <div class="tc-top">
       <div>
