@@ -87,8 +87,9 @@
   ════════════════════════════════════════ */
   #screen-trips .scroll { padding: 20px 32px 32px; }
   .trips-inner { max-width: 960px; margin: 0 auto; }
-  .trips-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .trips-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .trips-top h2 { font-family: 'DM Serif Display', serif; font-size: 22px; letter-spacing: -0.02em; }
+  .filter-bar { margin-bottom: 0; }
 
   /* filter chips */
   .filter-bar { display: flex; gap: 6px; margin-bottom: 16px; }
@@ -150,7 +151,7 @@
   .icon-btn svg { width: 12px; height: 12px; }
 
   /* empty state */
-  .trips-empty { text-align: center; padding: 64px 20px; color: var(--ink-faint); }
+  .trips-empty { text-align: center; padding: 64px 20px; color: var(--ink-faint); display: flex; flex-direction: column; align-items: center; }
   .trips-empty svg { width: 44px; height: 44px; margin-bottom: 14px; opacity: 0.25; }
   .trips-empty p { font-size: 14px; color: var(--ink-muted); margin-bottom: 5px; }
   .trips-empty span { font-size: 13px; }
@@ -176,9 +177,8 @@
   .bub-u { background: var(--dark); color: #faf8f5; border-radius: 13px 3px 13px 13px; }
   .bub p + p { margin-top: 6px; }
 
-  /* See Recos button */
-  .see-recos-wrap { display: none; max-width: 660px; margin: 0 auto; padding: 0 28px 4px; }
-  .see-recos-wrap.visible { display: block; animation: fadeUp 0.25s ease; }
+  /* See Recos — inline in chat after Scout message */
+  .see-recos-row { display: flex; align-items: flex-start; gap: 8px; animation: fadeUp 0.22s ease; }
   .see-recos-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); padding: 10px 20px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: background 0.15s; }
   .see-recos-btn:hover { background: var(--accent-dim); }
   .see-recos-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
@@ -456,7 +456,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-home" class="screen">
   <header class="tb">
-    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <a class="brand">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('trips')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
@@ -499,14 +499,11 @@
     <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('home')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
-      New Trip
+      My Trips
     </button>
   </header>
   <div class="scroll">
     <div class="trips-inner">
-      <div class="trips-top">
-        <h2>My Trips</h2>
-      </div>
       <div id="tripsPageContent"></div>
     </div>
   </div>
@@ -517,16 +514,13 @@
 ══════════════════════════════════════════ -->
 <div id="screen-chat" class="screen">
   <header class="tb">
-    <div class="tb-left">
-      <button class="back-btn" onclick="navigate('trips')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <div class="tb-right" style="gap:10px;">
+      <span id="chatTripName" style="font-size:13px;color:var(--ink-muted);"></span>
+      <button class="tb-btn" onclick="navigate('trips')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
         My Trips
       </button>
-      <div class="tb-divider"></div>
-      <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
-    </div>
-    <div class="tb-right">
-      <span id="chatTripName" style="font-size:13px;color:var(--ink-muted);"></span>
     </div>
   </header>
   <div class="ctx-bar">
@@ -534,12 +528,6 @@
     <span id="ctxText">Scout will help you find the perfect destination.</span>
   </div>
   <div class="state-bar" id="stateBar"></div>
-  <div class="see-recos-wrap" id="seeRecosWrap">
-    <button class="see-recos-btn" id="seeRecosBtn" onclick="handleSeeRecos()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      See Recommendations
-    </button>
-  </div>
   <div class="chat-wrap" id="chatWrap">
     <div class="chat-inner" id="chatInner">
       <div class="typing-row" id="typingRow" style="display:none;">
@@ -563,14 +551,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-recos" class="screen">
   <header class="tb">
-    <div class="tb-left">
-      <button class="back-btn" onclick="navigate('chat')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        Back to Chat
-      </button>
-      <div class="tb-divider"></div>
-      <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
-    </div>
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('trips')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
@@ -578,20 +559,15 @@
   </header>
   <div class="state-bar" id="stateBarRecos"></div>
   <div class="scroll">
-    <div class="recos-inner">
-      <div class="recos-left">
-        <div class="recos-heading">
-          <div class="recos-label"><div class="recos-label-dot"></div>Your destination matches</div>
-          <div id="recosSubheading" style="font-size:13px;color:var(--ink-muted);margin-top:3px;"></div>
-        </div>
-        <div id="recosCards"></div>
-        <div class="refine-row" id="refineRow" style="display:none;">
-          <p>None of these feel right? Tell Scout what's missing.</p>
-          <button class="refine-btn" onclick="navigate('chat')">Refine with Scout</button>
-        </div>
+    <div class="recos-inner" style="display:block;max-width:720px;margin:0 auto;padding:24px 28px 28px;">
+      <div class="recos-heading">
+        <div class="recos-label"><div class="recos-label-dot"></div>Your destination matches</div>
+        <div id="recosSubheading" style="font-size:13px;color:var(--ink-muted);margin-top:3px;"></div>
       </div>
-      <div class="recos-right">
-        <div id="planCta"></div>
+      <div id="recosCards"></div>
+      <div class="refine-row" id="refineRow" style="display:none;">
+        <p>None of these feel right? Tell Scout what's missing.</p>
+        <button class="refine-btn" onclick="navigate('chat')">Refine with Scout</button>
       </div>
     </div>
   </div>
@@ -602,14 +578,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-plans" class="screen">
   <header class="tb">
-    <div class="tb-left">
-      <button class="back-btn" onclick="navigate('recos')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        Recommendations
-      </button>
-      <div class="tb-divider"></div>
-      <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
-    </div>
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('trips')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
@@ -681,14 +650,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-itin" class="screen">
   <header class="tb">
-    <div class="tb-left">
-      <button class="back-btn" onclick="navigate('trips')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        My Trips
-      </button>
-      <div class="tb-divider"></div>
-      <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
-    </div>
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('trips')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
@@ -725,14 +687,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-concierge" class="screen">
   <header class="tb">
-    <div class="tb-left">
-      <button class="back-btn" onclick="navigate('trips')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        My Trips
-      </button>
-      <div class="tb-divider"></div>
-      <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
-    </div>
+    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('trips')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
@@ -1056,7 +1011,10 @@ function openTrip(id) {
   if (tripState?.stage === 'matched' && currentRecos) {
     navigate('recos');
     const selectedName = uiState.selected_option_name || tripState.trip_context.selected_option?.id || null;
-    if (selectedName) renderPlanCta(selectedName);
+    if (selectedName) {
+      // Re-inject the inline plan CTA after recos render
+      setTimeout(() => chooseDestination(selectedName, tripState.trip_context.selected_option?.id, tripState.trip_context.selected_option?.type || 'destination'), 50);
+    }
     return;
   }
 
@@ -1074,10 +1032,9 @@ function openTrip(id) {
 // CHAT
 // ══════════════════════════════════════════
 function clearChat() {
-  // Reset inner but preserve typing row structure
   const inner = document.getElementById('chatInner');
   inner.innerHTML = `<div class="typing-row" id="typingRow" style="display:none;"><div class="av">S</div><div class="tdots"><span></span><span></span><span></span></div></div>`;
-  setRecoBtn(false);
+  document.getElementById('inlineRecoBtnRow')?.remove();
   busy = false;
   setSendDisabled(false);
 }
@@ -1204,11 +1161,29 @@ function md(t) { return t ? escapeHtml(t).replace(/\*\*(.*?)\*\*/g, '<strong>$1<
 
 function showTyping() { document.getElementById('typingRow').style.display = 'flex'; scrollChat(); }
 function removeTyping() { document.getElementById('typingRow').style.display = 'none'; }
-function setRecoBtn(show) { document.getElementById('seeRecosWrap').classList.toggle('visible', show); }
 function setSendDisabled(v) { document.getElementById('sendBtn').disabled = v; }
 function scrollChat() {
   const w = document.getElementById('chatWrap');
   if (w) setTimeout(() => { w.scrollTop = w.scrollHeight; }, 50);
+}
+
+function setRecoBtn(show) {
+  // Remove any existing inline reco row first
+  document.getElementById('inlineRecoBtnRow')?.remove();
+  if (!show) return;
+  const inner  = document.getElementById('chatInner');
+  const typing = document.getElementById('typingRow');
+  const row = document.createElement('div');
+  row.className = 'see-recos-row';
+  row.id = 'inlineRecoBtnRow';
+  row.innerHTML = `
+    <div class="av">S</div>
+    <button class="see-recos-btn" id="seeRecosBtn" onclick="handleSeeRecos()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      See Recommendations
+    </button>`;
+  inner.insertBefore(row, typing);
+  scrollChat();
 }
 
 async function handleSend() {
@@ -1256,8 +1231,7 @@ async function handleSeeRecos() {
   if (busy) return;
   busy = true;
   const btn = document.getElementById('seeRecosBtn');
-  btn.disabled = true;
-  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Finding matches…`;
+  if (btn) { btn.disabled = true; btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Finding matches…`; }
 
   try {
     const meridianOut = await callMeridian();
@@ -1271,8 +1245,10 @@ async function handleSeeRecos() {
   }
 
   busy = false;
-  btn.disabled = false;
-  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> See Recommendations`;
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> See Recommendations`;
+  }
 }
 
 // ══════════════════════════════════════════
@@ -1297,17 +1273,17 @@ function renderRecos(meridianData) {
 
   if (!meridianData) {
     container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;">No recommendations to show.</div>`;
-    renderPlanCta(null); return;
+    return;
   }
 
   if (meridianData.status !== 'SUCCESS') {
     renderFailureRecos(container, meridianData);
-    renderPlanCta(null); return;
+    return;
   }
 
   if (!meridianData.options?.length) {
     container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;">No recommendations to show.</div>`;
-    renderPlanCta(null); return;
+    return;
   }
 
   meridianData.options.forEach((opt, idx) => {
@@ -1366,7 +1342,6 @@ function renderRecos(meridianData) {
   });
 
   document.getElementById('refineRow').style.display = 'flex';
-  renderPlanCta(null);
 }
 
 function renderFailureRecos(container, meridianData) {
@@ -1413,10 +1388,31 @@ function chooseDestination(name, id, type = 'destination') {
     renderStateBarEl('stateBarRecos');
   }
   saveUiState('recos', { selected_option_name: name });
-  renderPlanCta(name);
-  // Store chosen dest for plans/itin screens
   window._chosenDest = name;
   console.log(`%c[Destination chosen] ${name}`, 'color:#3a6b4a;font-weight:700;');
+
+  // Remove any existing plan CTA row
+  document.getElementById('inlinePlanCta')?.remove();
+
+  // Inject "Would you like to plan this trip?" below all the cards
+  const container = document.getElementById('recosCards');
+  const ctaDiv = document.createElement('div');
+  ctaDiv.id = 'inlinePlanCta';
+  ctaDiv.style.cssText = 'margin-top:16px;background:var(--card);border:1.5px solid var(--accent);border-radius:var(--r-lg);padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;animation:fadeUp 0.22s ease;';
+  ctaDiv.innerHTML = `
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--accent);margin-bottom:3px;">Destination confirmed</div>
+      <div style="font-size:15px;font-weight:600;color:var(--ink);">${escapeHtml(name)}</div>
+      <div style="font-size:13px;color:var(--ink-muted);margin-top:3px;">Would you like to plan this trip?</div>
+    </div>
+    <button onclick="navigate('plans')" style="flex-shrink:0;background:var(--accent);color:#fff;border:none;border-radius:var(--r-sm);padding:10px 20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:background 0.15s;" onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--accent)'">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Plan this trip →
+    </button>`;
+  container.appendChild(ctaDiv);
+
+  // Scroll into view
+  setTimeout(() => ctaDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
 }
 
 function notForMe(name) {
@@ -1580,29 +1576,33 @@ function renderStateBarEl(elId) {
 // ══════════════════════════════════════════
 function setFilter(f) { tripFilter = f; renderTripsList(); }
 
+const NEW_TRIP_BTN = `<button class="tb-btn" onclick="navigate('home')" style="display:inline-flex;align-items:center;gap:6px;">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
+  New Trip
+</button>`;
+
 function renderTripsList() {
   const trips = getTrips();
   const el    = document.getElementById('tripsPageContent');
 
+  // ── ZERO TRIPS: no header, just empty state + New Trip below ──
   if (trips.length === 0) {
-    el.innerHTML = `<div class="trips-empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      <p>No trips yet</p>
-      <span>Tap "+ New Trip" to start planning.</span>
-    </div>`;
+    el.innerHTML = `
+      <div class="trips-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <p>No trips yet</p>
+        <span>Start planning your next adventure.</span>
+        <div style="margin-top:18px;">${NEW_TRIP_BTN}</div>
+      </div>`;
     return;
   }
 
-  // Classify trips
-  // Active = concierge trips currently ongoing (future: has paid_plan = concierge + active dates)
-  // Upcoming = matching or matched (in progress, destination found)
-  // Completed = none for now (no completed state yet)
+  // ── ONE OR MORE TRIPS ──
   const activeTr    = trips.filter(t => t.paid_plan === 'concierge' && t.status === 'active');
-  const upcomingTr  = trips.filter(t => t.status === 'matching' || t.status === 'matched' || (t.paid_plan === 'planning'));
+  const upcomingTr  = trips.filter(t => t.status === 'matching' || t.status === 'matched' || t.paid_plan === 'planning');
   const newTr       = trips.filter(t => t.status === 'new' && !t.paid_plan);
   const completedTr = trips.filter(t => t.paid_plan === 'concierge' && t.status === 'done');
 
-  // Filter bar: show tabs dynamically
   const allCount       = trips.length;
   const upcomingCount  = upcomingTr.length + newTr.length;
   const completedCount = completedTr.length;
@@ -1615,9 +1615,15 @@ function renderTripsList() {
     { key: 'all',       label: `All (${allCount})` },
   ];
 
-  const filterBar = `<div class="filter-bar">${filters.map(f =>
-    `<button class="fc${tripFilter === f.key ? ' active' : ''}" onclick="setFilter('${f.key}')">${f.label}</button>`
-  ).join('')}</div>`;
+  // Header row: "My Trips" h2 on left, New Trip button on right; filter chips below
+  const headerHtml = `
+    <div class="trips-top" style="margin-bottom:10px;">
+      <h2 style="font-family:'DM Serif Display',serif;font-size:22px;letter-spacing:-0.02em;">My Trips</h2>
+      ${NEW_TRIP_BTN}
+    </div>
+    <div class="filter-bar" style="margin-bottom:16px;">
+      ${filters.map(f => `<button class="fc${tripFilter === f.key ? ' active' : ''}" onclick="setFilter('${f.key}')">${f.label}</button>`).join('')}
+    </div>`;
 
   // Active concierge banner
   const activeBannerHtml = activeTr.length ? `
@@ -1658,7 +1664,7 @@ function renderTripsList() {
       `).join('')
     : emptyHtml;
 
-  el.innerHTML = activeBannerHtml + filterBar + sectionsHtml;
+  el.innerHTML = headerHtml + activeBannerHtml + sectionsHtml;
 }
 
 function tripBadge(trip) {
@@ -1671,7 +1677,7 @@ function tripBadge(trip) {
 
 function tripCtaConfig(trip) {
   if (trip.status === 'matching') return { label: 'Resume with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  if (trip.status === 'matched')  return { label: 'Review recommendations', style: 'cta-blue', action: `openTrip('${trip.id}')` };
+  if (trip.status === 'matched')  return { label: 'Plan this trip', style: 'cta-green', action: `openTrip('${trip.id}')` };
   if (trip.status === 'new')      return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
   if (trip.paid_plan === 'planning') return { label: 'See itinerary', style: 'cta-green', action: `navigate('itin')` };
   return { label: 'Open trip', style: 'cta-accent', action: `openTrip('${trip.id}')` };
