@@ -234,19 +234,15 @@
   .recos-label-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 
   /* Accordion */
-  .acc-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; transition: border-color 0.2s; }
-  .acc-card.rank-1 { border-color: var(--accent); border-width: 1.5px; }
-  .acc-card.open { border-color: var(--accent); }
-  .acc-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; user-select: none; transition: background 0.15s; }
-  .acc-header:hover { background: var(--paper-warm); }
+  .match-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+  .match-card.rank-1 { border-color: var(--accent); border-width: 1.5px; }
+  .match-card-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .match-card-body { padding: 14px 16px 16px; }
   .rank-badge { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .acc-name { font-weight: 600; font-size: 14.5px; flex: 1; }
   .acc-best { font-size: 10px; font-weight: 600; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent-light); padding: 2px 7px; border-radius: 4px; }
   .acc-summary { font-size: 11px; color: var(--ink-muted); font-family: 'DM Mono', monospace; background: var(--paper-warm); padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
-  .acc-chevron { width: 15px; height: 15px; flex-shrink: 0; color: var(--ink-faint); transition: transform 0.22s ease; }
-  .acc-card.open .acc-chevron { transform: rotate(180deg); color: var(--accent); }
-  .acc-body { display: none; padding: 14px 16px 16px; border-top: 1px solid var(--border); }
-  .acc-card.open .acc-body { display: block; animation: fadeUp 0.18s ease; }
+  .acc-body { padding: 14px 16px 16px; border-top: 1px solid var(--border); }
   .match-sections { display: flex; flex-direction: column; gap: 12px; }
   .match-section { font-size: 12.5px; }
   .match-heading { font-weight: 600; color: var(--ink); margin-bottom: 4px; font-size: 13px; }
@@ -271,8 +267,6 @@
   .card-actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
   .choose-btn { background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 500; padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
   .choose-btn:hover { background: var(--accent); }
-  .not-for-me-btn { background: none; border: none; font-size: 12px; color: var(--ink-faint); cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 7px 4px; transition: color 0.15s; text-decoration: underline; text-underline-offset: 2px; }
-  .not-for-me-btn:hover { color: var(--ink-muted); }
 
   /* Right CTA panel */
   .plan-cta-placeholder { border: 2px dashed var(--border); border-radius: var(--r); padding: 32px 20px; text-align: center; color: var(--ink-faint); font-size: 13px; line-height: 1.6; }
@@ -610,7 +604,7 @@
       <div id="inlinePlanCtaWrap"></div>
       <div class="refine-row" id="refineRow" style="display:none;">
         <p>None of these feel right? Tell Scout what's missing.</p>
-        <button class="refine-btn" onclick="navigate('chat')">Refine with Scout</button>
+        <button class="refine-btn" onclick="refineWithScout()">Refine with Scout</button>
       </div>
     </div>
   </div>
@@ -1447,9 +1441,9 @@ function renderRecos(meridianData) {
     return;
   }
 
-  meridianData.options.forEach((opt, idx) => {
+  meridianData.options.forEach((opt) => {
     const card = document.createElement('div');
-    card.className = `acc-card${opt.rank === 1 ? ' rank-1' : ''}${idx === 0 ? ' open' : ''}`;
+    card.className = `match-card${opt.rank === 1 ? ' rank-1' : ''}`;
     const budgetSec  = (opt.match_sections || []).find(s => s.type === 'budget');
     const summaryTag = budgetSec?.per_person_total ? `<span class="acc-summary">₹${budgetSec.per_person_total.toLocaleString('en-IN')}/pp</span>` : '';
 
@@ -1487,18 +1481,16 @@ function renderRecos(meridianData) {
     const safeOptType  = jsArg(optionType);
     bodyHtml += `<div class="card-actions">
       <button class="choose-btn" onclick="chooseDestination('${safeDestName}','${safeOptionId}','${safeOptType}')">Choose ${escapeHtml(destName)} →</button>
-      <button class="not-for-me-btn" onclick="notForMe('${safeDestName}')">Not for me</button>
     </div>`;
 
     card.innerHTML = `
-      <div class="acc-header" onclick="toggleAcc(this.parentElement)">
+      <div class="match-card-header">
         <div class="rank-badge">${opt.rank}</div>
         <div class="acc-name">${escapeHtml(destName)}</div>
         ${opt.rank === 1 ? `<span class="acc-best">Best match</span>` : ''}
         ${summaryTag}
-        <svg class="acc-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
-      <div class="acc-body">${bodyHtml}</div>`;
+      <div class="match-card-body">${bodyHtml}</div>`;
     container.appendChild(card);
   });
 
@@ -1522,7 +1514,6 @@ function renderFailureRecos(container, meridianData) {
   container.innerHTML = html;
 }
 
-function toggleAcc(card) { card.classList.toggle('open'); }
 
 function chooseDestination(name, id, type = 'destination') {
   if (tripState) {
@@ -1567,6 +1558,28 @@ function notForMe(name) {
     appendMsg('user', `${name} isn't for me.`);
     showTyping();
     callScout(`${name} isn't for me.`).then(res => {
+      removeTyping();
+      appendMsg('assistant', res.message);
+      setRecoBtn(tripState.matcher_state.recommendation_intent === true);
+    }).catch(err => {
+      removeTyping();
+      appendError(`Couldn't reach Scout — try again. (${err.message})`);
+    });
+  }, 300);
+}
+
+function refineWithScout() {
+  if (!tripState) { navigate('chat'); return; }
+  tripState.stage = 'matching';
+  tripState.matcher_state.recommendation_intent = false;
+  saveTripState();
+
+  navigate('chat');
+  const msg = "I want to refine these recommendations.";
+  setTimeout(() => {
+    appendMsg('user', msg);
+    showTyping();
+    callScout(msg).then(res => {
       removeTyping();
       appendMsg('assistant', res.message);
       setRecoBtn(tripState.matcher_state.recommendation_intent === true);
