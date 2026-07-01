@@ -30,14 +30,9 @@
 
   /* ── Shared Topbar ── */
   .tb { display: flex; align-items: center; justify-content: space-between; padding: 13px 28px; border-bottom: 1px solid var(--border); background: var(--paper); flex-shrink: 0; z-index: 20; }
-  .tb-left { display: flex; align-items: center; gap: 12px; }
   .tb-right { display: flex; align-items: center; gap: 8px; }
   .brand { font-family: 'DM Serif Display', serif; font-size: 17px; letter-spacing: -0.01em; color: var(--ink); cursor: pointer; text-decoration: none; }
   .brand em { color: var(--accent); font-style: normal; }
-  .tb-divider { width: 1px; height: 15px; background: var(--border); }
-  .back-btn { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--ink-muted); background: none; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: color 0.15s; }
-  .back-btn:hover { color: var(--accent); }
-  .back-btn svg { width: 14px; height: 14px; }
   .tb-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--card); color: var(--ink-muted); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; white-space: nowrap; }
   .tb-btn:hover { border-color: var(--accent); color: var(--accent); }
   .tb-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
@@ -96,16 +91,6 @@
   .fc { font-size: 12.5px; font-weight: 500; padding: 5px 14px; border-radius: 100px; border: 1px solid var(--border); background: var(--card); color: var(--ink-muted); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
   .fc:hover { border-color: var(--accent); color: var(--accent); }
   .fc.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-  /* active banner */
-  .active-banner { background: linear-gradient(135deg, var(--dark), #4a3728); border-radius: var(--r-lg); padding: 16px 20px; margin-bottom: 16px; color: #fff; display: flex; align-items: center; gap: 16px; }
-  .ab-info { flex: 1; }
-  .ab-eye { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; opacity: 0.5; margin-bottom: 3px; }
-  .ab-title { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
-  .ab-sub { font-size: 12.5px; opacity: 0.65; }
-  .ab-cta { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: var(--r-sm); background: rgba(255,255,255,0.15); color: #fff; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; white-space: nowrap; transition: background 0.15s; }
-  .ab-cta:hover { background: rgba(255,255,255,0.25); }
-  .ab-cta svg { width: 13px; height: 13px; }
 
   /* section label */
   .sec-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink-faint); margin-bottom: 10px; margin-top: 18px; }
@@ -959,7 +944,8 @@ function jsArg(value) {
 
 function applyStateDelta(delta) {
   if (!delta) return;
-  if (delta.stage) tripState.stage = delta.stage;
+  // UI owns stage transitions — Scout's delta.stage is intentionally ignored.
+  // Stages are set explicitly by UI actions (handleSend, callMeridian, chooseDestination, etc.)
   if (delta.trip_context) {
     if (delta.trip_context.required_inputs) deepMerge(tripState.trip_context.required_inputs, delta.trip_context.required_inputs);
     if (delta.trip_context.preferences) deepMerge(tripState.trip_context.preferences, delta.trip_context.preferences);
@@ -1134,23 +1120,6 @@ function openTrip(id) {
   clearChat();
   const trip = getTripById(id);
   document.getElementById('chatTripName').textContent = trip?.title || '';
-
-  const uiState = loadUiState(id);
-
-  if ((tripState?.stage === 'matched' || tripState?.stage === 'planning') && currentRecos) {
-    navigate('recos');
-    const selectedName = uiState.selected_option_name || tripState.trip_context.selected_option?.name || tripState.trip_context.selected_option?.id || null;
-    if (selectedName) {
-      setTimeout(() => chooseDestination(selectedName, tripState.trip_context.selected_option?.id, tripState.trip_context.selected_option?.type || 'destination'), 50);
-    }
-    return;
-  }
-
-  if (uiState.last_screen === 'recos' && currentRecos) {
-    navigate('recos');
-    return;
-  }
-
   navigate('chat');
   renderStateBar();
   resumeChat();
@@ -1167,7 +1136,9 @@ function clearChat() {
   setSendDisabled(false);
 }
 
-let resuming = false;
+function removeResumeBtn() {
+  document.getElementById('resume-continue-btn')?.remove();
+}
 
 function resumeChat() {
   const stage = tripState?.stage;
@@ -1181,18 +1152,16 @@ function resumeChat() {
 
   if (stage === 'recommended') {
     appendMsg('assistant', `Welcome back — Scout already found some great matches for this trip. Head to recommendations to pick one.`);
-    setRecoBtn(false);
     return;
   }
 
   if (stage === 'recommendation_ready') {
-    // Recommendation intent is set — show Generate Recommendations CTA directly, no Scout resume call needed.
     appendMsg('assistant', `Welcome back — Scout has everything needed to find your matches. Tap below to generate recommendations.`);
     setRecoBtn(true);
     return;
   }
 
-  resuming = true;
+  // stage === 'matching': show resume card, wait for user action
   const ri    = tripState.trip_context.required_inputs;
   const prefs = tripState.trip_context.preferences;
 
@@ -1208,8 +1177,7 @@ function resumeChat() {
     ? `₹${ri.budget.toLocaleString('en-IN')} ${ri.budget_unit === 'per_person' ? 'per person' : 'total'}`
     : null;
 
-  const prefKeys   = Object.keys(prefs).filter(k => k !== 'rejections');
-  const rejections = tripState.matcher_state.rejected_options || [];
+  const prefKeys = Object.keys(prefs).filter(k => k !== 'rejections');
   let prefRows = prefKeys.length === 0
     ? `<div class="resume-row"><span class="resume-row-key">Preferences</span><span class="resume-row-val empty">None collected yet</span></div>`
     : prefKeys.map(k => {
@@ -1218,15 +1186,12 @@ function resumeChat() {
         return row(k.replace(/_/g, ' '), d);
       }).join('');
 
-  const rejRow      = rejections.length > 0 ? row('Rejected', rejections.map(r => r.destination).join(', ')) : '';
   const awaitingMsg = tripState.matcher_state.conversation_context?.awaiting;
-  const nextStep    = awaitingMsg
+  const nextStep = awaitingMsg
     ? `Scout was last waiting for: <strong>${awaitingMsg.replace(/_/g, ' ')}</strong>`
-    : tripState.matcher_state.recommendation_intent
-      ? `Ready to generate recommendations`
-      : `Conversation in progress`;
+    : `Conversation in progress`;
 
-  const inner = document.getElementById('chatInner');
+  const inner  = document.getElementById('chatInner');
   const typing = document.getElementById('typingRow');
   const div = document.createElement('div');
   div.className = 'mrow';
@@ -1242,28 +1207,28 @@ function resumeChat() {
         ${row('Duration', ri.duration_nights ? ri.duration_nights + ' nights' : null)}
         ${row('Budget', budgetDisplay)}
         <div class="resume-section-sep">Preferences</div>
-        ${prefRows}${rejRow}
+        ${prefRows}
       </div>
       <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:12px;">${nextStep}</div>
-      <button class="resume-continue-btn" onclick="handleContinue()">
+      <button class="resume-continue-btn" id="resume-continue-btn" onclick="handleContinue()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         Continue from here
       </button>
     </div>`;
   inner.insertBefore(div, typing);
   scrollChat();
-  setRecoBtn(tripState.matcher_state.recommendation_intent === true);
 }
 
 async function handleContinue() {
   if (busy) return;
-  busy = true; setSendDisabled(true); resuming = false;
+  busy = true; setSendDisabled(true);
+  removeResumeBtn();
   showTyping();
   try {
     const res = await callScout(null);
     removeTyping();
     appendMsg('assistant', res.message);
-    setRecoBtn(tripState.matcher_state.recommendation_intent === true);
+    setRecoBtn(tripState.stage === 'recommendation_ready');
   } catch (err) {
     removeTyping();
     appendError(`Couldn't reach Scout — try again. (${err.message})`);
@@ -1333,7 +1298,8 @@ async function handleSend() {
   if (!msg || busy) return;
   busy = true; input.value = ''; input.style.height = 'auto'; setSendDisabled(true);
 
-  if (resuming) { resuming = false; }
+  // Remove Continue button if visible (user typed instead of clicking Continue)
+  removeResumeBtn();
 
   if (!currentTripId) {
     const trip = createTrip();
@@ -1342,16 +1308,22 @@ async function handleSend() {
     document.getElementById('chatTripName').textContent = trip.title;
   }
 
-  if (tripState.stage === 'new') {
+  const stage = tripState.stage;
+  if (stage === 'new') {
     tripState.stage = 'matching';
     saveTripState();
-  } else if (tripState.stage === 'recommendation_ready') {
-    // New info arrived after Scout was ready to generate — go back to matching.
+  } else if (stage === 'recommendation_ready') {
+    // New info before generating — go back to matching
     tripState.stage = 'matching';
     tripState.matcher_state.recommendation_intent = false;
     saveTripState();
-  } else if (tripState.stage === 'matched') {
-    // User is refining after already confirming a destination — clear the selection.
+  } else if (stage === 'recommended') {
+    // User typing after seeing recommendations — refining
+    tripState.stage = 'matching';
+    tripState.matcher_state.recommendation_intent = false;
+    saveTripState();
+  } else if (stage === 'matched') {
+    // Refining after destination confirmed — clear selection
     tripState.stage = 'matching';
     tripState.trip_context.selected_option = null;
     saveTripState();
@@ -1363,8 +1335,7 @@ async function handleSend() {
     const res = await callScout(msg);
     removeTyping();
     appendMsg('assistant', res.message);
-    setRecoBtn(tripState.matcher_state.recommendation_intent === true);
-    // Update ctx bar
+    setRecoBtn(tripState.stage === 'recommendation_ready');
     const ri = tripState.trip_context.required_inputs;
     if (ri.origin_city || ri.num_travelers) {
       const parts = [];
@@ -1544,29 +1515,6 @@ function chooseDestination(name, id, type = 'destination') {
   setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
 }
 
-function notForMe(name) {
-  console.log(`%c[Not for me] ${name}`, 'color:#c46b3a;font-weight:700;');
-  if (tripState) {
-    if (!Array.isArray(tripState.matcher_state.rejected_options)) tripState.matcher_state.rejected_options = [];
-    tripState.matcher_state.rejected_options.push({ destination: name, reason: 'user_rejected' });
-    tripState.matcher_state.recommendation_intent = false;
-    tripState.stage = 'matching';
-    saveTripState();
-  }
-  navigate('chat');
-  setTimeout(() => {
-    appendMsg('user', `${name} isn't for me.`);
-    showTyping();
-    callScout(`${name} isn't for me.`).then(res => {
-      removeTyping();
-      appendMsg('assistant', res.message);
-      setRecoBtn(tripState.matcher_state.recommendation_intent === true);
-    }).catch(err => {
-      removeTyping();
-      appendError(`Couldn't reach Scout — try again. (${err.message})`);
-    });
-  }, 300);
-}
 
 function refineWithScout() {
   if (!tripState) { navigate('chat'); return; }
@@ -1582,7 +1530,7 @@ function refineWithScout() {
     callScout(msg).then(res => {
       removeTyping();
       appendMsg('assistant', res.message);
-      setRecoBtn(tripState.matcher_state.recommendation_intent === true);
+      setRecoBtn(tripState.stage === 'recommendation_ready');
     }).catch(err => {
       removeTyping();
       appendError(`Couldn't reach Scout — try again. (${err.message})`);
@@ -1809,26 +1757,23 @@ function tripBadge(trip, fullState) {
   if (trip.paid_plan === 'planning')  return { cls: 'b-done', text: 'Itinerary ready' };
   if (trip.paid_plan === 'concierge') return { cls: 'b-done', text: 'Concierge requested' };
   const stage = fullState?.stage;
-  if (stage === 'planning') return { cls: 'b-matched', text: 'Planning in progress' };
-  if (stage === 'matched')  return { cls: 'b-matched', text: 'Destination chosen' };
-  if (stage === 'recommended' || fullState?.matcher_state?.recommendations?.length) return { cls: 'b-reco', text: 'Recommendations ready' };
-  if (stage === 'recommendation_ready' && fullState?.matcher_state?.recommendation_intent) return { cls: 'b-chat', text: 'Ready to generate' };
-  if (stage === 'matching') return { cls: 'b-chat', text: 'In conversation' };
-  if (stage === 'new' || trip.status === 'new') return { cls: 'b-new', text: 'New' };
-  return { cls: 'b-new', text: trip.status };
+  if (stage === 'planning')              return { cls: 'b-matched', text: 'Planning in progress' };
+  if (stage === 'matched')               return { cls: 'b-matched', text: 'Destination chosen' };
+  if (stage === 'recommended')           return { cls: 'b-reco',    text: 'Recommendations ready' };
+  if (stage === 'recommendation_ready')  return { cls: 'b-chat',    text: 'Ready to generate' };
+  if (stage === 'matching')              return { cls: 'b-chat',    text: 'In conversation' };
+  return { cls: 'b-new', text: 'New' };
 }
 
 function tripCtaConfig(trip, fullState) {
-  if (trip.paid_plan === 'planning')  return { label: 'See itinerary', style: 'cta-green', action: `navigate('itin')` };
-  if (trip.paid_plan === 'concierge') return { label: 'View trip status', style: 'cta-green', action: `navigate('concierge')` };
+  if (trip.paid_plan === 'planning')  return { label: 'See itinerary',   style: 'cta-green',  action: `navigate('itin')` };
+  if (trip.paid_plan === 'concierge') return { label: 'View trip status', style: 'cta-green',  action: `navigate('concierge')` };
   const stage = fullState?.stage;
-  if (stage === 'planning') return { label: 'Resume planning with Scout', style: 'cta-green', action: `openTripForPlanning('${trip.id}')` };
-  if (stage === 'matched')  return { label: 'Plan this trip', style: 'cta-green', action: `openTripForPlanning('${trip.id}')` };
-  if (stage === 'recommended' || fullState?.matcher_state?.recommendations?.length) return { label: 'Review recommendations', style: 'cta-blue', action: `openTripRecos('${trip.id}')` };
-  if (stage === 'recommendation_ready' && fullState?.matcher_state?.recommendation_intent) return { label: 'Generate recommendations', style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  if (stage === 'matching') return { label: 'Resume with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  if (stage === 'new' || trip.status === 'new') return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  return { label: 'Open trip', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  // matched and planning are dual-CTA — rendered inline in tripCardHTML
+  if (stage === 'recommended')          return { label: 'Review recommendations',    style: 'cta-blue',   action: `openTripRecos('${trip.id}')` };
+  if (stage === 'recommendation_ready') return { label: 'Generate recommendations',  style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  if (stage === 'matching')             return { label: 'Resume matching with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
 }
 
 function tripCardHTML(trip) {
