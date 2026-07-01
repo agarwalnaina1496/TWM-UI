@@ -168,6 +168,10 @@
   .see-recos-btn:hover { background: var(--accent-dim); }
   .see-recos-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
   .see-recos-btn svg { width: 14px; height: 14px; }
+  .see-recos-btn.secondary { background: var(--green); }
+  .see-recos-btn.secondary:hover { background: #2d5a3a; }
+  .see-recos-row.multi { flex-wrap: wrap; }
+  .see-recos-row.multi .see-recos-btn { padding: 9px 16px; }
 
   /* Typing indicator */
   .typing-row { display: flex; align-items: center; gap: 8px; }
@@ -1140,56 +1144,105 @@ function removeResumeBtn() {
   document.getElementById('resume-continue-btn')?.remove();
 }
 
-function resumeChat() {
-  const stage = tripState?.stage;
-  if (!stage || stage === 'new') { appendMsg('assistant', WELCOME); return; }
-
-  if (stage === 'matched' || stage === 'planning') {
-    const sel = tripState.trip_context.selected_option;
-    appendMsg('assistant', `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`);
-    return;
-  }
-
-  if (stage === 'recommended') {
-    appendMsg('assistant', `Welcome back — Scout already found some great matches for this trip. Head to recommendations to pick one.`);
-    return;
-  }
-
-  if (stage === 'recommendation_ready') {
-    appendMsg('assistant', `Welcome back — Scout has everything needed to find your matches. Tap below to generate recommendations.`);
-    setRecoBtn(true);
-    return;
-  }
-
-  // stage === 'matching': show resume card, wait for user action
-  const ri    = tripState.trip_context.required_inputs;
-  const prefs = tripState.trip_context.preferences;
-
-  const row = (key, val) => {
-    const hasVal = val != null && val !== '';
-    return `<div class="resume-row">
-      <span class="resume-row-key">${key}</span>
-      <span class="resume-row-val${hasVal ? '' : ' empty'}">${hasVal ? val : 'Not collected yet'}</span>
-    </div>`;
+// Human-readable label for a trip's current stage — used in the context card.
+function stageLabel(stage) {
+  const map = {
+    matching:              'In conversation',
+    recommendation_ready:  'Ready to generate recommendations',
+    recommended:           'Recommendations ready',
+    matched:                'Destination chosen',
+    planning:               'Planning in progress',
   };
+  return map[stage] || stage;
+}
 
-  const budgetDisplay = ri.budget
-    ? `₹${ri.budget.toLocaleString('en-IN')} ${ri.budget_unit === 'per_person' ? 'per person' : 'total'}`
-    : null;
+// One-line summary of the most recent Meridian recommendation run, if any.
+function latestRecoSummary() {
+  const reco = latestRecommendation();
+  if (!reco) return null;
+  if (reco.status !== 'SUCCESS') return `Last attempt: ${String(reco.status).replace(/_/g, ' ').toLowerCase()}`;
+  const opts = reco.options || [];
+  if (!opts.length) return null;
+  const top = opts.find(o => o.rank === 1) || opts[0];
+  return `${opts.length} option${opts.length > 1 ? 's' : ''} generated${top?.name ? ` · top pick: ${top.name}` : ''}`;
+}
 
-  const prefKeys = Object.keys(prefs).filter(k => k !== 'rejections');
-  let prefRows = prefKeys.length === 0
-    ? `<div class="resume-row"><span class="resume-row-key">Preferences</span><span class="resume-row-val empty">None collected yet</span></div>`
-    : prefKeys.map(k => {
-        const v = prefs[k];
-        const d = typeof v === 'object' && v !== null && !Array.isArray(v) && v.value ? v.value : (Array.isArray(v) ? v.join(', ') : String(v));
-        return row(k.replace(/_/g, ' '), d);
-      }).join('');
+// ── Reusable trip context card ──────────────────────────────────────────
+// Always tripState-driven: renders whatever non-empty state currently exists
+// (stage, required inputs, preferences, recommendation intent, awaiting,
+// selected option, latest recommendations summary). Callers only decide
+// whether to show the "Continue from here" action — everything else about
+// what context exists is derived purely from tripState.
+function renderTripContextCard({ showContinue = false } = {}) {
+  document.getElementById('resume-card-wrap')?.remove();
+  if (!tripState) return;
 
-  const awaitingMsg = tripState.matcher_state.conversation_context?.awaiting;
-  const nextStep = awaitingMsg
-    ? `Scout was last waiting for: <strong>${awaitingMsg.replace(/_/g, ' ')}</strong>`
-    : `Conversation in progress`;
+  const ri    = tripState.trip_context.required_inputs || {};
+  const prefs = tripState.trip_context.preferences || {};
+  const ms    = tripState.matcher_state || {};
+  const sel   = tripState.trip_context.selected_option;
+
+  const row = (key, val) => `<div class="resume-row">
+      <span class="resume-row-key">${escapeHtml(key)}</span>
+      <span class="resume-row-val">${escapeHtml(val)}</span>
+    </div>`;
+
+  // Required inputs — only fields that actually have a value.
+  const inputRows = [];
+  if (ri.origin_city)     inputRows.push(row('From', ri.origin_city));
+  if (ri.num_travelers)   inputRows.push(row('Travellers', ri.num_travelers + ' people'));
+  if (ri.travel_month)    inputRows.push(row('Month', ri.travel_month));
+  if (ri.duration_nights) inputRows.push(row('Duration', ri.duration_nights + ' nights'));
+  if (ri.budget)          inputRows.push(row('Budget', `₹${ri.budget.toLocaleString('en-IN')} ${ri.budget_unit === 'per_person' ? 'per person' : 'total'}`));
+
+  // Preferences — only non-empty keys, excluding the internal 'rejections' bucket.
+  const prefKeys = Object.keys(prefs).filter(k => {
+    if (k === 'rejections') return false;
+    const v = prefs[k];
+    if (v == null || v === '') return false;
+    if (Array.isArray(v) && v.length === 0) return false;
+    return true;
+  });
+  const prefRows = prefKeys.map(k => {
+    const v = prefs[k];
+    const d = (typeof v === 'object' && v !== null && !Array.isArray(v) && 'value' in v) ? v.value
+              : (Array.isArray(v) ? v.join(', ') : String(v));
+    return row(k.replace(/_/g, ' '), d);
+  });
+
+  // Recommendation intent.
+  const intentRows = ms.recommendation_intent === true ? [row('Recommendation intent', 'Ready to generate')] : [];
+
+  // Awaiting (what Scout was last waiting on).
+  const awaiting = ms.conversation_context?.awaiting;
+  const awaitingRows = awaiting ? [row('Awaiting', String(awaiting).replace(/_/g, ' '))] : [];
+
+  // Selected option.
+  const selRows = sel ? [row('Selected', sel.name || sel.id || '')] : [];
+
+  // Latest recommendations summary.
+  const recoSummary = latestRecoSummary();
+  const recoRows = recoSummary ? [row('Latest recommendations', recoSummary)] : [];
+
+  const sections = [
+    { label: null,           rows: [row('Stage', stageLabel(tripState.stage))] },
+    inputRows.length    ? { label: 'Trip details', rows: inputRows }    : null,
+    prefRows.length     ? { label: 'Preferences',  rows: prefRows }     : null,
+    intentRows.length   ? { label: null,           rows: intentRows }   : null,
+    awaitingRows.length  ? { label: null,          rows: awaitingRows } : null,
+    selRows.length       ? { label: null,          rows: selRows }      : null,
+    recoRows.length       ? { label: null,         rows: recoRows }     : null,
+  ].filter(Boolean);
+
+  const sectionsHtml = sections.map(s =>
+    `${s.label ? `<div class="resume-section-sep">${escapeHtml(s.label)}</div>` : ''}${s.rows.join('')}`
+  ).join('');
+
+  const continueBtnHtml = showContinue ? `
+      <button class="resume-continue-btn" id="resume-continue-btn" onclick="handleContinue()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        Continue from here
+      </button>` : '';
 
   const inner  = document.getElementById('chatInner');
   const typing = document.getElementById('typingRow');
@@ -1201,22 +1254,94 @@ function resumeChat() {
     <div class="resume-card">
       <div class="resume-card-label">Here's where we left off</div>
       <div class="resume-rows">
-        ${row('From', ri.origin_city)}
-        ${row('Travellers', ri.num_travelers ? ri.num_travelers + ' people' : null)}
-        ${row('Month', ri.travel_month)}
-        ${row('Duration', ri.duration_nights ? ri.duration_nights + ' nights' : null)}
-        ${row('Budget', budgetDisplay)}
-        <div class="resume-section-sep">Preferences</div>
-        ${prefRows}
+        ${sectionsHtml}
       </div>
-      <div style="font-size:12.5px;color:var(--ink-muted);margin-bottom:12px;">${nextStep}</div>
-      <button class="resume-continue-btn" id="resume-continue-btn" onclick="handleContinue()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        Continue from here
-      </button>
+      ${continueBtnHtml}
     </div>`;
   inner.insertBefore(div, typing);
   scrollChat();
+}
+
+// ── Inline CTA row (below the context card) ─────────────────────────────
+// Generic helper: one place that inserts/replaces the action row under the
+// chat context card. setRecoBtn and the stage-specific CTA builders below
+// all funnel through this.
+function clearInlineCta() {
+  document.getElementById('inlineRecoBtnRow')?.remove();
+}
+
+function renderInlineCta(html, { multi = false } = {}) {
+  clearInlineCta();
+  if (!html) return;
+  const inner  = document.getElementById('chatInner');
+  const typing = document.getElementById('typingRow');
+  const row = document.createElement('div');
+  row.className = `see-recos-row${multi ? ' multi' : ''}`;
+  row.id = 'inlineRecoBtnRow';
+  row.innerHTML = html;
+  inner.insertBefore(row, typing);
+  scrollChat();
+}
+
+// CTA for stage === 'recommended': jump to the recommendations screen.
+function reviewRecosCtaHtml() {
+  return `
+    <div class="av">S</div>
+    <button class="see-recos-btn" onclick="openTripRecos('${currentTripId}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      Review recommendations
+    </button>`;
+}
+
+// CTA for stage === 'matched' / 'planning': review recos, or move into planning with Scout.
+function reviewAndPlannerCtaHtml(stage) {
+  const plannerLabel = stage === 'planning' ? 'Continue planning with Scout' : 'Want to plan?';
+  return `
+    <div class="av">S</div>
+    <button class="see-recos-btn" onclick="openTripRecos('${currentTripId}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      Review recommendations
+    </button>
+    <button class="see-recos-btn secondary" onclick="openTripForPlanning('${currentTripId}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      ${plannerLabel}
+    </button>`;
+}
+
+function resumeChat() {
+  const stage = tripState?.stage;
+  if (!stage || stage === 'new') { appendMsg('assistant', WELCOME); return; }
+
+  // The context card is always rendered from tripState — resumeChat only
+  // decides which CTA(s) accompany it for the current stage.
+  renderTripContextCard({ showContinue: stage === 'matching' });
+
+  if (stage === 'matching') {
+    // Continue button lives inside the context card itself; nothing else to add.
+    return;
+  }
+
+  if (stage === 'recommendation_ready') {
+    appendMsg('assistant', `Welcome back — Scout has everything needed to find your matches. Tap below to generate recommendations.`);
+    setRecoBtn(true);
+    return;
+  }
+
+  if (stage === 'recommended') {
+    appendMsg('assistant', `Welcome back — Scout already found some great matches for this trip. Head to recommendations to pick one.`);
+    renderInlineCta(reviewRecosCtaHtml());
+    return;
+  }
+
+  if (stage === 'matched' || stage === 'planning') {
+    const sel = tripState.trip_context.selected_option;
+    const msg = stage === 'planning'
+      ? `Welcome back — you're planning ${sel?.name || sel?.id || 'this trip'} with Scout. Pick up where you left off, or revisit recommendations.`
+      : `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`;
+    appendMsg('assistant', msg);
+    renderInlineCta(reviewAndPlannerCtaHtml(stage), { multi: true });
+    return;
+  }
 }
 
 async function handleContinue() {
@@ -1274,22 +1399,13 @@ function scrollChat() {
 }
 
 function setRecoBtn(show) {
-  // Remove any existing inline reco row first
-  document.getElementById('inlineRecoBtnRow')?.remove();
-  if (!show) return;
-  const inner  = document.getElementById('chatInner');
-  const typing = document.getElementById('typingRow');
-  const row = document.createElement('div');
-  row.className = 'see-recos-row';
-  row.id = 'inlineRecoBtnRow';
-  row.innerHTML = `
+  if (!show) { clearInlineCta(); return; }
+  renderInlineCta(`
     <div class="av">S</div>
     <button class="see-recos-btn" id="seeRecosBtn" onclick="handleSeeRecos()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       See Recommendations
-    </button>`;
-  inner.insertBefore(row, typing);
-  scrollChat();
+    </button>`);
 }
 
 async function handleSend() {
