@@ -854,13 +854,7 @@ function deleteTrip(id) {
 }
 
 function syncTripFromState(id, state) {
-  const ri = state.trip_context.required_inputs;
-  const inputs = [];
-  if (ri.origin_city)     inputs.push(ri.origin_city);
-  if (ri.num_travelers)   inputs.push(ri.num_travelers + ' pax');
-  if (ri.travel_month)    inputs.push(ri.travel_month);
-  if (ri.duration_nights) inputs.push(ri.duration_nights + 'n');
-  if (ri.budget)          inputs.push('₹' + ri.budget.toLocaleString('en-IN'));
+  const inputs = tripContextChips(state.trip_context || {}).slice(0, 4);
   const knownStages = ['new', 'matching', 'recommendation_ready', 'recommended', 'matched', 'planning'];
   const status = knownStages.includes(state.stage) ? state.stage : 'matching';
   updateTrip(id, { status, inputs });
@@ -874,11 +868,7 @@ function defaultState(tripId) {
     trip_id: tripId,
     status: 'free',
     stage: 'new',
-    trip_context: {
-      required_inputs: { origin_city: null, budget: null, budget_unit: null, duration_nights: null, num_travelers: null, travel_month: null },
-      preferences: {},
-      selected_option: null
-    },
+    trip_context: {},
     matcher_state: {
       recommendation_intent: false,
       conversation_context: { last_scout_message: null, awaiting: null },
@@ -942,6 +932,32 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function formatContextValue(value) {
+  if (Array.isArray(value)) return value.map(formatContextValue).filter(Boolean).join(', ');
+  if (isPlainObject(value)) {
+    return Object.entries(value)
+      .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${formatContextValue(v)}`)
+      .filter(Boolean)
+      .join('; ');
+  }
+  return value == null || value === '' ? '' : String(value);
+}
+
+function tripContextChips(context) {
+  if (!context || typeof context !== 'object') return [];
+  const hidden = ['selected_option'];
+  const priority = ['origin', 'travel_month', 'travel_dates', 'duration', 'budget', 'trip_purpose'];
+  const keys = [...priority.filter(k => k in context && !hidden.includes(k)), ...Object.keys(context).filter(k => !priority.includes(k) && !hidden.includes(k))];
+  return keys.map(k => {
+    const formatted = formatContextValue(context[k]);
+    return formatted ? `${k.replace(/_/g, ' ')}: ${formatted}` : '';
+  }).filter(Boolean);
+}
+
 function jsArg(value) {
   return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
 }
@@ -950,11 +966,7 @@ function applyStateDelta(delta) {
   if (!delta) return;
   // UI owns stage transitions — Scout's delta.stage is intentionally ignored.
   // Stages are set explicitly by UI actions (handleSend, callMeridian, chooseDestination, etc.)
-  if (delta.trip_context) {
-    if (delta.trip_context.required_inputs) deepMerge(tripState.trip_context.required_inputs, delta.trip_context.required_inputs);
-    if (delta.trip_context.preferences) deepMerge(tripState.trip_context.preferences, delta.trip_context.preferences);
-    if ('selected_option' in delta.trip_context) tripState.trip_context.selected_option = delta.trip_context.selected_option;
-  }
+  if (delta.trip_context) deepMerge(tripState.trip_context, delta.trip_context);
   if (delta.matcher_state) deepMergeMatcherState(tripState.matcher_state, delta.matcher_state);
   syncStageFromIntent();
 }
@@ -1177,37 +1189,21 @@ function renderTripContextCard({ showContinue = false } = {}) {
   document.getElementById('resume-card-wrap')?.remove();
   if (!tripState) return;
 
-  const ri    = tripState.trip_context.required_inputs || {};
-  const prefs = tripState.trip_context.preferences || {};
+  const tc    = tripState.trip_context || {};
   const ms    = tripState.matcher_state || {};
-  const sel   = tripState.trip_context.selected_option;
+  const sel   = tc.selected_option;
 
   const row = (key, val) => `<div class="resume-row">
       <span class="resume-row-key">${escapeHtml(key)}</span>
       <span class="resume-row-val">${escapeHtml(val)}</span>
     </div>`;
 
-  // Required inputs — only fields that actually have a value.
-  const inputRows = [];
-  if (ri.origin_city)     inputRows.push(row('From', ri.origin_city));
-  if (ri.num_travelers)   inputRows.push(row('Travellers', ri.num_travelers + ' people'));
-  if (ri.travel_month)    inputRows.push(row('Month', ri.travel_month));
-  if (ri.duration_nights) inputRows.push(row('Duration', ri.duration_nights + ' nights'));
-  if (ri.budget)          inputRows.push(row('Budget', `₹${ri.budget.toLocaleString('en-IN')} ${ri.budget_unit === 'per_person' ? 'per person' : 'total'}`));
-
-  // Preferences — only non-empty keys, excluding the internal 'rejections' bucket.
-  const prefKeys = Object.keys(prefs).filter(k => {
-    if (k === 'rejections') return false;
-    const v = prefs[k];
-    if (v == null || v === '') return false;
-    if (Array.isArray(v) && v.length === 0) return false;
-    return true;
-  });
-  const prefRows = prefKeys.map(k => {
-    const v = prefs[k];
-    const d = (typeof v === 'object' && v !== null && !Array.isArray(v) && 'value' in v) ? v.value
-              : (Array.isArray(v) ? v.join(', ') : String(v));
-    return row(k.replace(/_/g, ' '), d);
+  // Trip context is open-ended; render whatever Scout has extracted.
+  const contextRows = tripContextChips(tc).map(chipText => {
+    const idx = chipText.indexOf(': ');
+    return idx === -1
+      ? row('Context', chipText)
+      : row(chipText.slice(0, idx), chipText.slice(idx + 2));
   });
 
   // Recommendation intent.
@@ -1226,8 +1222,7 @@ function renderTripContextCard({ showContinue = false } = {}) {
 
   const sections = [
     { label: null,           rows: [row('Stage', stageLabel(tripState.stage))] },
-    inputRows.length    ? { label: 'Trip details', rows: inputRows }    : null,
-    prefRows.length     ? { label: 'Preferences',  rows: prefRows }     : null,
+    contextRows.length  ? { label: 'Trip context', rows: contextRows }  : null,
     intentRows.length   ? { label: null,           rows: intentRows }   : null,
     awaitingRows.length  ? { label: null,          rows: awaitingRows } : null,
     selRows.length       ? { label: null,          rows: selRows }      : null,
@@ -1452,14 +1447,8 @@ async function handleSend() {
     removeTyping();
     appendMsg('assistant', res.message);
     setRecoBtn(tripState.stage === 'recommendation_ready');
-    const ri = tripState.trip_context.required_inputs;
-    if (ri.origin_city || ri.num_travelers) {
-      const parts = [];
-      if (ri.origin_city)   parts.push(ri.origin_city);
-      if (ri.num_travelers) parts.push(ri.num_travelers + ' travellers');
-      if (ri.travel_month)  parts.push(ri.travel_month);
-      document.getElementById('ctxText').textContent = parts.join(' · ') || 'Scout will help you find the perfect destination.';
-    }
+    const parts = tripContextChips(tripState.trip_context || {}).slice(0, 3);
+    if (parts.length) document.getElementById('ctxText').textContent = parts.join(' · ');
   } catch (err) {
     removeTyping();
     appendError(`Something went wrong — try again. (${err.message})`);
@@ -1503,15 +1492,8 @@ function renderRecos(meridianData) {
   document.getElementById('refineRow').style.display = 'none';
 
   // Subheading from trip context
-  const ri = tripState?.trip_context?.required_inputs;
-  if (ri) {
-    const parts = [];
-    if (ri.num_travelers) parts.push(ri.num_travelers + ' travellers');
-    if (ri.origin_city)   parts.push(ri.origin_city);
-    if (ri.travel_month)  parts.push(ri.travel_month);
-    if (ri.duration_nights) parts.push(ri.duration_nights + ' nights');
-    document.getElementById('recosSubheading').textContent = parts.join(' · ');
-  }
+  const contextParts = tripContextChips(tripState?.trip_context || {}).slice(0, 4);
+  document.getElementById('recosSubheading').textContent = contextParts.join(' · ');
 
   if (!meridianData) {
     container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">No recommendations to show.</div>`;
@@ -1700,18 +1682,15 @@ function confirmPayment(planType) {
 // ITINERARY (static sample seeded from chosen dest)
 // ══════════════════════════════════════════
 function renderItinerary(destName) {
-  const ri    = tripState?.trip_context?.required_inputs || {};
+  const tc    = tripState?.trip_context || {};
   const title = destName || 'Your Trip';
-  const pax   = ri.num_travelers ? `${ri.num_travelers} travellers` : '';
-  const nights = ri.duration_nights ? `${ri.duration_nights} nights` : '';
-  const month  = ri.travel_month || '';
+  const contextParts = tripContextChips(tc);
 
   document.getElementById('itinTitle').textContent = title;
-  document.getElementById('itinSub').textContent   = [pax, nights, 'Curated by TWM'].filter(Boolean).join(' · ');
+  document.getElementById('itinSub').textContent   = ['Curated by TWM', ...contextParts.slice(0, 2)].filter(Boolean).join(' · ');
 
   const meta = document.getElementById('itinMeta');
-  meta.innerHTML = [month, ri.origin_city ? `From ${ri.origin_city}` : '', ri.budget ? `₹${ri.budget.toLocaleString('en-IN')} budget` : '']
-    .filter(Boolean).map(t => `<span class="ib-tag">${escapeHtml(t)}</span>`).join('');
+  meta.innerHTML = contextParts.slice(0, 4).map(t => `<span class="ib-tag">${escapeHtml(t)}</span>`).join('');
 
   // Sample days — real implementation would come from planner API
   const days = [
@@ -1762,29 +1741,20 @@ function renderStateBar() { renderStateBarEl('stateBar'); }
 function renderStateBarEl(elId) {
   const el = document.getElementById(elId);
   if (!el || !tripState) { if (el) el.innerHTML = ''; return; }
-  const ri    = tripState.trip_context.required_inputs;
-  const prefs = tripState.trip_context.preferences;
-  const ms    = tripState.matcher_state;
+  const tc    = tripState.trip_context || {};
+  const ms    = tripState.matcher_state || {};
   const chip  = (val, cls='') => val != null && val !== '' ? `<span class="sc ${cls}">${escapeHtml(String(val))}</span>` : `<span class="sc empty">—</span>`;
   const bool  = v => `<span class="sc ${v ? 'tv' : 'fv'}">${v}</span>`;
-  const prefKeys  = Object.keys(prefs).filter(k => k !== 'rejections');
-  const prefChips = prefKeys.length === 0 ? chip(null) : prefKeys.map(k => {
-    const v = prefs[k];
-    const d = typeof v === 'object' && v !== null && !Array.isArray(v) && v.value ? v.value : (Array.isArray(v) ? v.join(',') : String(v));
-    return `<span class="sc">${escapeHtml(k)}: ${escapeHtml(d)}</span>`;
-  }).join('');
+  const contextChips = tripContextChips(tc);
+  const contextHtml = contextChips.length === 0 ? chip(null) : contextChips.slice(0, 8).map(v => `<span class="sc">${escapeHtml(v)}</span>`).join('');
   el.innerHTML = `
     <div class="state-bar-group"><div class="state-bar-label">Stage</div><div class="state-bar-section">${chip(tripState.stage,'stg')}</div></div>
     <div class="state-div"></div>
-    <div class="state-bar-group"><div class="state-bar-label">Required inputs</div><div class="state-bar-section">
-      ${chip(ri.origin_city)}${chip(ri.num_travelers?ri.num_travelers+' pax':null)}${chip(ri.travel_month)}${chip(ri.duration_nights?ri.duration_nights+'n':null)}${chip(ri.budget?'₹'+ri.budget.toLocaleString('en-IN')+(ri.budget_unit==='per_person'?'/pp':' total'):null)}
-    </div></div>
-    <div class="state-div"></div>
-    <div class="state-bar-group"><div class="state-bar-label">Preferences</div><div class="state-bar-section">${prefChips}</div></div>
+    <div class="state-bar-group"><div class="state-bar-label">Trip context</div><div class="state-bar-section">${contextHtml}</div></div>
     <div class="state-div"></div>
     <div class="state-bar-group"><div class="state-bar-label">reco_intent</div><div class="state-bar-section">${bool(ms.recommendation_intent)}</div></div>
     <div class="state-bar-group"><div class="state-bar-label">awaiting</div><div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div></div>
-    <div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tripState.trip_context.selected_option?.name || tripState.trip_context.selected_option?.id)}</div></div>`;
+    <div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tc.selected_option?.name || tc.selected_option?.id)}</div></div>`;
 }
 
 // ══════════════════════════════════════════
