@@ -970,6 +970,11 @@ async function callScout(message) {
   if (!res.ok) throw new Error(`Scout ${res.status}`);
   const data = await res.json();
   applyStateDelta(data.state_delta);
+  // Backend now tells us which internal mode handled this turn via `intent`.
+  // This is the source of truth for the matcher->planner switch — purely
+  // internal state, never surfaced in the UI.
+  if (data.intent === 'planner') markPlanningStarted();
+  window._enteringPlanner = false;
   saveTripState();
   logScoutTurn(message, before, data, JSON.parse(JSON.stringify(tripState)));
   return data;
@@ -1311,7 +1316,7 @@ async function handleContinue() {
   try {
     const res = await callScout(null);
     removeTyping();
-    appendMsg('assistant', res.message);
+    if (res.message) appendMsg('assistant', res.message);
     setRecoBtn(tripState.stage === 'recommendation_ready');
   } catch (err) {
     removeTyping();
@@ -1414,7 +1419,7 @@ async function handleSend() {
   try {
     const res = await callScout(msg);
     removeTyping();
-    appendMsg('assistant', res.message);
+    if (res.message) appendMsg('assistant', res.message);
     setRecoBtn(tripState.stage === 'recommendation_ready');
     const ri = tripState.trip_context.required_inputs;
     if (ri.origin_city || ri.num_travelers) {
@@ -1422,7 +1427,7 @@ async function handleSend() {
       if (ri.origin_city)   parts.push(ri.origin_city);
       if (ri.num_travelers) parts.push(ri.num_travelers + ' travellers');
       if (ri.travel_month)  parts.push(ri.travel_month);
-      document.getElementById('ctxText').textContent = parts.join(' · ') || 'Scout will help you find the perfect destination.';
+      document.getElementById('ctxText').textContent = parts.join(' · ') || 'Scout is here to help with your trip.';
     }
   } catch (err) {
     removeTyping();
@@ -1609,7 +1614,7 @@ function refineWithScout() {
     showTyping();
     callScout(msg).then(res => {
       removeTyping();
-      appendMsg('assistant', res.message);
+      if (res.message) appendMsg('assistant', res.message);
       setRecoBtn(tripState.stage === 'recommendation_ready');
     }).catch(err => {
       removeTyping();
