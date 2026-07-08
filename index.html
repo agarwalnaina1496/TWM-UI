@@ -1034,9 +1034,6 @@ async function handleScoutResult(res, message = null) {
   if (res?.intent === 'matcher') {
     const meridianOut = await callMeridian(message);
     if (meridianOut.message) appendMsg('assistant', meridianOut.message);
-    if (shouldStoreMeridianOutput(meridianOut) && hasRecommendations()) {
-      renderInlineCta(reviewRecosCtaHtml());
-    }
     return meridianOut;
   }
 
@@ -1298,7 +1295,7 @@ function renderTripContextCard({ showContinue = false } = {}) {
 
 // ── Inline CTA row (below the context card) ─────────────────────────────
 // Generic helper: one place that inserts/replaces the action row under the
-// chat context card. setRecoBtn and the stage-specific CTA builders below
+// chat context card. Stage-specific CTA builders below
 // all funnel through this.
 function clearInlineCta() {
   document.getElementById('inlineRecoBtnRow')?.remove();
@@ -1315,16 +1312,6 @@ function renderInlineCta(html, { multi = false } = {}) {
   row.innerHTML = html;
   inner.insertBefore(row, typing);
   scrollChat();
-}
-
-// CTA for stage === 'recommended': jump to the recommendations screen.
-function reviewRecosCtaHtml() {
-  return `
-    <div class="av">S</div>
-    <button class="see-recos-btn" onclick="openTripRecos('${currentTripId}')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      Review recommendations
-    </button>`;
 }
 
 // CTA for stage === 'matched' / 'planning': review recos when present, and move into planning with Scout.
@@ -1364,14 +1351,12 @@ function resumeChat() {
   if (stage === 'matching') return;
 
   if (stage === 'recommendation_ready') {
-    appendMsg('assistant', `Welcome back — Scout has everything needed to find your matches. Tap below to generate recommendations.`);
-    setRecoBtn(true);
+    appendMsg('assistant', `Welcome back - Scout has enough context to continue. Tell me what you want to refine, or ask for destination options here.`);
     return;
   }
 
   if (stage === 'recommended') {
-    appendMsg('assistant', `Welcome back — Scout already found some great matches for this trip. Head to recommendations to pick one.`);
-    renderInlineCta(reviewRecosCtaHtml());
+    appendMsg('assistant', `Welcome back - Scout already found matches for this trip. You can keep refining or ask what to do next here.`);
     return;
   }
 
@@ -1448,16 +1433,6 @@ function scrollChat() {
   if (w) setTimeout(() => { w.scrollTop = w.scrollHeight; }, 50);
 }
 
-function setRecoBtn(show) {
-  if (!show) { clearInlineCta(); return; }
-  renderInlineCta(`
-    <div class="av">S</div>
-    <button class="see-recos-btn" id="seeRecosBtn" onclick="handleSeeRecos()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      See Recommendations
-    </button>`);
-}
-
 async function handleSend() {
   const input = document.getElementById('userInput');
   const msg   = input.value.trim();
@@ -1520,33 +1495,7 @@ async function handleSend() {
   busy = false; setSendDisabled(false);
 }
 
-async function handleSeeRecos() {
-  if (busy) return;
-  busy = true;
-  const btn = document.getElementById('seeRecosBtn');
-  if (btn) { btn.disabled = true; btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Finding matches…`; }
 
-  try {
-    const meridianOut = await callMeridian();
-    if (shouldStoreMeridianOutput(meridianOut)) {
-      currentRecos = latestRecommendation() || recommendationPayloadFromMeridian(meridianOut);
-      navigate('recos');
-    } else if (meridianOut.message) {
-      appendMsg('assistant', meridianOut.message);
-    }
-  } catch (err) {
-    appendError(`Hit a snag — want to try again? (${err.message})`);
-    console.error('[Generate]', err);
-  }
-
-  busy = false;
-  if (btn) {
-    btn.disabled = false;
-    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> See Recommendations`;
-  }
-}
-
-// ══════════════════════════════════════════
 // RECOMMENDATIONS PAGE
 // ══════════════════════════════════════════
 function renderRecos(meridianData) {
