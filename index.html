@@ -823,13 +823,9 @@ function defaultState(tripId) {
     stage: 'new',
     trip_context: {},
     matcher_state: {
-      recommendation_intent: false,
-      conversation_context: { last_scout_message: null, awaiting: null },
+      conversation_context: { last_scout_message: null, last_meridian_message: null, awaiting: null },
       recommendations: [],
-      rejected_options: [],
-      nuanced_preferences: [],
-      travel_style: [],
-      explicit_exclusions: []
+      rejected_options: []
     },
     planner_state: null
   };
@@ -869,7 +865,7 @@ function hasRecommendations(state = tripState) {
 }
 
 function isMeridianBusinessStatus(status) {
-  return ['SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL', 'MISSING_INPUTS'].includes(status);
+  return ['NEEDS_CLARIFICATION', 'SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL'].includes(status);
 }
 
 function loadUiState(tripId) {
@@ -926,22 +922,10 @@ function applyStateDelta(delta) {
   // Stages are set explicitly by UI actions (handleSend, callMeridian, chooseDestination, etc.)
   if (delta.trip_context) deepMerge(tripState.trip_context, delta.trip_context);
   if (delta.matcher_state) deepMergeMatcherState(tripState.matcher_state, delta.matcher_state);
-  syncStageFromIntent();
-}
-
-// Client-side stage refinement: once Scout signals recommendation_intent, and the
-// server hasn't already moved us into a more advanced stage, mark stage as 'recommendation_ready'
-// so My Trips / chat resume can show a direct "Generate Recommendations" CTA.
-function syncStageFromIntent() {
-  if (!tripState) return;
-  const advancedStages = ['recommended', 'matched', 'planning', 'planned'];
-  if (tripState.matcher_state?.recommendation_intent === true && !advancedStages.includes(tripState.stage)) {
-    tripState.stage = 'recommendation_ready';
-  }
 }
 
 // Append/dedupe known array fields instead of letting deepMerge clobber them.
-const ARRAY_MERGE_KEYS = ['nuanced_preferences', 'travel_style', 'explicit_exclusions', 'rejected_options'];
+const ARRAY_MERGE_KEYS = ['rejected_options'];
 function deepMergeMatcherState(target, source) {
   if (!source || typeof source !== 'object') return;
   for (const key of Object.keys(source)) {
@@ -997,7 +981,7 @@ async function callScout(message) {
 
 function applyStageFromScoutIntent(intent) {
   if (!tripState) return;
-  if (intent === 'matcher' && tripState.stage === 'new') {
+  if (intent === 'matcher' && ['new', 'recommendation_ready'].includes(tripState.stage)) {
     tripState.stage = 'matching';
   }
   if (intent === 'planner') {
@@ -1012,19 +996,58 @@ function responseMessageForIntent(res) {
   if (res.intent === null || res.intent === undefined) return res.message || '';
   return '';
 }
-async function callMeridian() {
-  const input = { trip_context: tripState.trip_context };
+
+function recommendationPayloadFromMeridian(data) {
+  const { state_delta, ...payload } = data || {};
+  return payload;
+}
+
+function shouldStoreMeridianOutput(data) {
+  return data?.status && data.status !== 'NEEDS_CLARIFICATION';
+}
+
+async function callMeridian(message = null) {
+  const input = { trip_state: tripState, message };
   const res = await fetch(API.meridian, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
   if (!res.ok) throw new Error(`Meridian ${res.status}`);
   const data = await res.json();
   if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
-  if (!Array.isArray(tripState.matcher_state.recommendations)) tripState.matcher_state.recommendations = [];
-  tripState.matcher_state.recommendations.push(data);
-  tripState.matcher_state.recommendation_intent = false;
-  tripState.stage = 'recommended';
+
+  applyStateDelta(data.state_delta);
+
+  if (shouldStoreMeridianOutput(data)) {
+    const payload = recommendationPayloadFromMeridian(data);
+    if (!Array.isArray(tripState.matcher_state.recommendations)) tripState.matcher_state.recommendations = [];
+    tripState.matcher_state.recommendations.push(payload);
+    currentRecos = payload;
+    tripState.stage = 'recommended';
+  } else if (!['recommended', 'matched', 'planning', 'planned'].includes(tripState.stage)) {
+    tripState.stage = 'matching';
+  }
+
   saveTripState();
   logMeridian(input, data);
   return data;
+}
+
+async function handleScoutResult(res, message = null) {
+  if (res?.intent === 'matcher') {
+    const meridianOut = await callMeridian(message);
+    if (meridianOut.message) appendMsg('assistant', meridianOut.message);
+    if (shouldStoreMeridianOutput(meridianOut) && hasRecommendations()) {
+      renderInlineCta(reviewRecosCtaHtml());
+    }
+    return meridianOut;
+  }
+
+  const reply = responseMessageForIntent(res);
+  if (reply) appendMsg('assistant', reply);
+  return res;
+}
+
+function updateChatContextSnippet() {
+  const parts = tripContextChips(tripState.trip_context || {}).slice(0, 3);
+  document.getElementById('ctxText').textContent = parts.length ? parts.join(' · ') : 'Scout is here to help with your trip.';
 }
 
 // ══════════════════════════════════════════
@@ -1168,10 +1191,6 @@ function hasTripContext(state = tripState) {
   return tripContextChips(state?.trip_context || {}).length > 0;
 }
 
-function stageAllowsRecoIntent(stage) {
-  return ['matching', 'recommendation_ready'].includes(stage);
-}
-
 function stageAllowsAwaiting(stage) {
   return ['matching', 'recommendation_ready', 'planning'].includes(stage);
 }
@@ -1200,7 +1219,6 @@ function confirmOptionFromChat(option) {
   const id = option.destination_id || option.circuit_id || option.name;
   tripState.trip_context.selected_option = { type, id, name: option.name };
   tripState.stage = 'matched';
-  tripState.matcher_state.recommendation_intent = false;
   saveTripState();
 }
 // ── Reusable trip context card ──────────────────────────────────────────
@@ -1231,9 +1249,6 @@ function renderTripContextCard({ showContinue = false } = {}) {
       : row(chipText.slice(0, idx), chipText.slice(idx + 2));
   });
 
-  // Recommendation intent.
-  const intentRows = stageAllowsRecoIntent(stage) && ms.recommendation_intent === true ? [row('Recommendation intent', 'Ready to generate')] : [];
-
   // Awaiting (what Scout was last waiting on).
   const awaiting = ms.conversation_context?.awaiting;
   const awaitingRows = stageAllowsAwaiting(stage) && awaiting ? [row('Awaiting', String(awaiting).replace(/_/g, ' '))] : [];
@@ -1248,7 +1263,6 @@ function renderTripContextCard({ showContinue = false } = {}) {
   const sections = [
     { label: null,           rows: [row('Stage', stageLabel(stage))] },
     contextRows.length  ? { label: 'Trip context', rows: contextRows }  : null,
-    intentRows.length   ? { label: null,           rows: intentRows }   : null,
     awaitingRows.length  ? { label: null,          rows: awaitingRows } : null,
     selRows.length       ? { label: null,          rows: selRows }      : null,
     recoRows.length       ? { label: null,         rows: recoRows }     : null,
@@ -1387,10 +1401,9 @@ async function handleContinue() {
   showTyping();
   try {
     const res = await callScout(null);
+    await handleScoutResult(res, null);
     removeTyping();
-    const reply = responseMessageForIntent(res);
-    if (reply) appendMsg('assistant', reply);
-    setRecoBtn(tripState.stage === 'recommendation_ready');
+    updateChatContextSnippet();
   } catch (err) {
     removeTyping();
     appendError(`Couldn't reach Scout — try again. (${err.message})`);
@@ -1475,12 +1488,10 @@ async function handleSend() {
   if (stage === 'recommendation_ready') {
     // New info before generating — go back to matching
     tripState.stage = 'matching';
-    tripState.matcher_state.recommendation_intent = false;
     saveTripState();
   } else if (stage === 'recommended') {
     // User typing after seeing recommendations — refining
     tripState.stage = 'matching';
-    tripState.matcher_state.recommendation_intent = false;
     saveTripState();
   } else if (stage === 'matched' && window._enteringPlanner) {
     // User chose to plan this destination — move into planner mode.
@@ -1498,15 +1509,12 @@ async function handleSend() {
   showTyping();
   try {
     const res = await callScout(msg);
+    await handleScoutResult(res, msg);
     removeTyping();
-    const reply = responseMessageForIntent(res);
-    if (reply) appendMsg('assistant', reply);
-    setRecoBtn(tripState.stage === 'recommendation_ready');
-    const parts = tripContextChips(tripState.trip_context || {}).slice(0, 3);
-    document.getElementById('ctxText').textContent = parts.length ? parts.join(' · ') : 'Scout is here to help with your trip.';
+    updateChatContextSnippet();
   } catch (err) {
     removeTyping();
-    appendError(`Something went wrong — try again. (${err.message})`);
+    appendError(`Something went wrong - try again. (${err.message})`);
     console.error('[Scout]', err);
   }
   busy = false; setSendDisabled(false);
@@ -1520,9 +1528,11 @@ async function handleSeeRecos() {
 
   try {
     const meridianOut = await callMeridian();
-    if (isMeridianBusinessStatus(meridianOut.status)) {
-      currentRecos = meridianOut;
+    if (shouldStoreMeridianOutput(meridianOut)) {
+      currentRecos = latestRecommendation() || recommendationPayloadFromMeridian(meridianOut);
       navigate('recos');
+    } else if (meridianOut.message) {
+      appendMsg('assistant', meridianOut.message);
     }
   } catch (err) {
     appendError(`Hit a snag — want to try again? (${err.message})`);
@@ -1555,12 +1565,11 @@ function renderRecos(meridianData) {
     return;
   }
 
-  if (meridianData.status !== 'SUCCESS') {
-    renderFailureRecos(container, meridianData);
-    return;
-  }
-
   if (!meridianData.options?.length) {
+    if (meridianData.status !== 'SUCCESS') {
+      renderFailureRecos(container, meridianData);
+      return;
+    }
     container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">No recommendations to show.</div>`;
     return;
   }
@@ -1672,27 +1681,24 @@ function chooseDestination(name, id, type = 'destination') {
 function refineWithScout() {
   if (!tripState) { navigate('chat'); return; }
   tripState.stage = 'matching';
-  tripState.matcher_state.recommendation_intent = false;
   saveTripState();
 
   navigate('chat');
   const msg = "I want to refine these recommendations.";
-  setTimeout(() => {
+  setTimeout(async () => {
     appendMsg('user', msg);
     showTyping();
-    callScout(msg).then(res => {
+    try {
+      const res = await callScout(msg);
+      await handleScoutResult(res, msg);
       removeTyping();
-      const reply = responseMessageForIntent(res);
-      if (reply) appendMsg('assistant', reply);
-      setRecoBtn(tripState.stage === 'recommendation_ready');
-    }).catch(err => {
+      updateChatContextSnippet();
+    } catch (err) {
       removeTyping();
-      appendError(`Couldn't reach Scout — try again. (${err.message})`);
-    });
+      appendError(`Couldn't reach Scout - try again. (${err.message})`);
+    }
   }, 300);
 }
-
-// ══════════════════════════════════════════
 // PLANS & PRICING
 // ══════════════════════════════════════════
 function showPaymentModal(planType) {
@@ -1801,14 +1807,11 @@ function renderStateBarEl(elId) {
   const ms    = tripState.matcher_state || {};
   const stage = tripState.stage || 'new';
   const chip  = (val, cls='') => val != null && val !== '' ? `<span class="sc ${cls}">${escapeHtml(String(val))}</span>` : `<span class="sc empty">—</span>`;
-  const bool  = v => `<span class="sc ${v ? 'tv' : 'fv'}">${v}</span>`;
   const contextChips = tripContextChips(tc);
   const contextHtml = contextChips.length === 0 ? chip(null) : contextChips.slice(0, 8).map(v => `<span class="sc">${escapeHtml(v)}</span>`).join('');
-  const showRecoIntent = ['matching', 'recommendation_ready'].includes(stage);
   const showAwaiting = ['matching', 'recommendation_ready', 'planning'].includes(stage) && ms.conversation_context?.awaiting;
   const showSelected = ['matched', 'planning', 'planned'].includes(stage);
   const extraGroups = [
-    showRecoIntent ? `<div class="state-bar-group"><div class="state-bar-label">reco_intent</div><div class="state-bar-section">${bool(ms.recommendation_intent)}</div></div>` : '',
     showAwaiting ? `<div class="state-bar-group"><div class="state-bar-label">awaiting</div><div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div></div>` : '',
     showSelected ? `<div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tc.selected_option?.name || tc.selected_option?.id)}</div></div>` : '',
   ].filter(Boolean).join('');
