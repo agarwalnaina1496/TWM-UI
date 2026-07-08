@@ -863,6 +863,11 @@ function latestRecommendation() {
   return Array.isArray(recs) && recs.length ? recs[recs.length - 1] : null;
 }
 
+function hasRecommendations(state = tripState) {
+  const recs = state?.matcher_state?.recommendations;
+  return Array.isArray(recs) && recs.length > 0;
+}
+
 function isMeridianBusinessStatus(status) {
   return ['SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL', 'MISSING_INPUTS'].includes(status);
 }
@@ -1308,15 +1313,17 @@ function reviewRecosCtaHtml() {
     </button>`;
 }
 
-// CTA for stage === 'matched' / 'planning': review recos, or move into planning with Scout.
+// CTA for stage === 'matched' / 'planning': review recos when present, and move into planning with Scout.
 function reviewAndPlannerCtaHtml(stage) {
   const plannerLabel = stage === 'planning' ? 'Continue planning with Scout' : 'Want to plan?';
-  return `
-    <div class="av">S</div>
+  const reviewCta = (stage !== 'planning' || hasRecommendations()) ? `
     <button class="see-recos-btn" onclick="openTripRecos('${currentTripId}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       Review recommendations
-    </button>
+    </button>` : '';
+  return `
+    <div class="av">S</div>
+    ${reviewCta}
     <button class="see-recos-btn secondary" onclick="openTripForPlanning('${currentTripId}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
       ${plannerLabel}
@@ -1356,11 +1363,16 @@ function resumeChat() {
 
   if (stage === 'matched' || stage === 'planning') {
     const sel = tripState.trip_context.selected_option;
+    const hasRecos = stage !== 'planning' || hasRecommendations();
     const msg = stage === 'planning'
-      ? `Welcome back — you're planning ${sel?.name || sel?.id || 'this trip'} with Scout. Pick up where you left off, or revisit recommendations.`
-      : `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`;
+      ? (hasRecos
+        ? `Welcome back — you're planning ${sel?.name || sel?.id || 'this trip'} with Scout. Pick up where you left off, or revisit recommendations.`
+        : `Welcome back — you're planning ${sel?.name || sel?.id || 'this trip'} with Scout. Pick up where you left off.`)
+      : (hasRecos
+        ? `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`
+        : `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. You can plan next steps with Scout.`);
     appendMsg('assistant', msg);
-    renderInlineCta(reviewAndPlannerCtaHtml(stage), { multi: true });
+    renderInlineCta(reviewAndPlannerCtaHtml(stage), { multi: hasRecos });
     return;
   }
 
@@ -1923,21 +1935,23 @@ function tripCardHTML(trip) {
   const isMatched  = !trip.paid_plan && fullState?.stage === 'matched';
   const isPlanning = !trip.paid_plan && fullState?.stage === 'planning';
   const isPlanned = !trip.paid_plan && fullState?.stage === 'planned';
+  const showReviewRecos = !isPlanning || hasRecommendations(fullState);
+  const reviewRecosButton = showReviewRecos
+    ? `<button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
+        Review recommendations
+      </button>`
+    : '';
 
   const ctaHtml = isMatched
     ? `<div style="display:flex;gap:6px;">
-        <button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
-          Review recommendations
-        </button>
+        ${reviewRecosButton}
         <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
           Want to plan?
         </button>
       </div>`
     : isPlanning
     ? `<div style="display:flex;gap:6px;">
-        <button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
-          Review recommendations
-        </button>
+        ${reviewRecosButton}
         <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
           Resume planning with Scout
         </button>
