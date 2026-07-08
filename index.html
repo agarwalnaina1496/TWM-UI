@@ -453,24 +453,14 @@
       <h1>Travel the way you want,<br><em>effortlessly.</em></h1>
       <p>From wondering where to go to stepping off the plane — TWM handles every detail so you don't have to.</p>
     </div>
-    <div class="home-modules">
+    <div class="home-modules" style="grid-template-columns: 1fr; max-width: 420px;">
       <div class="home-mod" onclick="startMatch()">
         <div class="mod-icon mod-icon-discover">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
         </div>
-        <h2>Help me decide where to go</h2>
-        <p>Tell Scout your vibe, travel style, and budget — we'll find the perfect destination and explain why.</p>
-        <span class="mod-cta mod-cta-discover">Discover with Scout
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-        </span>
-      </div>
-      <div class="home-mod" onclick="startPlanningConvo()">
-        <div class="mod-icon mod-icon-plan">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        </div>
-        <h2>I already have a place in mind</h2>
-        <p>Know where you're headed? Let's design your trip — places, pace, then a full itinerary.</p>
-        <span class="mod-cta mod-cta-plan">Plan with Scout
+        <h2>Need help in your trip?</h2>
+        <p>Whether you know where you're headed or need help deciding — tell Scout about your trip and it'll take it from there.</p>
+        <span class="mod-cta mod-cta-discover">Start with Scout
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </span>
       </div>
@@ -512,7 +502,7 @@
   </header>
   <div class="ctx-bar">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span id="ctxText">Scout will help you find the perfect destination.</span>
+    <span id="ctxText">Scout is here to help with your trip.</span>
   </div>
   <div class="state-bar" id="stateBar"></div>
   <div class="chat-wrap" id="chatWrap">
@@ -527,44 +517,6 @@
     <div class="input-wrap">
       <textarea id="userInput" placeholder="Tell Scout about your trip…" rows="1"></textarea>
       <button class="send-btn" id="sendBtn" onclick="handleSend()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     SCREEN 3B — PLANNING CHAT (coming soon)
-══════════════════════════════════════════ -->
-<div id="screen-planning-chat" class="screen">
-  <header class="tb">
-    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
-    <div class="tb-right" style="gap:10px;">
-      <span id="planningTripName" style="font-size:13px;color:var(--ink-muted);"></span>
-      <button class="tb-btn" onclick="navigate('trips')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
-        My Trips
-      </button>
-    </div>
-  </header>
-  <div class="ctx-bar">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span>Scout is helping design your day-by-day plan.</span>
-  </div>
-  <div class="chat-wrap">
-    <div class="chat-inner">
-      <div class="mrow">
-        <div class="av">S</div>
-        <div class="bub bub-s">
-          <p>Planning with Scout is coming soon. We're building the experience that turns your chosen destination into a full day-by-day itinerary — hang tight!</p>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="input-bar">
-    <div class="input-wrap" style="opacity:0.5;">
-      <textarea placeholder="Planning chat coming soon…" rows="1" disabled style="cursor:not-allowed;"></textarea>
-      <button class="send-btn" disabled style="cursor:not-allowed;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
     </div>
@@ -809,6 +761,7 @@ const API = {
   meridian: 'https://travelwithme-zf9f.onrender.com/meridian',
 };
 const WELCOME = "Hey there, I'm Scout. Tell me about the trip you have in mind, and I'll help you discover a destination that's the right fit for you and also tell you why it is the right fit for you.";
+const PLANNER_COMING_SOON_MESSAGE = "Trip planning is coming soon. For now, I can keep helping with the where-to-go decision and preserve this context so planning can pick up from here later.";
 const TRIPS_KEY    = 'twm_trips_v1';
 const STATE_KEY    = 'twm_state_v1';
 const UI_STATE_KEY = 'twm_ui_state_v1';
@@ -855,7 +808,7 @@ function deleteTrip(id) {
 
 function syncTripFromState(id, state) {
   const inputs = tripContextChips(state.trip_context || {}).slice(0, 4);
-  const knownStages = ['new', 'matching', 'recommendation_ready', 'recommended', 'matched', 'planning'];
+  const knownStages = ['new', 'matching', 'recommendation_ready', 'recommended', 'matched', 'planning', 'planned'];
   const status = knownStages.includes(state.stage) ? state.stage : 'matching';
   updateTrip(id, { status, inputs });
 }
@@ -870,13 +823,9 @@ function defaultState(tripId) {
     stage: 'new',
     trip_context: {},
     matcher_state: {
-      recommendation_intent: false,
-      conversation_context: { last_scout_message: null, awaiting: null },
+      conversation_context: { last_scout_message: null, last_meridian_message: null, awaiting: null },
       recommendations: [],
-      rejected_options: [],
-      nuanced_preferences: [],
-      travel_style: [],
-      explicit_exclusions: []
+      rejected_options: []
     },
     planner_state: null
   };
@@ -910,8 +859,13 @@ function latestRecommendation() {
   return Array.isArray(recs) && recs.length ? recs[recs.length - 1] : null;
 }
 
+function hasRecommendations(state = tripState) {
+  const recs = state?.matcher_state?.recommendations;
+  return Array.isArray(recs) && recs.length > 0;
+}
+
 function isMeridianBusinessStatus(status) {
-  return ['SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL', 'MISSING_INPUTS'].includes(status);
+  return ['NEEDS_CLARIFICATION', 'SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL'].includes(status);
 }
 
 function loadUiState(tripId) {
@@ -968,22 +922,10 @@ function applyStateDelta(delta) {
   // Stages are set explicitly by UI actions (handleSend, callMeridian, chooseDestination, etc.)
   if (delta.trip_context) deepMerge(tripState.trip_context, delta.trip_context);
   if (delta.matcher_state) deepMergeMatcherState(tripState.matcher_state, delta.matcher_state);
-  syncStageFromIntent();
-}
-
-// Client-side stage refinement: once Scout signals recommendation_intent, and the
-// server hasn't already moved us into a more advanced stage, mark stage as 'recommendation_ready'
-// so My Trips / chat resume can show a direct "Generate Recommendations" CTA.
-function syncStageFromIntent() {
-  if (!tripState) return;
-  const advancedStages = ['recommended', 'matched', 'planning'];
-  if (tripState.matcher_state?.recommendation_intent === true && !advancedStages.includes(tripState.stage)) {
-    tripState.stage = 'recommendation_ready';
-  }
 }
 
 // Append/dedupe known array fields instead of letting deepMerge clobber them.
-const ARRAY_MERGE_KEYS = ['nuanced_preferences', 'travel_style', 'explicit_exclusions', 'rejected_options'];
+const ARRAY_MERGE_KEYS = ['rejected_options'];
 function deepMergeMatcherState(target, source) {
   if (!source || typeof source !== 'object') return;
   for (const key of Object.keys(source)) {
@@ -1030,24 +972,82 @@ async function callScout(message) {
   if (!res.ok) throw new Error(`Scout ${res.status}`);
   const data = await res.json();
   applyStateDelta(data.state_delta);
+  applyStageFromScoutIntent(data.intent);
+  window._enteringPlanner = false;
   saveTripState();
   logScoutTurn(message, before, data, JSON.parse(JSON.stringify(tripState)));
   return data;
 }
 
-async function callMeridian() {
-  const input = { trip_context: tripState.trip_context };
+function applyStageFromScoutIntent(intent) {
+  if (!tripState) return;
+  if (intent === 'matcher' && ['new', 'recommendation_ready'].includes(tripState.stage)) {
+    tripState.stage = 'matching';
+  }
+  if (intent === 'planner') {
+    markPlanningStarted();
+  }
+}
+
+function responseMessageForIntent(res) {
+  if (!res) return '';
+  if (res.intent === 'planner') return PLANNER_COMING_SOON_MESSAGE;
+  if (res.intent === 'advise') return res.message || '';
+  if (res.intent === null || res.intent === undefined) return res.message || '';
+  return '';
+}
+
+function recommendationPayloadFromMeridian(data) {
+  const { state_delta, ...payload } = data || {};
+  return payload;
+}
+
+function shouldStoreMeridianOutput(data) {
+  return data?.status && data.status !== 'NEEDS_CLARIFICATION';
+}
+
+async function callMeridian(message = null) {
+  const input = { trip_state: tripState, message };
   const res = await fetch(API.meridian, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
   if (!res.ok) throw new Error(`Meridian ${res.status}`);
   const data = await res.json();
   if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
-  if (!Array.isArray(tripState.matcher_state.recommendations)) tripState.matcher_state.recommendations = [];
-  tripState.matcher_state.recommendations.push(data);
-  tripState.matcher_state.recommendation_intent = false;
-  tripState.stage = 'recommended';
+
+  applyStateDelta(data.state_delta);
+
+  if (shouldStoreMeridianOutput(data)) {
+    const payload = recommendationPayloadFromMeridian(data);
+    if (!Array.isArray(tripState.matcher_state.recommendations)) tripState.matcher_state.recommendations = [];
+    tripState.matcher_state.recommendations.push(payload);
+    currentRecos = payload;
+    tripState.stage = 'recommended';
+  } else if (!['recommended', 'matched', 'planning', 'planned'].includes(tripState.stage)) {
+    tripState.stage = 'matching';
+  }
+
   saveTripState();
   logMeridian(input, data);
   return data;
+}
+
+async function handleScoutResult(res, message = null) {
+  if (res?.intent === 'matcher') {
+    const meridianOut = await callMeridian(message);
+    if (meridianOut.message) appendMsg('assistant', meridianOut.message);
+    if (shouldStoreMeridianOutput(meridianOut) && hasRecommendations()) {
+      renderInlineCta(reviewRecosCtaHtml());
+    }
+    return meridianOut;
+  }
+
+  const reply = responseMessageForIntent(res);
+  if (reply) appendMsg('assistant', reply);
+  return res;
+}
+
+function updateChatContextSnippet() {
+  const parts = tripContextChips(tripState.trip_context || {}).slice(0, 3);
+  document.getElementById('ctxText').textContent = parts.length ? parts.join(' · ') : 'Scout is here to help with your trip.';
 }
 
 // ══════════════════════════════════════════
@@ -1056,7 +1056,7 @@ async function callMeridian() {
 function navigate(screen) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + screen).classList.add('active');
-  if (currentTripId && (screen === 'chat' || screen === 'recos' || screen === 'planning-chat')) saveUiState(screen);
+  if (currentTripId && (screen === 'chat' || screen === 'recos')) saveUiState(screen);
   if (screen === 'trips') renderTripsList();
   if (screen === 'home') { /* nothing extra */ }
   if (screen === 'recos') {
@@ -1068,17 +1068,21 @@ function navigate(screen) {
 function startMatch() {
   currentTripId = null;
   tripState = null;
+  window._enteringPlanner = false;
   clearChat();
   navigate('chat');
   document.getElementById('chatTripName').textContent = '';
-  document.getElementById('ctxText').textContent = 'Scout will help you find the perfect destination — takes 2–3 minutes.';
+  document.getElementById('ctxText').textContent = 'Scout is here to help with your trip.';
   renderStateBar();
   setTimeout(() => appendMsg('assistant', WELCOME), 200);
 }
 
 function startPlanningConvo() {
   // Called either from the recos screen (tripState/currentTripId already set)
-  // or from Home's "I already have a place in mind" module (no trip yet).
+  // or from Home's single entry module (no trip yet).
+  // Planning now lives inside the same unified chat (screen-chat) as matching —
+  // there's no separate screen or visible mode indicator; the user just keeps
+  // talking to Scout in one continuous conversation.
   if (!currentTripId) {
     const trip = createTrip();
     currentTripId = trip.id;
@@ -1086,15 +1090,19 @@ function startPlanningConvo() {
     saveTripState();
   }
   // NOTE: stage stays as-is here (e.g. 'matched') until the user actually sends
-  // their first message in the planner chat — see markPlanningStarted().
+  // their first message post-selection — see markPlanningStarted(), invoked from handleSend.
+  window._enteringPlanner = true;
   const trip = getTripById(currentTripId);
-  document.getElementById('planningTripName').textContent = trip?.title || '';
-  navigate('planning-chat');
+  document.getElementById('chatTripName').textContent = trip?.title || '';
+  clearChat();
+  navigate('chat');
+  renderStateBar();
+  resumeChat();
 }
 
-// Call this once the user sends their first message in the planner chat.
+// Call this once the user sends their first message after choosing to plan.
 // Per the stage-transition spec: matched -> planning triggers on the first
-// Scout planner message, not on merely opening the planner screen.
+// message sent with planner intent, not on merely opening the chat.
 function markPlanningStarted() {
   if (!tripState) return;
   if (tripState.stage !== 'planning') {
@@ -1107,8 +1115,6 @@ function openTripForPlanning(id) {
   currentTripId = id;
   tripState = loadTripState(id);
   currentRecos = latestRecommendation();
-  const trip = getTripById(id);
-  document.getElementById('planningTripName').textContent = trip?.title || '';
   window._chosenDest = tripState?.trip_context?.selected_option?.name || tripState?.trip_context?.selected_option?.id || '';
   startPlanningConvo();
 }
@@ -1133,6 +1139,7 @@ function openTrip(id) {
   currentTripId = id;
   tripState = loadTripState(id);
   currentRecos = latestRecommendation();
+  window._enteringPlanner = false;
   clearChat();
   const trip = getTripById(id);
   document.getElementById('chatTripName').textContent = trip?.title || '';
@@ -1164,6 +1171,7 @@ function stageLabel(stage) {
     recommended:           'Recommendations ready',
     matched:                'Destination chosen',
     planning:               'Planning in progress',
+    planned:                'Plan ready',
   };
   return map[stage] || stage;
 }
@@ -1179,6 +1187,40 @@ function latestRecoSummary() {
   return `${opts.length} option${opts.length > 1 ? 's' : ''} generated${top?.name ? ` · top pick: ${top.name}` : ''}`;
 }
 
+function hasTripContext(state = tripState) {
+  return tripContextChips(state?.trip_context || {}).length > 0;
+}
+
+function stageAllowsAwaiting(stage) {
+  return ['matching', 'recommendation_ready', 'planning'].includes(stage);
+}
+
+function stageAllowsSelected(stage) {
+  return ['matched', 'planning', 'planned'].includes(stage);
+}
+
+function findChatConfirmedOption(message) {
+  const reco = latestRecommendation();
+  const options = reco?.options || [];
+  if (!message || !options.length) return null;
+  const normalized = message.toLowerCase();
+  const confirms = ['choose', 'chose', 'select', 'selected', 'pick', 'picked', 'confirm', 'lock', 'final', 'go with'];
+  if (!confirms.some(word => normalized.includes(word))) return null;
+  return options.find(opt => {
+    const name = String(opt.name || '').toLowerCase();
+    const id = String(opt.destination_id || opt.circuit_id || '').toLowerCase();
+    return (name && normalized.includes(name)) || (id && normalized.includes(id));
+  }) || null;
+}
+
+function confirmOptionFromChat(option) {
+  if (!tripState || !option) return;
+  const type = option.type || (option.circuit_id ? 'circuit' : 'destination');
+  const id = option.destination_id || option.circuit_id || option.name;
+  tripState.trip_context.selected_option = { type, id, name: option.name };
+  tripState.stage = 'matched';
+  saveTripState();
+}
 // ── Reusable trip context card ──────────────────────────────────────────
 // Always tripState-driven: renders whatever non-empty state currently exists
 // (stage, required inputs, preferences, recommendation intent, awaiting,
@@ -1192,6 +1234,7 @@ function renderTripContextCard({ showContinue = false } = {}) {
   const tc    = tripState.trip_context || {};
   const ms    = tripState.matcher_state || {};
   const sel   = tc.selected_option;
+  const stage = tripState.stage || 'new';
 
   const row = (key, val) => `<div class="resume-row">
       <span class="resume-row-key">${escapeHtml(key)}</span>
@@ -1206,24 +1249,20 @@ function renderTripContextCard({ showContinue = false } = {}) {
       : row(chipText.slice(0, idx), chipText.slice(idx + 2));
   });
 
-  // Recommendation intent.
-  const intentRows = ms.recommendation_intent === true ? [row('Recommendation intent', 'Ready to generate')] : [];
-
   // Awaiting (what Scout was last waiting on).
   const awaiting = ms.conversation_context?.awaiting;
-  const awaitingRows = awaiting ? [row('Awaiting', String(awaiting).replace(/_/g, ' '))] : [];
+  const awaitingRows = stageAllowsAwaiting(stage) && awaiting ? [row('Awaiting', String(awaiting).replace(/_/g, ' '))] : [];
 
   // Selected option.
-  const selRows = sel ? [row('Selected', sel.name || sel.id || '')] : [];
+  const selRows = stageAllowsSelected(stage) && sel ? [row('Selected', sel.name || sel.id || '')] : [];
 
   // Latest recommendations summary.
   const recoSummary = latestRecoSummary();
   const recoRows = recoSummary ? [row('Latest recommendations', recoSummary)] : [];
 
   const sections = [
-    { label: null,           rows: [row('Stage', stageLabel(tripState.stage))] },
+    { label: null,           rows: [row('Stage', stageLabel(stage))] },
     contextRows.length  ? { label: 'Trip context', rows: contextRows }  : null,
-    intentRows.length   ? { label: null,           rows: intentRows }   : null,
     awaitingRows.length  ? { label: null,          rows: awaitingRows } : null,
     selRows.length       ? { label: null,          rows: selRows }      : null,
     recoRows.length       ? { label: null,         rows: recoRows }     : null,
@@ -1288,15 +1327,17 @@ function reviewRecosCtaHtml() {
     </button>`;
 }
 
-// CTA for stage === 'matched' / 'planning': review recos, or move into planning with Scout.
+// CTA for stage === 'matched' / 'planning': review recos when present, and move into planning with Scout.
 function reviewAndPlannerCtaHtml(stage) {
   const plannerLabel = stage === 'planning' ? 'Continue planning with Scout' : 'Want to plan?';
-  return `
-    <div class="av">S</div>
+  const reviewCta = (stage !== 'planning' || hasRecommendations()) ? `
     <button class="see-recos-btn" onclick="openTripRecos('${currentTripId}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       Review recommendations
-    </button>
+    </button>` : '';
+  return `
+    <div class="av">S</div>
+    ${reviewCta}
     <button class="see-recos-btn secondary" onclick="openTripForPlanning('${currentTripId}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
       ${plannerLabel}
@@ -1304,17 +1345,23 @@ function reviewAndPlannerCtaHtml(stage) {
 }
 
 function resumeChat() {
-  const stage = tripState?.stage;
-  if (!stage || stage === 'new') { appendMsg('assistant', WELCOME); return; }
+  const stage = tripState?.stage || 'new';
+  const hasContext = hasTripContext();
+  if (stage === 'new') {
+    if (hasContext) {
+      renderTripContextCard();
+      appendMsg('assistant', `Welcome back — I saved the context from your last chat. You can keep asking Scout here, or ask for destination options whenever you're ready.`);
+    } else {
+      appendMsg('assistant', WELCOME);
+    }
+    return;
+  }
 
   // The context card is always rendered from tripState — resumeChat only
   // decides which CTA(s) accompany it for the current stage.
   renderTripContextCard({ showContinue: stage === 'matching' });
 
-  if (stage === 'matching') {
-    // Continue button lives inside the context card itself; nothing else to add.
-    return;
-  }
+  if (stage === 'matching') return;
 
   if (stage === 'recommendation_ready') {
     appendMsg('assistant', `Welcome back — Scout has everything needed to find your matches. Tap below to generate recommendations.`);
@@ -1330,15 +1377,23 @@ function resumeChat() {
 
   if (stage === 'matched' || stage === 'planning') {
     const sel = tripState.trip_context.selected_option;
+    const hasRecos = stage !== 'planning' || hasRecommendations();
     const msg = stage === 'planning'
-      ? `Welcome back — you're planning ${sel?.name || sel?.id || 'this trip'} with Scout. Pick up where you left off, or revisit recommendations.`
-      : `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`;
+      ? (hasRecos
+        ? `Welcome back — you're planning ${sel?.name || sel?.id || 'this trip'} with Scout. Pick up where you left off, or revisit recommendations.`
+        : `Welcome back — you're planning ${sel?.name || sel?.id || 'this trip'} with Scout. Pick up where you left off.`)
+      : (hasRecos
+        ? `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`
+        : `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. You can plan next steps with Scout.`);
     appendMsg('assistant', msg);
-    renderInlineCta(reviewAndPlannerCtaHtml(stage), { multi: true });
+    renderInlineCta(reviewAndPlannerCtaHtml(stage), { multi: hasRecos });
     return;
   }
-}
 
+  if (stage === 'planned') {
+    appendMsg('assistant', `Welcome back — your plan is ready.`);
+  }
+}
 async function handleContinue() {
   if (busy) return;
   busy = true; setSendDisabled(true);
@@ -1346,9 +1401,9 @@ async function handleContinue() {
   showTyping();
   try {
     const res = await callScout(null);
+    await handleScoutResult(res, null);
     removeTyping();
-    appendMsg('assistant', res.message);
-    setRecoBtn(tripState.stage === 'recommendation_ready');
+    updateChatContextSnippet();
   } catch (err) {
     removeTyping();
     appendError(`Couldn't reach Scout — try again. (${err.message})`);
@@ -1420,19 +1475,29 @@ async function handleSend() {
   }
 
   const stage = tripState.stage;
-  if (stage === 'new') {
-    tripState.stage = 'matching';
-    saveTripState();
-  } else if (stage === 'recommendation_ready') {
+  const confirmedOption = stage === 'recommended' ? findChatConfirmedOption(msg) : null;
+  if (confirmedOption) {
+    appendMsg('user', msg);
+    confirmOptionFromChat(confirmedOption);
+    appendMsg('assistant', `${confirmedOption.name} is locked in. Want a day-by-day plan for this?`);
+    renderInlineCta(reviewAndPlannerCtaHtml('matched'), { multi: true });
+    busy = false; setSendDisabled(false);
+    return;
+  }
+
+  if (stage === 'recommendation_ready') {
     // New info before generating — go back to matching
     tripState.stage = 'matching';
-    tripState.matcher_state.recommendation_intent = false;
     saveTripState();
   } else if (stage === 'recommended') {
     // User typing after seeing recommendations — refining
     tripState.stage = 'matching';
-    tripState.matcher_state.recommendation_intent = false;
     saveTripState();
+  } else if (stage === 'matched' && window._enteringPlanner) {
+    // User chose to plan this destination — move into planner mode.
+    // Purely internal: no screen change, no visible indicator.
+    window._enteringPlanner = false;
+    markPlanningStarted();
   } else if (stage === 'matched') {
     // Refining after destination confirmed — clear selection
     tripState.stage = 'matching';
@@ -1444,14 +1509,12 @@ async function handleSend() {
   showTyping();
   try {
     const res = await callScout(msg);
+    await handleScoutResult(res, msg);
     removeTyping();
-    appendMsg('assistant', res.message);
-    setRecoBtn(tripState.stage === 'recommendation_ready');
-    const parts = tripContextChips(tripState.trip_context || {}).slice(0, 3);
-    if (parts.length) document.getElementById('ctxText').textContent = parts.join(' · ');
+    updateChatContextSnippet();
   } catch (err) {
     removeTyping();
-    appendError(`Something went wrong — try again. (${err.message})`);
+    appendError(`Something went wrong - try again. (${err.message})`);
     console.error('[Scout]', err);
   }
   busy = false; setSendDisabled(false);
@@ -1465,9 +1528,11 @@ async function handleSeeRecos() {
 
   try {
     const meridianOut = await callMeridian();
-    if (isMeridianBusinessStatus(meridianOut.status)) {
-      currentRecos = meridianOut;
+    if (shouldStoreMeridianOutput(meridianOut)) {
+      currentRecos = latestRecommendation() || recommendationPayloadFromMeridian(meridianOut);
       navigate('recos');
+    } else if (meridianOut.message) {
+      appendMsg('assistant', meridianOut.message);
     }
   } catch (err) {
     appendError(`Hit a snag — want to try again? (${err.message})`);
@@ -1500,12 +1565,11 @@ function renderRecos(meridianData) {
     return;
   }
 
-  if (meridianData.status !== 'SUCCESS') {
-    renderFailureRecos(container, meridianData);
-    return;
-  }
-
   if (!meridianData.options?.length) {
+    if (meridianData.status !== 'SUCCESS') {
+      renderFailureRecos(container, meridianData);
+      return;
+    }
     container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">No recommendations to show.</div>`;
     return;
   }
@@ -1617,26 +1681,24 @@ function chooseDestination(name, id, type = 'destination') {
 function refineWithScout() {
   if (!tripState) { navigate('chat'); return; }
   tripState.stage = 'matching';
-  tripState.matcher_state.recommendation_intent = false;
   saveTripState();
 
   navigate('chat');
   const msg = "I want to refine these recommendations.";
-  setTimeout(() => {
+  setTimeout(async () => {
     appendMsg('user', msg);
     showTyping();
-    callScout(msg).then(res => {
+    try {
+      const res = await callScout(msg);
+      await handleScoutResult(res, msg);
       removeTyping();
-      appendMsg('assistant', res.message);
-      setRecoBtn(tripState.stage === 'recommendation_ready');
-    }).catch(err => {
+      updateChatContextSnippet();
+    } catch (err) {
       removeTyping();
-      appendError(`Couldn't reach Scout — try again. (${err.message})`);
-    });
+      appendError(`Couldn't reach Scout - try again. (${err.message})`);
+    }
   }, 300);
 }
-
-// ══════════════════════════════════════════
 // PLANS & PRICING
 // ══════════════════════════════════════════
 function showPaymentModal(planType) {
@@ -1743,21 +1805,22 @@ function renderStateBarEl(elId) {
   if (!el || !tripState) { if (el) el.innerHTML = ''; return; }
   const tc    = tripState.trip_context || {};
   const ms    = tripState.matcher_state || {};
+  const stage = tripState.stage || 'new';
   const chip  = (val, cls='') => val != null && val !== '' ? `<span class="sc ${cls}">${escapeHtml(String(val))}</span>` : `<span class="sc empty">—</span>`;
-  const bool  = v => `<span class="sc ${v ? 'tv' : 'fv'}">${v}</span>`;
   const contextChips = tripContextChips(tc);
   const contextHtml = contextChips.length === 0 ? chip(null) : contextChips.slice(0, 8).map(v => `<span class="sc">${escapeHtml(v)}</span>`).join('');
+  const showAwaiting = ['matching', 'recommendation_ready', 'planning'].includes(stage) && ms.conversation_context?.awaiting;
+  const showSelected = ['matched', 'planning', 'planned'].includes(stage);
+  const extraGroups = [
+    showAwaiting ? `<div class="state-bar-group"><div class="state-bar-label">awaiting</div><div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div></div>` : '',
+    showSelected ? `<div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tc.selected_option?.name || tc.selected_option?.id)}</div></div>` : '',
+  ].filter(Boolean).join('');
   el.innerHTML = `
-    <div class="state-bar-group"><div class="state-bar-label">Stage</div><div class="state-bar-section">${chip(tripState.stage,'stg')}</div></div>
+    <div class="state-bar-group"><div class="state-bar-label">Stage</div><div class="state-bar-section">${chip(stage,'stg')}</div></div>
     <div class="state-div"></div>
     <div class="state-bar-group"><div class="state-bar-label">Trip context</div><div class="state-bar-section">${contextHtml}</div></div>
-    <div class="state-div"></div>
-    <div class="state-bar-group"><div class="state-bar-label">reco_intent</div><div class="state-bar-section">${bool(ms.recommendation_intent)}</div></div>
-    <div class="state-bar-group"><div class="state-bar-label">awaiting</div><div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div></div>
-    <div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tc.selected_option?.name || tc.selected_option?.id)}</div></div>`;
+    ${extraGroups ? `<div class="state-div"></div>${extraGroups}` : ''}`;
 }
-
-// ══════════════════════════════════════════
 // MY TRIPS — RENDER
 // ══════════════════════════════════════════
 function setFilter(f) { tripFilter = f; renderTripsList(); }
@@ -1843,11 +1906,13 @@ function tripBadge(trip, fullState) {
   if (trip.paid_plan === 'planning')  return { cls: 'b-done', text: 'Itinerary ready' };
   if (trip.paid_plan === 'concierge') return { cls: 'b-done', text: 'Concierge requested' };
   const stage = fullState?.stage;
+  if (stage === 'planned')               return { cls: 'b-done',    text: 'Plan ready' };
   if (stage === 'planning')              return { cls: 'b-matched', text: 'Planning in progress' };
   if (stage === 'matched')               return { cls: 'b-matched', text: 'Destination chosen' };
   if (stage === 'recommended')           return { cls: 'b-reco',    text: 'Recommendations ready' };
   if (stage === 'recommendation_ready')  return { cls: 'b-chat',    text: 'Ready to generate' };
   if (stage === 'matching')              return { cls: 'b-chat',    text: 'In conversation' };
+  if (stage === 'new' && hasTripContext(fullState)) return { cls: 'b-chat', text: 'Advice saved' };
   return { cls: 'b-new', text: 'New' };
 }
 
@@ -1856,12 +1921,13 @@ function tripCtaConfig(trip, fullState) {
   if (trip.paid_plan === 'concierge') return { label: 'View trip status', style: 'cta-green',  action: `navigate('concierge')` };
   const stage = fullState?.stage;
   // matched and planning are dual-CTA — rendered inline in tripCardHTML
+  if (stage === 'planned')              return { label: 'See plan', style: 'cta-green', action: `navigate('itin')` };
   if (stage === 'recommended')          return { label: 'Review recommendations',    style: 'cta-blue',   action: `openTripRecos('${trip.id}')` };
   if (stage === 'recommendation_ready') return { label: 'Generate recommendations',  style: 'cta-accent', action: `openTrip('${trip.id}')` };
   if (stage === 'matching')             return { label: 'Resume matching with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  if (stage === 'new' && hasTripContext(fullState)) return { label: 'Resume chat', style: 'cta-accent', action: `openTrip('${trip.id}')` };
   return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
 }
-
 function tripCardHTML(trip) {
   const fullState = (() => { try { return loadTripState(trip.id); } catch { return null; } })();
   const badge  = tripBadge(trip, fullState);
@@ -1871,21 +1937,24 @@ function tripCardHTML(trip) {
   const sel    = fullState?.trip_context?.selected_option?.name || fullState?.trip_context?.selected_option?.id || null;
   const isMatched  = !trip.paid_plan && fullState?.stage === 'matched';
   const isPlanning = !trip.paid_plan && fullState?.stage === 'planning';
+  const isPlanned = !trip.paid_plan && fullState?.stage === 'planned';
+  const showReviewRecos = !isPlanning || hasRecommendations(fullState);
+  const reviewRecosButton = showReviewRecos
+    ? `<button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
+        Review recommendations
+      </button>`
+    : '';
 
   const ctaHtml = isMatched
     ? `<div style="display:flex;gap:6px;">
-        <button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
-          Review recommendations
-        </button>
+        ${reviewRecosButton}
         <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
           Want to plan?
         </button>
       </div>`
     : isPlanning
     ? `<div style="display:flex;gap:6px;">
-        <button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
-          Review recommendations
-        </button>
+        ${reviewRecosButton}
         <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
           Resume planning with Scout
         </button>
