@@ -761,6 +761,7 @@ const API = {
   meridian: 'https://travelwithme-zf9f.onrender.com/meridian',
 };
 const WELCOME = "Hey there, I'm Scout. Tell me about the trip you have in mind, and I'll help you discover a destination that's the right fit for you and also tell you why it is the right fit for you.";
+const PLANNER_COMING_SOON_MESSAGE = "Trip planning is coming soon. For now, I can keep helping with the where-to-go decision and preserve this context so planning can pick up from here later.";
 const TRIPS_KEY    = 'twm_trips_v1';
 const STATE_KEY    = 'twm_state_v1';
 const UI_STATE_KEY = 'twm_ui_state_v1';
@@ -807,7 +808,7 @@ function deleteTrip(id) {
 
 function syncTripFromState(id, state) {
   const inputs = tripContextChips(state.trip_context || {}).slice(0, 4);
-  const knownStages = ['new', 'matching', 'recommendation_ready', 'recommended', 'matched', 'planning'];
+  const knownStages = ['new', 'matching', 'recommendation_ready', 'recommended', 'matched', 'planning', 'planned'];
   const status = knownStages.includes(state.stage) ? state.stage : 'matching';
   updateTrip(id, { status, inputs });
 }
@@ -928,7 +929,7 @@ function applyStateDelta(delta) {
 // so My Trips / chat resume can show a direct "Generate Recommendations" CTA.
 function syncStageFromIntent() {
   if (!tripState) return;
-  const advancedStages = ['recommended', 'matched', 'planning'];
+  const advancedStages = ['recommended', 'matched', 'planning', 'planned'];
   if (tripState.matcher_state?.recommendation_intent === true && !advancedStages.includes(tripState.stage)) {
     tripState.stage = 'recommendation_ready';
   }
@@ -982,16 +983,30 @@ async function callScout(message) {
   if (!res.ok) throw new Error(`Scout ${res.status}`);
   const data = await res.json();
   applyStateDelta(data.state_delta);
-  // Backend now tells us which internal mode handled this turn via `intent`.
-  // This is the source of truth for the matcher->planner switch — purely
-  // internal state, never surfaced in the UI.
-  if (data.intent === 'planner') markPlanningStarted();
+  applyStageFromScoutIntent(data.intent);
   window._enteringPlanner = false;
   saveTripState();
   logScoutTurn(message, before, data, JSON.parse(JSON.stringify(tripState)));
   return data;
 }
 
+function applyStageFromScoutIntent(intent) {
+  if (!tripState) return;
+  if (intent === 'matcher' && tripState.stage === 'new') {
+    tripState.stage = 'matching';
+  }
+  if (intent === 'planner') {
+    markPlanningStarted();
+  }
+}
+
+function responseMessageForIntent(res) {
+  if (!res) return '';
+  if (res.intent === 'planner') return PLANNER_COMING_SOON_MESSAGE;
+  if (res.intent === 'advise') return res.message || '';
+  if (res.intent === null || res.intent === undefined) return res.message || '';
+  return '';
+}
 async function callMeridian() {
   const input = { trip_context: tripState.trip_context };
   const res = await fetch(API.meridian, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
@@ -1128,6 +1143,7 @@ function stageLabel(stage) {
     recommended:           'Recommendations ready',
     matched:                'Destination chosen',
     planning:               'Planning in progress',
+    planned:                'Plan ready',
   };
   return map[stage] || stage;
 }
@@ -1143,6 +1159,45 @@ function latestRecoSummary() {
   return `${opts.length} option${opts.length > 1 ? 's' : ''} generated${top?.name ? ` · top pick: ${top.name}` : ''}`;
 }
 
+function hasTripContext(state = tripState) {
+  return tripContextChips(state?.trip_context || {}).length > 0;
+}
+
+function stageAllowsRecoIntent(stage) {
+  return ['matching', 'recommendation_ready'].includes(stage);
+}
+
+function stageAllowsAwaiting(stage) {
+  return ['matching', 'recommendation_ready', 'planning'].includes(stage);
+}
+
+function stageAllowsSelected(stage) {
+  return ['matched', 'planning', 'planned'].includes(stage);
+}
+
+function findChatConfirmedOption(message) {
+  const reco = latestRecommendation();
+  const options = reco?.options || [];
+  if (!message || !options.length) return null;
+  const normalized = message.toLowerCase();
+  const confirms = ['choose', 'chose', 'select', 'selected', 'pick', 'picked', 'confirm', 'lock', 'final', 'go with'];
+  if (!confirms.some(word => normalized.includes(word))) return null;
+  return options.find(opt => {
+    const name = String(opt.name || '').toLowerCase();
+    const id = String(opt.destination_id || opt.circuit_id || '').toLowerCase();
+    return (name && normalized.includes(name)) || (id && normalized.includes(id));
+  }) || null;
+}
+
+function confirmOptionFromChat(option) {
+  if (!tripState || !option) return;
+  const type = option.type || (option.circuit_id ? 'circuit' : 'destination');
+  const id = option.destination_id || option.circuit_id || option.name;
+  tripState.trip_context.selected_option = { type, id, name: option.name };
+  tripState.stage = 'matched';
+  tripState.matcher_state.recommendation_intent = false;
+  saveTripState();
+}
 // ── Reusable trip context card ──────────────────────────────────────────
 // Always tripState-driven: renders whatever non-empty state currently exists
 // (stage, required inputs, preferences, recommendation intent, awaiting,
@@ -1156,6 +1211,7 @@ function renderTripContextCard({ showContinue = false } = {}) {
   const tc    = tripState.trip_context || {};
   const ms    = tripState.matcher_state || {};
   const sel   = tc.selected_option;
+  const stage = tripState.stage || 'new';
 
   const row = (key, val) => `<div class="resume-row">
       <span class="resume-row-key">${escapeHtml(key)}</span>
@@ -1171,21 +1227,21 @@ function renderTripContextCard({ showContinue = false } = {}) {
   });
 
   // Recommendation intent.
-  const intentRows = ms.recommendation_intent === true ? [row('Recommendation intent', 'Ready to generate')] : [];
+  const intentRows = stageAllowsRecoIntent(stage) && ms.recommendation_intent === true ? [row('Recommendation intent', 'Ready to generate')] : [];
 
   // Awaiting (what Scout was last waiting on).
   const awaiting = ms.conversation_context?.awaiting;
-  const awaitingRows = awaiting ? [row('Awaiting', String(awaiting).replace(/_/g, ' '))] : [];
+  const awaitingRows = stageAllowsAwaiting(stage) && awaiting ? [row('Awaiting', String(awaiting).replace(/_/g, ' '))] : [];
 
   // Selected option.
-  const selRows = sel ? [row('Selected', sel.name || sel.id || '')] : [];
+  const selRows = stageAllowsSelected(stage) && sel ? [row('Selected', sel.name || sel.id || '')] : [];
 
   // Latest recommendations summary.
   const recoSummary = latestRecoSummary();
   const recoRows = recoSummary ? [row('Latest recommendations', recoSummary)] : [];
 
   const sections = [
-    { label: null,           rows: [row('Stage', stageLabel(tripState.stage))] },
+    { label: null,           rows: [row('Stage', stageLabel(stage))] },
     contextRows.length  ? { label: 'Trip context', rows: contextRows }  : null,
     intentRows.length   ? { label: null,           rows: intentRows }   : null,
     awaitingRows.length  ? { label: null,          rows: awaitingRows } : null,
@@ -1268,17 +1324,23 @@ function reviewAndPlannerCtaHtml(stage) {
 }
 
 function resumeChat() {
-  const stage = tripState?.stage;
-  if (!stage || stage === 'new') { appendMsg('assistant', WELCOME); return; }
+  const stage = tripState?.stage || 'new';
+  const hasContext = hasTripContext();
+  if (stage === 'new') {
+    if (hasContext) {
+      renderTripContextCard();
+      appendMsg('assistant', `Welcome back — I saved the context from your last chat. You can keep asking Scout here, or ask for destination options whenever you're ready.`);
+    } else {
+      appendMsg('assistant', WELCOME);
+    }
+    return;
+  }
 
   // The context card is always rendered from tripState — resumeChat only
   // decides which CTA(s) accompany it for the current stage.
   renderTripContextCard({ showContinue: stage === 'matching' });
 
-  if (stage === 'matching') {
-    // Continue button lives inside the context card itself; nothing else to add.
-    return;
-  }
+  if (stage === 'matching') return;
 
   if (stage === 'recommendation_ready') {
     appendMsg('assistant', `Welcome back — Scout has everything needed to find your matches. Tap below to generate recommendations.`);
@@ -1301,8 +1363,11 @@ function resumeChat() {
     renderInlineCta(reviewAndPlannerCtaHtml(stage), { multi: true });
     return;
   }
-}
 
+  if (stage === 'planned') {
+    appendMsg('assistant', `Welcome back — your plan is ready.`);
+  }
+}
 async function handleContinue() {
   if (busy) return;
   busy = true; setSendDisabled(true);
@@ -1311,7 +1376,8 @@ async function handleContinue() {
   try {
     const res = await callScout(null);
     removeTyping();
-    if (res.message) appendMsg('assistant', res.message);
+    const reply = responseMessageForIntent(res);
+    if (reply) appendMsg('assistant', reply);
     setRecoBtn(tripState.stage === 'recommendation_ready');
   } catch (err) {
     removeTyping();
@@ -1384,10 +1450,17 @@ async function handleSend() {
   }
 
   const stage = tripState.stage;
-  if (stage === 'new') {
-    tripState.stage = 'matching';
-    saveTripState();
-  } else if (stage === 'recommendation_ready') {
+  const confirmedOption = stage === 'recommended' ? findChatConfirmedOption(msg) : null;
+  if (confirmedOption) {
+    appendMsg('user', msg);
+    confirmOptionFromChat(confirmedOption);
+    appendMsg('assistant', `${confirmedOption.name} is locked in. Want a day-by-day plan for this?`);
+    renderInlineCta(reviewAndPlannerCtaHtml('matched'), { multi: true });
+    busy = false; setSendDisabled(false);
+    return;
+  }
+
+  if (stage === 'recommendation_ready') {
     // New info before generating — go back to matching
     tripState.stage = 'matching';
     tripState.matcher_state.recommendation_intent = false;
@@ -1414,7 +1487,8 @@ async function handleSend() {
   try {
     const res = await callScout(msg);
     removeTyping();
-    if (res.message) appendMsg('assistant', res.message);
+    const reply = responseMessageForIntent(res);
+    if (reply) appendMsg('assistant', reply);
     setRecoBtn(tripState.stage === 'recommendation_ready');
     const parts = tripContextChips(tripState.trip_context || {}).slice(0, 3);
     document.getElementById('ctxText').textContent = parts.length ? parts.join(' · ') : 'Scout is here to help with your trip.';
@@ -1596,7 +1670,8 @@ function refineWithScout() {
     showTyping();
     callScout(msg).then(res => {
       removeTyping();
-      if (res.message) appendMsg('assistant', res.message);
+      const reply = responseMessageForIntent(res);
+      if (reply) appendMsg('assistant', reply);
       setRecoBtn(tripState.stage === 'recommendation_ready');
     }).catch(err => {
       removeTyping();
@@ -1712,21 +1787,25 @@ function renderStateBarEl(elId) {
   if (!el || !tripState) { if (el) el.innerHTML = ''; return; }
   const tc    = tripState.trip_context || {};
   const ms    = tripState.matcher_state || {};
+  const stage = tripState.stage || 'new';
   const chip  = (val, cls='') => val != null && val !== '' ? `<span class="sc ${cls}">${escapeHtml(String(val))}</span>` : `<span class="sc empty">—</span>`;
   const bool  = v => `<span class="sc ${v ? 'tv' : 'fv'}">${v}</span>`;
   const contextChips = tripContextChips(tc);
   const contextHtml = contextChips.length === 0 ? chip(null) : contextChips.slice(0, 8).map(v => `<span class="sc">${escapeHtml(v)}</span>`).join('');
+  const showRecoIntent = ['matching', 'recommendation_ready'].includes(stage);
+  const showAwaiting = ['matching', 'recommendation_ready', 'planning'].includes(stage) && ms.conversation_context?.awaiting;
+  const showSelected = ['matched', 'planning', 'planned'].includes(stage);
+  const extraGroups = [
+    showRecoIntent ? `<div class="state-bar-group"><div class="state-bar-label">reco_intent</div><div class="state-bar-section">${bool(ms.recommendation_intent)}</div></div>` : '',
+    showAwaiting ? `<div class="state-bar-group"><div class="state-bar-label">awaiting</div><div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div></div>` : '',
+    showSelected ? `<div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tc.selected_option?.name || tc.selected_option?.id)}</div></div>` : '',
+  ].filter(Boolean).join('');
   el.innerHTML = `
-    <div class="state-bar-group"><div class="state-bar-label">Stage</div><div class="state-bar-section">${chip(tripState.stage,'stg')}</div></div>
+    <div class="state-bar-group"><div class="state-bar-label">Stage</div><div class="state-bar-section">${chip(stage,'stg')}</div></div>
     <div class="state-div"></div>
     <div class="state-bar-group"><div class="state-bar-label">Trip context</div><div class="state-bar-section">${contextHtml}</div></div>
-    <div class="state-div"></div>
-    <div class="state-bar-group"><div class="state-bar-label">reco_intent</div><div class="state-bar-section">${bool(ms.recommendation_intent)}</div></div>
-    <div class="state-bar-group"><div class="state-bar-label">awaiting</div><div class="state-bar-section">${chip(ms.conversation_context?.awaiting)}</div></div>
-    <div class="state-bar-group"><div class="state-bar-label">selected</div><div class="state-bar-section">${chip(tc.selected_option?.name || tc.selected_option?.id)}</div></div>`;
+    ${extraGroups ? `<div class="state-div"></div>${extraGroups}` : ''}`;
 }
-
-// ══════════════════════════════════════════
 // MY TRIPS — RENDER
 // ══════════════════════════════════════════
 function setFilter(f) { tripFilter = f; renderTripsList(); }
@@ -1812,11 +1891,13 @@ function tripBadge(trip, fullState) {
   if (trip.paid_plan === 'planning')  return { cls: 'b-done', text: 'Itinerary ready' };
   if (trip.paid_plan === 'concierge') return { cls: 'b-done', text: 'Concierge requested' };
   const stage = fullState?.stage;
+  if (stage === 'planned')               return { cls: 'b-done',    text: 'Plan ready' };
   if (stage === 'planning')              return { cls: 'b-matched', text: 'Planning in progress' };
   if (stage === 'matched')               return { cls: 'b-matched', text: 'Destination chosen' };
   if (stage === 'recommended')           return { cls: 'b-reco',    text: 'Recommendations ready' };
   if (stage === 'recommendation_ready')  return { cls: 'b-chat',    text: 'Ready to generate' };
   if (stage === 'matching')              return { cls: 'b-chat',    text: 'In conversation' };
+  if (stage === 'new' && hasTripContext(fullState)) return { cls: 'b-chat', text: 'Advice saved' };
   return { cls: 'b-new', text: 'New' };
 }
 
@@ -1825,12 +1906,13 @@ function tripCtaConfig(trip, fullState) {
   if (trip.paid_plan === 'concierge') return { label: 'View trip status', style: 'cta-green',  action: `navigate('concierge')` };
   const stage = fullState?.stage;
   // matched and planning are dual-CTA — rendered inline in tripCardHTML
+  if (stage === 'planned')              return { label: 'See plan', style: 'cta-green', action: `navigate('itin')` };
   if (stage === 'recommended')          return { label: 'Review recommendations',    style: 'cta-blue',   action: `openTripRecos('${trip.id}')` };
   if (stage === 'recommendation_ready') return { label: 'Generate recommendations',  style: 'cta-accent', action: `openTrip('${trip.id}')` };
   if (stage === 'matching')             return { label: 'Resume matching with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  if (stage === 'new' && hasTripContext(fullState)) return { label: 'Resume chat', style: 'cta-accent', action: `openTrip('${trip.id}')` };
   return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
 }
-
 function tripCardHTML(trip) {
   const fullState = (() => { try { return loadTripState(trip.id); } catch { return null; } })();
   const badge  = tripBadge(trip, fullState);
@@ -1840,6 +1922,7 @@ function tripCardHTML(trip) {
   const sel    = fullState?.trip_context?.selected_option?.name || fullState?.trip_context?.selected_option?.id || null;
   const isMatched  = !trip.paid_plan && fullState?.stage === 'matched';
   const isPlanning = !trip.paid_plan && fullState?.stage === 'planning';
+  const isPlanned = !trip.paid_plan && fullState?.stage === 'planned';
 
   const ctaHtml = isMatched
     ? `<div style="display:flex;gap:6px;">
