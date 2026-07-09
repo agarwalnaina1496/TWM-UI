@@ -1661,20 +1661,28 @@ function renderRecos(meridianData) {
   meridianData.options.forEach((opt) => {
     const card = document.createElement('div');
     card.className = `match-card${opt.rank === 1 ? ' rank-1' : ''}`;
-    const budgetSec  = (opt.match_sections || []).find(s => s.type === 'budget');
+    const sections = opt.sections || opt.match_sections || [];
+    const budgetSec  = sections.find(s => s.type === 'budget');
     const summaryTag = budgetSec?.per_person_total ? `<span class="acc-summary">₹${budgetSec.per_person_total.toLocaleString('en-IN')}/pp</span>` : '';
 
+    const whyRanked = opt.why_ranked_here || (opt.why_this_works_for_you || []).map(item => {
+      const criterion = item.criterion ? `${item.criterion}: ` : '';
+      return `${criterion}${item.reason || item}`;
+    });
+    const summaryMatches = opt.decision_summary?.matches || [];
+    const summaryTradeoffs = opt.decision_summary?.tradeoffs || (opt.tradeoffs || []).map(t => t.point || t);
+
     let bodyHtml = `<div class="match-sections">`;
-    if (opt.why_this_works_for_you?.length) {
-      bodyHtml += `<div class="match-section"><div class="match-heading">Why this works for you</div><ul class="match-points">${opt.why_this_works_for_you.map(item => {
-        const criterion = item.criterion ? `<strong>${escapeHtml(item.criterion)}:</strong> ` : '';
-        return `<li>${criterion}${escapeHtml(item.reason || item)}</li>`;
-      }).join('')}</ul></div>`;
-    }
     if (opt.best_for) {
       bodyHtml += `<div class="match-section"><div class="match-heading">Best for</div><ul class="match-points"><li>${escapeHtml(opt.best_for)}</li></ul></div>`;
     }
-    (opt.match_sections || []).forEach(sec => {
+    if (whyRanked.length) {
+      bodyHtml += `<div class="match-section"><div class="match-heading">Why ranked here</div><ul class="match-points">${whyRanked.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
+    }
+    if (summaryMatches.length) {
+      bodyHtml += `<div class="match-section"><div class="match-heading">Matches</div><ul class="match-points">${summaryMatches.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
+    }
+    sections.forEach(sec => {
       bodyHtml += `<div class="match-section"><div class="match-heading">${escapeHtml(sec.heading)}</div>`;
       if (sec.type === 'budget') {
         bodyHtml += `<table class="budget-table">`;
@@ -1695,8 +1703,8 @@ function renderRecos(meridianData) {
     });
     bodyHtml += `</div>`;
 
-    if (opt.tradeoffs?.length) {
-      bodyHtml += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>${opt.tradeoffs.map(t=>`<div class="tradeoff-item">${escapeHtml(t.point)}</div>`).join('')}</div>`;
+    if (summaryTradeoffs.length) {
+      bodyHtml += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>${summaryTradeoffs.map(t=>`<div class="tradeoff-item">${escapeHtml(t)}</div>`).join('')}</div>`;
     }
 
     const destName     = opt.name || '';
