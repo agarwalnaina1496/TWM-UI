@@ -1371,12 +1371,19 @@ function renderInlineCta(html, { multi = false } = {}) {
   scrollChat();
 }
 
+function latestAdvisorMessage(state = tripState) {
+  const adviceArtifact = latestAdvisorArtifact(state);
+  return adviceArtifact?.assistant_message
+    || state?.advisor_state?.conversation_context?.last_advisor_message
+    || null;
+}
+
 function replayLatestAdvisorAdvice() {
-  const adviceArtifact = latestAdvisorArtifact();
-  if (!adviceArtifact?.assistant_message) return false;
+  const adviceMessage = latestAdvisorMessage();
+  if (!adviceMessage) return false;
   appendMsg('assistant', `Last time, I'd said:
 
-${adviceArtifact.assistant_message}`);
+${adviceMessage}`);
   return true;
 }
 
@@ -1418,15 +1425,29 @@ function resumeChat() {
     return;
   }
 
-  renderTripContextCard();
+  // The context card is always rendered from tripState; resumeChat only
+  // decides which memory and CTA(s) accompany it for the current stage.
+  renderTripContextCard({ showContinue: stage === 'matching' });
+  const replayedAdvice = replayLatestAdvisorAdvice();
 
   if (stage === 'planning') {
     appendMsg('assistant', PLANNER_COMING_SOON_MESSAGE);
     return;
   }
 
-  if (replayLatestAdvisorAdvice()) return;
-  if (replayMatcherContext()) return;
+  if (!replayedAdvice && replayMatcherContext()) return;
+
+  if (stage === 'new') {
+    if (!replayedAdvice) appendMsg('assistant', `What would you like to explore next?`);
+    return;
+  }
+
+  if (stage === 'matching') return;
+
+  if (stage === 'recommendation_ready') {
+    appendMsg('assistant', `Welcome back - Scout has enough context to continue. Tell me what you want to refine, or ask for destination options here.`);
+    return;
+  }
 
   if (stage === 'recommended') {
     appendMsg('assistant', `Welcome back - Scout already found matches for this trip. You can keep refining or ask what to do next here.`);
