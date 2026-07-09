@@ -458,7 +458,7 @@
       <p>From wondering where to go to stepping off the plane — TWM handles every detail so you don't have to.</p>
     </div>
     <div class="home-modules" style="grid-template-columns: 1fr; max-width: 420px;">
-      <div class="home-mod" onclick="startMatch()">
+      <div class="home-mod" onclick="startChat()">
         <div class="mod-icon mod-icon-discover">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
         </div>
@@ -929,13 +929,17 @@ function formatContextValue(value) {
 
 function tripContextChips(context) {
   if (!context || typeof context !== 'object') return [];
-  const hidden = ['selected_option'];
-  const priority = ['origin', 'travel_month', 'travel_dates', 'duration', 'budget', 'trip_purpose'];
-  const keys = [...priority.filter(k => k in context && !hidden.includes(k)), ...Object.keys(context).filter(k => !priority.includes(k) && !hidden.includes(k))];
-  return keys.map(k => {
-    const formatted = formatContextValue(context[k]);
+  const source = context;
+  const hidden = ['selected_option', 'advisor', 'matcher', 'planner'];
+  const priority = ['origin', 'travel_month', 'travel_dates', 'duration', 'budget', 'trip_purpose', 'country', 'destination_scope'];
+  const keys = [...priority.filter(k => k in source && !hidden.includes(k)), ...Object.keys(source).filter(k => !priority.includes(k) && !hidden.includes(k))];
+  const chips = keys.map(k => {
+    const formatted = formatContextValue(source[k]);
     return formatted ? `${k.replace(/_/g, ' ')}: ${formatted}` : '';
   }).filter(Boolean);
+  const selected = context.selected_option?.name || context.selected_option?.id;
+  if (selected) chips.unshift(`selected: ${selected}`);
+  return chips;
 }
 
 function jsArg(value) {
@@ -1023,9 +1027,24 @@ function normalizeScoutResponse(data) {
   data.state_delta = delta;
   return data;
 }
+function scoutRequestFromState(state = tripState, message = null) {
+  return {
+    trip_state: {
+      stage: state?.stage || 'new',
+      trip_context: state?.trip_context || {},
+      advisor_state: state?.advisor_state || {
+        conversation_context: { last_advisor_message: null },
+        artifacts: []
+      }
+    },
+    message
+  };
+}
+
 async function callScout(message) {
   const before = JSON.parse(JSON.stringify(tripState));
-  const res = await fetch(API.scout, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trip_state: tripState, message }) });
+  const input = scoutRequestFromState(tripState, message);
+  const res = await fetch(API.scout, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
   if (!res.ok) throw new Error(`Scout ${res.status}`);
   const data = normalizeScoutResponse(await res.json());
   applyStateDelta(data.state_delta);
@@ -1063,8 +1082,31 @@ function shouldStoreMeridianOutput(data) {
   return data?.status && data.status !== 'NEEDS_CLARIFICATION';
 }
 
-async function callMeridian(message = null) {
-  const input = { trip_state: tripState, message };
+function meridianTripContextFromState(state = tripState) {
+  const tc = state?.trip_context || {};
+  const result = {};
+  Object.entries(tc).forEach(([key, value]) => {
+    if (['advisor', 'planner'].includes(key)) return;
+    result[key] = value;
+  });
+  return result;
+}
+
+function meridianRequestFromState(state = tripState) {
+  return {
+    trip_state: {
+      trip_context: meridianTripContextFromState(state),
+      matcher_state: state?.matcher_state || {
+        conversation_context: { last_meridian_message: null, awaiting: null },
+        recommendations: [],
+        rejected_options: []
+      }
+    }
+  };
+}
+
+async function callMeridian() {
+  const input = meridianRequestFromState();
   const res = await fetch(API.meridian, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
   if (!res.ok) throw new Error(`Meridian ${res.status}`);
   const data = await res.json();
@@ -1089,7 +1131,7 @@ async function callMeridian(message = null) {
 
 async function handleScoutResult(res, message = null) {
   if (res?.intent === 'matcher') {
-    const meridianOut = await callMeridian(message);
+    const meridianOut = await callMeridian();
     if (meridianOut.message) appendMsg('assistant', meridianOut.message);
     return meridianOut;
   }
@@ -1119,7 +1161,7 @@ function navigate(screen) {
   }
 }
 
-function startMatch() {
+function startChat() {
   currentTripId = null;
   tripState = null;
   window._enteringPlanner = false;
@@ -1623,6 +1665,15 @@ function renderRecos(meridianData) {
     const summaryTag = budgetSec?.per_person_total ? `<span class="acc-summary">₹${budgetSec.per_person_total.toLocaleString('en-IN')}/pp</span>` : '';
 
     let bodyHtml = `<div class="match-sections">`;
+    if (opt.why_this_works_for_you?.length) {
+      bodyHtml += `<div class="match-section"><div class="match-heading">Why this works for you</div><ul class="match-points">${opt.why_this_works_for_you.map(item => {
+        const criterion = item.criterion ? `<strong>${escapeHtml(item.criterion)}:</strong> ` : '';
+        return `<li>${criterion}${escapeHtml(item.reason || item)}</li>`;
+      }).join('')}</ul></div>`;
+    }
+    if (opt.best_for) {
+      bodyHtml += `<div class="match-section"><div class="match-heading">Best for</div><ul class="match-points"><li>${escapeHtml(opt.best_for)}</li></ul></div>`;
+    }
     (opt.match_sections || []).forEach(sec => {
       bodyHtml += `<div class="match-section"><div class="match-heading">${escapeHtml(sec.heading)}</div>`;
       if (sec.type === 'budget') {
@@ -1869,7 +1920,7 @@ function renderStateBarEl(elId) {
 // ══════════════════════════════════════════
 function setFilter(f) { tripFilter = f; renderTripsList(); }
 
-const NEW_TRIP_BTN = `<button class="tb-btn" onclick="navigate('home')" style="display:inline-flex;align-items:center;gap:6px;">
+const NEW_TRIP_BTN = `<button class="tb-btn" onclick="startChat()" style="display:inline-flex;align-items:center;gap:6px;">
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
   New Trip
 </button>`;
