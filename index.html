@@ -25,7 +25,7 @@
   /* ── Screens ── */
   .screen { display: none; flex-direction: column; height: 100vh; overflow: hidden; }
   .screen.active { display: flex; }
-  .scroll { flex: 1; overflow-y: auto; }
+  .scroll { flex: 1; overflow-y: auto; scrollbar-gutter: stable; }
   .scroll::-webkit-scrollbar { width: 3px; }
   .scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
@@ -149,7 +149,7 @@
   .ctx-bar { padding: 7px 28px; background: var(--accent-light); border-bottom: 1px solid #e8d0bc; display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
   .ctx-bar svg { width: 13px; height: 13px; color: var(--accent); flex-shrink: 0; }
   .ctx-bar span { font-size: 12px; color: var(--accent); font-weight: 500; }
-  .chat-wrap { flex: 1; overflow-y: auto; padding: 20px 0; }
+  .chat-wrap { flex: 1; overflow-y: auto; padding: 20px 0; scrollbar-gutter: stable; }
   .chat-wrap::-webkit-scrollbar { width: 3px; }
   .chat-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   .chat-inner { display: flex; flex-direction: column; gap: 14px; max-width: 860px; width: 100%; margin: 0 auto; padding: 0 28px; }
