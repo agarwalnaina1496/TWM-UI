@@ -835,8 +835,12 @@ function defaultState(tripId) {
     status: 'free',
     stage: 'new',
     trip_context: {},
+    advisor_state: {
+      conversation_context: { last_advisor_message: null },
+      artifacts: []
+    },
     matcher_state: {
-      conversation_context: { last_scout_message: null, last_meridian_message: null, awaiting: null },
+      conversation_context: { last_meridian_message: null, awaiting: null },
       recommendations: [],
       rejected_options: []
     },
@@ -875,6 +879,15 @@ function latestRecommendation() {
 function hasRecommendations(state = tripState) {
   const recs = state?.matcher_state?.recommendations;
   return Array.isArray(recs) && recs.length > 0;
+}
+
+function latestAdvisorArtifact(state = tripState) {
+  const artifacts = state?.advisor_state?.artifacts;
+  if (!Array.isArray(artifacts) || !artifacts.length) return null;
+  for (let i = artifacts.length - 1; i >= 0; i--) {
+    if (artifacts[i]?.assistant_message) return artifacts[i];
+  }
+  return null;
 }
 
 function isMeridianBusinessStatus(status) {
@@ -934,12 +947,16 @@ function applyStateDelta(delta) {
   // UI owns stage transitions — Scout's delta.stage is intentionally ignored.
   // Stages are set explicitly by UI actions (handleSend, callMeridian, chooseDestination, etc.)
   if (delta.trip_context) deepMerge(tripState.trip_context, delta.trip_context);
-  if (delta.matcher_state) deepMergeMatcherState(tripState.matcher_state, delta.matcher_state);
+  if (delta.advisor_state) {
+    if (!tripState.advisor_state) tripState.advisor_state = { conversation_context: { last_advisor_message: null }, artifacts: [] };
+    deepMergeStateBranch(tripState.advisor_state, delta.advisor_state);
+  }
+  if (delta.matcher_state) deepMergeStateBranch(tripState.matcher_state, delta.matcher_state);
 }
 
 // Append/dedupe known array fields instead of letting deepMerge clobber them.
-const ARRAY_MERGE_KEYS = ['rejected_options'];
-function deepMergeMatcherState(target, source) {
+const ARRAY_MERGE_KEYS = ['rejected_options', 'artifacts'];
+function deepMergeStateBranch(target, source) {
   if (!source || typeof source !== 'object') return;
   for (const key of Object.keys(source)) {
     const val = source[key];
@@ -1259,7 +1276,7 @@ function renderTripContextCard({ showContinue = false } = {}) {
       : row(chipText.slice(0, idx), chipText.slice(idx + 2));
   });
 
-  // Awaiting (what Scout was last waiting on).
+  // Awaiting (what Meridian was last waiting on).
   const awaiting = ms.conversation_context?.awaiting;
   const awaitingRows = stageAllowsAwaiting(stage) && awaiting ? [row('Awaiting', String(awaiting).replace(/_/g, ' '))] : [];
 
@@ -1327,6 +1344,15 @@ function renderInlineCta(html, { multi = false } = {}) {
   scrollChat();
 }
 
+function replayLatestAdvisorAdvice() {
+  const adviceArtifact = latestAdvisorArtifact();
+  if (!adviceArtifact?.assistant_message) return false;
+  appendMsg('assistant', `Last time, I'd said:
+
+${adviceArtifact.assistant_message}`);
+  return true;
+}
+
 // CTA for stage === 'matched' / 'planning': review recos when present, and move into planning with Scout.
 function reviewAndPlannerCtaHtml(stage) {
   const plannerLabel = stage === 'planning' ? 'Continue planning with Scout' : 'Want to plan?';
@@ -1360,6 +1386,7 @@ function resumeChat() {
   // The context card is always rendered from tripState — resumeChat only
   // decides which CTA(s) accompany it for the current stage.
   renderTripContextCard({ showContinue: stage === 'matching' });
+  replayLatestAdvisorAdvice();
 
   if (stage === 'matching') return;
 
@@ -1373,16 +1400,17 @@ function resumeChat() {
     return;
   }
 
-  if (stage === 'matched' || stage === 'planning') {
+  if (stage === 'planning') {
+    appendMsg('assistant', PLANNER_COMING_SOON_MESSAGE);
+    return;
+  }
+
+  if (stage === 'matched') {
     const sel = tripState.trip_context.selected_option;
-    const hasRecos = stage !== 'planning' || hasRecommendations();
-    const msg = stage === 'planning'
-      ? (hasRecos
-        ? `Welcome back — you're planning ${sel?.name || sel?.id || 'this trip'} with Scout. Pick up where you left off, or revisit recommendations.`
-        : `Welcome back — you're planning ${sel?.name || sel?.id || 'this trip'} with Scout. Pick up where you left off.`)
-      : (hasRecos
-        ? `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`
-        : `Welcome back — you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. You can plan next steps with Scout.`);
+    const hasRecos = hasRecommendations();
+    const msg = hasRecos
+      ? `Welcome back - you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`
+      : `Welcome back - you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. You can plan next steps with Scout.`;
     appendMsg('assistant', msg);
     renderInlineCta(reviewAndPlannerCtaHtml(stage), { multi: hasRecos });
     return;
