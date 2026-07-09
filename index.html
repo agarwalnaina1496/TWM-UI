@@ -1344,12 +1344,19 @@ function renderInlineCta(html, { multi = false } = {}) {
   scrollChat();
 }
 
+function latestAdvisorMessage(state = tripState) {
+  const adviceArtifact = latestAdvisorArtifact(state);
+  return adviceArtifact?.assistant_message
+    || state?.advisor_state?.conversation_context?.last_advisor_message
+    || null;
+}
+
 function replayLatestAdvisorAdvice() {
-  const adviceArtifact = latestAdvisorArtifact();
-  if (!adviceArtifact?.assistant_message) return false;
+  const adviceMessage = latestAdvisorMessage();
+  if (!adviceMessage) return false;
   appendMsg('assistant', `Last time, I'd said:
 
-${adviceArtifact.assistant_message}`);
+${adviceMessage}`);
   return true;
 }
 
@@ -1373,20 +1380,27 @@ function reviewAndPlannerCtaHtml(stage) {
 function resumeChat() {
   const stage = tripState?.stage || 'new';
   const hasContext = hasTripContext();
-  if (stage === 'new') {
-    if (hasContext) {
-      renderTripContextCard();
-      appendMsg('assistant', `Welcome back — I saved the context from your last chat. You can keep asking Scout here, or ask for destination options whenever you're ready.`);
-    } else {
-      appendMsg('assistant', WELCOME);
-    }
+  if (!hasContext) {
+    appendMsg('assistant', WELCOME);
     return;
   }
 
-  // The context card is always rendered from tripState — resumeChat only
-  // decides which CTA(s) accompany it for the current stage.
+  // The context card is always rendered from tripState; resumeChat only
+  // decides which memory and CTA(s) accompany it for the current stage.
   renderTripContextCard({ showContinue: stage === 'matching' });
-  replayLatestAdvisorAdvice();
+  const replayedAdvice = replayLatestAdvisorAdvice();
+
+  if (stage === 'planning') {
+    appendMsg('assistant', PLANNER_COMING_SOON_MESSAGE);
+    return;
+  }
+
+  if (stage === 'new') {
+    if (!replayedAdvice) {
+      appendMsg('assistant', `What would you like to explore next?`);
+    }
+    return;
+  }
 
   if (stage === 'matching') return;
 
@@ -1397,11 +1411,6 @@ function resumeChat() {
 
   if (stage === 'recommended') {
     appendMsg('assistant', `Welcome back - Scout already found matches for this trip. You can keep refining or ask what to do next here.`);
-    return;
-  }
-
-  if (stage === 'planning') {
-    appendMsg('assistant', PLANNER_COMING_SOON_MESSAGE);
     return;
   }
 
@@ -1417,7 +1426,7 @@ function resumeChat() {
   }
 
   if (stage === 'planned') {
-    appendMsg('assistant', `Welcome back — your plan is ready.`);
+    appendMsg('assistant', `Welcome back - your plan is ready.`);
   }
 }
 async function handleContinue() {
