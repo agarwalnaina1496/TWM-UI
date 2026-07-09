@@ -996,11 +996,38 @@ function logMeridian(input, output) {
 // ══════════════════════════════════════════
 // API CALLS
 // ══════════════════════════════════════════
+function normalizeScoutResponse(data) {
+  if (data?.intent !== 'advise') return data;
+  const delta = data.state_delta || {};
+  const legacyMessage = delta.matcher_state?.conversation_context?.last_scout_message;
+  const adviceMessage = data.message || legacyMessage;
+  if (!adviceMessage) return data;
+
+  const advisorState = delta.advisor_state || {};
+  const conversationContext = advisorState.conversation_context || {};
+  conversationContext.last_advisor_message = adviceMessage;
+  const artifacts = Array.isArray(advisorState.artifacts) ? advisorState.artifacts : [];
+  const exists = artifacts.some(item => item?.type === 'advice' && item?.source === 'scout' && item?.assistant_message === adviceMessage);
+  if (!exists) {
+    artifacts.push({
+      type: 'advice',
+      source: 'scout',
+      assistant_message: adviceMessage,
+      created_at: new Date().toISOString()
+    });
+  }
+  advisorState.conversation_context = conversationContext;
+  advisorState.artifacts = artifacts;
+  delta.advisor_state = advisorState;
+  delete delta.matcher_state;
+  data.state_delta = delta;
+  return data;
+}
 async function callScout(message) {
   const before = JSON.parse(JSON.stringify(tripState));
   const res = await fetch(API.scout, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trip_state: tripState, message }) });
   if (!res.ok) throw new Error(`Scout ${res.status}`);
-  const data = await res.json();
+  const data = normalizeScoutResponse(await res.json());
   applyStateDelta(data.state_delta);
   applyStageFromScoutIntent(data.intent);
   window._enteringPlanner = false;
@@ -1370,38 +1397,39 @@ function reviewAndPlannerCtaHtml(stage) {
     </button>`;
 }
 
+function replayMatcherContext() {
+  const ctx = tripState?.matcher_state?.conversation_context || {};
+  if (ctx.last_meridian_message) {
+    appendMsg('assistant', ctx.last_meridian_message);
+    return true;
+  }
+  if (ctx.awaiting) {
+    appendMsg('assistant', `I was waiting on ${String(ctx.awaiting).replace(/_/g, ' ')}. Tell me that and I'll keep matching from here.`);
+    return true;
+  }
+  return false;
+}
+
 function resumeChat() {
   const stage = tripState?.stage || 'new';
   const hasContext = hasTripContext();
-  if (stage === 'new') {
-    if (hasContext) {
-      renderTripContextCard();
-      appendMsg('assistant', `Welcome back — I saved the context from your last chat. You can keep asking Scout here, or ask for destination options whenever you're ready.`);
-    } else {
-      appendMsg('assistant', WELCOME);
-    }
+  if (!hasContext) {
+    appendMsg('assistant', WELCOME);
     return;
   }
 
-  // The context card is always rendered from tripState — resumeChat only
-  // decides which CTA(s) accompany it for the current stage.
-  renderTripContextCard({ showContinue: stage === 'matching' });
-  replayLatestAdvisorAdvice();
-
-  if (stage === 'matching') return;
-
-  if (stage === 'recommendation_ready') {
-    appendMsg('assistant', `Welcome back - Scout has enough context to continue. Tell me what you want to refine, or ask for destination options here.`);
-    return;
-  }
-
-  if (stage === 'recommended') {
-    appendMsg('assistant', `Welcome back - Scout already found matches for this trip. You can keep refining or ask what to do next here.`);
-    return;
-  }
+  renderTripContextCard();
 
   if (stage === 'planning') {
     appendMsg('assistant', PLANNER_COMING_SOON_MESSAGE);
+    return;
+  }
+
+  if (replayLatestAdvisorAdvice()) return;
+  if (replayMatcherContext()) return;
+
+  if (stage === 'recommended') {
+    appendMsg('assistant', `Welcome back - Scout already found matches for this trip. You can keep refining or ask what to do next here.`);
     return;
   }
 
@@ -1417,8 +1445,11 @@ function resumeChat() {
   }
 
   if (stage === 'planned') {
-    appendMsg('assistant', `Welcome back — your plan is ready.`);
+    appendMsg('assistant', `Welcome back - your plan is ready.`);
+    return;
   }
+
+  appendMsg('assistant', `What would you like to explore next?`);
 }
 async function handleContinue() {
   if (busy) return;
@@ -1904,7 +1935,7 @@ function tripBadge(trip, fullState) {
   if (stage === 'recommended')           return { cls: 'b-reco',    text: 'Recommendations ready' };
   if (stage === 'recommendation_ready')  return { cls: 'b-chat',    text: 'Ready to generate' };
   if (stage === 'matching')              return { cls: 'b-chat',    text: 'In conversation' };
-  if (stage === 'new' && hasTripContext(fullState)) return { cls: 'b-chat', text: 'Advice saved' };
+  if (stage === 'new' && hasTripContext(fullState)) return { cls: 'b-chat', text: 'In conversation' };
   return { cls: 'b-new', text: 'New' };
 }
 
