@@ -478,10 +478,6 @@
 <div id="screen-trips" class="screen">
   <header class="tb">
     <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
-    <button class="tb-btn" onclick="navigate('home')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
-      My Trips
-    </button>
   </header>
   <div class="scroll">
     <div class="trips-inner">
@@ -1149,6 +1145,25 @@ async function handleScoutResult(res, message = null) {
   return res;
 }
 
+// Shared "send this message (or null, to just continue) to Scout and render
+// whatever comes back" routine — same typing indicator / success / error
+// handling every caller (handleSend, handleContinue, refineWithScout) needs.
+// errorText and errorLogTag let each caller keep its own wording/log tag
+// without duplicating the try/catch scaffolding.
+async function sendScoutMessage(msg, { errorText = 'Something went wrong - try again.', errorLogTag = null } = {}) {
+  showTyping();
+  try {
+    const res = await callScout(msg);
+    await handleScoutResult(res, msg);
+    removeTyping();
+    updateChatContextSnippet();
+  } catch (err) {
+    removeTyping();
+    appendError(`${errorText} (${err.message})`);
+    if (errorLogTag) console.error(errorLogTag, err);
+  }
+}
+
 function updateChatContextSnippet() {
   const parts = tripContextChips(tripState.trip_context || {}).slice(0, 3);
   document.getElementById('ctxText').textContent = parts.length ? parts.join(' · ') : 'Scout is here to help with your trip.';
@@ -1173,11 +1188,8 @@ function startChat() {
   currentTripId = null;
   tripState = null;
   window._enteringPlanner = false;
-  clearChat();
-  navigate('chat');
-  document.getElementById('chatTripName').textContent = '';
+  enterChatScreenForTrip(null);
   document.getElementById('ctxText').textContent = 'Scout is here to help with your trip.';
-  renderStateBar();
   setTimeout(() => appendMsg('assistant', WELCOME), 200);
 }
 
@@ -1196,11 +1208,7 @@ function startPlanningConvo() {
   // NOTE: stage stays as-is here (e.g. 'matched') until the user actually sends
   // their first message post-selection — see markPlanningStarted(), invoked from handleSend.
   window._enteringPlanner = true;
-  const trip = getTripById(currentTripId);
-  document.getElementById('chatTripName').textContent = trip?.title || '';
-  clearChat();
-  navigate('chat');
-  renderStateBar();
+  enterChatScreenForTrip(currentTripId);
   resumeChat();
 }
 
@@ -1227,8 +1235,7 @@ function openTripRecos(id) {
   currentTripId = id;
   tripState = loadTripState(id);
   currentRecos = latestRecommendation();
-  const trip = getTripById(id);
-  document.getElementById('chatTripName').textContent = trip?.title || '';
+  setChatTripNameDisplay(getTripById(id)?.title);
 
   navigate('recos');
   saveUiState('recos');
@@ -1244,11 +1251,7 @@ function openTrip(id) {
   tripState = loadTripState(id);
   currentRecos = latestRecommendation();
   window._enteringPlanner = false;
-  clearChat();
-  const trip = getTripById(id);
-  document.getElementById('chatTripName').textContent = trip?.title || '';
-  navigate('chat');
-  renderStateBar();
+  enterChatScreenForTrip(id);
   resumeChat();
 }
 
@@ -1261,6 +1264,25 @@ function clearChat() {
   document.getElementById('inlineRecoBtnRow')?.remove();
   busy = false;
   setSendDisabled(false);
+}
+
+// Single place that writes the trip name into the chat header — every
+// entry point that opens/creates a trip goes through this instead of
+// touching the DOM directly.
+function setChatTripNameDisplay(title) {
+  document.getElementById('chatTripName').textContent = title || '';
+}
+
+// Shared "open the chat screen for this trip" routine: fresh chat DOM,
+// correct trip name in the header, chat screen active, state-bar refreshed.
+// Used by every entry point that lands the user on screen-chat for a given
+// trip (starting fresh, resuming, planning, refining) so they can't drift
+// out of sync with each other.
+function enterChatScreenForTrip(tripId) {
+  clearChat();
+  setChatTripNameDisplay(tripId ? getTripById(tripId)?.title : '');
+  navigate('chat');
+  renderStateBar();
 }
 
 function removeResumeBtn() {
@@ -1479,14 +1501,16 @@ function replayMatcherContext() {
 function resumeChat() {
   const stage = tripState?.stage || 'new';
   const hasContext = hasTripContext();
+
+  // Context card shows for any resumed trip whose stage has moved past
+  // 'new' — regardless of how we got here (My Trips, Refine, etc.).
+  if (stage !== 'new') renderTripContextCard({ showContinue: stage === 'matching' });
+
   if (!hasContext) {
     appendMsg('assistant', WELCOME);
     return;
   }
 
-  // The context card is always rendered from tripState; resumeChat only
-  // decides which memory and CTA(s) accompany it for the current stage.
-  renderTripContextCard({ showContinue: stage === 'matching' });
   const replayedAdvice = replayLatestAdvisorAdvice();
 
   if (stage === 'planning') {
@@ -1536,17 +1560,7 @@ async function handleContinue() {
   if (busy) return;
   busy = true; setSendDisabled(true);
   removeResumeBtn();
-  showTyping();
-  try {
-    const res = await callScout(null);
-    await handleScoutResult(res, null);
-    removeTyping();
-    updateChatContextSnippet();
-  } catch (err) {
-    removeTyping();
-    appendError(`Couldn't reach Scout — try again. (${err.message})`);
-    console.error('[Resume/continue]', err);
-  }
+  await sendScoutMessage(null, { errorText: "Couldn't reach Scout — try again.", errorLogTag: '[Resume/continue]' });
   busy = false; setSendDisabled(false);
 }
 
@@ -1599,7 +1613,7 @@ async function handleSend() {
     const trip = createTrip();
     currentTripId = trip.id;
     tripState = defaultState(trip.id);
-    document.getElementById('chatTripName').textContent = trip.title;
+    setChatTripNameDisplay(trip.title);
   }
 
   const stage = tripState.stage;
@@ -1634,17 +1648,7 @@ async function handleSend() {
   }
 
   appendMsg('user', msg);
-  showTyping();
-  try {
-    const res = await callScout(msg);
-    await handleScoutResult(res, msg);
-    removeTyping();
-    updateChatContextSnippet();
-  } catch (err) {
-    removeTyping();
-    appendError(`Something went wrong - try again. (${err.message})`);
-    console.error('[Scout]', err);
-  }
+  await sendScoutMessage(msg, { errorText: 'Something went wrong - try again.', errorLogTag: '[Scout]' });
   busy = false; setSendDisabled(false);
 }
 
@@ -1802,25 +1806,13 @@ function refineWithScout() {
   tripState.stage = 'matching';
   saveTripState();
 
-  clearChat();
-  const trip = getTripById(currentTripId);
-  document.getElementById('chatTripName').textContent = trip?.title || '';
-  navigate('chat');
-  renderStateBar();
+  enterChatScreenForTrip(currentTripId);
+  if (tripState.stage !== 'new') renderTripContextCard();
 
   const msg = "I want to refine these recommendations.";
   setTimeout(async () => {
     appendMsg('user', msg);
-    showTyping();
-    try {
-      const res = await callScout(msg);
-      await handleScoutResult(res, msg);
-      removeTyping();
-      updateChatContextSnippet();
-    } catch (err) {
-      removeTyping();
-      appendError(`Couldn't reach Scout - try again. (${err.message})`);
-    }
+    await sendScoutMessage(msg, { errorText: "Couldn't reach Scout - try again." });
   }, 300);
 }
 // PLANS & PRICING
@@ -2156,7 +2148,7 @@ function startRename(id, e) {
     const span = document.createElement('span');
     span.id = 'tc-title-' + id; span.className = ''; span.textContent = newTitle;
     input.replaceWith(span);
-    if (currentTripId === id) document.getElementById('chatTripName').textContent = newTitle;
+    if (currentTripId === id) setChatTripNameDisplay(newTitle);
   };
   input.addEventListener('blur', finish);
   input.addEventListener('keydown', e => {
