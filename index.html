@@ -1500,17 +1500,23 @@ function replayMatcherContext() {
 
 function resumeChat() {
   const stage = tripState?.stage || 'new';
-  const hasContext = hasTripContext();
 
-  // Context card shows for any resumed trip whose stage has moved past
-  // 'new' — regardless of how we got here (My Trips, Refine, etc.).
-  if (stage !== 'new') renderTripContextCard({ showContinue: stage === 'matching' });
-
-  if (!hasContext) {
-    appendMsg('assistant', WELCOME);
+  if (stage === 'new') {
+    if (!hasTripContext()) {
+      appendMsg('assistant', WELCOME);
+      return;
+    }
+    const replayedAdvice = replayLatestAdvisorAdvice();
+    if (!replayedAdvice && replayMatcherContext()) return;
+    if (!replayedAdvice) appendMsg('assistant', `What would you like to explore next?`);
     return;
   }
 
+  // Stage has moved past 'new' — the trip has definitely been engaged with,
+  // so always show the context card and continue with per-stage messaging.
+  // (Never fall back to the generic WELCOME here, even if trip_context
+  // itself doesn't have structured chips yet — e.g. right after a refine.)
+  renderTripContextCard({ showContinue: stage === 'matching' });
   const replayedAdvice = replayLatestAdvisorAdvice();
 
   if (stage === 'planning') {
@@ -1519,11 +1525,6 @@ function resumeChat() {
   }
 
   if (!replayedAdvice && replayMatcherContext()) return;
-
-  if (stage === 'new') {
-    if (!replayedAdvice) appendMsg('assistant', `What would you like to explore next?`);
-    return;
-  }
 
   if (stage === 'matching') return;
 
