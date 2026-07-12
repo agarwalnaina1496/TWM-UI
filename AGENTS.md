@@ -4,7 +4,8 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 
 ## Scope and issue naming
 
-- Prefix every implementation story for this repository with `[UI]`.
+- Prefix every Linear implementation-story title for this repository with `[UI]`.
+- Use the prefix only in Linear. Do not add `[UI]` to branch names, commit messages, or pull-request titles unless the user explicitly requests it.
 - Keep UI work in this repository. Coordinate separate `[BE]` work when the requirement changes an API, prompt response, or shared state contract.
 - Avoid unrelated visual, state-management, or formatting changes in the same branch or pull request.
 
@@ -50,3 +51,4 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 - Use a UI-specific branch and pull request.
 - Stage only intended files in a dirty worktree.
 - Do not commit, push, open, or merge a pull request without the explicit gate required by the workspace instructions.
+- An explicitly authorized `AGENTS.md` process-configuration update does not need a Linear story, but all requested Git delivery gates still apply.
