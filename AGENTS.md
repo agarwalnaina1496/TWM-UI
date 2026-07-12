@@ -35,7 +35,8 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 
 - Documentation updates are mandatory for every implementation story.
 - Include affected CTA mappings, stage transitions, resume behavior, persisted-state shape, and API integration behavior in the story scope, acceptance criteria, and verification plan.
-- When canonical documentation lives in `TWM_Docs/`, plan and verify the coordinated documentation change without folding that repository into this repository's Git history or pull request.
+- Keep product behavior and shared-contract docs in `TWM_Docs/`, including product architecture, TripState/stages, CTA mappings, resume behavior, and shared API/user flows.
+- Backend technical and operational subjects such as prompt versioning, FastAPI internals, n8n, EC2, and deployment/runtime setup belong in `TravelWithMe/`, not `TWM_Docs/` or this repository.
 - A UI story is not complete while its documented behavior or contract is stale.
 
 ## Verification
@@ -52,3 +53,4 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 - Stage only intended files in a dirty worktree.
 - Do not commit, push, open, or merge a pull request without the explicit gate required by the workspace instructions.
 - An explicitly authorized `AGENTS.md` process-configuration update does not need a Linear story, but all requested Git delivery gates still apply.
+- A request to address PR review comments authorizes brief replies and resolution of verified addressed threads unless the user says otherwise.
