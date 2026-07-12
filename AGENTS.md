@@ -33,11 +33,12 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 
 ## Documentation
 
-- Documentation updates are mandatory for every implementation story.
-- Include affected CTA mappings, stage transitions, resume behavior, persisted-state shape, and API integration behavior in the story scope, acceptance criteria, and verification plan.
+- Require documentation when a story changes product behavior, user-facing flows, shared contracts, architecture, stages, CTA mappings, resume behavior, or state ownership.
+- Do not require standalone documentation for every small internal or technical UI change. Tests, concise PR context, and code comments are sufficient when no product or shared contract changes.
+- Include only genuinely affected documentation in story scope, acceptance criteria, and verification.
 - Keep product behavior and shared-contract docs in `TWM_Docs/`, including product architecture, TripState/stages, CTA mappings, resume behavior, and shared API/user flows.
 - Backend technical and operational subjects such as prompt versioning, FastAPI internals, n8n, EC2, and deployment/runtime setup belong in `TravelWithMe/`, not `TWM_Docs/` or this repository.
-- A UI story is not complete while its documented behavior or contract is stale.
+- A UI story is not complete while affected product or shared-contract documentation is stale.
 
 ## Verification
 
