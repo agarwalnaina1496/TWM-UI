@@ -891,6 +891,37 @@ function latestAdvisorArtifact(state = tripState) {
   return null;
 }
 
+function normalizedAgentMeta(meta, expectedAgent) {
+  if (!isPlainObject(meta)) return null;
+  if (meta.agent !== expectedAgent) return null;
+  if (typeof meta.prompt_version !== 'string' || !meta.prompt_version.trim()) return null;
+  return { agent: expectedAgent, prompt_version: meta.prompt_version.trim() };
+}
+
+function debugAgentMeta(meta, expectedAgent) {
+  return normalizedAgentMeta(meta, expectedAgent)
+    || { agent: expectedAgent, prompt_version: 'unknown/legacy' };
+}
+
+function tripPromptProvenance(state = tripState) {
+  const artifacts = Array.isArray(state?.advisor_state?.artifacts) ? state.advisor_state.artifacts : [];
+  const recommendations = Array.isArray(state?.matcher_state?.recommendations) ? state.matcher_state.recommendations : [];
+  return {
+    scout: artifacts
+      .filter(item => item?.type === 'advice' && item?.source === 'scout')
+      .map((item, index) => ({ index, ...debugAgentMeta(item.agent_meta, 'scout'), created_at: item.created_at || null })),
+    meridian: recommendations
+      .map((item, index) => ({ index, ...debugAgentMeta(item?.agent_meta, 'meridian'), generated_at: item?.generated_at || null }))
+  };
+}
+
+window.getTripPromptProvenance = function(tripId = currentTripId) {
+  const state = tripId === currentTripId && tripState ? tripState : loadTripState(tripId);
+  const provenance = tripPromptProvenance(state);
+  console.log(`%cPrompt provenance: ${tripId || 'unsaved trip'}`, 'color:#6b6460;font-weight:700;', provenance);
+  return provenance;
+};
+
 function isMeridianBusinessStatus(status) {
   return ['NEEDS_CLARIFICATION', 'SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL'].includes(status);
 }
@@ -988,6 +1019,7 @@ function logScoutTurn(userMsg, before, response, after) {
   console.log('%cUser message:', 'color:#6b6460;font-weight:600;', userMsg ?? 'resume');
   console.log('%cTrip state before:', 'color:#6b6460;font-weight:600;', JSON.parse(JSON.stringify(before)));
   console.log('%cScout response:', 'color:#3a6b4a;font-weight:600;', response);
+  console.log('%cScout prompt:', 'color:#3a6b4a;font-weight:600;', debugAgentMeta(response?.agent_meta, 'scout'));
   console.log('%cTrip state after:', 'color:#3a6b4a;font-weight:600;', JSON.parse(JSON.stringify(after)));
   console.groupEnd();
 }
@@ -995,6 +1027,7 @@ function logMeridian(input, output) {
   console.group(`%c trip id: ${tripState.trip_id}`, 'color:#7090e0;font-weight:700;font-size:13px;');
   console.log('%cMeridian input:', 'color:#6b6460;font-weight:600;', JSON.parse(JSON.stringify(input)));
   console.log('%cMeridian output:', 'color:#3a6b4a;font-weight:600;', output);
+  console.log('%cMeridian prompt:', 'color:#3a6b4a;font-weight:600;', debugAgentMeta(output?.agent_meta, 'meridian'));
   console.groupEnd();
 }
 
@@ -1012,14 +1045,19 @@ function normalizeScoutResponse(data) {
   const conversationContext = advisorState.conversation_context || {};
   conversationContext.last_advisor_message = adviceMessage;
   const artifacts = Array.isArray(advisorState.artifacts) ? advisorState.artifacts : [];
-  const exists = artifacts.some(item => item?.type === 'advice' && item?.source === 'scout' && item?.assistant_message === adviceMessage);
-  if (!exists) {
-    artifacts.push({
+  const agentMeta = normalizedAgentMeta(data.agent_meta, 'scout');
+  const existing = artifacts.find(item => item?.type === 'advice' && item?.source === 'scout' && item?.assistant_message === adviceMessage);
+  if (existing) {
+    if (agentMeta) existing.agent_meta = agentMeta;
+  } else {
+    const artifact = {
       type: 'advice',
       source: 'scout',
       assistant_message: adviceMessage,
       created_at: new Date().toISOString()
-    });
+    };
+    if (agentMeta) artifact.agent_meta = agentMeta;
+    artifacts.push(artifact);
   }
   advisorState.conversation_context = conversationContext;
   advisorState.artifacts = artifacts;
@@ -1075,7 +1113,9 @@ function responseMessageForIntent(res) {
 }
 
 function recommendationPayloadFromMeridian(data) {
-  const { state_delta, ...payload } = data || {};
+  const { state_delta, agent_meta, ...payload } = data || {};
+  const agentMeta = normalizedAgentMeta(agent_meta, 'meridian');
+  if (agentMeta) payload.agent_meta = agentMeta;
   return payload;
 }
 
