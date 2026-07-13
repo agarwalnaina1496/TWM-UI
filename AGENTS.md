@@ -12,6 +12,7 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 ## Product intent and discovery
 
 - The user's explicit decisions in the active discovery define intended product behavior.
+- This product is currently pre-MVP. Do not add legacy localStorage compatibility, migrations, fallback state shapes, or rollout layers unless the user explicitly requests them; implement the current approved canonical UI/state behavior directly.
 - Treat UI code, backend behavior, tests, and documentation as evidence of current behavior. Surface conflicts and ask the user to decide before finalizing scope.
 - For API or conversational-flow changes, inspect the corresponding backend schema, normalization, and agent response behavior before editing the UI.
 
@@ -22,7 +23,7 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 - Keep context existence detection separate from context-chip presentation. Hidden or non-display state may still be meaningful saved context.
 - Resume behavior must be derived from the complete saved trip state, including relevant advisor, matcher, planner, and UI state, without silently resetting or regressing lifecycle stage.
 - Review/reopen actions must not mutate stage or selection merely to reconstruct presentation state.
-- Consider backward compatibility for existing localStorage records whenever the persisted shape or interpretation changes.
+- Do not preserve superseded localStorage records or state interpretations by default during pre-MVP development.
 
 ## Backend integration and provenance
 
