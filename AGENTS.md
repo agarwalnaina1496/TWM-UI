@@ -11,9 +11,7 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 
 ## Product intent and discovery
 
-- The user's explicit decisions in the active discovery define intended product behavior.
 - This product is currently pre-MVP. Do not add legacy localStorage compatibility, migrations, fallback state shapes, or rollout layers unless the user explicitly requests them; implement the current approved canonical UI/state behavior directly.
-- Treat UI code, backend behavior, tests, and documentation as evidence of current behavior. Surface conflicts and ask the user to decide before finalizing scope.
 - For API or conversational-flow changes, inspect the corresponding backend schema, normalization, and agent response behavior before editing the UI.
 
 ## State, stages, and resume behavior
@@ -34,12 +32,8 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 
 ## Documentation
 
-- Require documentation when a story changes product behavior, user-facing flows, shared contracts, architecture, stages, CTA mappings, resume behavior, or state ownership.
-- Do not require standalone documentation for every small internal or technical UI change. Tests, concise PR context, and code comments are sufficient when no product or shared contract changes.
-- Include only genuinely affected documentation in story scope, acceptance criteria, and verification.
 - Keep product behavior and shared-contract docs in `TWM_Docs/`, including product architecture, TripState/stages, CTA mappings, resume behavior, and shared API/user flows.
 - Backend technical and operational subjects such as prompt versioning, FastAPI internals, n8n, EC2, and deployment/runtime setup belong in `TravelWithMe/`, not `TWM_Docs/` or this repository.
-- A UI story is not complete while affected product or shared-contract documentation is stale.
 
 ## Verification
 
@@ -47,12 +41,9 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 - For state-driven behavior, test fresh and resumed trips across relevant stages, including empty, advisor-only, matcher, recommended, matched, and planning states as applicable.
 - Verify CTA label, destination screen, stage preservation, localStorage result, and refresh/resume behavior together.
 - For API integration changes, test success, expected business failures, and infrastructure failures without corrupting saved state.
-- Report UI checks, documentation verification, compatibility risks, and rollback instructions separately from backend results.
+- Report UI checks, affected documentation verification, known limitations, and rollback instructions separately from Backend results.
 
 ## Git delivery
 
 - Use a UI-specific branch and pull request.
 - Stage only intended files in a dirty worktree.
-- Do not commit, push, open, or merge a pull request without the explicit gate required by the workspace instructions.
-- An explicitly authorized `AGENTS.md` process-configuration update does not need a Linear story, but all requested Git delivery gates still apply.
-- A request to address PR review comments authorizes brief replies and resolution of verified addressed threads unless the user says otherwise.
