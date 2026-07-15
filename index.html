@@ -1133,21 +1133,31 @@ function meridianTripContextFromState(state = tripState) {
   return result;
 }
 
-function meridianRequestFromState(state = tripState) {
+function meridianAdvisorStateFromState(state = tripState) {
+  return {
+    conversation_context: {
+      last_advisor_message: state?.advisor_state?.conversation_context?.last_advisor_message ?? null
+    }
+  };
+}
+
+function meridianRequestFromState(state = tripState, message = null) {
   return {
     trip_state: {
       trip_context: meridianTripContextFromState(state),
+      advisor_state: meridianAdvisorStateFromState(state),
       matcher_state: state?.matcher_state || {
         conversation_context: { last_meridian_message: null, awaiting: null },
         recommendations: [],
         rejected_options: []
       }
-    }
+    },
+    message
   };
 }
 
-async function callMeridian() {
-  const input = meridianRequestFromState();
+async function callMeridian(message = null) {
+  const input = meridianRequestFromState(tripState, message);
   const res = await fetch(API.meridian, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
   if (!res.ok) throw new Error(`Meridian ${res.status}`);
   const data = await res.json();
@@ -1172,7 +1182,7 @@ async function callMeridian() {
 
 async function handleScoutResult(res, message = null) {
   if (res?.intent === 'matcher') {
-    const meridianOut = await callMeridian();
+    const meridianOut = await callMeridian(message);
     if (meridianOut.message) appendMsg('assistant', meridianOut.message);
     if (tripState.stage === 'recommended' && hasRecommendations()) {
       renderInlineCta(reviewRecosOnlyCtaHtml());
@@ -1804,8 +1814,8 @@ function renderFailureRecos(container, meridianData) {
     if (sec.points?.length) html += `<ul class="match-points">${sec.points.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
     html += `</div>`;
   });
-  if (meridianData.relaxation_suggestions?.length) {
-    html += `<div class="match-section"><div class="match-heading">Ways to adjust</div><ul class="match-points">${meridianData.relaxation_suggestions.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
+  if (meridianData.constraint_adjustment_suggestions?.length) {
+    html += `<div class="match-section"><div class="match-heading">Ways to adjust</div><ul class="match-points">${meridianData.constraint_adjustment_suggestions.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
   }
   html += `</div></div></div>`;
   container.innerHTML = html;
