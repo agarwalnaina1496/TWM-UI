@@ -195,6 +195,8 @@
 
   /* Error bubble */
   .error-bub { background: #fff0f0; border: 1px solid #f0c0c0; border-radius: var(--r-sm); padding: 10px 14px; font-size: 13px; color: #a03030; max-width: 80%; }
+  .error-retry-btn { margin-top: 8px; background: transparent; color: #8d2525; border: 1px solid #d99595; border-radius: 6px; padding: 6px 11px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .error-retry-btn:hover { background: #ffe3e3; }
 
   /* Resume card */
   .resume-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); padding: 14px 16px; max-width: 82%; }
@@ -543,14 +545,14 @@
   <div class="scroll">
     <div class="recos-inner" style="display:block;max-width:920px;margin:0 auto;padding:24px 28px 28px;">
       <div class="recos-heading">
-        <div class="recos-label"><div class="recos-label-dot"></div>Your destination matches</div>
+        <div class="recos-label"><div class="recos-label-dot"></div><span id="recosLabelText">Your destination matches</span></div>
         <div id="recosSubheading" style="font-size:13px;color:var(--ink-muted);margin-top:3px;"></div>
       </div>
       <div id="recosCards" class="recos-grid"></div>
       <div id="inlinePlanCtaWrap"></div>
       <div class="refine-row" id="refineRow" style="display:none;">
-        <p>None of these feel right? Tell Scout what's missing.</p>
-        <button class="refine-btn" onclick="refineWithScout()">Refine with Scout</button>
+        <p>Want to adjust the match? Tell us what should change.</p>
+        <button class="refine-btn" onclick="refineRecommendations()">Refine preferences</button>
       </div>
     </div>
   </div>
@@ -774,8 +776,8 @@ const API = {
   scout:    'https://travelwithme-zf9f.onrender.com/scout',
   meridian: 'https://travelwithme-zf9f.onrender.com/meridian',
 };
-const WELCOME = "Hey there, I'm Scout. Tell me about the trip you have in mind, and I'll help you discover a destination that's the right fit for you and also tell you why it is the right fit for you.";
-const PLANNER_COMING_SOON_MESSAGE = "Trip planning is coming soon. For now, I can keep helping with the where-to-go decision and preserve this context so planning can pick up from here later.";
+const WELCOME = "Hey, I'm Scout. Tell me about the trip you have in mind. I can help you find destinations that fit and explain why.";
+const PLANNER_COMING_SOON_MESSAGE = "Trip planning is coming soon. For now, I can keep helping you decide where to go, and I'll preserve this context so planning can pick up here later.";
 const TRIPS_KEY    = 'twm_trips_v1';
 const STATE_KEY    = 'twm_state_v1';
 const UI_STATE_KEY = 'twm_ui_state_v1';
@@ -785,6 +787,7 @@ let tripState     = null;
 let busy          = false;
 let currentRecos  = null;
 let tripFilter    = 'active'; // default filter
+let pendingRetryTurn = null;
 
 // ══════════════════════════════════════════
 // TRIPS LIST (localStorage)
@@ -873,8 +876,8 @@ function deepMerge(target, source) {
   }
 }
 
-function latestRecommendation() {
-  const recs = tripState?.matcher_state?.recommendations;
+function latestRecommendation(state = tripState) {
+  const recs = state?.matcher_state?.recommendations;
   return Array.isArray(recs) && recs.length ? recs[recs.length - 1] : null;
 }
 
@@ -927,8 +930,58 @@ function isMeridianBusinessStatus(status) {
   return ['NEEDS_CLARIFICATION', 'SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL'].includes(status);
 }
 
+function isMeridianFailureStatus(status) {
+  return ['SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL'].includes(status);
+}
+
+function meridianOutcomeHeading(status) {
+  const headings = {
+    SOFT_FAIL: 'A few tradeoffs to consider',
+    HARD_FAIL: 'No reliable match yet',
+    BUDGET_FAIL: 'The current budget needs adjusting',
+    CONFLICT_FAIL: 'Some trip preferences conflict'
+  };
+  return headings[status] || 'Match outcome';
+}
+
+function meridianSectionPoints(section) {
+  if (Array.isArray(section?.points)) return section.points;
+  if (section?.type === 'stops' && Array.isArray(section.stops)) {
+    return section.stops.map(stop => [
+      stop?.name,
+      Number.isFinite(stop?.nights) ? `${stop.nights} night${stop.nights === 1 ? '' : 's'}` : null,
+      stop?.what_it_offers
+    ].filter(Boolean).join(', ')).filter(Boolean);
+  }
+  if (section?.type === 'internal_travel' && Array.isArray(section.legs)) {
+    return section.legs.map(leg => [
+      leg?.from && leg?.to ? `${leg.from} to ${leg.to}` : leg?.from || leg?.to,
+      leg?.duration,
+      leg?.mode ? `by ${leg.mode}` : null
+    ].filter(Boolean).join(', ')).filter(Boolean);
+  }
+  return [];
+}
+
 function activeAgentFromState(state = tripState) {
   return state?.active_agent === 'meridian' ? 'meridian' : 'scout';
+}
+
+function chatComposerPlaceholder(state = tripState) {
+  if (state?.stage === 'planning') return 'Tell us what you want help planning...';
+  if (activeAgentFromState(state) === 'meridian') return 'Reply or refine your destination preferences...';
+  return 'Tell Scout about your trip...';
+}
+
+function updateChatComposerPlaceholder() {
+  const input = document.getElementById('userInput');
+  if (input) input.placeholder = chatComposerPlaceholder();
+}
+
+function phaseContextFallback(state = tripState) {
+  if (state?.stage === 'planning') return 'Planning context is saved for this trip.';
+  if (activeAgentFromState(state) === 'meridian') return 'Destination matching is in progress.';
+  return 'Scout is here to help with your trip.';
 }
 
 function setActiveAgent(agent) {
@@ -994,16 +1047,30 @@ function jsArg(value) {
   return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
 }
 
-function applyStateDelta(delta) {
-  if (!delta) return;
-  // UI owns stage transitions — Scout's delta.stage is intentionally ignored.
-  // Stages are set explicitly by UI actions (handleSend, callMeridian, chooseDestination, etc.)
-  if (delta.trip_context) deepMerge(tripState.trip_context, delta.trip_context);
-  if (delta.advisor_state) {
-    if (!tripState.advisor_state) tripState.advisor_state = { conversation_context: { last_advisor_message: null }, artifacts: [] };
-    deepMergeStateBranch(tripState.advisor_state, delta.advisor_state);
+function agentOwnedStateDelta(delta, agent) {
+  if (!['scout', 'meridian'].includes(agent)) throw new Error(`Unknown delta owner: ${agent}`);
+  if (!isPlainObject(delta)) return {};
+
+  const owned = {};
+  if (isPlainObject(delta.trip_context)) {
+    owned.trip_context = Object.fromEntries(
+      Object.entries(delta.trip_context).filter(([key]) => key !== 'selected_option')
+    );
   }
-  if (delta.matcher_state) deepMergeStateBranch(tripState.matcher_state, delta.matcher_state);
+  if (agent === 'meridian' && isPlainObject(delta.matcher_state)) {
+    owned.matcher_state = Object.fromEntries(
+      Object.entries(delta.matcher_state).filter(([key]) => key !== 'recommendations')
+    );
+  }
+  return owned;
+}
+
+function applyStateDelta(delta, agent) {
+  const owned = agentOwnedStateDelta(delta, agent);
+  // UI owns stage transitions, so agent lifecycle fields are intentionally ignored.
+  // Stages are set explicitly by UI actions (handleSend, callMeridian, chooseDestination, etc.)
+  if (owned.trip_context) deepMerge(tripState.trip_context, owned.trip_context);
+  if (owned.matcher_state) deepMergeStateBranch(tripState.matcher_state, owned.matcher_state);
 }
 
 // Append/dedupe known array fields instead of letting deepMerge clobber them.
@@ -1050,17 +1117,15 @@ function logMeridian(input, output) {
 // ══════════════════════════════════════════
 // API CALLS
 // ══════════════════════════════════════════
-function normalizeScoutResponse(data) {
-  if (data?.intent !== 'advise') return data;
-  const delta = data.state_delta || {};
-  const legacyMessage = delta.matcher_state?.conversation_context?.last_scout_message;
-  const adviceMessage = data.message || legacyMessage;
-  if (!adviceMessage) return data;
+function recordScoutAdvice(data, state = tripState) {
+  const adviceMessage = data?.intent === 'advise' ? data.message : null;
+  if (!state || !adviceMessage) return;
 
-  const advisorState = delta.advisor_state || {};
-  const conversationContext = advisorState.conversation_context || {};
-  conversationContext.last_advisor_message = adviceMessage;
-  const artifacts = Array.isArray(advisorState.artifacts) ? advisorState.artifacts : [];
+  if (!isPlainObject(state.advisor_state)) state.advisor_state = {};
+  if (!isPlainObject(state.advisor_state.conversation_context)) state.advisor_state.conversation_context = {};
+  state.advisor_state.conversation_context.last_advisor_message = adviceMessage;
+  if (!Array.isArray(state.advisor_state.artifacts)) state.advisor_state.artifacts = [];
+  const artifacts = state.advisor_state.artifacts;
   const agentMeta = normalizedAgentMeta(data.agent_meta, 'scout');
   const existing = artifacts.find(item => item?.type === 'advice' && item?.source === 'scout' && item?.assistant_message === adviceMessage);
   if (existing) {
@@ -1075,12 +1140,6 @@ function normalizeScoutResponse(data) {
     if (agentMeta) artifact.agent_meta = agentMeta;
     artifacts.push(artifact);
   }
-  advisorState.conversation_context = conversationContext;
-  advisorState.artifacts = artifacts;
-  delta.advisor_state = advisorState;
-  delete delta.matcher_state;
-  data.state_delta = delta;
-  return data;
 }
 function scoutRequestFromState(state = tripState, message = null) {
   return {
@@ -1101,8 +1160,9 @@ async function callScout(message) {
   const input = scoutRequestFromState(tripState, message);
   const res = await fetch(API.scout, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
   if (!res.ok) throw new Error(`Scout ${res.status}`);
-  const data = normalizeScoutResponse(await res.json());
-  applyStateDelta(data.state_delta);
+  const data = await res.json();
+  applyStateDelta(data.state_delta, 'scout');
+  recordScoutAdvice(data);
   applyRoutingFromScoutIntent(data.intent);
   window._enteringPlanner = false;
   saveTripState();
@@ -1138,7 +1198,7 @@ function recommendationPayloadFromMeridian(data) {
 }
 
 function shouldStoreMeridianOutput(data) {
-  return data?.status && data.status !== 'NEEDS_CLARIFICATION';
+  return isMeridianBusinessStatus(data?.status) && data.status !== 'NEEDS_CLARIFICATION';
 }
 
 function meridianTripContextFromState(state = tripState) {
@@ -1181,7 +1241,7 @@ async function callMeridian(message = null) {
   const data = await res.json();
   if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
 
-  applyStateDelta(data.state_delta);
+  applyStateDelta(data.state_delta, 'meridian');
   applyMeridianRoutingOutcome(data.status);
 
   if (shouldStoreMeridianOutput(data)) {
@@ -1202,10 +1262,7 @@ async function callMeridian(message = null) {
 async function handleScoutResult(res, message = null) {
   if (res?.intent === 'matcher') {
     const meridianOut = await callMeridian(message);
-    if (meridianOut.message) appendMsg('assistant', meridianOut.message);
-    if (tripState.stage === 'recommended' && hasRecommendations()) {
-      renderInlineCta(reviewRecosOnlyCtaHtml());
-    }
+    presentMeridianOutcome(meridianOut);
     return meridianOut;
   }
 
@@ -1217,10 +1274,7 @@ async function handleScoutResult(res, message = null) {
 async function dispatchActiveAgentTurn(message) {
   if (activeAgentFromState() === 'meridian') {
     const meridianOut = await callMeridian(message);
-    if (meridianOut.message) appendMsg('assistant', meridianOut.message);
-    if (tripState.stage === 'recommended' && hasRecommendations()) {
-      renderInlineCta(reviewRecosOnlyCtaHtml());
-    }
+    presentMeridianOutcome(meridianOut);
     return meridianOut;
   }
 
@@ -1228,26 +1282,51 @@ async function dispatchActiveAgentTurn(message) {
   return handleScoutResult(scoutOut, message);
 }
 
+function presentMeridianOutcome(data) {
+  if (data?.message) appendMsg('assistant', data.message);
+  if (data?.status !== 'NEEDS_CLARIFICATION' && tripState.stage === 'recommended' && hasRecommendations()) {
+    renderInlineCta(reviewLatestMatchCtaHtml());
+  }
+  updateChatComposerPlaceholder();
+}
+
 // Shared active-agent dispatcher — same typing indicator / success / error
-// handling every caller (handleSend, handleContinue, refineWithScout) needs.
+// handling every caller (handleSend, handleContinue, refineRecommendations) needs.
 // errorText and errorLogTag let each caller keep its own wording/log tag
 // without duplicating the try/catch scaffolding.
-async function sendActiveAgentMessage(msg, { errorText = 'Something went wrong - try again.', errorLogTag = null } = {}) {
+async function sendActiveAgentMessage(msg, { errorText = "We couldn't complete that request.", errorLogTag = null } = {}) {
   showTyping();
   try {
-    await dispatchActiveAgentTurn(msg);
+    const result = await dispatchActiveAgentTurn(msg);
+    pendingRetryTurn = null;
+    document.getElementById('retry-error-row')?.remove();
     removeTyping();
     updateChatContextSnippet();
+    return { ok: true, result };
   } catch (err) {
     removeTyping();
-    appendError(`${errorText} (${err.message})`);
+    pendingRetryTurn = { tripId: currentTripId, message: msg, errorText, errorLogTag };
+    document.getElementById('retry-error-row')?.remove();
+    appendError(`${errorText} Your trip context is unchanged.`, { retry: true });
     if (errorLogTag) console.error(errorLogTag, err);
+    return { ok: false, error: err };
   }
 }
 
+async function retryLastFailedTurn() {
+  const retry = pendingRetryTurn;
+  if (!retry || retry.tripId !== currentTripId || busy) return;
+  busy = true;
+  setSendDisabled(true);
+  document.getElementById('retry-error-row')?.remove();
+  await sendActiveAgentMessage(retry.message, retry);
+  busy = false;
+  setSendDisabled(false);
+}
+
 function updateChatContextSnippet() {
-  const parts = tripContextChips(tripState.trip_context || {}).slice(0, 3);
-  document.getElementById('ctxText').textContent = parts.length ? parts.join(' · ') : 'Scout is here to help with your trip.';
+  const parts = tripContextChips(tripState?.trip_context || {}).slice(0, 3);
+  document.getElementById('ctxText').textContent = parts.length ? parts.join(' · ') : phaseContextFallback();
 }
 
 // ══════════════════════════════════════════
@@ -1268,9 +1347,10 @@ function navigate(screen) {
 function startChat() {
   currentTripId = null;
   tripState = null;
+  pendingRetryTurn = null;
   window._enteringPlanner = false;
   enterChatScreenForTrip(null);
-  document.getElementById('ctxText').textContent = 'Scout is here to help with your trip.';
+  document.getElementById('ctxText').textContent = phaseContextFallback();
   setTimeout(() => appendMsg('assistant', WELCOME), 200);
 }
 
@@ -1365,6 +1445,8 @@ function enterChatScreenForTrip(tripId) {
   setChatTripNameDisplay(tripId ? getTripById(tripId)?.title : '');
   navigate('chat');
   renderStateBar();
+  updateChatComposerPlaceholder();
+  updateChatContextSnippet();
 }
 
 function removeResumeBtn() {
@@ -1541,23 +1623,28 @@ ${adviceMessage}`);
   return true;
 }
 
-// CTA for stage === 'matched' / 'planning': review recos when present, and move into planning with Scout.
-// CTA for stage === 'recommended' with no planner action yet: just review recos.
-function reviewRecosOnlyCtaHtml() {
+function latestMatchReviewLabel(state = tripState) {
+  return isMeridianFailureStatus(latestRecommendation(state)?.status)
+    ? 'Review match outcome'
+    : 'Review recommendations';
+}
+
+// CTA for the latest terminal Meridian outcome.
+function reviewLatestMatchCtaHtml() {
   return `
     <div class="av">S</div>
     <button class="see-recos-btn" onclick="openTripRecos('${currentTripId}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      Review recommendations
+      ${latestMatchReviewLabel()}
     </button>`;
 }
 
 function reviewAndPlannerCtaHtml(stage) {
-  const plannerLabel = stage === 'planning' ? 'Continue planning with Scout' : 'Want to plan?';
+  const plannerLabel = stage === 'planning' ? 'Continue planning' : 'Want to plan?';
   const reviewCta = (stage !== 'planning' || hasRecommendations()) ? `
     <button class="see-recos-btn" onclick="openTripRecos('${currentTripId}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      Review recommendations
+      ${latestMatchReviewLabel()}
     </button>` : '';
   return `
     <div class="av">S</div>
@@ -1583,6 +1670,7 @@ function replayMatcherContext() {
 
 function resumeChat() {
   const stage = tripState?.stage || 'new';
+  const activeAgent = activeAgentFromState();
 
   if (stage === 'new') {
     if (!hasTripContext()) {
@@ -1599,26 +1687,31 @@ function resumeChat() {
   // so always show the context card and continue with per-stage messaging.
   // (Never fall back to the generic WELCOME here, even if trip_context
   // itself doesn't have structured chips yet — e.g. right after a refine.)
-  renderTripContextCard({ showContinue: stage === 'matching' });
-  const replayedAdvice = replayLatestAdvisorAdvice();
+  renderTripContextCard({ showContinue: stage === 'matching' && activeAgent === 'scout' });
 
   if (stage === 'planning') {
     appendMsg('assistant', PLANNER_COMING_SOON_MESSAGE);
     return;
   }
 
-  if (!replayedAdvice && replayMatcherContext()) return;
-
-  if (stage === 'matching') return;
+  if (stage === 'matching') {
+    if (activeAgent === 'meridian') {
+      if (!replayMatcherContext()) appendMsg('assistant', 'Tell me what you would like to clarify or change, and I will continue matching from here.');
+      return;
+    }
+    if (!replayLatestAdvisorAdvice()) appendMsg('assistant', 'What would you like to explore next?');
+    return;
+  }
 
   if (stage === 'recommendation_ready') {
-    appendMsg('assistant', `Welcome back - Scout has enough context to continue. Tell me what you want to refine, or ask for destination options here.`);
+    appendMsg('assistant', 'Welcome back. Your trip context is ready. Tell me what you want to refine, or ask for destination options here.');
     return;
   }
 
   if (stage === 'recommended') {
-    appendMsg('assistant', `Welcome back - Scout already found matches for this trip. You can keep refining or ask what to do next here.`);
-    if (hasRecommendations()) renderInlineCta(reviewRecosOnlyCtaHtml());
+    const latest = latestRecommendation();
+    appendMsg('assistant', latest?.message || 'Welcome back. Your latest match outcome is ready to review.');
+    if (hasRecommendations()) renderInlineCta(reviewLatestMatchCtaHtml());
     return;
   }
 
@@ -1626,8 +1719,8 @@ function resumeChat() {
     const sel = tripState.trip_context.selected_option;
     const hasRecos = hasRecommendations();
     const msg = hasRecos
-      ? `Welcome back - you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Head to recommendations to explore your options or plan next steps.`
-      : `Welcome back - you've confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. You can plan next steps with Scout.`;
+      ? `Welcome back. You have confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. Review the recommendations or continue to planning.`
+      : `Welcome back. You have confirmed ${sel?.name || sel?.id || 'a destination'} for this trip. You can continue to planning.`;
     appendMsg('assistant', msg);
     renderInlineCta(reviewAndPlannerCtaHtml(stage), { multi: hasRecos });
     return;
@@ -1644,7 +1737,7 @@ async function handleContinue() {
   if (busy) return;
   busy = true; setSendDisabled(true);
   removeResumeBtn();
-  await sendActiveAgentMessage(null, { errorText: "Couldn't continue — try again.", errorLogTag: '[Resume/continue]' });
+  await sendActiveAgentMessage(null, { errorText: "We couldn't continue.", errorLogTag: '[Resume/continue]' });
   busy = false; setSendDisabled(false);
 }
 
@@ -1664,12 +1757,13 @@ function appendMsg(role, content) {
   scrollChat();
 }
 
-function appendError(text) {
+function appendError(text, { retry = false } = {}) {
   const inner  = document.getElementById('chatInner');
   const typing = document.getElementById('typingRow');
   const div = document.createElement('div');
   div.className = 'mrow';
-  div.innerHTML = `<div class="av">S</div><div class="error-bub">${text}</div>`;
+  if (retry) div.id = 'retry-error-row';
+  div.innerHTML = `<div class="av">S</div><div class="error-bub"><div>${escapeHtml(text)}</div>${retry ? '<button class="error-retry-btn" onclick="retryLastFailedTurn()">Try again</button>' : ''}</div>`;
   inner.insertBefore(div, typing);
   scrollChat();
 }
@@ -1705,7 +1799,7 @@ async function handleSend() {
   if (confirmedOption) {
     appendMsg('user', msg);
     confirmOptionFromChat(confirmedOption);
-    appendMsg('assistant', `${confirmedOption.name} is locked in. Want a day-by-day plan for this?`);
+    appendMsg('assistant', `${confirmedOption.name} is confirmed. Would you like to plan this trip?`);
     renderInlineCta(reviewAndPlannerCtaHtml('matched'), { multi: true });
     busy = false; setSendDisabled(false);
     return;
@@ -1735,7 +1829,7 @@ async function handleSend() {
   }
 
   appendMsg('user', msg);
-  await sendActiveAgentMessage(msg, { errorText: 'Something went wrong - try again.', errorLogTag: '[Active agent]' });
+  await sendActiveAgentMessage(msg, { errorText: "We couldn't complete that request.", errorLogTag: '[Active agent]' });
   busy = false; setSendDisabled(false);
 }
 
@@ -1748,6 +1842,9 @@ function renderRecos(meridianData) {
   container.innerHTML = '';
   document.getElementById('inlinePlanCtaWrap').innerHTML = '';
   document.getElementById('refineRow').style.display = 'none';
+  document.getElementById('recosLabelText').textContent = isMeridianFailureStatus(meridianData?.status)
+    ? 'Your match outcome'
+    : 'Your destination matches';
 
   // Subheading from trip context
   const contextParts = tripContextChips(tripState?.trip_context || {}).slice(0, 4);
@@ -1758,11 +1855,13 @@ function renderRecos(meridianData) {
     return;
   }
 
+  if (isMeridianFailureStatus(meridianData.status)) {
+    renderFailureRecos(container, meridianData);
+    document.getElementById('refineRow').style.display = 'flex';
+    return;
+  }
+
   if (!meridianData.options?.length) {
-    if (meridianData.status !== 'SUCCESS') {
-      renderFailureRecos(container, meridianData);
-      return;
-    }
     container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">No recommendations to show.</div>`;
     return;
   }
@@ -1770,16 +1869,13 @@ function renderRecos(meridianData) {
   meridianData.options.forEach((opt) => {
     const card = document.createElement('div');
     card.className = `match-card${opt.rank === 1 ? ' rank-1' : ''}`;
-    const sections = opt.sections || opt.match_sections || [];
+    const sections = Array.isArray(opt.sections) ? opt.sections : [];
     const budgetSec  = sections.find(s => s.type === 'budget');
     const summaryTag = budgetSec?.per_person_total ? `<span class="acc-summary">₹${budgetSec.per_person_total.toLocaleString('en-IN')}/pp</span>` : '';
 
-    const whyRanked = opt.why_ranked_here || (opt.why_this_works_for_you || []).map(item => {
-      const criterion = item.criterion ? `${item.criterion}: ` : '';
-      return `${criterion}${item.reason || item}`;
-    });
+    const whyRanked = Array.isArray(opt.why_ranked_here) ? opt.why_ranked_here : [];
     const summaryMatches = opt.decision_summary?.matches || [];
-    const summaryTradeoffs = opt.decision_summary?.tradeoffs || (opt.tradeoffs || []).map(t => t.point || t);
+    const summaryTradeoffs = opt.decision_summary?.tradeoffs || [];
 
     let bodyHtml = `<div class="match-sections">`;
     if (opt.best_for) {
@@ -1805,8 +1901,9 @@ function renderRecos(meridianData) {
         bodyHtml += `<tr class="total-row"><td>Total per person</td><td>₹${(sec.per_person_total||0).toLocaleString('en-IN')}</td></tr></table>`;
         const vc   = sec.verdict === 'comfortable' ? 'comfortable' : sec.verdict === 'tight' ? 'tight' : 'stretch';
         bodyHtml  += `<div class="budget-tags"><span class="budget-tag">₹${(sec.per_person_total||0).toLocaleString('en-IN')}/pp</span><span class="budget-tag">₹${(sec.group_total||0).toLocaleString('en-IN')} total</span>${sec.verdict ? `<span class="verdict-tag ${vc}">${sec.verdict}</span>` : ''}</div>`;
-      } else if (sec.points) {
-        bodyHtml += `<ul class="match-points">${sec.points.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
+      } else {
+        const points = meridianSectionPoints(sec);
+        if (points.length) bodyHtml += `<ul class="match-points">${points.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
       }
       bodyHtml += `</div>`;
     });
@@ -1842,14 +1939,9 @@ function renderRecos(meridianData) {
 
 function renderFailureRecos(container, meridianData) {
   let html = `<div class="acc-card open" style="grid-column:1/-1;"><div class="acc-body"><div class="match-sections">`;
-  html += `<div class="match-section"><div class="match-heading">${escapeHtml(meridianData.status || 'Result')}</div>`;
+  html += `<div class="match-section"><div class="match-heading">${escapeHtml(meridianOutcomeHeading(meridianData.status))}</div>`;
   if (meridianData.message) html += `<p style="color:var(--ink-muted);line-height:1.6;">${escapeHtml(meridianData.message)}</p>`;
   html += `</div>`;
-  (meridianData.failure_sections || []).forEach(sec => {
-    html += `<div class="match-section"><div class="match-heading">${escapeHtml(sec.heading)}</div>`;
-    if (sec.points?.length) html += `<ul class="match-points">${sec.points.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
-    html += `</div>`;
-  });
   if (meridianData.constraint_adjustment_suggestions?.length) {
     html += `<div class="match-section"><div class="match-heading">Ways to adjust</div><ul class="match-points">${meridianData.constraint_adjustment_suggestions.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
   }
@@ -1889,7 +1981,7 @@ function chooseDestination(name, id, type = 'destination') {
 }
 
 
-function refineWithScout() {
+function refineRecommendations() {
   if (!tripState) { navigate('chat'); return; }
   tripState.stage = 'matching';
   setActiveAgent('meridian');
@@ -1901,7 +1993,7 @@ function refineWithScout() {
   const msg = "I want to refine these recommendations.";
   setTimeout(async () => {
     appendMsg('user', msg);
-    await sendActiveAgentMessage(msg, { errorText: "Couldn't continue matching - try again." });
+    await sendActiveAgentMessage(msg, { errorText: "We couldn't continue matching." });
   }, 300);
 }
 // PLANS & PRICING
@@ -2129,9 +2221,9 @@ function tripCtaConfig(trip, fullState) {
   const stage = fullState?.stage;
   // matched and planning are dual-CTA — rendered inline in tripCardHTML
   if (stage === 'planned')              return { label: 'See plan', style: 'cta-green', action: `navigate('itin')` };
-  if (stage === 'recommended')          return { label: 'Review recommendations',    style: 'cta-blue',   action: `openTripRecos('${trip.id}')` };
+  if (stage === 'recommended')          return { label: latestMatchReviewLabel(fullState), style: 'cta-blue', action: `openTripRecos('${trip.id}')` };
   if (stage === 'recommendation_ready') return { label: 'Generate recommendations',  style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  if (stage === 'matching')             return { label: 'Resume matching with Scout', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  if (stage === 'matching')             return { label: 'Resume matching', style: 'cta-accent', action: `openTrip('${trip.id}')` };
   if (stage === 'new' && hasTripContext(fullState)) return { label: 'Resume chat', style: 'cta-accent', action: `openTrip('${trip.id}')` };
   return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
 }
@@ -2148,7 +2240,7 @@ function tripCardHTML(trip) {
   const showReviewRecos = !isPlanning || hasRecommendations(fullState);
   const reviewRecosButton = showReviewRecos
     ? `<button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
-        Review recommendations
+        ${latestMatchReviewLabel(fullState)}
       </button>`
     : '';
 
@@ -2163,7 +2255,7 @@ function tripCardHTML(trip) {
     ? `<div style="display:flex;gap:6px;">
         ${reviewRecosButton}
         <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
-          Resume planning with Scout
+          Resume planning
         </button>
       </div>`
     : `<button class="tc-cta ${cta.style}" onclick="${cta.action}; event.stopPropagation()">

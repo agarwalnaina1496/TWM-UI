@@ -24,7 +24,7 @@ const context = vm.createContext({ Date });
   'normalizedAgentMeta',
   'debugAgentMeta',
   'tripPromptProvenance',
-  'normalizeScoutResponse',
+  'recordScoutAdvice',
   'recommendationPayloadFromMeridian'
 ].forEach(name => vm.runInContext(extractFunction(name), context));
 
@@ -36,23 +36,30 @@ assert.deepEqual(
 assert.equal(context.normalizedAgentMeta({ agent: 'meridian', prompt_version: '1.0.0' }, 'scout'), null);
 assert.equal(context.normalizedAgentMeta({ agent: 'scout', prompt_version: '' }, 'scout'), null);
 
-const scoutResponse = context.normalizeScoutResponse({
+const scoutState = { advisor_state: { conversation_context: {}, artifacts: [] } };
+context.recordScoutAdvice({
   intent: 'advise',
   message: 'Advice',
   agent_meta: validScout,
   state_delta: {}
-});
+}, scoutState);
 assert.deepEqual(
-  { ...scoutResponse.state_delta.advisor_state.artifacts[0].agent_meta },
+  { ...scoutState.advisor_state.artifacts[0].agent_meta },
   { agent: 'scout', prompt_version: '1.2.3' }
 );
+assert.equal(scoutState.advisor_state.conversation_context.last_advisor_message, 'Advice');
 
-const legacyScout = context.normalizeScoutResponse({
+const unversionedScoutState = { advisor_state: { conversation_context: {}, artifacts: [] } };
+context.recordScoutAdvice({
   intent: 'advise',
-  message: 'Legacy advice',
+  message: 'Unversioned advice',
   state_delta: {}
-});
-assert.equal('agent_meta' in legacyScout.state_delta.advisor_state.artifacts[0], false);
+}, unversionedScoutState);
+assert.equal('agent_meta' in unversionedScoutState.advisor_state.artifacts[0], false);
+
+const matcherHandoffState = { advisor_state: { conversation_context: {}, artifacts: [] } };
+context.recordScoutAdvice({ intent: 'matcher', message: 'Must not be stored as advice.' }, matcherHandoffState);
+assert.equal(matcherHandoffState.advisor_state.artifacts.length, 0);
 
 const meridianPayload = context.recommendationPayloadFromMeridian({
   status: 'SUCCESS',
