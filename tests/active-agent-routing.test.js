@@ -34,6 +34,8 @@ vm.runInContext("let tripState = null; const STATE_KEY = 'state:';", context);
   'defaultState',
   'loadTripState',
   'saveTripState',
+  'isPlainObject',
+  'agentOwnedStateDelta',
   'isMeridianBusinessStatus',
   'activeAgentFromState',
   'setActiveAgent',
@@ -88,6 +90,27 @@ assert.deepEqual(Object.keys(meridianPayload.trip_state).sort(), [
   'matcher_state',
   'trip_context'
 ]);
+
+const scoutDelta = plain(context.agentOwnedStateDelta({
+  trip_context: { region: 'Uttarakhand', selected_option: { id: 'blocked' } },
+  advisor_state: { injected: true },
+  matcher_state: { recommendations: [{ name: 'Injected' }] }
+}, 'scout'));
+assert.deepEqual(scoutDelta, { trip_context: { region: 'Uttarakhand' } });
+
+const meridianDelta = plain(context.agentOwnedStateDelta({
+  trip_context: { budget: 'mid-range', selected_option: { id: 'blocked' } },
+  matcher_state: {
+    conversation_context: { awaiting: 'duration' },
+    recommendations: [{ name: 'Injected' }]
+  },
+  advisor_state: { injected: true }
+}, 'meridian'));
+assert.deepEqual(meridianDelta, {
+  trip_context: { budget: 'mid-range' },
+  matcher_state: { conversation_context: { awaiting: 'duration' } }
+});
+assert.throws(() => context.agentOwnedStateDelta({}, 'unknown'), /Unknown delta owner/);
 
 assert.throws(
   () => vm.runInContext("applyMeridianRoutingOutcome('UNKNOWN')", context),

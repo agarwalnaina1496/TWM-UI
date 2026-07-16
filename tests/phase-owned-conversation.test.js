@@ -128,6 +128,7 @@ assert.equal(context.phaseContextFallback(), 'Planning context is saved for this
 assert.equal(html.includes('match_sections'), false);
 assert.equal(html.includes('why_this_works_for_you'), false);
 assert.equal(html.includes('failure_sections'), false);
+assert.equal(html.includes('last_scout_message'), false);
 assert.equal(html.includes('refineWithScout'), false);
 assert.equal(html.includes('API.planner'), false);
 assert.match(html, /retryLastFailedTurn/);

@@ -1047,16 +1047,30 @@ function jsArg(value) {
   return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
 }
 
-function applyStateDelta(delta) {
-  if (!delta) return;
-  // UI owns stage transitions — Scout's delta.stage is intentionally ignored.
-  // Stages are set explicitly by UI actions (handleSend, callMeridian, chooseDestination, etc.)
-  if (delta.trip_context) deepMerge(tripState.trip_context, delta.trip_context);
-  if (delta.advisor_state) {
-    if (!tripState.advisor_state) tripState.advisor_state = { conversation_context: { last_advisor_message: null }, artifacts: [] };
-    deepMergeStateBranch(tripState.advisor_state, delta.advisor_state);
+function agentOwnedStateDelta(delta, agent) {
+  if (!['scout', 'meridian'].includes(agent)) throw new Error(`Unknown delta owner: ${agent}`);
+  if (!isPlainObject(delta)) return {};
+
+  const owned = {};
+  if (isPlainObject(delta.trip_context)) {
+    owned.trip_context = Object.fromEntries(
+      Object.entries(delta.trip_context).filter(([key]) => key !== 'selected_option')
+    );
   }
-  if (delta.matcher_state) deepMergeStateBranch(tripState.matcher_state, delta.matcher_state);
+  if (agent === 'meridian' && isPlainObject(delta.matcher_state)) {
+    owned.matcher_state = Object.fromEntries(
+      Object.entries(delta.matcher_state).filter(([key]) => key !== 'recommendations')
+    );
+  }
+  return owned;
+}
+
+function applyStateDelta(delta, agent) {
+  const owned = agentOwnedStateDelta(delta, agent);
+  // UI owns stage transitions, so agent lifecycle fields are intentionally ignored.
+  // Stages are set explicitly by UI actions (handleSend, callMeridian, chooseDestination, etc.)
+  if (owned.trip_context) deepMerge(tripState.trip_context, owned.trip_context);
+  if (owned.matcher_state) deepMergeStateBranch(tripState.matcher_state, owned.matcher_state);
 }
 
 // Append/dedupe known array fields instead of letting deepMerge clobber them.
@@ -1103,17 +1117,15 @@ function logMeridian(input, output) {
 // ══════════════════════════════════════════
 // API CALLS
 // ══════════════════════════════════════════
-function normalizeScoutResponse(data) {
-  if (data?.intent !== 'advise') return data;
-  const delta = data.state_delta || {};
-  const legacyMessage = delta.matcher_state?.conversation_context?.last_scout_message;
-  const adviceMessage = data.message || legacyMessage;
-  if (!adviceMessage) return data;
+function recordScoutAdvice(data, state = tripState) {
+  const adviceMessage = data?.intent === 'advise' ? data.message : null;
+  if (!state || !adviceMessage) return;
 
-  const advisorState = delta.advisor_state || {};
-  const conversationContext = advisorState.conversation_context || {};
-  conversationContext.last_advisor_message = adviceMessage;
-  const artifacts = Array.isArray(advisorState.artifacts) ? advisorState.artifacts : [];
+  if (!isPlainObject(state.advisor_state)) state.advisor_state = {};
+  if (!isPlainObject(state.advisor_state.conversation_context)) state.advisor_state.conversation_context = {};
+  state.advisor_state.conversation_context.last_advisor_message = adviceMessage;
+  if (!Array.isArray(state.advisor_state.artifacts)) state.advisor_state.artifacts = [];
+  const artifacts = state.advisor_state.artifacts;
   const agentMeta = normalizedAgentMeta(data.agent_meta, 'scout');
   const existing = artifacts.find(item => item?.type === 'advice' && item?.source === 'scout' && item?.assistant_message === adviceMessage);
   if (existing) {
@@ -1128,12 +1140,6 @@ function normalizeScoutResponse(data) {
     if (agentMeta) artifact.agent_meta = agentMeta;
     artifacts.push(artifact);
   }
-  advisorState.conversation_context = conversationContext;
-  advisorState.artifacts = artifacts;
-  delta.advisor_state = advisorState;
-  delete delta.matcher_state;
-  data.state_delta = delta;
-  return data;
 }
 function scoutRequestFromState(state = tripState, message = null) {
   return {
@@ -1154,8 +1160,9 @@ async function callScout(message) {
   const input = scoutRequestFromState(tripState, message);
   const res = await fetch(API.scout, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
   if (!res.ok) throw new Error(`Scout ${res.status}`);
-  const data = normalizeScoutResponse(await res.json());
-  applyStateDelta(data.state_delta);
+  const data = await res.json();
+  applyStateDelta(data.state_delta, 'scout');
+  recordScoutAdvice(data);
   applyRoutingFromScoutIntent(data.intent);
   window._enteringPlanner = false;
   saveTripState();
@@ -1234,7 +1241,7 @@ async function callMeridian(message = null) {
   const data = await res.json();
   if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
 
-  applyStateDelta(data.state_delta);
+  applyStateDelta(data.state_delta, 'meridian');
   applyMeridianRoutingOutcome(data.status);
 
   if (shouldStoreMeridianOutput(data)) {
