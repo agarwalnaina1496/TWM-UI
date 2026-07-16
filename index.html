@@ -1882,7 +1882,7 @@ function renderRecos(meridianData) {
       bodyHtml += `<div class="match-section"><div class="match-heading">Best for</div><ul class="match-points"><li>${escapeHtml(opt.best_for)}</li></ul></div>`;
     }
     if (whyRanked.length) {
-      bodyHtml += `<div class="match-section"><div class="match-heading">Why ranked here</div><ul class="match-points">${whyRanked.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
+      bodyHtml += `<div class="match-section"><div class="match-heading">Why this works for you</div><ul class="match-points">${whyRanked.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
     }
     if (summaryMatches.length) {
       bodyHtml += `<div class="match-section"><div class="match-heading">Matches</div><ul class="match-points">${summaryMatches.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
