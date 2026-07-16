@@ -43,6 +43,7 @@ vm.runInContext("let tripState = null; const STATE_KEY = 'state:';", context);
   'meridianTripContextFromState',
   'meridianAdvisorStateFromState',
   'meridianRequestFromState',
+  'presentMeridianOutcome',
   'dispatchActiveAgentTurn'
 ].forEach(name => vm.runInContext(extractFunction(name), context));
 
@@ -98,7 +99,8 @@ context.callMeridian = async message => ({ status: 'NEEDS_CLARIFICATION', messag
 context.appendMsg = () => {};
 context.hasRecommendations = () => false;
 context.renderInlineCta = () => {};
-context.reviewRecosOnlyCtaHtml = () => '';
+context.reviewLatestMatchCtaHtml = () => '';
+context.updateChatComposerPlaceholder = () => {};
 context.handleScoutResult = value => value;
 vm.runInContext("tripState.stage = 'matching'; tripState.active_agent = 'meridian'", context);
 
