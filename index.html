@@ -835,6 +835,7 @@ function defaultState(tripId) {
     trip_id: tripId,
     status: 'free',
     stage: 'new',
+    active_agent: 'scout',
     trip_context: {},
     advisor_state: {
       conversation_context: { last_advisor_message: null },
@@ -924,6 +925,21 @@ window.getTripPromptProvenance = function(tripId = currentTripId) {
 
 function isMeridianBusinessStatus(status) {
   return ['NEEDS_CLARIFICATION', 'SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL'].includes(status);
+}
+
+function activeAgentFromState(state = tripState) {
+  return state?.active_agent === 'meridian' ? 'meridian' : 'scout';
+}
+
+function setActiveAgent(agent) {
+  if (!tripState) return;
+  if (![null, 'scout', 'meridian'].includes(agent)) throw new Error(`Unknown active agent: ${agent}`);
+  tripState.active_agent = agent;
+}
+
+function applyMeridianRoutingOutcome(status) {
+  if (!isMeridianBusinessStatus(status)) throw new Error(`Unexpected Meridian status: ${status || 'missing'}`);
+  setActiveAgent(status === 'NEEDS_CLARIFICATION' ? 'meridian' : null);
 }
 
 function loadUiState(tripId) {
@@ -1087,19 +1103,21 @@ async function callScout(message) {
   if (!res.ok) throw new Error(`Scout ${res.status}`);
   const data = normalizeScoutResponse(await res.json());
   applyStateDelta(data.state_delta);
-  applyStageFromScoutIntent(data.intent);
+  applyRoutingFromScoutIntent(data.intent);
   window._enteringPlanner = false;
   saveTripState();
   logScoutTurn(message, before, data, JSON.parse(JSON.stringify(tripState)));
   return data;
 }
 
-function applyStageFromScoutIntent(intent) {
+function applyRoutingFromScoutIntent(intent) {
   if (!tripState) return;
-  if (intent === 'matcher' && ['new', 'recommendation_ready'].includes(tripState.stage)) {
-    tripState.stage = 'matching';
+  if (intent === 'matcher') {
+    if (['new', 'recommendation_ready'].includes(tripState.stage)) tripState.stage = 'matching';
+    setActiveAgent('meridian');
   }
   if (intent === 'planner') {
+    setActiveAgent(null);
     markPlanningStarted();
   }
 }
@@ -1164,6 +1182,7 @@ async function callMeridian(message = null) {
   if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
 
   applyStateDelta(data.state_delta);
+  applyMeridianRoutingOutcome(data.status);
 
   if (shouldStoreMeridianOutput(data)) {
     const payload = recommendationPayloadFromMeridian(data);
@@ -1195,16 +1214,28 @@ async function handleScoutResult(res, message = null) {
   return res;
 }
 
-// Shared "send this message (or null, to just continue) to Scout and render
-// whatever comes back" routine — same typing indicator / success / error
+async function dispatchActiveAgentTurn(message) {
+  if (activeAgentFromState() === 'meridian') {
+    const meridianOut = await callMeridian(message);
+    if (meridianOut.message) appendMsg('assistant', meridianOut.message);
+    if (tripState.stage === 'recommended' && hasRecommendations()) {
+      renderInlineCta(reviewRecosOnlyCtaHtml());
+    }
+    return meridianOut;
+  }
+
+  const scoutOut = await callScout(message);
+  return handleScoutResult(scoutOut, message);
+}
+
+// Shared active-agent dispatcher — same typing indicator / success / error
 // handling every caller (handleSend, handleContinue, refineWithScout) needs.
 // errorText and errorLogTag let each caller keep its own wording/log tag
 // without duplicating the try/catch scaffolding.
-async function sendScoutMessage(msg, { errorText = 'Something went wrong - try again.', errorLogTag = null } = {}) {
+async function sendActiveAgentMessage(msg, { errorText = 'Something went wrong - try again.', errorLogTag = null } = {}) {
   showTyping();
   try {
-    const res = await callScout(msg);
-    await handleScoutResult(res, msg);
+    await dispatchActiveAgentTurn(msg);
     removeTyping();
     updateChatContextSnippet();
   } catch (err) {
@@ -1267,6 +1298,7 @@ function startPlanningConvo() {
 // message sent with planner intent, not on merely opening the chat.
 function markPlanningStarted() {
   if (!tripState) return;
+  setActiveAgent(null);
   if (tripState.stage !== 'planning') {
     tripState.stage = 'planning';
     saveTripState();
@@ -1395,6 +1427,7 @@ function confirmOptionFromChat(option) {
   const id = option.destination_id || option.circuit_id || option.name;
   tripState.trip_context.selected_option = { type, id, name: option.name };
   tripState.stage = 'matched';
+  setActiveAgent(null);
   saveTripState();
 }
 // ── Reusable trip context card ──────────────────────────────────────────
@@ -1611,7 +1644,7 @@ async function handleContinue() {
   if (busy) return;
   busy = true; setSendDisabled(true);
   removeResumeBtn();
-  await sendScoutMessage(null, { errorText: "Couldn't reach Scout — try again.", errorLogTag: '[Resume/continue]' });
+  await sendActiveAgentMessage(null, { errorText: "Couldn't continue — try again.", errorLogTag: '[Resume/continue]' });
   busy = false; setSendDisabled(false);
 }
 
@@ -1681,10 +1714,12 @@ async function handleSend() {
   if (stage === 'recommendation_ready') {
     // New info before generating — go back to matching
     tripState.stage = 'matching';
+    setActiveAgent('meridian');
     saveTripState();
   } else if (stage === 'recommended') {
     // User typing after seeing recommendations — refining
     tripState.stage = 'matching';
+    setActiveAgent('meridian');
     saveTripState();
   } else if (stage === 'matched' && window._enteringPlanner) {
     // User chose to plan this destination — move into planner mode.
@@ -1694,12 +1729,13 @@ async function handleSend() {
   } else if (stage === 'matched') {
     // Refining after destination confirmed — clear selection
     tripState.stage = 'matching';
+    setActiveAgent('meridian');
     tripState.trip_context.selected_option = null;
     saveTripState();
   }
 
   appendMsg('user', msg);
-  await sendScoutMessage(msg, { errorText: 'Something went wrong - try again.', errorLogTag: '[Scout]' });
+  await sendActiveAgentMessage(msg, { errorText: 'Something went wrong - try again.', errorLogTag: '[Active agent]' });
   busy = false; setSendDisabled(false);
 }
 
@@ -1826,6 +1862,7 @@ function chooseDestination(name, id, type = 'destination') {
   if (tripState) {
     tripState.trip_context.selected_option = { type, id: id || name, name };
     tripState.stage = 'matched';
+    setActiveAgent(null);
     saveTripState();
     renderStateBarEl('stateBarRecos');
   }
@@ -1855,6 +1892,7 @@ function chooseDestination(name, id, type = 'destination') {
 function refineWithScout() {
   if (!tripState) { navigate('chat'); return; }
   tripState.stage = 'matching';
+  setActiveAgent('meridian');
   saveTripState();
 
   enterChatScreenForTrip(currentTripId);
@@ -1863,7 +1901,7 @@ function refineWithScout() {
   const msg = "I want to refine these recommendations.";
   setTimeout(async () => {
     appendMsg('user', msg);
-    await sendScoutMessage(msg, { errorText: "Couldn't reach Scout - try again." });
+    await sendActiveAgentMessage(msg, { errorText: "Couldn't continue matching - try again." });
   }, 300);
 }
 // PLANS & PRICING
