@@ -215,31 +215,46 @@
      SCREEN 4 — RECOMMENDATIONS
   ════════════════════════════════════════ */
   #screen-recos .scroll { padding: 24px 28px 28px; }
-  .recos-inner { max-width: 900px; margin: 0 auto; display: flex; gap: 24px; align-items: flex-start; }
-  .recos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  .recos-inner { max-width: 1180px; margin: 0 auto; }
+  .recos-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
   .recos-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
   .recos-right { width: 280px; flex-shrink: 0; position: sticky; top: 0; }
   .recos-heading { margin-bottom: 14px; }
   .recos-heading h2 { font-family: 'DM Serif Display', serif; font-size: 20px; letter-spacing: -0.02em; margin-bottom: 3px; }
   .recos-heading p { font-size: 13px; color: var(--ink-muted); }
+  .recos-intro { max-width: 780px; margin-top: 8px; font-size: 13.5px; line-height: 1.65; color: var(--ink-muted); }
   .recos-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-muted); display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
   .recos-label-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 
-  /* Accordion */
-  .match-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+  /* Ask-mapped recommendation comparison */
+  .match-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
   .match-card.rank-1 { border-color: var(--accent); border-width: 1.5px; }
-  .match-card-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
-  .match-card-body { padding: 14px 16px 16px; }
+  .match-card.is-selected { box-shadow: 0 0 0 2px var(--accent-light), var(--shadow); }
+  .match-card-header { display: flex; align-items: center; gap: 9px; padding: 14px 16px 10px; }
+  .match-card-body { padding: 0 16px 16px; display: flex; flex-direction: column; flex: 1; }
   .rank-badge { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .acc-name { font-weight: 600; font-size: 14.5px; flex: 1; }
   .acc-best { font-size: 10px; font-weight: 600; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent-light); padding: 2px 7px; border-radius: 4px; }
-  .acc-summary { font-size: 11px; color: var(--ink-muted); font-family: 'DM Mono', monospace; background: var(--paper-warm); padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
-  .acc-body { padding: 14px 16px 16px; border-top: 1px solid var(--border); }
+  .option-summary { color: var(--ink-muted); font-size: 12.5px; line-height: 1.55; margin-bottom: 12px; min-height: 3.1em; }
+  .criterion-list { border-top: 1px solid var(--border); margin-bottom: 12px; }
+  .criterion-row { padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .criterion-row-top { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+  .criterion-label { font-size: 12px; font-weight: 600; color: var(--ink); }
+  .criterion-conclusion { font-size: 11.5px; color: var(--ink-muted); line-height: 1.45; }
+  .outcome-badge { flex-shrink: 0; border-radius: 100px; padding: 2px 7px; font-size: 9.5px; line-height: 1.4; font-weight: 700; letter-spacing: 0.05em; }
+  .outcome-match { color: var(--green); background: var(--green-light); }
+  .outcome-tradeoff { color: #915700; background: #fff3df; }
+  .outcome-mismatch { color: #9c3030; background: #ffeaea; }
+  .other-count { color: var(--ink-faint); font-size: 11.5px; margin-bottom: 10px; }
   .match-sections { display: flex; flex-direction: column; gap: 12px; }
   .match-section { font-size: 12.5px; }
   .match-heading { font-weight: 600; color: var(--ink); margin-bottom: 4px; font-size: 13px; }
   .match-points { padding-left: 15px; color: var(--ink-muted); }
   .match-points li { margin-bottom: 2px; }
+  .fact-list { display: grid; gap: 5px; }
+  .fact-row { display: grid; grid-template-columns: minmax(100px, .7fr) 1.3fr; gap: 10px; }
+  .fact-row dt { color: var(--ink-faint); }
+  .fact-row dd { color: var(--ink); margin: 0; }
   .budget-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
   .budget-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
   .budget-table td:first-child { color: var(--ink-muted); }
@@ -248,17 +263,27 @@
   .budget-table tr.total-row td:last-child { color: var(--accent-dim); }
   .budget-tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   .budget-tag { font-family: 'DM Mono', monospace; font-size: 11px; background: var(--accent-light); color: var(--accent-dim); padding: 2px 8px; border-radius: 4px; }
-  .verdict-tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; }
-  .verdict-tag.comfortable { background: var(--green-light); color: var(--green); }
-  .verdict-tag.tight { background: #fff3e0; color: #b06000; }
-  .verdict-tag.stretch { background: #ffeaea; color: #a03030; }
-  .tradeoffs { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .tradeoffs { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
   .tradeoff-label { font-size: 10px; font-weight: 600; color: var(--ink-faint); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 5px; }
   .tradeoff-item { font-size: 12px; color: var(--ink-muted); display: flex; gap: 5px; align-items: flex-start; margin-bottom: 3px; }
   .tradeoff-item::before { content: "↗"; font-size: 10px; margin-top: 1px; flex-shrink: 0; color: var(--ink-faint); }
-  .card-actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
+  .card-actions { display: flex; gap: 8px; margin-top: auto; align-items: center; flex-wrap: wrap; }
   .choose-btn { background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 500; padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
   .choose-btn:hover { background: var(--accent); }
+  .details-btn { background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--accent); cursor: pointer; font-family: 'DM Sans', sans-serif; }
+  .details-btn:hover, .details-btn:focus-visible { background: var(--accent-light); }
+  .recommendation-detail { margin-top: 14px; background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); padding: 20px; }
+  .recommendation-detail[hidden] { display: none; }
+  .detail-header { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+  .detail-title { font-family: 'DM Serif Display', serif; font-size: 20px; }
+  .detail-subtitle { color: var(--ink-muted); font-size: 12.5px; margin-top: 3px; }
+  .detail-close { border: 1px solid var(--border); background: var(--paper); color: var(--ink-muted); border-radius: 6px; padding: 6px 10px; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+  .detail-criterion { padding: 14px 0; border-top: 1px solid var(--border); }
+  .detail-criterion:first-of-type { border-top: none; }
+  .detail-conclusion { font-size: 13px; color: var(--ink); line-height: 1.55; margin: 6px 0 10px; }
+  .detail-evidence { display: grid; gap: 10px; }
+  .detail-block { background: var(--paper-warm); border-radius: var(--r-sm); padding: 11px 12px; }
+  .integration-failure { grid-column: 1 / -1; padding: 24px; border: 1px solid #f0c0c0; border-radius: var(--r); background: #fff0f0; color: #8d2525; font-size: 13px; line-height: 1.55; }
 
   /* Right CTA panel */
   .plan-cta-placeholder { border: 2px dashed var(--border); border-radius: var(--r); padding: 32px 20px; text-align: center; color: var(--ink-faint); font-size: 13px; line-height: 1.6; }
@@ -437,6 +462,12 @@
     .chat-inner { width: 100%; padding: 0 16px; }
     .input-wrap { width: calc(100% - 32px); }
     .bub { max-width: 88%; }
+    #screen-recos .scroll { padding: 16px; }
+    .recos-inner { padding: 0 !important; }
+    .detail-header { flex-direction: column; }
+  }
+  @media (min-width: 761px) and (max-width: 1040px) {
+    .recos-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 </style>
 </head>
@@ -547,8 +578,10 @@
       <div class="recos-heading">
         <div class="recos-label"><div class="recos-label-dot"></div><span id="recosLabelText">Your destination matches</span></div>
         <div id="recosSubheading" style="font-size:13px;color:var(--ink-muted);margin-top:3px;"></div>
+        <p id="recosIntro" class="recos-intro"></p>
       </div>
       <div id="recosCards" class="recos-grid"></div>
+      <section id="recoDetailPanel" class="recommendation-detail" aria-live="polite" hidden></section>
       <div id="inlinePlanCtaWrap"></div>
       <div class="refine-row" id="refineRow" style="display:none;">
         <p>Want to adjust the match? Tell us what should change.</p>
@@ -786,6 +819,7 @@ let currentTripId = null;
 let tripState     = null;
 let busy          = false;
 let currentRecos  = null;
+let expandedRecommendationKey = null;
 let tripFilter    = 'active'; // default filter
 let pendingRetryTurn = null;
 
@@ -1197,6 +1231,69 @@ function recommendationPayloadFromMeridian(data) {
   return payload;
 }
 
+const RECOMMENDATION_OUTCOMES = new Set(['MATCH', 'TRADEOFF', 'MISMATCH']);
+const RECOMMENDATION_DETAIL_TYPES = new Set(['bullets', 'facts', 'cost_breakdown']);
+
+function recommendationOptionKey(option) {
+  return String(option?.type === 'circuit' ? option?.circuit_id : option?.destination_id || '');
+}
+
+function recommendationViewModel(payload) {
+  if (!isPlainObject(payload)) throw new Error('Recommendation response is missing.');
+  const criteria = payload.traveler_criteria;
+  const options = payload.options;
+  if (!Array.isArray(criteria) || !criteria.length) throw new Error('Traveler criteria are missing.');
+  if (!Array.isArray(options) || !options.length || options.length > 3) throw new Error('Recommendation options are invalid.');
+
+  const criteriaById = new Map();
+  criteria.forEach(criterion => {
+    if (!isPlainObject(criterion) || !criterion.id || !criterion.label || criteriaById.has(String(criterion.id))) {
+      throw new Error('Traveler criteria are invalid.');
+    }
+    criteriaById.set(String(criterion.id), criterion);
+  });
+
+  const ranks = new Set();
+  const optionKeys = new Set();
+  const joinedOptions = options.map(option => {
+    const key = recommendationOptionKey(option);
+    const validIdentity = option?.type === 'single'
+      ? Boolean(option.destination_id && !option.circuit_id)
+      : option?.type === 'circuit' && Boolean(option.circuit_id && !option.destination_id);
+    if (!isPlainObject(option) || !validIdentity || !key || !option.name || !Number.isInteger(option.rank) || option.rank < 1 || option.rank > 3 || ranks.has(option.rank) || optionKeys.has(key)) {
+      throw new Error('Recommendation option identity or rank is invalid.');
+    }
+    ranks.add(option.rank);
+    optionKeys.add(key);
+    if (!Array.isArray(option.evaluations) || option.evaluations.length !== criteria.length) {
+      throw new Error('Recommendation evaluations are incomplete.');
+    }
+    const seen = new Set();
+    const evaluations = option.evaluations.map(evaluation => {
+      const criterionId = String(evaluation?.criterion_id || '');
+      if (!criteriaById.has(criterionId) || seen.has(criterionId) || !RECOMMENDATION_OUTCOMES.has(evaluation?.outcome) || !evaluation?.conclusion) {
+        throw new Error('Recommendation evaluation references are invalid.');
+      }
+      seen.add(criterionId);
+      const details = Array.isArray(evaluation.details) ? evaluation.details : [];
+      if (!details.length || details.some(detail => !isPlainObject(detail) || !RECOMMENDATION_DETAIL_TYPES.has(detail.type))) {
+        throw new Error('Recommendation evaluation details are invalid.');
+      }
+      return { ...evaluation, criterion: criteriaById.get(criterionId) };
+    });
+    return { ...option, key, evaluations };
+  }).sort((a, b) => a.rank - b.rank);
+  return { message: payload.message || '', criteria, options: joinedOptions };
+}
+
+function preparedMeridianRecommendation(data) {
+  if (!shouldStoreMeridianOutput(data)) return null;
+  const payload = recommendationPayloadFromMeridian(data);
+  if (Array.isArray(payload.options) && payload.options.length) recommendationViewModel(payload);
+  else if (payload.status === 'SUCCESS') throw new Error('Successful recommendation response has no options.');
+  return payload;
+}
+
 function shouldStoreMeridianOutput(data) {
   return isMeridianBusinessStatus(data?.status) && data.status !== 'NEEDS_CLARIFICATION';
 }
@@ -1241,11 +1338,13 @@ async function callMeridian(message = null) {
   const data = await res.json();
   if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
 
+  // Validate a terminal recommendation before applying its state delta or saving anything.
+  const payload = preparedMeridianRecommendation(data);
+
   applyStateDelta(data.state_delta, 'meridian');
   applyMeridianRoutingOutcome(data.status);
 
   if (shouldStoreMeridianOutput(data)) {
-    const payload = recommendationPayloadFromMeridian(data);
     if (!Array.isArray(tripState.matcher_state.recommendations)) tripState.matcher_state.recommendations = [];
     tripState.matcher_state.recommendations.push(payload);
     currentRecos = payload;
@@ -1397,6 +1496,7 @@ function openTripRecos(id) {
   currentTripId = id;
   tripState = loadTripState(id);
   currentRecos = latestRecommendation();
+  expandedRecommendationKey = loadUiState(id)?.expanded_recommendation_key || null;
   setChatTripNameDisplay(getTripById(id)?.title);
 
   navigate('recos');
@@ -1839,7 +1939,12 @@ async function handleSend() {
 function renderRecos(meridianData) {
   renderStateBarEl('stateBarRecos');
   const container = document.getElementById('recosCards');
+  const intro = document.getElementById('recosIntro');
+  const detailPanel = document.getElementById('recoDetailPanel');
   container.innerHTML = '';
+  intro.textContent = '';
+  detailPanel.hidden = true;
+  detailPanel.innerHTML = '';
   document.getElementById('inlinePlanCtaWrap').innerHTML = '';
   document.getElementById('refineRow').style.display = 'none';
   document.getElementById('recosLabelText').textContent = isMeridianFailureStatus(meridianData?.status)
@@ -1855,86 +1960,98 @@ function renderRecos(meridianData) {
     return;
   }
 
-  if (isMeridianFailureStatus(meridianData.status)) {
+  if (isMeridianFailureStatus(meridianData.status) && !meridianData.options?.length) {
     renderFailureRecos(container, meridianData);
     document.getElementById('refineRow').style.display = 'flex';
     return;
   }
 
-  if (!meridianData.options?.length) {
-    container.innerHTML = `<div style="color:var(--ink-faint);font-size:13px;padding:40px 0;text-align:center;grid-column:1/-1;">No recommendations to show.</div>`;
+  let model;
+  try {
+    model = recommendationViewModel(meridianData);
+  } catch (error) {
+    console.error('[Recommendation contract]', error);
+    container.innerHTML = `<div class="integration-failure">We couldn't safely display these recommendations. Please refine your request and try again.</div>`;
+    document.getElementById('refineRow').style.display = 'flex';
     return;
   }
 
-  meridianData.options.forEach((opt) => {
+  intro.textContent = model.message;
+  const selected = tripState?.trip_context?.selected_option;
+  if (expandedRecommendationKey === null) expandedRecommendationKey = loadUiState(currentTripId)?.expanded_recommendation_key || null;
+
+  model.options.forEach((opt) => {
     const card = document.createElement('div');
-    card.className = `match-card${opt.rank === 1 ? ' rank-1' : ''}`;
-    const sections = Array.isArray(opt.sections) ? opt.sections : [];
-    const budgetSec  = sections.find(s => s.type === 'budget');
-    const summaryTag = budgetSec?.per_person_total ? `<span class="acc-summary">₹${budgetSec.per_person_total.toLocaleString('en-IN')}/pp</span>` : '';
-
-    const whyRanked = Array.isArray(opt.why_ranked_here) ? opt.why_ranked_here : [];
-    const summaryMatches = opt.decision_summary?.matches || [];
-    const summaryTradeoffs = opt.decision_summary?.tradeoffs || [];
-
-    let bodyHtml = `<div class="match-sections">`;
-    if (opt.best_for) {
-      bodyHtml += `<div class="match-section"><div class="match-heading">Best for</div><ul class="match-points"><li>${escapeHtml(opt.best_for)}</li></ul></div>`;
-    }
-    if (whyRanked.length) {
-      bodyHtml += `<div class="match-section"><div class="match-heading">Why this works for you</div><ul class="match-points">${whyRanked.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
-    }
-    if (summaryMatches.length) {
-      bodyHtml += `<div class="match-section"><div class="match-heading">Matches</div><ul class="match-points">${summaryMatches.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></div>`;
-    }
-    sections.forEach(sec => {
-      bodyHtml += `<div class="match-section"><div class="match-heading">${escapeHtml(sec.heading)}</div>`;
-      if (sec.type === 'budget') {
-        bodyHtml += `<table class="budget-table">`;
-        [['Stay', sec.stay],['Food', sec.food],['Travel', sec.travel],['Activities', sec.activities],['Local transport', sec.local_transport]].forEach(([label, item]) => {
-          if (!item) return;
-          const pp   = item.estimate_per_person;
-          const grp  = item.estimate_group;
-          const note = item.notes ? ` <span style="color:var(--ink-faint);font-size:11px;">- ${escapeHtml(item.notes)}</span>` : '';
-          bodyHtml  += `<tr><td>${label}${note}</td><td>${pp ? '₹'+pp.toLocaleString('en-IN')+'/pp' : grp ? '₹'+grp.toLocaleString('en-IN')+' total' : ''}</td></tr>`;
-        });
-        bodyHtml += `<tr class="total-row"><td>Total per person</td><td>₹${(sec.per_person_total||0).toLocaleString('en-IN')}</td></tr></table>`;
-        const vc   = sec.verdict === 'comfortable' ? 'comfortable' : sec.verdict === 'tight' ? 'tight' : 'stretch';
-        bodyHtml  += `<div class="budget-tags"><span class="budget-tag">₹${(sec.per_person_total||0).toLocaleString('en-IN')}/pp</span><span class="budget-tag">₹${(sec.group_total||0).toLocaleString('en-IN')} total</span>${sec.verdict ? `<span class="verdict-tag ${vc}">${sec.verdict}</span>` : ''}</div>`;
-      } else {
-        const points = meridianSectionPoints(sec);
-        if (points.length) bodyHtml += `<ul class="match-points">${points.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
-      }
-      bodyHtml += `</div>`;
-    });
-    bodyHtml += `</div>`;
-
-    if (summaryTradeoffs.length) {
-      bodyHtml += `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>${summaryTradeoffs.map(t=>`<div class="tradeoff-item">${escapeHtml(t)}</div>`).join('')}</div>`;
-    }
-
     const destName     = opt.name || '';
     const optionType   = opt.type === 'circuit' ? 'circuit' : 'destination';
-    const optionId     = optionType === 'circuit' ? opt.circuit_id : opt.destination_id;
+    const optionId     = opt.key;
+    const isSelected   = selected && String(selected.id || selected.name) === String(optionId || destName);
+    card.className = `match-card${opt.rank === 1 ? ' rank-1' : ''}${isSelected ? ' is-selected' : ''}`;
     const safeDestName = jsArg(destName);
     const safeOptionId = jsArg(optionId || '');
     const safeOptType  = jsArg(optionType);
-    bodyHtml += `<div class="card-actions">
-      <button class="choose-btn" onclick="chooseDestination('${safeDestName}','${safeOptionId}','${safeOptType}')">Choose ${escapeHtml(destName)} →</button>
-    </div>`;
+    const safeKey = jsArg(opt.key);
+    const criterionHtml = opt.evaluations.map(evaluation => `<div class="criterion-row"><div class="criterion-row-top"><span class="outcome-badge outcome-${evaluation.outcome.toLowerCase()}">${escapeHtml(evaluation.outcome)}</span><span class="criterion-label">${escapeHtml(evaluation.criterion.label)}</span></div><div class="criterion-conclusion">${escapeHtml(evaluation.conclusion)}</div></div>`).join('');
+    const otherCount = Array.isArray(opt.other_considerations) ? opt.other_considerations.length : 0;
 
     card.innerHTML = `
       <div class="match-card-header">
         <div class="rank-badge">${opt.rank}</div>
         <div class="acc-name">${escapeHtml(destName)}</div>
         ${opt.rank === 1 ? `<span class="acc-best">Best match</span>` : ''}
-        ${summaryTag}
       </div>
-      <div class="match-card-body">${bodyHtml}</div>`;
+      <div class="match-card-body"><p class="option-summary">${escapeHtml(opt.summary || '')}</p><div class="criterion-list">${criterionHtml}</div>${otherCount ? `<div class="other-count">${otherCount} other ${otherCount === 1 ? 'consideration' : 'considerations'}</div>` : ''}<div class="card-actions"><button class="details-btn" aria-expanded="${expandedRecommendationKey === opt.key}" aria-controls="recoDetailPanel" onclick="toggleRecommendationDetails('${safeKey}')">Why this works</button><button class="choose-btn" onclick="chooseDestination('${safeDestName}','${safeOptionId}','${safeOptType}')">${isSelected ? 'Selected' : `Choose ${escapeHtml(destName)}`}</button></div></div>`;
     container.appendChild(card);
   });
 
+  renderRecommendationDetail(model);
+
   document.getElementById('refineRow').style.display = 'flex';
+}
+
+function validEstimateRange(range) {
+  return isPlainObject(range) && Number.isFinite(range.minimum) && Number.isFinite(range.maximum) && range.minimum >= 0 && range.maximum >= range.minimum;
+}
+
+function formatEstimateRange(range, currency) {
+  if (!validEstimateRange(range)) return '';
+  const formatter = new Intl.NumberFormat('en-IN', { style: 'currency', currency: currency || 'INR', maximumFractionDigits: 0 });
+  return range.minimum === range.maximum ? formatter.format(range.minimum) : `${formatter.format(range.minimum)}–${formatter.format(range.maximum)}`;
+}
+
+function recommendationDetailHtml(detail) {
+  if (detail.type === 'bullets' && Array.isArray(detail.items) && detail.items.length) return `<div class="detail-block"><ul class="match-points">${detail.items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>`;
+  if (detail.type === 'facts' && Array.isArray(detail.facts) && detail.facts.length) return `<div class="detail-block"><dl class="fact-list">${detail.facts.map(item => `<div class="fact-row"><dt>${escapeHtml(item?.label || '')}</dt><dd>${escapeHtml(item?.value || '')}</dd></div>`).join('')}</dl></div>`;
+  if (detail.type !== 'cost_breakdown') return '';
+  const currency = detail.currency || 'INR';
+  const rows = (Array.isArray(detail.items) ? detail.items : []).map(item => {
+    const perPerson = formatEstimateRange(item?.per_person, currency);
+    const group = formatEstimateRange(item?.group, currency);
+    if (!perPerson && !group) return '';
+    return `<tr><td>${escapeHtml(item?.label || '')}</td><td>${escapeHtml([perPerson && `${perPerson}/person`, group && `${group} group`].filter(Boolean).join(' · '))}</td></tr>`;
+  }).filter(Boolean);
+  const perPersonTotal = formatEstimateRange(detail.per_person_total, currency);
+  const groupTotal = formatEstimateRange(detail.group_total, currency);
+  if (!rows.length && !perPersonTotal && !groupTotal) return '';
+  const totals = [perPersonTotal && `<span class="budget-tag">${escapeHtml(perPersonTotal)}/person</span>`, groupTotal && `<span class="budget-tag">${escapeHtml(groupTotal)} group</span>`].filter(Boolean).join('');
+  return `<div class="detail-block">${rows.length ? `<table class="budget-table">${rows.join('')}</table>` : ''}${totals ? `<div class="budget-tags">${totals}</div>` : ''}${detail.note ? `<p class="criterion-conclusion">${escapeHtml(detail.note)}</p>` : ''}</div>`;
+}
+
+function renderRecommendationDetail(model) {
+  const panel = document.getElementById('recoDetailPanel');
+  const option = model.options.find(candidate => candidate.key === expandedRecommendationKey);
+  if (!option) { panel.hidden = true; panel.innerHTML = ''; return; }
+  const criteriaHtml = option.evaluations.map(evaluation => `<section class="detail-criterion"><div class="criterion-row-top"><span class="outcome-badge outcome-${evaluation.outcome.toLowerCase()}">${escapeHtml(evaluation.outcome)}</span><h4 class="criterion-label">${escapeHtml(evaluation.criterion.label)}</h4></div><p class="detail-conclusion">${escapeHtml(evaluation.conclusion)}</p><div class="detail-evidence">${evaluation.details.map(recommendationDetailHtml).join('')}</div>${Array.isArray(evaluation.tradeoffs) && evaluation.tradeoffs.length ? `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>${evaluation.tradeoffs.map(item => `<div class="tradeoff-item">${escapeHtml(item)}</div>`).join('')}</div>` : ''}</section>`).join('');
+  const other = Array.isArray(option.other_considerations) ? option.other_considerations : [];
+  panel.innerHTML = `<div class="detail-header"><div><h3 class="detail-title">Why this works for you</h3><p class="detail-subtitle">${escapeHtml(option.name)}</p></div><button class="detail-close" onclick="toggleRecommendationDetails('${jsArg(option.key)}')">Close</button></div>${criteriaHtml}${other.length ? `<section class="detail-criterion"><h4 class="match-heading">Things to consider</h4><ul class="match-points">${other.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></section>` : ''}`;
+  panel.hidden = false;
+}
+
+function toggleRecommendationDetails(optionKey) {
+  expandedRecommendationKey = expandedRecommendationKey === optionKey ? null : optionKey;
+  saveUiState('recos', { expanded_recommendation_key: expandedRecommendationKey });
+  renderRecos(currentRecos);
+  if (expandedRecommendationKey) document.getElementById('recoDetailPanel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function renderFailureRecos(container, meridianData) {
@@ -1961,6 +2078,8 @@ function chooseDestination(name, id, type = 'destination') {
   saveUiState('recos', { selected_option_name: name });
   window._chosenDest = name;
   console.log(`%c[Destination chosen] ${name}`, 'color:#3a6b4a;font-weight:700;');
+
+  renderRecos(currentRecos);
 
   const wrap = document.getElementById('inlinePlanCtaWrap');
   if (!wrap) return;
