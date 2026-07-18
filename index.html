@@ -1077,10 +1077,6 @@ function tripContextChips(context) {
   return chips;
 }
 
-function jsArg(value) {
-  return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
-}
-
 function agentOwnedStateDelta(delta, agent) {
   if (!['scout', 'meridian'].includes(agent)) throw new Error(`Unknown delta owner: ${agent}`);
   if (!isPlainObject(delta)) return {};
@@ -1663,7 +1659,7 @@ function renderTripContextCard({ showContinue = false } = {}) {
   ).join('');
 
   const continueBtnHtml = showContinue ? `
-      <button class="resume-continue-btn" id="resume-continue-btn" onclick="handleContinue()">
+      <button class="resume-continue-btn" id="resume-continue-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         Continue from here
       </button>` : '';
@@ -1682,6 +1678,7 @@ function renderTripContextCard({ showContinue = false } = {}) {
       </div>
       ${continueBtnHtml}
     </div>`;
+  div.querySelector('#resume-continue-btn')?.addEventListener('click', handleContinue);
   inner.insertBefore(div, typing);
   scrollChat();
 }
@@ -1703,6 +1700,8 @@ function renderInlineCta(html, { multi = false } = {}) {
   row.className = `see-recos-row${multi ? ' multi' : ''}`;
   row.id = 'inlineRecoBtnRow';
   row.innerHTML = html;
+  row.querySelector('[data-action="review-recommendations"]')?.addEventListener('click', () => openTripRecos(currentTripId));
+  row.querySelector('[data-action="continue-planning"]')?.addEventListener('click', () => openTripForPlanning(currentTripId));
   inner.insertBefore(row, typing);
   scrollChat();
 }
@@ -1733,7 +1732,7 @@ function latestMatchReviewLabel(state = tripState) {
 function reviewLatestMatchCtaHtml() {
   return `
     <div class="av">S</div>
-    <button class="see-recos-btn" onclick="openTripRecos('${currentTripId}')">
+    <button class="see-recos-btn" data-action="review-recommendations">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       ${latestMatchReviewLabel()}
     </button>`;
@@ -1742,14 +1741,14 @@ function reviewLatestMatchCtaHtml() {
 function reviewAndPlannerCtaHtml(stage) {
   const plannerLabel = stage === 'planning' ? 'Continue planning' : 'Want to plan?';
   const reviewCta = (stage !== 'planning' || hasRecommendations()) ? `
-    <button class="see-recos-btn" onclick="openTripRecos('${currentTripId}')">
+    <button class="see-recos-btn" data-action="review-recommendations">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       ${latestMatchReviewLabel()}
     </button>` : '';
   return `
     <div class="av">S</div>
     ${reviewCta}
-    <button class="see-recos-btn secondary" onclick="openTripForPlanning('${currentTripId}')">
+    <button class="see-recos-btn secondary" data-action="continue-planning">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
       ${plannerLabel}
     </button>`;
@@ -1863,7 +1862,8 @@ function appendError(text, { retry = false } = {}) {
   const div = document.createElement('div');
   div.className = 'mrow';
   if (retry) div.id = 'retry-error-row';
-  div.innerHTML = `<div class="av">S</div><div class="error-bub"><div>${escapeHtml(text)}</div>${retry ? '<button class="error-retry-btn" onclick="retryLastFailedTurn()">Try again</button>' : ''}</div>`;
+  div.innerHTML = `<div class="av">S</div><div class="error-bub"><div>${escapeHtml(text)}</div>${retry ? '<button class="error-retry-btn">Try again</button>' : ''}</div>`;
+  div.querySelector('.error-retry-btn')?.addEventListener('click', retryLastFailedTurn);
   inner.insertBefore(div, typing);
   scrollChat();
 }
@@ -1987,10 +1987,6 @@ function renderRecos(meridianData) {
     const optionId     = opt.key;
     const isSelected   = selected && String(selected.id || selected.name) === String(optionId || destName);
     card.className = `match-card${opt.rank === 1 ? ' rank-1' : ''}${isSelected ? ' is-selected' : ''}`;
-    const safeDestName = jsArg(destName);
-    const safeOptionId = jsArg(optionId || '');
-    const safeOptType  = jsArg(optionType);
-    const safeKey = jsArg(opt.key);
     const criterionHtml = opt.evaluations.map(evaluation => `<div class="criterion-row"><div class="criterion-row-top"><span class="outcome-badge outcome-${evaluation.outcome.toLowerCase()}">${escapeHtml(evaluation.outcome)}</span><span class="criterion-label">${escapeHtml(evaluation.criterion.label)}</span></div><div class="criterion-conclusion">${escapeHtml(evaluation.conclusion)}</div></div>`).join('');
     const otherCount = Array.isArray(opt.other_considerations) ? opt.other_considerations.length : 0;
 
@@ -2000,7 +1996,9 @@ function renderRecos(meridianData) {
         <div class="acc-name">${escapeHtml(destName)}</div>
         ${opt.rank === 1 ? `<span class="acc-best">Best match</span>` : ''}
       </div>
-      <div class="match-card-body"><p class="option-summary">${escapeHtml(opt.summary || '')}</p><div class="criterion-list">${criterionHtml}</div>${otherCount ? `<div class="other-count">${otherCount} other ${otherCount === 1 ? 'consideration' : 'considerations'}</div>` : ''}<div class="card-actions"><button class="details-btn" aria-expanded="${expandedRecommendationKey === opt.key}" aria-controls="recoDetailPanel" onclick="toggleRecommendationDetails('${safeKey}')">Why this works</button><button class="choose-btn" onclick="chooseDestination('${safeDestName}','${safeOptionId}','${safeOptType}')">${isSelected ? 'Selected' : `Choose ${escapeHtml(destName)}`}</button></div></div>`;
+      <div class="match-card-body"><p class="option-summary">${escapeHtml(opt.summary || '')}</p><div class="criterion-list">${criterionHtml}</div>${otherCount ? `<div class="other-count">${otherCount} other ${otherCount === 1 ? 'consideration' : 'considerations'}</div>` : ''}<div class="card-actions"><button class="details-btn" aria-expanded="${expandedRecommendationKey === opt.key}" aria-controls="recoDetailPanel">Why this works</button><button class="choose-btn">${isSelected ? 'Selected' : `Choose ${escapeHtml(destName)}`}</button></div></div>`;
+    card.querySelector('.details-btn').addEventListener('click', () => toggleRecommendationDetails(opt.key));
+    card.querySelector('.choose-btn').addEventListener('click', () => chooseDestination(destName, optionId || '', optionType));
     container.appendChild(card);
   });
 
@@ -2043,7 +2041,8 @@ function renderRecommendationDetail(model) {
   if (!option) { panel.hidden = true; panel.innerHTML = ''; return; }
   const criteriaHtml = option.evaluations.map(evaluation => `<section class="detail-criterion"><div class="criterion-row-top"><span class="outcome-badge outcome-${evaluation.outcome.toLowerCase()}">${escapeHtml(evaluation.outcome)}</span><h4 class="criterion-label">${escapeHtml(evaluation.criterion.label)}</h4></div><p class="detail-conclusion">${escapeHtml(evaluation.conclusion)}</p><div class="detail-evidence">${evaluation.details.map(recommendationDetailHtml).join('')}</div>${Array.isArray(evaluation.tradeoffs) && evaluation.tradeoffs.length ? `<div class="tradeoffs"><div class="tradeoff-label">Trade-offs</div>${evaluation.tradeoffs.map(item => `<div class="tradeoff-item">${escapeHtml(item)}</div>`).join('')}</div>` : ''}</section>`).join('');
   const other = Array.isArray(option.other_considerations) ? option.other_considerations : [];
-  panel.innerHTML = `<div class="detail-header"><div><h3 class="detail-title">Why this works for you</h3><p class="detail-subtitle">${escapeHtml(option.name)}</p></div><button class="detail-close" onclick="toggleRecommendationDetails('${jsArg(option.key)}')">Close</button></div>${criteriaHtml}${other.length ? `<section class="detail-criterion"><h4 class="match-heading">Things to consider</h4><ul class="match-points">${other.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></section>` : ''}`;
+  panel.innerHTML = `<div class="detail-header"><div><h3 class="detail-title">Why this works for you</h3><p class="detail-subtitle">${escapeHtml(option.name)}</p></div><button class="detail-close">Close</button></div>${criteriaHtml}${other.length ? `<section class="detail-criterion"><h4 class="match-heading">Things to consider</h4><ul class="match-points">${other.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></section>` : ''}`;
+  panel.querySelector('.detail-close').addEventListener('click', () => toggleRecommendationDetails(option.key));
   panel.hidden = false;
 }
 
@@ -2090,11 +2089,12 @@ function chooseDestination(name, id, type = 'destination') {
         <div style="font-size:15px;font-weight:600;color:var(--ink);">${escapeHtml(name)}</div>
         <div style="font-size:13px;color:var(--ink-muted);margin-top:3px;">Would you like to plan this trip?</div>
       </div>
-      <button onclick="startPlanningConvo()" style="flex-shrink:0;background:var(--accent);color:#fff;border:none;border-radius:var(--r-sm);padding:10px 20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:background 0.15s;" onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--accent)'">
+      <button class="inline-plan-btn" style="flex-shrink:0;background:var(--accent);color:#fff;border:none;border-radius:var(--r-sm);padding:10px 20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:background 0.15s;">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         Plan this trip →
       </button>
     </div>`;
+  wrap.querySelector('.inline-plan-btn').addEventListener('click', startPlanningConvo);
 
   setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
 }
@@ -2132,10 +2132,12 @@ function showPaymentModal(planType) {
       }</div>
       ${isPlanning ? `<div class="modal-amount">₹499</div>` : ''}
       <div class="modal-actions">
-        <button class="modal-btn-pay" onclick="confirmPayment('${planType}')">${isPlanning ? '✓ Confirm & Pay' : '✓ Request Quote'}</button>
-        <button class="modal-btn-cancel" onclick="closePaymentModal()">Cancel</button>
+        <button class="modal-btn-pay">${isPlanning ? '✓ Confirm & Pay' : '✓ Request Quote'}</button>
+        <button class="modal-btn-cancel">Cancel</button>
       </div>
     </div>`;
+  overlay.querySelector('.modal-btn-pay').addEventListener('click', () => confirmPayment(isPlanning ? 'planning' : 'concierge'));
+  overlay.querySelector('.modal-btn-cancel').addEventListener('click', closePaymentModal);
   document.body.appendChild(overlay);
 }
 
@@ -2243,7 +2245,7 @@ function renderStateBarEl(elId) {
 // ══════════════════════════════════════════
 function setFilter(f) { tripFilter = f; renderTripsList(); }
 
-const NEW_TRIP_BTN = `<button class="tb-btn" onclick="startChat()" style="display:inline-flex;align-items:center;gap:6px;">
+const NEW_TRIP_BTN = `<button class="tb-btn new-trip-action" style="display:inline-flex;align-items:center;gap:6px;">
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
   New Trip
 </button>`;
@@ -2261,6 +2263,7 @@ function renderTripsList() {
         <span>Start planning your next adventure.</span>
         <div style="margin-top:18px;">${NEW_TRIP_BTN}</div>
       </div>`;
+    el.querySelector('.new-trip-action')?.addEventListener('click', startChat);
     return;
   }
 
@@ -2291,7 +2294,7 @@ function renderTripsList() {
       ${NEW_TRIP_BTN}
     </div>
     <div class="filter-bar" style="margin-bottom:16px;">
-      ${filters.map(f => `<button class="fc${tripFilter === f.key ? ' active' : ''}" onclick="setFilter('${f.key}')">${f.label}</button>`).join('')}
+      ${filters.map(f => `<button class="fc${tripFilter === f.key ? ' active' : ''}" data-filter="${f.key}">${f.label}</button>`).join('')}
     </div>`;
 
   // Which trips to show
@@ -2313,11 +2316,14 @@ function renderTripsList() {
   const sectionsHtml = sections.length
     ? sections.map(s => `
         <div class="sec-label">${s.label}</div>
-        <div class="tc-grid">${s.trips.map(t => tripCardHTML(t)).join('')}</div>
+        <div class="tc-grid">${s.trips.map(t => tripCardHTML(t, trips.indexOf(t))).join('')}</div>
       `).join('')
     : emptyHtml;
 
   el.innerHTML = headerHtml + sectionsHtml;
+  el.querySelectorAll('.new-trip-action').forEach(button => button.addEventListener('click', startChat));
+  el.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => setFilter(button.dataset.filter)));
+  el.querySelectorAll('[data-trip-index]').forEach(card => bindTripCardActions(card, trips[Number(card.dataset.tripIndex)]));
 }
 
 function tripBadge(trip, fullState) {
@@ -2335,18 +2341,18 @@ function tripBadge(trip, fullState) {
 }
 
 function tripCtaConfig(trip, fullState) {
-  if (trip.paid_plan === 'planning')  return { label: 'See itinerary',   style: 'cta-green',  action: `navigate('itin')` };
-  if (trip.paid_plan === 'concierge') return { label: 'View trip status', style: 'cta-green',  action: `navigate('concierge')` };
+  if (trip.paid_plan === 'planning')  return { label: 'See itinerary',   style: 'cta-green', action: 'itinerary' };
+  if (trip.paid_plan === 'concierge') return { label: 'View trip status', style: 'cta-green', action: 'concierge' };
   const stage = fullState?.stage;
   // matched and planning are dual-CTA — rendered inline in tripCardHTML
-  if (stage === 'planned')              return { label: 'See plan', style: 'cta-green', action: `navigate('itin')` };
-  if (stage === 'recommended')          return { label: latestMatchReviewLabel(fullState), style: 'cta-blue', action: `openTripRecos('${trip.id}')` };
-  if (stage === 'recommendation_ready') return { label: 'Generate recommendations',  style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  if (stage === 'matching')             return { label: 'Resume matching', style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  if (stage === 'new' && hasTripContext(fullState)) return { label: 'Resume chat', style: 'cta-accent', action: `openTrip('${trip.id}')` };
-  return { label: 'Start planning', style: 'cta-accent', action: `openTrip('${trip.id}')` };
+  if (stage === 'planned')              return { label: 'See plan', style: 'cta-green', action: 'itinerary' };
+  if (stage === 'recommended')          return { label: latestMatchReviewLabel(fullState), style: 'cta-blue', action: 'recommendations' };
+  if (stage === 'recommendation_ready') return { label: 'Generate recommendations', style: 'cta-accent', action: 'chat' };
+  if (stage === 'matching')             return { label: 'Resume matching', style: 'cta-accent', action: 'chat' };
+  if (stage === 'new' && hasTripContext(fullState)) return { label: 'Resume chat', style: 'cta-accent', action: 'chat' };
+  return { label: 'Start planning', style: 'cta-accent', action: 'chat' };
 }
-function tripCardHTML(trip) {
+function tripCardHTML(trip, tripIndex) {
   const fullState = (() => { try { return loadTripState(trip.id); } catch { return null; } })();
   const badge  = tripBadge(trip, fullState);
   const cta    = tripCtaConfig(trip, fullState);
@@ -2358,7 +2364,7 @@ function tripCardHTML(trip) {
   const isPlanned = !trip.paid_plan && fullState?.stage === 'planned';
   const showReviewRecos = !isPlanning || hasRecommendations(fullState);
   const reviewRecosButton = showReviewRecos
-    ? `<button class="tc-cta cta-blue" style="padding:6px 10px;" onclick="openTripRecos('${trip.id}'); event.stopPropagation()">
+    ? `<button class="tc-cta cta-blue" data-trip-action="recommendations" style="padding:6px 10px;">
         ${latestMatchReviewLabel(fullState)}
       </button>`
     : '';
@@ -2366,31 +2372,31 @@ function tripCardHTML(trip) {
   const ctaHtml = isMatched
     ? `<div style="display:flex;gap:6px;">
         ${reviewRecosButton}
-        <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
+        <button class="tc-cta cta-green" data-trip-action="planning" style="padding:6px 10px;">
           Want to plan?
         </button>
       </div>`
     : isPlanning
     ? `<div style="display:flex;gap:6px;">
         ${reviewRecosButton}
-        <button class="tc-cta cta-green" style="padding:6px 10px;" onclick="openTripForPlanning('${trip.id}'); event.stopPropagation()">
+        <button class="tc-cta cta-green" data-trip-action="planning" style="padding:6px 10px;">
           Resume planning
         </button>
       </div>`
-    : `<button class="tc-cta ${cta.style}" onclick="${cta.action}; event.stopPropagation()">
+    : `<button class="tc-cta ${cta.style}" data-trip-action="${cta.action}">
         ${escapeHtml(cta.label)}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </button>`;
 
-  return `<div class="tc" ${(isMatched || isPlanning) ? '' : `onclick="${cta.action}"`}>
+  return `<div class="tc" data-trip-index="${tripIndex}"${(isMatched || isPlanning) ? '' : ` data-card-action="${cta.action}"`}>
     <div class="tc-top">
       <div>
         <div class="tc-name">
-          <span id="tc-title-${trip.id}">${escapeHtml(trip.title)}</span>
-          <button class="rename-btn" onclick="startRename('${trip.id}',event)" title="Rename">
+          <span class="tc-name-text">${escapeHtml(trip.title)}</span>
+          <button class="rename-btn" title="Rename">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button class="icon-btn danger" onclick="confirmDeleteTrip('${trip.id}', event)" title="Delete" style="margin-left:auto;">
+          <button class="icon-btn danger" title="Delete" style="margin-left:auto;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
           </button>
         </div>
@@ -2404,6 +2410,25 @@ function tripCardHTML(trip) {
       ${ctaHtml}
     </div>
   </div>`;
+}
+
+function runTripAction(action, tripId) {
+  if (action === 'itinerary') navigate('itin');
+  else if (action === 'concierge') navigate('concierge');
+  else if (action === 'recommendations') openTripRecos(tripId);
+  else if (action === 'planning') openTripForPlanning(tripId);
+  else if (action === 'chat') openTrip(tripId);
+}
+
+function bindTripCardActions(card, trip) {
+  if (!trip) return;
+  card.querySelectorAll('[data-trip-action]').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    runTripAction(button.dataset.tripAction, trip.id);
+  }));
+  card.querySelector('.rename-btn')?.addEventListener('click', event => startRename(trip.id, card.querySelector('.tc-name-text'), event));
+  card.querySelector('.icon-btn.danger')?.addEventListener('click', event => confirmDeleteTrip(trip.id, event));
+  if (card.dataset.cardAction) card.addEventListener('click', () => runTripAction(card.dataset.cardAction, trip.id));
 }
 
 function startHeaderRename(e) {
@@ -2432,9 +2457,8 @@ function startHeaderRename(e) {
   });
 }
 
-function startRename(id, e) {
+function startRename(id, titleEl, e) {
   e.stopPropagation();
-  const titleEl = document.getElementById('tc-title-' + id);
   if (!titleEl) return;
   const current = titleEl.textContent;
   const input = document.createElement('input');
@@ -2446,7 +2470,7 @@ function startRename(id, e) {
     const newTitle = input.value.trim() || current;
     updateTrip(id, { title: newTitle });
     const span = document.createElement('span');
-    span.id = 'tc-title-' + id; span.className = ''; span.textContent = newTitle;
+    span.className = 'tc-name-text'; span.textContent = newTitle;
     input.replaceWith(span);
     if (currentTripId === id) setChatTripNameDisplay(newTitle);
   };
