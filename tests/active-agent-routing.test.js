@@ -81,6 +81,32 @@ assert.equal(vm.runInContext('tripState.active_agent', context), 'scout');
 vm.runInContext("setActiveAgent('meridian')", context);
 const scoutPayload = plain(vm.runInContext("scoutRequestFromState(tripState, 'entry')", context));
 assert.equal('active_agent' in scoutPayload.trip_state, false);
+assert.deepEqual(Object.keys(scoutPayload.trip_state).sort(), [
+  'advisor_state',
+  'stage',
+  'trip_context'
+]);
+assert.deepEqual(scoutPayload.trip_state.advisor_state, {
+  conversation_context: { last_advisor_message: null }
+});
+
+vm.runInContext(`tripState.advisor_state = {
+  conversation_context: { last_advisor_message: 'Saved advice' },
+  artifacts: [{ assistant_message: '<script>local only</script>', agent_meta: { agent: 'scout' } }],
+  unexpected: 'local only'
+}`, context);
+const resumedScoutPayload = plain(vm.runInContext("scoutRequestFromState(tripState, 'hi')", context));
+assert.deepEqual(resumedScoutPayload.trip_state.advisor_state, {
+  conversation_context: { last_advisor_message: 'Saved advice' }
+});
+assert.equal(resumedScoutPayload.message, 'hi');
+assert.equal('artifacts' in resumedScoutPayload.trip_state.advisor_state, false);
+assert.equal('unexpected' in resumedScoutPayload.trip_state.advisor_state, false);
+
+const retrySource = extractFunction('retryLastFailedTurn');
+assert.match(retrySource, /sendActiveAgentMessage\(retry\.message, retry\)/);
+assert.equal(retrySource.includes('appendMsg('), false);
+assert.equal(retrySource.includes('tripState ='), false);
 
 const meridianPayload = plain(vm.runInContext("meridianRequestFromState(tripState, 'refine')", context));
 assert.equal('active_agent' in meridianPayload.trip_state, false);
