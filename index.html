@@ -1147,6 +1147,12 @@ function logMeridian(input, output) {
 // ══════════════════════════════════════════
 // API CALLS
 // ══════════════════════════════════════════
+function apiResponseError(agent, response) {
+  const error = new Error(`${agent} ${response.status}`);
+  error.status = response.status;
+  return error;
+}
+
 function recordScoutAdvice(data, state = tripState) {
   const adviceMessage = data?.intent === 'advise' ? data.message : null;
   if (!state || !adviceMessage) return;
@@ -1176,9 +1182,10 @@ function scoutRequestFromState(state = tripState, message = null) {
     trip_state: {
       stage: state?.stage || 'new',
       trip_context: state?.trip_context || {},
-      advisor_state: state?.advisor_state || {
-        conversation_context: { last_advisor_message: null },
-        artifacts: []
+      advisor_state: {
+        conversation_context: {
+          last_advisor_message: state?.advisor_state?.conversation_context?.last_advisor_message ?? null
+        }
       }
     },
     message
@@ -1189,7 +1196,7 @@ async function callScout(message) {
   const before = JSON.parse(JSON.stringify(tripState));
   const input = scoutRequestFromState(tripState, message);
   const res = await fetch(API.scout, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
-  if (!res.ok) throw new Error(`Scout ${res.status}`);
+  if (!res.ok) throw apiResponseError('Scout', res);
   const data = await res.json();
   applyStateDelta(data.state_delta, 'scout');
   recordScoutAdvice(data);
@@ -1330,7 +1337,7 @@ function meridianRequestFromState(state = tripState, message = null) {
 async function callMeridian(message = null) {
   const input = meridianRequestFromState(tripState, message);
   const res = await fetch(API.meridian, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
-  if (!res.ok) throw new Error(`Meridian ${res.status}`);
+  if (!res.ok) throw apiResponseError('Meridian', res);
   const data = await res.json();
   if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
 
@@ -1400,12 +1407,35 @@ async function sendActiveAgentMessage(msg, { errorText = "We couldn't complete t
     return { ok: true, result };
   } catch (err) {
     removeTyping();
-    pendingRetryTurn = { tripId: currentTripId, message: msg, errorText, errorLogTag };
+    const failure = turnFailurePresentation(err, errorText);
+    pendingRetryTurn = failure.retry
+      ? { tripId: currentTripId, message: msg, errorText, errorLogTag }
+      : null;
     document.getElementById('retry-error-row')?.remove();
-    appendError(`${errorText} Your trip context is unchanged.`, { retry: true });
+    appendError(failure.message, { retry: failure.retry });
     if (errorLogTag) console.error(errorLogTag, err);
     return { ok: false, error: err };
   }
+}
+
+function turnFailurePresentation(error, errorText) {
+  const status = Number(error?.status);
+  if (status === 429) {
+    return {
+      retry: false,
+      message: "Too many requests right now. Please wait a moment before trying again."
+    };
+  }
+  if (Number.isFinite(status) && status >= 400 && status < 500) {
+    return {
+      retry: false,
+      message: "I couldn't process that message. Please send a new message."
+    };
+  }
+  return {
+    retry: true,
+    message: `${errorText} Please try again.`
+  };
 }
 
 async function retryLastFailedTurn() {

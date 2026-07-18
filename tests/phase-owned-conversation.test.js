@@ -53,6 +53,8 @@ vm.runInContext('let tripState = null;', context);
   'latestRecommendation',
   'latestMatchReviewLabel',
   'responseMessageForIntent',
+  'apiResponseError',
+  'turnFailurePresentation',
   'renderFailureRecos',
   'resumeChat'
 ].forEach(name => vm.runInContext(extractFunction(name), context));
@@ -75,6 +77,25 @@ assert.deepEqual(plain(context.meridianSectionPoints({
 })), ['Kaza to Manali, 6 hours, by road']);
 assert.deepEqual(plain(context.meridianSectionPoints({ type: 'season', points: ['Best in summer'] })), ['Best in summer']);
 assert.equal(context.responseMessageForIntent({ intent: 'planner', message: 'ignored' }), 'Planning is coming soon.');
+
+const validationError = context.apiResponseError('Scout', { status: 422 });
+assert.equal(validationError.status, 422);
+assert.deepEqual(plain(context.turnFailurePresentation(validationError, 'Request failed.')), {
+  retry: false,
+  message: "I couldn't process that message. Please send a new message."
+});
+assert.deepEqual(plain(context.turnFailurePresentation({ status: 429 }, 'Request failed.')), {
+  retry: false,
+  message: "Too many requests right now. Please wait a moment before trying again."
+});
+assert.deepEqual(plain(context.turnFailurePresentation({ status: 503 }, 'Request failed.')), {
+  retry: true,
+  message: 'Request failed. Please try again.'
+});
+assert.deepEqual(plain(context.turnFailurePresentation(new Error('network'), 'Request failed.')), {
+  retry: true,
+  message: 'Request failed. Please try again.'
+});
 
 const failureContainer = {};
 context.renderFailureRecos(failureContainer, { status: 'HARD_FAIL', message: 'No reliable match.' });
