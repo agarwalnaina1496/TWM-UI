@@ -806,6 +806,7 @@ const IS_DEV_ENV = (window.IS_DEV_ENV ?? true) ||
 // CONSTANTS & ENDPOINTS
 // ══════════════════════════════════════════
 const API = {
+  health:   'https://travelwithme-zf9f.onrender.com/health',
   scout:    'https://travelwithme-zf9f.onrender.com/scout',
   meridian: 'https://travelwithme-zf9f.onrender.com/meridian',
 };
@@ -814,6 +815,9 @@ const PLANNER_COMING_SOON_MESSAGE = "Trip planning is coming soon. For now, I ca
 const TRIPS_KEY    = 'twm_trips_v1';
 const STATE_KEY    = 'twm_state_v1';
 const UI_STATE_KEY = 'twm_ui_state_v1';
+const BACKEND_ACTIVITY_KEY = 'twm_backend_activity_v1';
+const BACKEND_IDLE_MS = 14 * 60 * 1000;
+const READINESS_STATUS_DELAY_MS = 1200;
 
 let currentTripId = null;
 let tripState     = null;
@@ -822,6 +826,8 @@ let currentRecos  = null;
 let expandedRecommendationKey = null;
 let tripFilter    = 'active'; // default filter
 let pendingRetryTurn = null;
+let backendReadinessPromise = null;
+let readinessStatusTimer = null;
 
 // ══════════════════════════════════════════
 // TRIPS LIST (localStorage)
@@ -1147,6 +1153,68 @@ function logMeridian(input, output) {
 // ══════════════════════════════════════════
 // API CALLS
 // ══════════════════════════════════════════
+function lastBackendActivityAt() {
+  try {
+    const value = Number(sessionStorage.getItem(BACKEND_ACTIVITY_KEY));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function markBackendActivity(at = Date.now()) {
+  try { sessionStorage.setItem(BACKEND_ACTIVITY_KEY, String(at)); } catch {}
+}
+
+function backendNeedsReadiness(now = Date.now()) {
+  const lastActivity = lastBackendActivityAt();
+  return lastActivity === null || now - lastActivity >= BACKEND_IDLE_MS;
+}
+
+function prepareBackendForChat() {
+  if (!backendNeedsReadiness()) return null;
+  if (backendReadinessPromise) return backendReadinessPromise;
+
+  backendReadinessPromise = fetch(API.health, { method: 'GET' })
+    .then(response => {
+      if (!response.ok) throw apiResponseError('Health', response);
+      markBackendActivity();
+    })
+    .finally(() => { backendReadinessPromise = null; });
+  return backendReadinessPromise;
+}
+
+function clearReadinessStatus() {
+  if (readinessStatusTimer !== null) clearTimeout(readinessStatusTimer);
+  readinessStatusTimer = null;
+  document.getElementById('backend-readiness-status')?.remove();
+}
+
+function showReadinessStatus() {
+  if (document.getElementById('backend-readiness-status')) return;
+  const inner = document.getElementById('chatInner');
+  const typing = document.getElementById('typingRow');
+  if (!inner || !typing) return;
+  const row = document.createElement('div');
+  row.className = 'mrow';
+  row.id = 'backend-readiness-status';
+  row.innerHTML = '<div class="av">S</div><div class="bub bub-s" role="status" aria-live="polite">Starting the test trip assistant. This may take up to a minute.</div>';
+  inner.insertBefore(row, typing);
+  scrollChat();
+}
+
+async function waitForBackendReadinessForTurn() {
+  const readiness = prepareBackendForChat();
+  if (!readiness) return;
+  clearReadinessStatus();
+  readinessStatusTimer = setTimeout(showReadinessStatus, READINESS_STATUS_DELAY_MS);
+  try {
+    await readiness;
+  } finally {
+    clearReadinessStatus();
+  }
+}
+
 function apiResponseError(agent, response) {
   const error = new Error(`${agent} ${response.status}`);
   error.status = response.status;
@@ -1197,6 +1265,7 @@ async function callScout(message) {
   const input = scoutRequestFromState(tripState, message);
   const res = await fetch(API.scout, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
   if (!res.ok) throw apiResponseError('Scout', res);
+  markBackendActivity();
   const data = await res.json();
   applyStateDelta(data.state_delta, 'scout');
   recordScoutAdvice(data);
@@ -1338,6 +1407,7 @@ async function callMeridian(message = null) {
   const input = meridianRequestFromState(tripState, message);
   const res = await fetch(API.meridian, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
   if (!res.ok) throw apiResponseError('Meridian', res);
+  markBackendActivity();
   const data = await res.json();
   if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
 
@@ -1396,9 +1466,14 @@ function presentMeridianOutcome(data) {
 // handling every caller (handleSend, handleContinue, refineRecommendations) needs.
 // errorText and errorLogTag let each caller keep its own wording/log tag
 // without duplicating the try/catch scaffolding.
-async function sendActiveAgentMessage(msg, { errorText = "We couldn't complete that request.", errorLogTag = null } = {}) {
+async function sendActiveAgentMessage(msg, {
+  errorText = "We couldn't complete that request.",
+  errorLogTag = null,
+  waitForReadiness = false
+} = {}) {
   showTyping();
   try {
+    if (waitForReadiness) await waitForBackendReadinessForTurn();
     const result = await dispatchActiveAgentTurn(msg);
     pendingRetryTurn = null;
     document.getElementById('retry-error-row')?.remove();
@@ -1409,7 +1484,7 @@ async function sendActiveAgentMessage(msg, { errorText = "We couldn't complete t
     removeTyping();
     const failure = turnFailurePresentation(err, errorText);
     pendingRetryTurn = failure.retry
-      ? { tripId: currentTripId, message: msg, errorText, errorLogTag }
+      ? { tripId: currentTripId, message: msg, errorText, errorLogTag, waitForReadiness }
       : null;
     document.getElementById('retry-error-row')?.remove();
     appendError(failure.message, { retry: failure.retry });
@@ -1959,7 +2034,11 @@ async function handleSend() {
   }
 
   appendMsg('user', msg);
-  await sendActiveAgentMessage(msg, { errorText: "We couldn't complete that request.", errorLogTag: '[Active agent]' });
+  await sendActiveAgentMessage(msg, {
+    errorText: "We couldn't complete that request.",
+    errorLogTag: '[Active agent]',
+    waitForReadiness: true
+  });
   busy = false; setSendDisabled(false);
 }
 
@@ -2524,7 +2603,14 @@ function confirmDeleteTrip(id, e) {
 // ══════════════════════════════════════════
 // TEXTAREA
 // ══════════════════════════════════════════
+function warmBackendOnChatIntent() {
+  const readiness = prepareBackendForChat();
+  if (readiness) readiness.catch(() => {});
+}
+
+document.getElementById('userInput').addEventListener('focus', warmBackendOnChatIntent);
 document.getElementById('userInput').addEventListener('input', function() {
+  warmBackendOnChatIntent();
   this.style.height = 'auto';
   this.style.height = Math.min(this.scrollHeight, 110) + 'px';
 });
