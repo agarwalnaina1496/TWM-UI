@@ -1388,16 +1388,31 @@ function meridianAdvisorStateFromState(state = tripState) {
   };
 }
 
+function priorRecommendationsFromState(state = tripState) {
+  const latest = latestRecommendation(state);
+  const options = Array.isArray(latest?.options) ? latest.options : [];
+  return options.map(option => ({
+    rank: option.rank,
+    name: option.name,
+    ...(option.type === 'circuit' ? { circuit_id: option.circuit_id } : { destination_id: option.destination_id }),
+    type: option.type
+  })).sort((a, b) => a.rank - b.rank);
+}
+
+function meridianMatcherStateFromState(state = tripState) {
+  return {
+    conversation_context: state?.matcher_state?.conversation_context || { last_meridian_message: null, awaiting: null },
+    prior_recommendations: priorRecommendationsFromState(state),
+    rejected_options: state?.matcher_state?.rejected_options || []
+  };
+}
+
 function meridianRequestFromState(state = tripState, message = null) {
   return {
     trip_state: {
       trip_context: meridianTripContextFromState(state),
       advisor_state: meridianAdvisorStateFromState(state),
-      matcher_state: state?.matcher_state || {
-        conversation_context: { last_meridian_message: null, awaiting: null },
-        recommendations: [],
-        rejected_options: []
-      }
+      matcher_state: meridianMatcherStateFromState(state)
     },
     message
   };
