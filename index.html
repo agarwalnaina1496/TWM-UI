@@ -163,6 +163,29 @@
   .bub-u { background: var(--dark); color: #faf8f5; border-radius: 13px 3px 13px 13px; }
   .bub p + p { margin-top: 6px; }
 
+  /* Guide places draft — response-driven and kept in memory until DB persistence lands */
+  .guide-card-row { display: flex; align-items: flex-start; gap: 8px; animation: fadeUp 0.22s ease; }
+  .guide-card { width: min(75%, 720px); background: var(--card); border: 1px solid #dfc7b2; border-radius: 3px 13px 13px 13px; box-shadow: var(--shadow); overflow: hidden; }
+  .guide-card.is-stale { opacity: 0.68; }
+  .guide-card-head { padding: 13px 16px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .guide-card-title { font-family: 'DM Serif Display', serif; font-size: 17px; }
+  .guide-card-badge { padding: 3px 8px; border-radius: 100px; background: rgba(255,255,255,.2); font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+  .guide-card-body { padding: 17px 18px 14px; }
+  .guide-card-label { color: var(--ink-faint); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 7px; }
+  .guide-card-destination { font-family: 'DM Serif Display', serif; font-size: 18px; margin-bottom: 15px; }
+  .guide-place-list { list-style: none; display: grid; gap: 8px; }
+  .guide-place { display: flex; align-items: flex-start; gap: 8px; color: var(--ink); font-size: 13.5px; line-height: 1.45; }
+  .guide-place-check { width: 17px; height: 17px; border-radius: 50%; background: var(--green-light); color: var(--green); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; margin-top: 1px; font-size: 11px; font-weight: 700; }
+  .guide-card-meta { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 15px; }
+  .guide-meta-item span { display: block; color: var(--ink-faint); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
+  .guide-meta-item strong { display: block; color: var(--ink); font-size: 12.5px; margin-top: 2px; }
+  .guide-card-actions { padding: 11px 18px; background: var(--paper-warm); border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px; }
+  .guide-card-btn { border: 1px solid var(--border); background: var(--card); color: var(--ink); border-radius: 7px; padding: 8px 14px; font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .guide-card-btn:hover, .guide-card-btn:focus-visible { border-color: var(--accent); color: var(--accent); }
+  .guide-card-btn.primary { border-color: var(--green); background: var(--green); color: #fff; }
+  .guide-card-btn.primary:hover, .guide-card-btn.primary:focus-visible { background: #2d5a3a; color: #fff; }
+  .guide-card-btn:disabled { opacity: .55; cursor: not-allowed; }
+
   /* See Recos — inline in chat after Scout message */
   .see-recos-row { display: flex; align-items: flex-start; gap: 8px; animation: fadeUp 0.22s ease; }
   .see-recos-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); padding: 10px 20px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: background 0.15s; }
@@ -462,6 +485,7 @@
     .chat-inner { width: 100%; padding: 0 16px; }
     .input-wrap { width: calc(100% - 32px); }
     .bub { max-width: 88%; }
+    .guide-card { width: calc(100% - 35px); }
     #screen-recos .scroll { padding: 16px; }
     .recos-inner { padding: 0 !important; }
     .detail-header { flex-direction: column; }
@@ -816,9 +840,9 @@ const API = {
   health:   `${TWM_BASE_URL}/health`,
   scout:    `${TWM_BASE_URL}/scout`,
   meridian: `${TWM_BASE_URL}/meridian`,
+  guide:    `${TWM_BASE_URL}/guide`,
 };
 const WELCOME = "Hey, I'm Scout. Tell me about the trip you have in mind. I can help you find destinations that fit and explain why.";
-const PLANNER_COMING_SOON_MESSAGE = "Trip planning is coming soon. For now, I can keep helping you decide where to go, and I'll preserve this context so planning can pick up here later.";
 const TRIPS_KEY    = 'twm_trips_v1';
 const STATE_KEY    = 'twm_state_v1';
 const UI_STATE_KEY = 'twm_ui_state_v1';
@@ -835,6 +859,9 @@ let tripFilter    = 'active'; // default filter
 let pendingRetryTurn = null;
 let backendReadinessPromise = null;
 let readinessStatusTimer = null;
+// Planner state is deliberately memory-only until canonical DB persistence is available.
+// Never attach these sessions to TripState or any localStorage-backed UI state.
+const guideSessions = new Map();
 
 // ══════════════════════════════════════════
 // TRIPS LIST (localStorage)
@@ -1011,6 +1038,7 @@ function meridianSectionPoints(section) {
 }
 
 function activeAgentFromState(state = tripState) {
+  if (state?.stage === 'planning') return 'guide';
   return state?.active_agent === 'meridian' ? 'meridian' : 'scout';
 }
 
@@ -1026,14 +1054,14 @@ function updateChatComposerPlaceholder() {
 }
 
 function phaseContextFallback(state = tripState) {
-  if (state?.stage === 'planning') return 'Planning context is saved for this trip.';
+  if (state?.stage === 'planning') return 'Planning is in progress for this trip.';
   if (activeAgentFromState(state) === 'meridian') return 'Destination matching is in progress.';
   return 'Scout is here to help with your trip.';
 }
 
 function setActiveAgent(agent) {
   if (!tripState) return;
-  if (![null, 'scout', 'meridian'].includes(agent)) throw new Error(`Unknown active agent: ${agent}`);
+  if (![null, 'scout', 'meridian'].includes(agent)) throw new Error(`Unknown persisted active agent: ${agent}`);
   tripState.active_agent = agent;
 }
 
@@ -1297,7 +1325,6 @@ function applyRoutingFromScoutIntent(intent) {
 
 function responseMessageForIntent(res) {
   if (!res) return '';
-  if (res.intent === 'planner') return PLANNER_COMING_SOON_MESSAGE;
   if (res.intent === 'advise') return res.message || '';
   if (res.intent === null || res.intent === undefined) return res.message || '';
   return '';
@@ -1453,11 +1480,157 @@ async function callMeridian(message = null) {
   return data;
 }
 
+const GUIDE_PHASES = new Set(['NEEDS_CLARIFICATION', 'PLACES_DRAFT', 'DAY_PLAN_DRAFT', 'PLAN_APPROVED']);
+
+function guideSession(tripId = currentTripId) {
+  if (!tripId) throw new Error('Guide requires an active trip.');
+  if (!guideSessions.has(tripId)) {
+    guideSessions.set(tripId, { state: null, revision: 0 });
+  }
+  return guideSessions.get(tripId);
+}
+
+function validateGuideState(value) {
+  if (!isPlainObject(value) || !GUIDE_PHASES.has(value.phase)) throw new Error('Guide returned an invalid phase.');
+  for (const key of ['destinations', 'places', 'day_plan', 'preferences', 'exclusions', 'applied_changes']) {
+    if (!Array.isArray(value[key])) throw new Error(`Guide returned invalid ${key}.`);
+  }
+  if (value.phase === 'PLACES_DRAFT' && !value.places.length) throw new Error('Guide places draft is empty.');
+  if (value.phase === 'NEEDS_CLARIFICATION' && !value.pending_clarification) throw new Error('Guide clarification is missing.');
+  return value;
+}
+
+function guideRequest(event, message = null) {
+  const session = guideSession();
+  const payload = {
+    event,
+    trip_state: {
+      trip_context: tripState?.trip_context || {},
+      guide_state: session.state || {}
+    }
+  };
+  if (message) payload.message = message;
+  return payload;
+}
+
+async function callGuide(event, message = null) {
+  const tripId = currentTripId;
+  const input = guideRequest(event, message);
+  const res = await fetch(API.guide, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  if (!res.ok) throw apiResponseError('Guide', res);
+  markBackendActivity();
+  const data = await res.json();
+  if (tripId !== currentTripId) throw new Error('Active trip changed during Guide request.');
+  const session = guideSession(tripId);
+  session.state = validateGuideState(data.guide_state);
+  session.revision += 1;
+  console.debug('Guide turn', { event, response: data, revision: session.revision });
+  return data;
+}
+
+function deactivateOlderGuideCards() {
+  document.querySelectorAll('.guide-card:not(.is-stale)').forEach(card => {
+    card.classList.add('is-stale');
+    card.querySelectorAll('button').forEach(button => { button.disabled = true; });
+    const badge = card.querySelector('.guide-card-badge');
+    if (badge) badge.textContent = 'Updated';
+  });
+}
+
+function renderGuidePlacesCard(state, revision) {
+  deactivateOlderGuideCards();
+  const inner = document.getElementById('chatInner');
+  const typing = document.getElementById('typingRow');
+  if (!inner || !typing) return;
+  const row = document.createElement('div');
+  row.className = 'guide-card-row';
+  const destinations = state.destinations.length ? state.destinations.join(', ') : 'Your trip';
+  const duration = state.duration_days ? `${state.duration_days} day${state.duration_days === 1 ? '' : 's'}` : 'To confirm';
+  row.innerHTML = `
+    <div class="av">S</div>
+    <section class="guide-card" data-guide-revision="${revision}" aria-label="Places draft">
+      <div class="guide-card-head">
+        <div class="guide-card-title">Trip Design</div>
+        <div class="guide-card-badge">Draft</div>
+      </div>
+      <div class="guide-card-body">
+        <div class="guide-card-label">Destination</div>
+        <div class="guide-card-destination">${escapeHtml(destinations)}</div>
+        <div class="guide-card-label">Places to visit</div>
+        <ul class="guide-place-list">
+          ${state.places.map(place => `<li class="guide-place"><span class="guide-place-check" aria-hidden="true">✓</span><span>${escapeHtml(place)}</span></li>`).join('')}
+        </ul>
+        <div class="guide-card-meta">
+          <div class="guide-meta-item"><span>Duration</span><strong>${escapeHtml(duration)}</strong></div>
+          <div class="guide-meta-item"><span>Status</span><strong>Draft</strong></div>
+        </div>
+      </div>
+      <div class="guide-card-actions">
+        <button class="guide-card-btn" type="button" data-guide-action="edit">Edit places</button>
+        <button class="guide-card-btn primary" type="button" data-guide-action="approve">✓ Approve</button>
+      </div>
+    </section>`;
+  row.querySelector('[data-guide-action="edit"]')?.addEventListener('click', () => {
+    const input = document.getElementById('userInput');
+    if (input) {
+      input.placeholder = 'Tell Scout what to add, remove, or swap...';
+      input.focus();
+    }
+  });
+  row.querySelector('[data-guide-action="approve"]')?.addEventListener('click', () => approveGuidePlaces(revision, row));
+  inner.insertBefore(row, typing);
+  scrollChat();
+}
+
+function presentGuideOutcome(data) {
+  if (data?.message) appendMsg('assistant', data.message);
+  const session = guideSession();
+  if (session.state?.phase === 'PLACES_DRAFT') renderGuidePlacesCard(session.state, session.revision);
+  updateChatComposerPlaceholder();
+}
+
+async function approveGuidePlaces(revision, row) {
+  if (busy) return;
+  const session = guideSession();
+  if (revision !== session.revision || session.state?.phase !== 'PLACES_DRAFT') {
+    appendError('This places draft has been updated. Please approve the latest version.');
+    return;
+  }
+  busy = true;
+  setSendDisabled(true);
+  row.querySelectorAll('button').forEach(button => { button.disabled = true; });
+  showTyping();
+  try {
+    const data = await callGuide('APPROVE_PLACES');
+    removeTyping();
+    deactivateOlderGuideCards();
+    presentGuideOutcome(data);
+  } catch (err) {
+    removeTyping();
+    row.querySelectorAll('button').forEach(button => { button.disabled = false; });
+    appendError(turnFailurePresentation(err, "We couldn't approve these places.").message);
+    console.error('[Guide approval]', err);
+  } finally {
+    busy = false;
+    setSendDisabled(false);
+  }
+}
+
 async function handleScoutResult(res, message = null) {
   if (res?.intent === 'matcher') {
     const meridianOut = await callMeridian(message);
     presentMeridianOutcome(meridianOut);
     return meridianOut;
+  }
+
+  if (res?.intent === 'planner') {
+    const guideOut = await callGuide('START');
+    presentGuideOutcome(guideOut);
+    return guideOut;
   }
 
   const reply = responseMessageForIntent(res);
@@ -1466,6 +1639,13 @@ async function handleScoutResult(res, message = null) {
 }
 
 async function dispatchActiveAgentTurn(message) {
+  if (tripState?.stage === 'planning') {
+    const session = guideSession();
+    const event = !session.state && !message ? 'START' : 'TRAVELER_MESSAGE';
+    const guideOut = await callGuide(event, message);
+    presentGuideOutcome(guideOut);
+    return guideOut;
+  }
   if (activeAgentFromState() === 'meridian') {
     const meridianOut = await callMeridian(message);
     presentMeridianOutcome(meridianOut);
@@ -1607,12 +1787,25 @@ function markPlanningStarted() {
   }
 }
 
-function openTripForPlanning(id) {
+async function openTripForPlanning(id) {
   currentTripId = id;
   tripState = loadTripState(id);
   currentRecos = latestRecommendation();
   window._chosenDest = tripState?.trip_context?.selected_option?.name || tripState?.trip_context?.selected_option?.id || '';
   startPlanningConvo();
+  if (guideSessions.get(id)?.state || busy) return;
+  window._enteringPlanner = false;
+  markPlanningStarted();
+  clearInlineCta();
+  busy = true;
+  setSendDisabled(true);
+  await sendActiveAgentMessage(null, {
+    errorText: "We couldn't start planning.",
+    errorLogTag: '[Guide start]',
+    waitForReadiness: true
+  });
+  busy = false;
+  setSendDisabled(false);
 }
 
 function openTripRecos(id) {
@@ -1916,7 +2109,13 @@ function resumeChat() {
   renderTripContextCard({ showContinue: stage === 'matching' && activeAgent === 'scout' });
 
   if (stage === 'planning') {
-    appendMsg('assistant', PLANNER_COMING_SOON_MESSAGE);
+    const session = currentTripId ? guideSessions.get(currentTripId) : null;
+    if (session?.state) {
+      appendMsg('assistant', 'Continue refining your latest places draft here.');
+      if (session.state.phase === 'PLACES_DRAFT') renderGuidePlacesCard(session.state, session.revision);
+    } else {
+      appendMsg('assistant', 'Planner drafts are not saved yet. Send your planning request again and I’ll rebuild the places draft with you.');
+    }
     return;
   }
 
