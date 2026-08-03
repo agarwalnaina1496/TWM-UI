@@ -42,8 +42,11 @@ vm.runInContext("let tripState = null; const STATE_KEY = 'state:';", context);
   'applyMeridianRoutingOutcome',
   'applyRoutingFromScoutIntent',
   'scoutRequestFromState',
+  'latestRecommendation',
+  'priorRecommendationsFromState',
   'meridianTripContextFromState',
   'meridianAdvisorStateFromState',
+  'meridianMatcherStateFromState',
   'meridianRequestFromState',
   'presentMeridianOutcome',
   'dispatchActiveAgentTurn'
@@ -151,11 +154,19 @@ context.renderInlineCta = () => {};
 context.reviewLatestMatchCtaHtml = () => '';
 context.updateChatComposerPlaceholder = () => {};
 context.handleScoutResult = value => value;
+context.guideSession = () => ({ state: { phase: 'PLACES_DRAFT' } });
+context.callGuide = async (event, message) => ({ event, received: message });
+context.presentGuideOutcome = () => {};
 vm.runInContext("tripState.stage = 'matching'; tripState.active_agent = 'meridian'", context);
 
 (async () => {
   const result = await context.dispatchActiveAgentTurn('clarification answer');
   assert.equal(result.received, 'clarification answer');
+
+  vm.runInContext("tripState.stage = 'planning'; tripState.active_agent = null", context);
+  const guideResult = await context.dispatchActiveAgentTurn('remove rafting');
+  assert.equal(guideResult.event, 'TRAVELER_MESSAGE');
+  assert.equal(guideResult.received, 'remove rafting');
 
   context.callScout = async message => ({ intent: null, message: null, received: message });
   context.callMeridian = async () => assert.fail('Meridian must not receive a fresh Scout turn');

@@ -23,7 +23,7 @@ function extractFunction(name) {
 const calls = [];
 const context = vm.createContext({
   calls,
-  PLANNER_COMING_SOON_MESSAGE: 'Planning is coming soon.',
+  guideSessions: new Map(),
   escapeHtml: value => String(value),
   appendMsg: (role, message) => calls.push(['message', role, message]),
   hasTripContext: () => true,
@@ -76,7 +76,7 @@ assert.deepEqual(plain(context.meridianSectionPoints({
   legs: [{ from: 'Kaza', to: 'Manali', duration: '6 hours', mode: 'road' }]
 })), ['Kaza to Manali, 6 hours, by road']);
 assert.deepEqual(plain(context.meridianSectionPoints({ type: 'season', points: ['Best in summer'] })), ['Best in summer']);
-assert.equal(context.responseMessageForIntent({ intent: 'planner', message: 'ignored' }), 'Planning is coming soon.');
+assert.equal(context.responseMessageForIntent({ intent: 'planner', message: 'handled by Guide' }), '');
 
 const validationError = context.apiResponseError('Scout', { status: 422 });
 assert.equal(validationError.status, 422);
@@ -144,14 +144,14 @@ assert.equal(context.latestMatchReviewLabel(), 'Review recommendations');
 
 vm.runInContext("tripState = { stage: 'planning', active_agent: null, matcher_state: { recommendations: [] } }", context);
 assert.equal(context.chatComposerPlaceholder(), 'Tell us what you want help planning...');
-assert.equal(context.phaseContextFallback(), 'Planning context is saved for this trip.');
+assert.equal(context.phaseContextFallback(), 'Planning is in progress for this trip.');
 
 assert.equal(html.includes('match_sections'), false);
 assert.equal(html.includes('why_this_works_for_you'), false);
 assert.equal(html.includes('failure_sections'), false);
 assert.equal(html.includes('last_scout_message'), false);
 assert.equal(html.includes('refineWithScout'), false);
-assert.equal(html.includes('API.planner'), false);
+assert.match(html, /guide:\s+\`\$\{TWM_BASE_URL\}\/guide\`/);
 assert.match(html, /retryLastFailedTurn/);
 assert.match(html, /constraint_adjustment_suggestions/);
 
