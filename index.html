@@ -164,12 +164,12 @@
   .bub-u { background: var(--dark); color: #faf8f5; border-radius: 13px 3px 13px 13px; }
   .bub p + p { margin-top: 6px; }
 
-  /* Guide places draft — response-driven and kept in memory until DB persistence lands */
+  /* Guide places draft — response-driven and restored from canonical trip persistence */
   .guide-card-row { display: flex; align-items: flex-start; gap: 8px; animation: fadeUp 0.22s ease; }
   .guide-card { width: min(75%, 720px); background: var(--card); border: 1px solid #dfc7b2; border-radius: 3px 13px 13px 13px; box-shadow: var(--shadow); overflow: hidden; }
   .guide-card.is-stale { opacity: 0.68; }
   .guide-card-head { padding: 13px 16px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .guide-card-title { font-family: 'DM Serif Display', serif; font-size: 17px; }
+  .guide-card-title { font-family: 'DM Serif Display', serif; font-size: 17px; margin: 0; }
   .guide-card-badge { padding: 3px 8px; border-radius: 100px; background: rgba(255,255,255,.2); font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
   .guide-card-body { padding: 17px 18px 14px; }
   .guide-card-label { color: var(--ink-faint); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 7px; }
@@ -181,7 +181,7 @@
   .guide-meta-item span { display: block; color: var(--ink-faint); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
   .guide-meta-item strong { display: block; color: var(--ink); font-size: 12.5px; margin-top: 2px; }
   .guide-card-actions { padding: 11px 18px; background: var(--paper-warm); border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px; }
-  .guide-card-btn { border: 1px solid var(--border); background: var(--card); color: var(--ink); border-radius: 7px; padding: 8px 14px; font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .guide-card-btn { min-height: 44px; border: 1px solid var(--border); background: var(--card); color: var(--ink); border-radius: 7px; padding: 8px 14px; font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer; }
   .guide-card-btn:hover, .guide-card-btn:focus-visible { border-color: var(--accent); color: var(--accent); }
   .guide-card-btn.primary { border-color: var(--green); background: var(--green); color: #fff; }
   .guide-card-btn.primary:hover, .guide-card-btn.primary:focus-visible { background: #2d5a3a; color: #fff; }
@@ -487,6 +487,7 @@
     .input-wrap { width: calc(100% - 32px); }
     .bub { max-width: 88%; }
     .guide-card { width: calc(100% - 35px); }
+    .guide-card-actions .guide-card-btn { flex: 1 1 130px; }
     #screen-recos .scroll { padding: 16px; }
     .recos-inner { padding: 0 !important; }
     .detail-header { flex-direction: column; }
@@ -1038,6 +1039,26 @@ async function handleTripConflict(id) {
     if (document.getElementById('screen-recos')?.classList.contains('active')) {
       renderRecos(currentRecos);
     }
+    if (document.getElementById('screen-chat')?.classList.contains('active') && tripState?.stage === 'planning') {
+      const session = guideSession(id);
+      const visibleCard = document.querySelector('.guide-card:not(.is-stale)');
+      const visibleRevision = visibleCard?.dataset.guideRevision;
+      if (session?.state?.phase === 'NEEDS_CLARIFICATION') {
+        deactivateOlderGuideCards();
+        appendMsg('assistant', session.state.pending_clarification);
+      } else if (session?.state?.phase === 'PLACES_DRAFT') {
+        if (visibleRevision === String(session.revision)) {
+          visibleCard.removeAttribute('aria-disabled');
+          visibleCard.querySelectorAll('button').forEach(button => { button.disabled = false; });
+        } else {
+          deactivateOlderGuideCards();
+          appendMsg('assistant', 'The latest saved places draft has been loaded.');
+          renderGuidePlacesCard(session.state, session.revision);
+        }
+      } else if (session?.state?.phase === 'DAY_PLAN_DRAFT' || session?.state?.phase === 'PLAN_APPROVED') {
+        deactivateOlderGuideCards();
+      }
+    }
     showPersistenceNotice('This trip changed in another session. The latest saved version has been loaded.');
   }
 }
@@ -1504,6 +1525,7 @@ function validateGuideState(value) {
 function deactivateOlderGuideCards() {
   document.querySelectorAll('.guide-card:not(.is-stale)').forEach(card => {
     card.classList.add('is-stale');
+    card.setAttribute('aria-disabled', 'true');
     card.querySelectorAll('button').forEach(button => { button.disabled = true; });
     const badge = card.querySelector('.guide-card-badge');
     if (badge) badge.textContent = 'Updated';
@@ -1521,9 +1543,9 @@ function renderGuidePlacesCard(state, revision) {
   const duration = state.duration_days ? `${state.duration_days} day${state.duration_days === 1 ? '' : 's'}` : 'To confirm';
   row.innerHTML = `
     <div class="av">S</div>
-    <section class="guide-card" data-guide-revision="${revision}" aria-label="Places draft">
+    <section class="guide-card" data-guide-revision="${revision}" aria-labelledby="guide-card-title-${revision}">
       <div class="guide-card-head">
-        <div class="guide-card-title">Trip Design</div>
+        <h3 class="guide-card-title" id="guide-card-title-${revision}">Trip Design</h3>
         <div class="guide-card-badge">Draft</div>
       </div>
       <div class="guide-card-body">
@@ -1573,7 +1595,13 @@ async function approveGuidePlaces(revision, row) {
   setSendDisabled(true);
   row.querySelectorAll('button').forEach(button => { button.disabled = true; });
   showTyping();
+  const retryKey = pendingRetryTurn?.kind === 'command'
+    && pendingRetryTurn.tripId === currentTripId
+    && pendingRetryTurn.command === 'approve_places'
+      ? pendingRetryTurn.idempotencyKey
+      : newIdempotencyKey();
   const outcome = await sendDeterministicCommand('approve_places', {
+    idempotencyKey: retryKey,
     errorText: "We couldn't approve these places.",
     errorLogTag: '[Guide approval]',
     onSuccess: data => {
@@ -1582,7 +1610,12 @@ async function approveGuidePlaces(revision, row) {
     }
   });
   removeTyping();
-  if (!outcome.ok) {
+  const card = row.querySelector('.guide-card');
+  const canRetryApproval = !card?.classList.contains('is-stale')
+    && pendingRetryTurn?.kind === 'command'
+    && pendingRetryTurn.tripId === currentTripId
+    && pendingRetryTurn.command === 'approve_places';
+  if (!outcome.ok && canRetryApproval) {
     row.querySelectorAll('button').forEach(button => { button.disabled = false; });
   }
   busy = false;
@@ -2079,8 +2112,14 @@ function resumeChat() {
   if (stage === 'planning') {
     const session = currentTripId ? guideSession(currentTripId) : null;
     if (session?.state) {
-      appendMsg('assistant', 'Continue refining your latest places draft here.');
-      if (session.state.phase === 'PLACES_DRAFT') renderGuidePlacesCard(session.state, session.revision);
+      if (session.state.phase === 'NEEDS_CLARIFICATION') {
+        appendMsg('assistant', session.state.pending_clarification);
+      } else if (session.state.phase === 'PLACES_DRAFT') {
+        appendMsg('assistant', 'Continue refining your latest places draft here.');
+        renderGuidePlacesCard(session.state, session.revision);
+      } else {
+        appendMsg('assistant', 'Continue planning from your latest saved draft.');
+      }
     } else {
       appendMsg('assistant', 'Send your planning request and I’ll build the places draft with you.');
     }
