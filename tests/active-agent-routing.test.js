@@ -1,183 +1,24 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 
-function extractFunction(name) {
-  const asyncStart = html.indexOf(`async function ${name}(`);
-  const start = asyncStart === -1 ? html.indexOf(`function ${name}(`) : asyncStart;
-  assert.notEqual(start, -1, `Missing function ${name}`);
-  const bodyStart = html.indexOf('{', start);
-  let depth = 0;
-  for (let index = bodyStart; index < html.length; index += 1) {
-    if (html[index] === '{') depth += 1;
-    if (html[index] === '}') depth -= 1;
-    if (depth === 0) return html.slice(start, index + 1);
-  }
-  throw new Error(`Unclosed function ${name}`);
-}
+assert.match(html, /async function sendTripCommand\(command,/);
+assert.match(html, /const command = message == null \? 'continue' : 'traveler_message'/);
+assert.match(html, /sendTripCommand\(command, \{ message, idempotencyKey \}\)/);
+assert.match(html, /const superseded = tripId !== currentTripId;[\s\S]*return \{ \.\.\.result, superseded \}/);
+assert.match(html, /if \(!result\.superseded\) presentCommandOutcome\(result\)/);
+assert.doesNotMatch(html, /Active trip changed during command execution/);
+assert.match(html, /function tagCommandError\(error, tripId\)[\s\S]*error\.tripId = tripId;[\s\S]*error\.superseded = tripId !== currentTripId/);
+assert.match(html, /catch \(refreshError\)[\s\S]*throw tagCommandError\(refreshError, tripId\)/);
+assert.match(html, /if \(err\.superseded\) return \{ ok: false, error: err, superseded: true \}/);
+assert.match(html, /tripId: err\.tripId \|\| currentTripId/);
+assert.match(html, /tripId: error\.tripId \|\| currentTripId/);
+assert.match(html, /if \(tripId !== currentTripId\) return \{ ok: false, superseded: true \}/);
+assert.match(html, /if \(result\.superseded\)[\s\S]*pendingRetryTurn\?\.tripId === tripId/);
+assert.doesNotMatch(html, /function (?:callScout|callMeridian|callGuide|setActiveAgent)\b/);
+assert.doesNotMatch(html, /API\.(?:scout|meridian|guide)/);
+assert.doesNotMatch(html, /tripState\.active_agent\s*=/);
 
-const records = new Map();
-const context = vm.createContext({
-  Error,
-  tripStore: { records },
-  cloneJson: value => JSON.parse(JSON.stringify(value ?? {})),
-  queueTripSave: async () => {},
-  syncTripFromState: () => {},
-  renderStateBar: () => {}
-});
-vm.runInContext("let tripState = null;", context);
-[
-  'defaultState',
-  'loadTripState',
-  'saveTripState',
-  'isPlainObject',
-  'agentOwnedStateDelta',
-  'isMeridianBusinessStatus',
-  'activeAgentFromState',
-  'setActiveAgent',
-  'applyMeridianRoutingOutcome',
-  'applyRoutingFromScoutIntent',
-  'scoutRequestFromState',
-  'latestRecommendation',
-  'priorRecommendationsFromState',
-  'meridianTripContextFromState',
-  'meridianAdvisorStateFromState',
-  'meridianMatcherStateFromState',
-  'meridianRequestFromState',
-  'presentMeridianOutcome',
-  'dispatchActiveAgentTurn'
-].forEach(name => vm.runInContext(extractFunction(name), context));
-
-const plain = value => JSON.parse(JSON.stringify(value));
-
-vm.runInContext("tripState = defaultState('trip-1')", context);
-records.set('trip-1', { trip_state: vm.runInContext('tripState', context) });
-assert.equal(vm.runInContext('tripState.active_agent', context), 'scout');
-assert.equal(vm.runInContext('activeAgentFromState()', context), 'scout');
-
-vm.runInContext("applyRoutingFromScoutIntent('matcher')", context);
-assert.equal(vm.runInContext('tripState.stage', context), 'matching');
-assert.equal(vm.runInContext('tripState.active_agent', context), 'meridian');
-assert.equal(vm.runInContext('activeAgentFromState()', context), 'meridian');
-
-vm.runInContext("applyMeridianRoutingOutcome('NEEDS_CLARIFICATION')", context);
-assert.equal(vm.runInContext('tripState.active_agent', context), 'meridian');
-vm.runInContext('saveTripState()', context);
-vm.runInContext('tripState = loadTripState(\'trip-1\')', context);
-assert.equal(vm.runInContext('tripState.active_agent', context), 'meridian');
-
-vm.runInContext("applyMeridianRoutingOutcome('SUCCESS')", context);
-assert.equal(vm.runInContext('tripState.active_agent', context), null);
-
-for (const status of ['SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL']) {
-  vm.runInContext("setActiveAgent('meridian')", context);
-  vm.runInContext(`applyMeridianRoutingOutcome('${status}')`, context);
-  assert.equal(vm.runInContext('tripState.active_agent', context), null);
-}
-
-vm.runInContext("tripState = defaultState('trip-2')", context);
-assert.equal(vm.runInContext('tripState.active_agent', context), 'scout');
-
-vm.runInContext("setActiveAgent('meridian')", context);
-const scoutPayload = plain(vm.runInContext("scoutRequestFromState(tripState, 'entry')", context));
-assert.equal('active_agent' in scoutPayload.trip_state, false);
-assert.deepEqual(Object.keys(scoutPayload.trip_state).sort(), [
-  'advisor_state',
-  'stage',
-  'trip_context'
-]);
-assert.deepEqual(scoutPayload.trip_state.advisor_state, {
-  conversation_context: { last_advisor_message: null }
-});
-
-vm.runInContext(`tripState.advisor_state = {
-  conversation_context: { last_advisor_message: 'Saved advice' },
-  artifacts: [{ assistant_message: '<script>local only</script>', agent_meta: { agent: 'scout' } }],
-  unexpected: 'local only'
-}`, context);
-const resumedScoutPayload = plain(vm.runInContext("scoutRequestFromState(tripState, 'hi')", context));
-assert.deepEqual(resumedScoutPayload.trip_state.advisor_state, {
-  conversation_context: { last_advisor_message: 'Saved advice' }
-});
-assert.equal(resumedScoutPayload.message, 'hi');
-assert.equal('artifacts' in resumedScoutPayload.trip_state.advisor_state, false);
-assert.equal('unexpected' in resumedScoutPayload.trip_state.advisor_state, false);
-
-const retrySource = extractFunction('retryLastFailedTurn');
-assert.match(retrySource, /sendActiveAgentMessage\(retry\.message, retry\)/);
-assert.equal(retrySource.includes('appendMsg('), false);
-assert.equal(retrySource.includes('tripState ='), false);
-
-const meridianPayload = plain(vm.runInContext("meridianRequestFromState(tripState, 'refine')", context));
-assert.equal('active_agent' in meridianPayload.trip_state, false);
-assert.equal(meridianPayload.message, 'refine');
-assert.deepEqual(Object.keys(meridianPayload.trip_state).sort(), [
-  'advisor_state',
-  'matcher_state',
-  'trip_context'
-]);
-
-const scoutDelta = plain(context.agentOwnedStateDelta({
-  trip_context: { region: 'Uttarakhand', selected_option: { id: 'blocked' } },
-  advisor_state: { injected: true },
-  matcher_state: { recommendations: [{ name: 'Injected' }] }
-}, 'scout'));
-assert.deepEqual(scoutDelta, { trip_context: { region: 'Uttarakhand' } });
-
-const meridianDelta = plain(context.agentOwnedStateDelta({
-  trip_context: { budget: 'mid-range', selected_option: { id: 'blocked' } },
-  matcher_state: {
-    conversation_context: { awaiting: 'duration' },
-    recommendations: [{ name: 'Injected' }]
-  },
-  advisor_state: { injected: true }
-}, 'meridian'));
-assert.deepEqual(meridianDelta, {
-  trip_context: { budget: 'mid-range' },
-  matcher_state: { conversation_context: { awaiting: 'duration' } }
-});
-assert.throws(() => context.agentOwnedStateDelta({}, 'unknown'), /Unknown delta owner/);
-
-assert.throws(
-  () => vm.runInContext("applyMeridianRoutingOutcome('UNKNOWN')", context),
-  /Unexpected Meridian status/
-);
-
-context.callScout = async () => assert.fail('Scout must not receive an active Meridian turn');
-context.callMeridian = async message => ({ status: 'NEEDS_CLARIFICATION', message: null, received: message });
-context.appendMsg = () => {};
-context.hasRecommendations = () => false;
-context.renderInlineCta = () => {};
-context.reviewLatestMatchCtaHtml = () => '';
-context.updateChatComposerPlaceholder = () => {};
-context.handleScoutResult = value => value;
-context.guideSession = () => ({ state: { phase: 'PLACES_DRAFT' } });
-context.callGuide = async (event, message) => ({ event, received: message });
-context.presentGuideOutcome = () => {};
-vm.runInContext("tripState.stage = 'matching'; tripState.active_agent = 'meridian'", context);
-
-(async () => {
-  const result = await context.dispatchActiveAgentTurn('clarification answer');
-  assert.equal(result.received, 'clarification answer');
-
-  vm.runInContext("tripState.stage = 'planning'; tripState.active_agent = null", context);
-  const guideResult = await context.dispatchActiveAgentTurn('remove rafting');
-  assert.equal(guideResult.event, 'TRAVELER_MESSAGE');
-  assert.equal(guideResult.received, 'remove rafting');
-
-  context.callScout = async message => ({ intent: null, message: null, received: message });
-  context.callMeridian = async () => assert.fail('Meridian must not receive a fresh Scout turn');
-  context.handleScoutResult = (value, message) => ({ ...value, handledMessage: message });
-  vm.runInContext("tripState = defaultState('trip-3')", context);
-  const scoutResult = await context.dispatchActiveAgentTurn('new entry turn');
-  assert.equal(scoutResult.received, 'new entry turn');
-  assert.equal(scoutResult.handledMessage, 'new entry turn');
-
-  console.log('Active-agent routing tests passed.');
-})().catch(error => {
-  console.error(error);
-  process.exitCode = 1;
-});
+console.log('Backend-owned active-agent routing tests passed.');

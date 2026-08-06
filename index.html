@@ -20,6 +20,7 @@
     --r: 12px; --r-sm: 8px; --r-lg: 14px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
   body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; display: flex; flex-direction: column; }
 
   /* ── Screens ── */
@@ -62,7 +63,7 @@
   .hero h1 em { color: var(--accent); font-style: normal; }
   .hero p { font-size: 14.5px; color: var(--ink-muted); max-width: 420px; margin: 0 auto; line-height: 1.7; }
   .home-modules { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; max-width: 680px; }
-  .home-mod { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; gap: 14px; }
+  .home-mod { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; gap: 14px; text-align: left; font-family: inherit; }
   .home-mod:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(196,107,58,0.1); }
   .home-mod.coming-soon { opacity: 0.5; cursor: not-allowed; }
   .home-mod.coming-soon:hover { border-color: var(--border); transform: none; box-shadow: none; }
@@ -70,8 +71,8 @@
   .mod-icon svg { width: 20px; height: 20px; }
   .mod-icon-discover { background: var(--accent-light); color: var(--accent); }
   .mod-icon-plan { background: var(--green-light); color: var(--green); }
-  .home-mod h2 { font-size: 15.5px; font-weight: 600; color: var(--ink); line-height: 1.3; }
-  .home-mod p { font-size: 13px; color: var(--ink-muted); line-height: 1.6; flex: 1; }
+  .mod-title { display: block; font-size: 15.5px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+  .mod-description { display: block; font-size: 13px; color: var(--ink-muted); line-height: 1.6; flex: 1; }
   .mod-cta { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; }
   .mod-cta svg { width: 12px; height: 12px; }
   .mod-cta-discover { color: var(--accent); }
@@ -365,7 +366,7 @@
   .plan-btn-a:hover { background: #2d5c3a; }
   .plan-btn-b { width: 100%; padding: 10px 20px; border-radius: var(--r-lg); font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif; background: var(--accent); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.15s; }
   .plan-btn-b:hover { background: var(--accent-dim); }
-  .plans-skip { text-align: center; font-size: 12.5px; color: var(--ink-faint); cursor: pointer; margin-top: 6px; }
+  .plans-skip { text-align: center; font-size: 12.5px; color: var(--ink-faint); cursor: pointer; margin-top: 6px; border: 0; background: transparent; font-family: inherit; }
   .plans-skip:hover { color: var(--accent); }
   .plans-note { font-size: 12px; color: var(--ink-faint); text-align: center; margin-top: 10px; line-height: 1.55; }
 
@@ -502,7 +503,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-home" class="screen">
   <header class="tb">
-    <a class="brand">Travel<em>With</em>Me</a>
+    <a class="brand" href="#" onclick="navigate('home'); return false;">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('trips')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
@@ -515,16 +516,16 @@
       <p>From wondering where to go to stepping off the plane — TWM handles every detail so you don't have to.</p>
     </div>
     <div class="home-modules" style="grid-template-columns: 1fr; max-width: 420px;">
-      <div class="home-mod" onclick="startChat()">
-        <div class="mod-icon mod-icon-discover">
+      <button class="home-mod" type="button" onclick="startChat()">
+        <span class="mod-icon mod-icon-discover">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
-        </div>
-        <h2>Need help in your trip?</h2>
-        <p>Whether you know where you're headed or need help deciding — tell Scout about your trip and it'll take it from there.</p>
+        </span>
+        <span class="mod-title">Need help in your trip?</span>
+        <span class="mod-description">Whether you know where you're headed or need help deciding — tell Scout about your trip and it'll take it from there.</span>
         <span class="mod-cta mod-cta-discover">Start with Scout
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </span>
-      </div>
+      </button>
     </div>
   </div>
 </div>
@@ -534,7 +535,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-trips" class="screen">
   <header class="tb">
-    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <a class="brand" href="#" onclick="navigate('home'); return false;">Travel<em>With</em>Me</a>
   </header>
   <div class="scroll">
     <div class="trips-inner">
@@ -548,7 +549,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-chat" class="screen">
   <header class="tb">
-    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <a class="brand" href="#" onclick="navigate('home'); return false;">Travel<em>With</em>Me</a>
     <div class="tb-right" style="gap:10px;">
       <span class="tb-trip-name-wrap" style="display:flex;align-items:center;gap:4px;">
         <span id="chatTripName" style="font-size:13px;color:var(--ink-muted);"></span>
@@ -569,16 +570,17 @@
   <div class="state-bar" id="stateBar"></div>
   <div class="chat-wrap" id="chatWrap">
     <div class="chat-inner" id="chatInner">
-      <div class="typing-row" id="typingRow" style="display:none;">
+      <div class="typing-row" id="typingRow" role="status" aria-live="polite" style="display:none;">
         <div class="av">S</div>
+        <span class="sr-only">Scout is responding</span>
         <div class="tdots"><span></span><span></span><span></span></div>
       </div>
     </div>
   </div>
   <div class="input-bar">
     <div class="input-wrap">
-      <textarea id="userInput" placeholder="Tell Scout about your trip…" rows="1"></textarea>
-      <button class="send-btn" id="sendBtn" onclick="handleSend()">
+      <textarea id="userInput" aria-label="Message Scout" placeholder="Tell Scout about your trip…" rows="1"></textarea>
+      <button class="send-btn" id="sendBtn" type="button" aria-label="Send message" onclick="handleSend()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
     </div>
@@ -590,7 +592,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-recos" class="screen">
   <header class="tb">
-    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <a class="brand" href="#" onclick="navigate('home'); return false;">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('trips')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
@@ -620,7 +622,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-plans" class="screen">
   <header class="tb">
-    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <a class="brand" href="#" onclick="navigate('home'); return false;">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('trips')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
@@ -681,7 +683,7 @@
       <div class="plans-note">
         Concierge pricing varies by group size, destinations, and trip duration — we'll send a quote after a quick call.
         <br><br>
-        <span class="plans-skip" onclick="navigate('trips')">Not ready yet — save to My Trips and decide later</span>
+        <button class="plans-skip" type="button" onclick="navigate('trips')">Not ready yet — save to My Trips and decide later</button>
       </div>
     </div>
   </div>
@@ -692,7 +694,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-itin" class="screen">
   <header class="tb">
-    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <a class="brand" href="#" onclick="navigate('home'); return false;">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('trips')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
@@ -729,7 +731,7 @@
 ══════════════════════════════════════════ -->
 <div id="screen-concierge" class="screen">
   <header class="tb">
-    <a class="brand" onclick="navigate('home')">Travel<em>With</em>Me</a>
+    <a class="brand" href="#" onclick="navigate('home'); return false;">Travel<em>With</em>Me</a>
     <button class="tb-btn" onclick="navigate('trips')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
       My Trips
@@ -838,9 +840,6 @@ function isDevEnv() {
 const TWM_BASE_URL = window.TWM_BASE_URL || 'https://travelwithme-zf9f.onrender.com';
 const API = {
   health:   `${TWM_BASE_URL}/health`,
-  scout:    `${TWM_BASE_URL}/scout`,
-  meridian: `${TWM_BASE_URL}/meridian`,
-  guide:    `${TWM_BASE_URL}/guide`,
   trips:    '/api/trips',
 };
 const WELCOME = "Hey, I'm Scout. Tell me about the trip you have in mind. I can help you find destinations that fit and explain why.";
@@ -902,8 +901,8 @@ function tripView(record) {
     id: record.id,
     title: record.title,
     product_mode: record.product_mode,
-    status: metadata.status || state.stage || 'new',
-    inputs: Array.isArray(metadata.inputs) ? metadata.inputs : tripContextChips(state.trip_context || {}).slice(0, 4),
+    status: state.stage || 'new',
+    inputs: tripContextChips(state.trip_context || {}).slice(0, 4),
     paid_plan: metadata.paid_plan || null,
     version: record.version,
     created_at: record.created_at,
@@ -953,14 +952,9 @@ function getTripById(id) { return getTrips().find(t => t.id === id) || null; }
 async function createTrip() {
   const created = await tripApi('', {
     method: 'POST',
-    body: JSON.stringify({ title: 'Untitled Trip', product_mode: 'self_led', trip_state: {}, ui_state: {} }),
+    body: JSON.stringify({ title: 'Untitled Trip', product_mode: 'self_led' }),
   });
-  applyServerTrip(created);
-  const record = tripStore.records.get(created.id);
-  record.trip_state = defaultState(created.id);
-  record.ui_state = { trip_metadata: { status: 'new', inputs: [] } };
-  const saved = await persistTripNow(created.id);
-  return applyServerTrip(saved);
+  return applyServerTrip(created);
 }
 
 function updateTrip(id, delta) {
@@ -979,22 +973,9 @@ function updateTrip(id, delta) {
     return rename;
   }
   applyServerTrip(record);
-  const save = queueTripSave(id);
+  const save = queueUiStateSave(id);
   save.catch(() => {});
   return save;
-}
-
-function syncTripFromState(id, state) {
-  const inputs = tripContextChips(state.trip_context || {}).slice(0, 4);
-  const knownStages = ['new', 'matching', 'recommendation_ready', 'recommended', 'matched', 'planning', 'planned'];
-  const status = knownStages.includes(state.stage) ? state.stage : 'matching';
-  const record = tripStore.records.get(id);
-  if (!record) return;
-  record.ui_state = {
-    ...record.ui_state,
-    trip_metadata: { ...tripMetadata(record), status, inputs },
-  };
-  applyServerTrip(record);
 }
 
 // ══════════════════════════════════════════
@@ -1025,16 +1006,6 @@ function loadTripState(tripId) {
   return record ? cloneJson(record.trip_state) : defaultState(tripId);
 }
 
-function saveTripState() {
-  if (!tripState) return;
-  const record = tripStore.records.get(tripState.trip_id);
-  if (!record) return;
-  record.trip_state = cloneJson(tripState);
-  syncTripFromState(tripState.trip_id, tripState);
-  renderStateBar();
-  queueTripSave(tripState.trip_id).catch(() => {});
-}
-
 function showPersistenceNotice(message, { retry = false } = {}) {
   let notice = document.getElementById('persistenceNotice');
   if (!notice) {
@@ -1058,22 +1029,27 @@ async function handleTripConflict(id) {
   applyServerTrip(latest);
   if (currentTripId === id) {
     tripState = loadTripState(id);
+    currentRecos = latestRecommendation();
     guideSessions.delete(id);
     restoreGuideSession(id);
     renderStateBar();
+    updateChatComposerPlaceholder();
+    updateChatContextSnippet();
+    if (document.getElementById('screen-recos')?.classList.contains('active')) {
+      renderRecos(currentRecos);
+    }
+    showPersistenceNotice('This trip changed in another session. The latest saved version has been loaded.');
   }
-  showPersistenceNotice('This trip changed in another session. The latest saved version has been loaded.');
 }
 
-async function persistTripNow(id) {
+async function persistUiStateNow(id) {
   const record = tripStore.records.get(id);
   if (!record) throw new Error('Trip is no longer available.');
   try {
-    const saved = await tripApi(`/${id}`, {
-      method: 'PUT',
+    const saved = await tripApi(`/${id}/ui-state`, {
+      method: 'PATCH',
       body: JSON.stringify({
         expected_version: record.version,
-        trip_state: record.trip_state,
         ui_state: record.ui_state,
       }),
     });
@@ -1116,22 +1092,12 @@ function queueTripMutation(id, mutation) {
   return next;
 }
 
-function queueTripSave(id) {
+function queueUiStateSave(id) {
   return queueTripMutation(id, async () => {
-    const saved = await persistTripNow(id);
+    const saved = await persistUiStateNow(id);
     applyServerTrip(saved);
     return saved;
   });
-}
-
-function deepMerge(target, source) {
-  if (!source || typeof source !== 'object') return;
-  for (const key of Object.keys(source)) {
-    if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-      if (!target[key] || typeof target[key] !== 'object') target[key] = {};
-      deepMerge(target[key], source[key]);
-    } else { target[key] = source[key]; }
-  }
 }
 
 function latestRecommendation(state = tripState) {
@@ -1183,10 +1149,6 @@ window.getTripPromptProvenance = function(tripId = currentTripId) {
   console.log(`%cPrompt provenance: ${tripId || 'unsaved trip'}`, 'color:#6b6460;font-weight:700;', provenance);
   return provenance;
 };
-
-function isMeridianBusinessStatus(status) {
-  return ['NEEDS_CLARIFICATION', 'SUCCESS', 'SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL'].includes(status);
-}
 
 function isMeridianFailureStatus(status) {
   return ['SOFT_FAIL', 'HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL'].includes(status);
@@ -1243,17 +1205,6 @@ function phaseContextFallback(state = tripState) {
   return 'Scout is here to help with your trip.';
 }
 
-function setActiveAgent(agent) {
-  if (!tripState) return;
-  if (![null, 'scout', 'meridian'].includes(agent)) throw new Error(`Unknown persisted active agent: ${agent}`);
-  tripState.active_agent = agent;
-}
-
-function applyMeridianRoutingOutcome(status) {
-  if (!isMeridianBusinessStatus(status)) throw new Error(`Unexpected Meridian status: ${status || 'missing'}`);
-  setActiveAgent(status === 'NEEDS_CLARIFICATION' ? 'meridian' : null);
-}
-
 function loadUiState(tripId) {
   const record = tripStore.records.get(tripId);
   const persisted = record && isPlainObject(record.ui_state) ? record.ui_state : {};
@@ -1271,7 +1222,7 @@ function saveUiState(screen, extra = {}) {
   const uiState = { ...loadUiState(currentTripId), last_screen: screen, ...extra };
   record.ui_state = uiState;
   applyServerTrip(record);
-  queueTripSave(currentTripId).catch(() => {});
+  queueUiStateSave(currentTripId).catch(() => {});
 }
 
 function escapeHtml(value) {
@@ -1308,53 +1259,6 @@ function tripContextChips(context) {
   const selected = context.selected_option?.name || context.selected_option?.id;
   if (selected) chips.unshift(`selected: ${selected}`);
   return chips;
-}
-
-function agentOwnedStateDelta(delta, agent) {
-  if (!['scout', 'meridian'].includes(agent)) throw new Error(`Unknown delta owner: ${agent}`);
-  if (!isPlainObject(delta)) return {};
-
-  const owned = {};
-  if (isPlainObject(delta.trip_context)) {
-    owned.trip_context = Object.fromEntries(
-      Object.entries(delta.trip_context).filter(([key]) => key !== 'selected_option')
-    );
-  }
-  if (agent === 'meridian' && isPlainObject(delta.matcher_state)) {
-    owned.matcher_state = Object.fromEntries(
-      Object.entries(delta.matcher_state).filter(([key]) => key !== 'recommendations')
-    );
-  }
-  return owned;
-}
-
-function applyStateDelta(delta, agent) {
-  const owned = agentOwnedStateDelta(delta, agent);
-  // UI owns stage transitions, so agent lifecycle fields are intentionally ignored.
-  // Stages are set explicitly by UI actions (handleSend, callMeridian, chooseDestination, etc.)
-  if (owned.trip_context) deepMerge(tripState.trip_context, owned.trip_context);
-  if (owned.matcher_state) deepMergeStateBranch(tripState.matcher_state, owned.matcher_state);
-}
-
-// Append/dedupe known array fields instead of letting deepMerge clobber them.
-const ARRAY_MERGE_KEYS = ['rejected_options', 'artifacts'];
-function deepMergeStateBranch(target, source) {
-  if (!source || typeof source !== 'object') return;
-  for (const key of Object.keys(source)) {
-    const val = source[key];
-    if (ARRAY_MERGE_KEYS.includes(key) && Array.isArray(val)) {
-      if (!Array.isArray(target[key])) target[key] = [];
-      val.forEach(item => {
-        const exists = target[key].some(existing => JSON.stringify(existing) === JSON.stringify(item));
-        if (!exists) target[key].push(item);
-      });
-    } else if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
-      if (!target[key] || typeof target[key] !== 'object') target[key] = {};
-      deepMerge(target[key], val);
-    } else {
-      target[key] = val;
-    }
-  }
 }
 
 // ══════════════════════════════════════════
@@ -1448,85 +1352,66 @@ function apiResponseError(agent, response) {
   return error;
 }
 
-function recordScoutAdvice(data, state = tripState) {
-  const adviceMessage = data?.intent === 'advise' ? data.message : null;
-  if (!state || !adviceMessage) return;
+function newIdempotencyKey() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
+    const value = Math.floor(Math.random() * 16);
+    return (character === 'x' ? value : (value & 0x3) | 0x8).toString(16);
+  });
+}
 
-  if (!isPlainObject(state.advisor_state)) state.advisor_state = {};
-  if (!isPlainObject(state.advisor_state.conversation_context)) state.advisor_state.conversation_context = {};
-  state.advisor_state.conversation_context.last_advisor_message = adviceMessage;
-  if (!Array.isArray(state.advisor_state.artifacts)) state.advisor_state.artifacts = [];
-  const artifacts = state.advisor_state.artifacts;
-  const agentMeta = normalizedAgentMeta(data.agent_meta, 'scout');
-  const existing = artifacts.find(item => item?.type === 'advice' && item?.source === 'scout' && item?.assistant_message === adviceMessage);
-  if (existing) {
-    if (agentMeta) existing.agent_meta = agentMeta;
-  } else {
-    const artifact = {
-      type: 'advice',
-      source: 'scout',
-      assistant_message: adviceMessage,
-      created_at: new Date().toISOString()
-    };
-    if (agentMeta) artifact.agent_meta = agentMeta;
-    artifacts.push(artifact);
+function tagCommandError(error, tripId) {
+  error.tripId = tripId;
+  error.superseded = tripId !== currentTripId;
+  return error;
+}
+
+function acceptAuthoritativeTrip(record) {
+  applyServerTrip(record);
+  if (currentTripId === record.id) {
+    tripState = loadTripState(record.id);
+    currentRecos = latestRecommendation();
+    guideSessions.delete(record.id);
+    restoreGuideSession(record.id);
+    renderStateBar();
+    updateChatComposerPlaceholder();
   }
 }
-function scoutRequestFromState(state = tripState, message = null) {
-  return {
-    trip_state: {
-      stage: state?.stage || 'new',
-      trip_context: state?.trip_context || {},
-      advisor_state: {
-        conversation_context: {
-          last_advisor_message: state?.advisor_state?.conversation_context?.last_advisor_message ?? null
+
+async function sendTripCommand(command, { message = null, optionId = null, idempotencyKey = newIdempotencyKey() } = {}) {
+  const tripId = currentTripId;
+  if (!tripId) throw new Error('A saved trip is required before sending a command.');
+  return queueTripMutation(tripId, async () => {
+    const record = tripStore.records.get(tripId);
+    if (!record) throw new Error('Trip is no longer available.');
+    const payload = {
+      command,
+      expected_version: record.version,
+      idempotency_key: idempotencyKey,
+    };
+    if (message !== null) payload.message = message;
+    if (optionId !== null) payload.option_id = optionId;
+    try {
+      const result = await tripApi(`/${tripId}/commands`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      markBackendActivity();
+      const superseded = tripId !== currentTripId;
+      acceptAuthoritativeTrip(result.trip);
+      if (!superseded) clearPersistenceNotice();
+      return { ...result, superseded };
+    } catch (error) {
+      if (error.status === 409) {
+        try {
+          await handleTripConflict(tripId);
+        } catch (refreshError) {
+          throw tagCommandError(refreshError, tripId);
         }
       }
-    },
-    message
-  };
-}
-
-async function callScout(message) {
-  const before = JSON.parse(JSON.stringify(tripState));
-  const input = scoutRequestFromState(tripState, message);
-  const res = await fetch(API.scout, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
-  if (!res.ok) throw apiResponseError('Scout', res);
-  markBackendActivity();
-  const data = await res.json();
-  applyStateDelta(data.state_delta, 'scout');
-  recordScoutAdvice(data);
-  applyRoutingFromScoutIntent(data.intent);
-  window._enteringPlanner = false;
-  saveTripState();
-  logScoutTurn(message, before, data, JSON.parse(JSON.stringify(tripState)));
-  return data;
-}
-
-function applyRoutingFromScoutIntent(intent) {
-  if (!tripState) return;
-  if (intent === 'matcher') {
-    if (['new', 'recommendation_ready'].includes(tripState.stage)) tripState.stage = 'matching';
-    setActiveAgent('meridian');
-  }
-  if (intent === 'planner') {
-    setActiveAgent(null);
-    markPlanningStarted();
-  }
-}
-
-function responseMessageForIntent(res) {
-  if (!res) return '';
-  if (res.intent === 'advise') return res.message || '';
-  if (res.intent === null || res.intent === undefined) return res.message || '';
-  return '';
-}
-
-function recommendationPayloadFromMeridian(data) {
-  const { state_delta, agent_meta, ...payload } = data || {};
-  const agentMeta = normalizedAgentMeta(agent_meta, 'meridian');
-  if (agentMeta) payload.agent_meta = agentMeta;
-  return payload;
+      throw tagCommandError(error, tripId);
+    }
+  });
 }
 
 const RECOMMENDATION_OUTCOMES = new Set(['MATCH', 'TRADEOFF', 'MISMATCH']);
@@ -1584,94 +1469,6 @@ function recommendationViewModel(payload) {
   return { message: payload.message || '', criteria, options: joinedOptions };
 }
 
-function preparedMeridianRecommendation(data) {
-  if (!shouldStoreMeridianOutput(data)) return null;
-  const payload = recommendationPayloadFromMeridian(data);
-  if (Array.isArray(payload.options) && payload.options.length) recommendationViewModel(payload);
-  else if (payload.status === 'SUCCESS') throw new Error('Successful recommendation response has no options.');
-  return payload;
-}
-
-function shouldStoreMeridianOutput(data) {
-  return isMeridianBusinessStatus(data?.status) && data.status !== 'NEEDS_CLARIFICATION';
-}
-
-function meridianTripContextFromState(state = tripState) {
-  const tc = state?.trip_context || {};
-  const result = {};
-  Object.entries(tc).forEach(([key, value]) => {
-    if (['advisor', 'planner'].includes(key)) return;
-    result[key] = value;
-  });
-  return result;
-}
-
-function meridianAdvisorStateFromState(state = tripState) {
-  return {
-    conversation_context: {
-      last_advisor_message: state?.advisor_state?.conversation_context?.last_advisor_message ?? null
-    }
-  };
-}
-
-function priorRecommendationsFromState(state = tripState) {
-  const latest = latestRecommendation(state);
-  const options = Array.isArray(latest?.options) ? latest.options : [];
-  return options.map(option => ({
-    rank: option.rank,
-    name: option.name,
-    ...(option.type === 'circuit' ? { circuit_id: option.circuit_id } : { destination_id: option.destination_id }),
-    type: option.type
-  })).sort((a, b) => a.rank - b.rank);
-}
-
-function meridianMatcherStateFromState(state = tripState) {
-  return {
-    conversation_context: state?.matcher_state?.conversation_context || { last_meridian_message: null, awaiting: null },
-    prior_recommendations: priorRecommendationsFromState(state),
-    rejected_options: state?.matcher_state?.rejected_options || []
-  };
-}
-
-function meridianRequestFromState(state = tripState, message = null) {
-  return {
-    trip_state: {
-      trip_context: meridianTripContextFromState(state),
-      advisor_state: meridianAdvisorStateFromState(state),
-      matcher_state: meridianMatcherStateFromState(state)
-    },
-    message
-  };
-}
-
-async function callMeridian(message = null) {
-  const input = meridianRequestFromState(tripState, message);
-  const res = await fetch(API.meridian, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
-  if (!res.ok) throw apiResponseError('Meridian', res);
-  markBackendActivity();
-  const data = await res.json();
-  if (!isMeridianBusinessStatus(data.status)) throw new Error(`Unexpected Meridian status: ${data.status || 'missing'}`);
-
-  // Validate a terminal recommendation before applying its state delta or saving anything.
-  const payload = preparedMeridianRecommendation(data);
-
-  applyStateDelta(data.state_delta, 'meridian');
-  applyMeridianRoutingOutcome(data.status);
-
-  if (shouldStoreMeridianOutput(data)) {
-    if (!Array.isArray(tripState.matcher_state.recommendations)) tripState.matcher_state.recommendations = [];
-    tripState.matcher_state.recommendations.push(payload);
-    currentRecos = payload;
-    tripState.stage = 'recommended';
-  } else if (!['recommended', 'matched', 'planning', 'planned'].includes(tripState.stage)) {
-    tripState.stage = 'matching';
-  }
-
-  saveTripState();
-  logMeridian(input, data);
-  return data;
-}
-
 const GUIDE_PHASES = new Set(['NEEDS_CLARIFICATION', 'PLACES_DRAFT', 'DAY_PLAN_DRAFT', 'PLAN_APPROVED']);
 
 function restoreGuideSession(tripId = currentTripId) {
@@ -1702,43 +1499,6 @@ function validateGuideState(value) {
   if (value.phase === 'PLACES_DRAFT' && !value.places.length) throw new Error('Guide places draft is empty.');
   if (value.phase === 'NEEDS_CLARIFICATION' && !value.pending_clarification) throw new Error('Guide clarification is missing.');
   return value;
-}
-
-function guideRequest(event, message = null) {
-  const session = guideSession();
-  const payload = {
-    event,
-    trip_state: {
-      trip_context: tripState?.trip_context || {},
-      guide_state: session.state || {}
-    }
-  };
-  if (message) payload.message = message;
-  return payload;
-}
-
-async function callGuide(event, message = null) {
-  const tripId = currentTripId;
-  const input = guideRequest(event, message);
-  const res = await fetch(API.guide, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input)
-  });
-  if (!res.ok) throw apiResponseError('Guide', res);
-  markBackendActivity();
-  const data = await res.json();
-  if (tripId !== currentTripId) throw new Error('Active trip changed during Guide request.');
-  const session = guideSession(tripId);
-  session.state = validateGuideState(data.guide_state);
-  session.revision += 1;
-  tripState.planner_state = {
-    ...(isPlainObject(tripState.planner_state) ? tripState.planner_state : {}),
-    guide_session: cloneJson(session),
-  };
-  saveTripState();
-  console.debug('Guide turn', { event, response: data, revision: session.revision });
-  return data;
 }
 
 function deactivateOlderGuideCards() {
@@ -1813,64 +1573,37 @@ async function approveGuidePlaces(revision, row) {
   setSendDisabled(true);
   row.querySelectorAll('button').forEach(button => { button.disabled = true; });
   showTyping();
-  try {
-    const data = await callGuide('APPROVE_PLACES');
-    removeTyping();
-    deactivateOlderGuideCards();
-    presentGuideOutcome(data);
-  } catch (err) {
-    removeTyping();
+  const outcome = await sendDeterministicCommand('approve_places', {
+    errorText: "We couldn't approve these places.",
+    errorLogTag: '[Guide approval]',
+    onSuccess: data => {
+      deactivateOlderGuideCards();
+      presentCommandOutcome(data);
+    }
+  });
+  removeTyping();
+  if (!outcome.ok) {
     row.querySelectorAll('button').forEach(button => { button.disabled = false; });
-    appendError(turnFailurePresentation(err, "We couldn't approve these places.").message);
-    console.error('[Guide approval]', err);
-  } finally {
-    busy = false;
-    setSendDisabled(false);
   }
+  busy = false;
+  setSendDisabled(false);
 }
 
-async function handleScoutResult(res, message = null) {
-  if (res?.intent === 'matcher') {
-    const meridianOut = await callMeridian(message);
-    presentMeridianOutcome(meridianOut);
-    return meridianOut;
-  }
-
-  if (res?.intent === 'planner') {
-    const guideOut = await callGuide('START');
-    presentGuideOutcome(guideOut);
-    return guideOut;
-  }
-
-  const reply = responseMessageForIntent(res);
-  if (reply) appendMsg('assistant', reply);
-  return res;
-}
-
-async function dispatchActiveAgentTurn(message) {
-  if (tripState?.stage === 'planning') {
-    const session = guideSession();
-    const event = !session.state && !message ? 'START' : 'TRAVELER_MESSAGE';
-    const guideOut = await callGuide(event, message);
-    presentGuideOutcome(guideOut);
-    return guideOut;
-  }
-  if (activeAgentFromState() === 'meridian') {
-    const meridianOut = await callMeridian(message);
-    presentMeridianOutcome(meridianOut);
-    return meridianOut;
-  }
-
-  const scoutOut = await callScout(message);
-  return handleScoutResult(scoutOut, message);
-}
-
-function presentMeridianOutcome(data) {
+function presentCommandOutcome(data) {
   if (data?.message) appendMsg('assistant', data.message);
-  if (data?.status !== 'NEEDS_CLARIFICATION' && tripState.stage === 'recommended' && hasRecommendations()) {
+  const session = guideSession();
+  if (session.state?.phase === 'PLACES_DRAFT') renderGuidePlacesCard(session.state, session.revision);
+  if (tripState?.stage === 'recommended' && hasRecommendations()) {
     renderInlineCta(reviewLatestMatchCtaHtml());
   }
   updateChatComposerPlaceholder();
+}
+
+async function dispatchActiveAgentTurn(message, idempotencyKey) {
+  const command = message == null ? 'continue' : 'traveler_message';
+  const result = await sendTripCommand(command, { message, idempotencyKey });
+  if (!result.superseded) presentCommandOutcome(result);
+  return result;
 }
 
 // Shared active-agent dispatcher — same typing indicator / success / error
@@ -1880,22 +1613,30 @@ function presentMeridianOutcome(data) {
 async function sendActiveAgentMessage(msg, {
   errorText = "We couldn't complete that request.",
   errorLogTag = null,
-  waitForReadiness = false
+  waitForReadiness = false,
+  idempotencyKey = newIdempotencyKey()
 } = {}) {
+  const tripId = currentTripId;
   showTyping();
   try {
     if (waitForReadiness) await waitForBackendReadinessForTurn();
-    const result = await dispatchActiveAgentTurn(msg);
+    if (tripId !== currentTripId) return { ok: false, superseded: true };
+    const result = await dispatchActiveAgentTurn(msg, idempotencyKey);
+    if (result.superseded) {
+      if (pendingRetryTurn?.tripId === tripId) pendingRetryTurn = null;
+      return { ok: true, result };
+    }
     pendingRetryTurn = null;
     document.getElementById('retry-error-row')?.remove();
     removeTyping();
     updateChatContextSnippet();
     return { ok: true, result };
   } catch (err) {
+    if (err.superseded) return { ok: false, error: err, superseded: true };
     removeTyping();
     const failure = turnFailurePresentation(err, errorText);
     pendingRetryTurn = failure.retry
-      ? { tripId: currentTripId, message: msg, errorText, errorLogTag, waitForReadiness }
+      ? { tripId: err.tripId || currentTripId, message: msg, errorText, errorLogTag, waitForReadiness, idempotencyKey }
       : null;
     document.getElementById('retry-error-row')?.remove();
     appendError(failure.message, { retry: failure.retry });
@@ -1930,7 +1671,13 @@ async function retryLastFailedTurn() {
   busy = true;
   setSendDisabled(true);
   document.getElementById('retry-error-row')?.remove();
-  await sendActiveAgentMessage(retry.message, retry);
+  if (retry.kind === 'command') {
+    showTyping();
+    await sendDeterministicCommand(retry.command, retry);
+    removeTyping();
+  } else {
+    await sendActiveAgentMessage(retry.message, retry);
+  }
   busy = false;
   setSendDisabled(false);
 }
@@ -1976,22 +1723,55 @@ async function startPlanningConvo() {
     currentTripId = trip.id;
     tripState = loadTripState(trip.id);
   }
-  // NOTE: stage stays as-is here (e.g. 'matched') until the user actually sends
-  // their first message post-selection — see markPlanningStarted(), invoked from handleSend.
-  window._enteringPlanner = true;
   enterChatScreenForTrip(currentTripId);
-  resumeChat();
+  if (tripState?.trip_context?.selected_option && tripState.stage !== 'planning') {
+    busy = true;
+    setSendDisabled(true);
+    showTyping();
+    await sendDeterministicCommand('start_planning', {
+      errorText: "We couldn't start planning.",
+      errorLogTag: '[Guide start]',
+      onSuccess: presentCommandOutcome
+    });
+    removeTyping();
+    busy = false;
+    setSendDisabled(false);
+  } else {
+    resumeChat();
+  }
 }
 
-// Call this once the user sends their first message after choosing to plan.
-// Per the stage-transition spec: matched -> planning triggers on the first
-// message sent with planner intent, not on merely opening the chat.
-function markPlanningStarted() {
-  if (!tripState) return;
-  setActiveAgent(null);
-  if (tripState.stage !== 'planning') {
-    tripState.stage = 'planning';
-    saveTripState();
+async function sendDeterministicCommand(command, {
+  optionId = null,
+  idempotencyKey = newIdempotencyKey(),
+  errorText = "We couldn't complete that action.",
+  errorLogTag = null,
+  errorSurface = 'chat',
+  onSuccess = null
+} = {}) {
+  const tripId = currentTripId;
+  try {
+    const result = await sendTripCommand(command, { optionId, idempotencyKey });
+    if (result.superseded) {
+      if (pendingRetryTurn?.tripId === tripId) pendingRetryTurn = null;
+      return { ok: true, result };
+    }
+    pendingRetryTurn = null;
+    document.getElementById('retry-error-row')?.remove();
+    clearPersistenceNotice();
+    if (onSuccess) await onSuccess(result);
+    return { ok: true, result };
+  } catch (error) {
+    if (error.superseded) return { ok: false, error, superseded: true };
+    const failure = turnFailurePresentation(error, errorText);
+    pendingRetryTurn = failure.retry
+      ? { kind: 'command', tripId: error.tripId || currentTripId, command, optionId, idempotencyKey, errorText, errorLogTag, errorSurface, onSuccess }
+      : null;
+    document.getElementById('retry-error-row')?.remove();
+    if (errorSurface === 'recos') showPersistenceNotice(failure.message);
+    else appendError(failure.message, { retry: failure.retry });
+    if (errorLogTag) console.error(errorLogTag, error);
+    return { ok: false, error };
   }
 }
 
@@ -2002,18 +1782,7 @@ async function openTripForPlanning(id) {
   window._chosenDest = tripState?.trip_context?.selected_option?.name || tripState?.trip_context?.selected_option?.id || '';
   await startPlanningConvo();
   if (guideSession(id)?.state || busy) return;
-  window._enteringPlanner = false;
-  markPlanningStarted();
   clearInlineCta();
-  busy = true;
-  setSendDisabled(true);
-  await sendActiveAgentMessage(null, {
-    errorText: "We couldn't start planning.",
-    errorLogTag: '[Guide start]',
-    waitForReadiness: true
-  });
-  busy = false;
-  setSendDisabled(false);
 }
 
 function openTripRecos(id) {
@@ -2028,7 +1797,8 @@ function openTripRecos(id) {
 
   const selectedName = tripState.trip_context.selected_option?.name || tripState.trip_context.selected_option?.id || null;
   if (selectedName && (tripState.stage === 'matched' || tripState.stage === 'planning')) {
-    setTimeout(() => chooseDestination(selectedName, tripState.trip_context.selected_option?.id, tripState.trip_context.selected_option?.type || 'destination'), 50);
+    window._chosenDest = selectedName;
+    setTimeout(() => renderSelectedDestinationCta(selectedName), 50);
   }
 }
 
@@ -2046,10 +1816,9 @@ function openTrip(id) {
 // ══════════════════════════════════════════
 function clearChat() {
   const inner = document.getElementById('chatInner');
-  inner.innerHTML = `<div class="typing-row" id="typingRow" style="display:none;"><div class="av">S</div><div class="tdots"><span></span><span></span><span></span></div></div>`;
+  inner.innerHTML = `<div class="typing-row" id="typingRow" role="status" aria-live="polite" style="display:none;"><div class="av">S</div><span class="sr-only">Scout is responding</span><div class="tdots"><span></span><span></span><span></span></div></div>`;
   document.getElementById('inlineRecoBtnRow')?.remove();
-  busy = false;
-  setSendDisabled(false);
+  setSendDisabled(busy);
 }
 
 // Single place that writes the trip name into the chat header — every
@@ -2127,15 +1896,6 @@ function findChatConfirmedOption(message) {
   }) || null;
 }
 
-function confirmOptionFromChat(option) {
-  if (!tripState || !option) return;
-  const type = option.type || (option.circuit_id ? 'circuit' : 'destination');
-  const id = option.destination_id || option.circuit_id || option.name;
-  tripState.trip_context.selected_option = { type, id, name: option.name };
-  tripState.stage = 'matched';
-  setActiveAgent(null);
-  saveTripState();
-}
 // ── Reusable trip context card ──────────────────────────────────────────
 // Always tripState-driven: renders whatever non-empty state currently exists
 // (stage, required inputs, preferences, recommendation intent, awaiting,
@@ -2336,7 +2096,7 @@ function resumeChat() {
     return;
   }
 
-  if (stage === 'recommendation_ready') {
+  if (false) {
     appendMsg('assistant', 'Welcome back. Your trip context is ready. Tell me what you want to refine, or ask for destination options here.');
     return;
   }
@@ -2440,34 +2200,17 @@ async function handleSend() {
   const confirmedOption = stage === 'recommended' ? findChatConfirmedOption(msg) : null;
   if (confirmedOption) {
     appendMsg('user', msg);
-    confirmOptionFromChat(confirmedOption);
-    appendMsg('assistant', `${confirmedOption.name} is confirmed. Would you like to plan this trip?`);
-    renderInlineCta(reviewAndPlannerCtaHtml('matched'), { multi: true });
+    const optionId = confirmedOption.destination_id || confirmedOption.circuit_id || confirmedOption.name;
+    await sendDeterministicCommand('select_destination', {
+      optionId,
+      errorText: "We couldn't confirm that destination.",
+      onSuccess: result => {
+        presentCommandOutcome(result);
+        renderInlineCta(reviewAndPlannerCtaHtml('matched'), { multi: true });
+      }
+    });
     busy = false; setSendDisabled(false);
     return;
-  }
-
-  if (stage === 'recommendation_ready') {
-    // New info before generating — go back to matching
-    tripState.stage = 'matching';
-    setActiveAgent('meridian');
-    saveTripState();
-  } else if (stage === 'recommended') {
-    // User typing after seeing recommendations — refining
-    tripState.stage = 'matching';
-    setActiveAgent('meridian');
-    saveTripState();
-  } else if (stage === 'matched' && window._enteringPlanner) {
-    // User chose to plan this destination — move into planner mode.
-    // Purely internal: no screen change, no visible indicator.
-    window._enteringPlanner = false;
-    markPlanningStarted();
-  } else if (stage === 'matched') {
-    // Refining after destination confirmed — clear selection
-    tripState.stage = 'matching';
-    setActiveAgent('meridian');
-    tripState.trip_context.selected_option = null;
-    saveTripState();
   }
 
   appendMsg('user', msg);
@@ -2612,20 +2355,34 @@ function renderFailureRecos(container, meridianData) {
 }
 
 
-function chooseDestination(name, id, type = 'destination') {
-  if (tripState) {
-    tripState.trip_context.selected_option = { type, id: id || name, name };
-    tripState.stage = 'matched';
-    setActiveAgent(null);
-    saveTripState();
-    renderStateBarEl('stateBarRecos');
-  }
-  saveUiState('recos', { selected_option_name: name });
-  window._chosenDest = name;
-  console.log(`%c[Destination chosen] ${name}`, 'color:#3a6b4a;font-weight:700;');
+async function chooseDestination(name, id, type = 'destination') {
+  if (!tripState || busy) return;
+  busy = true;
+  const optionId = id || name;
+  const retryKey = pendingRetryTurn?.kind === 'command'
+    && pendingRetryTurn.tripId === currentTripId
+    && pendingRetryTurn.command === 'select_destination'
+    && pendingRetryTurn.optionId === optionId
+      ? pendingRetryTurn.idempotencyKey
+      : newIdempotencyKey();
+  await sendDeterministicCommand('select_destination', {
+    optionId,
+    idempotencyKey: retryKey,
+    errorText: "We couldn't confirm that destination.",
+    errorSurface: 'recos',
+    onSuccess: () => {
+      renderStateBarEl('stateBarRecos');
+      saveUiState('recos', { selected_option_name: name });
+      window._chosenDest = name;
+      console.log(`%c[Destination chosen] ${name}`, 'color:#3a6b4a;font-weight:700;');
+      renderRecos(currentRecos);
+      renderSelectedDestinationCta(name);
+    }
+  });
+  busy = false;
+}
 
-  renderRecos(currentRecos);
-
+function renderSelectedDestinationCta(name) {
   const wrap = document.getElementById('inlinePlanCtaWrap');
   if (!wrap) return;
   wrap.innerHTML = `
@@ -2648,9 +2405,6 @@ function chooseDestination(name, id, type = 'destination') {
 
 function refineRecommendations() {
   if (!tripState) { navigate('chat'); return; }
-  tripState.stage = 'matching';
-  setActiveAgent('meridian');
-  saveTripState();
 
   enterChatScreenForTrip(currentTripId);
   if (tripState.stage !== 'new') renderTripContextCard();

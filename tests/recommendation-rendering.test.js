@@ -91,6 +91,7 @@ assert.equal(html.includes('decision_summary'), false);
 assert.equal(html.includes('best_for'), false);
 assert.equal(html.includes('per_person_total||0'), false);
 assert.equal((extractFunction('renderRecos') + extractFunction('renderRecommendationDetail')).includes('itinerary'), false);
-assert.ok(html.indexOf('preparedMeridianRecommendation(data)') < html.indexOf("applyStateDelta(data.state_delta, 'meridian')"));
+assert.match(html, /currentRecos = latestRecommendation\(\)/);
+assert.doesNotMatch(html, /applyStateDelta/);
 
 console.log('Recommendation rendering tests passed.');
