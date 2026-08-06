@@ -55,14 +55,12 @@ const actionButton = {
   addEventListener: (name, handler) => listeners.set(`action:${name}`, handler)
 };
 const renameButton = { addEventListener: (name, handler) => listeners.set(`rename:${name}`, handler) };
-const deleteButton = { addEventListener: (name, handler) => listeners.set(`delete:${name}`, handler) };
 const title = {};
 const card = {
   dataset: { cardAction: '' },
   querySelectorAll: selector => selector === '[data-trip-action]' ? [actionButton] : [],
   querySelector: selector => ({
     '.rename-btn': renameButton,
-    '.icon-btn.danger': deleteButton,
     '.tc-name-text': title
   })[selector] || null,
   addEventListener: () => assert.fail('Dual-action card must not bind a card action')
@@ -72,8 +70,7 @@ Object.assign(context, {
   openTripRecos: id => calls.push(['recommendations', id]),
   openTripForPlanning: id => calls.push(['planning', id]),
   openTrip: id => calls.push(['chat', id]),
-  startRename: id => calls.push(['rename', id]),
-  confirmDeleteTrip: id => calls.push(['delete', id])
+  startRename: id => calls.push(['rename', id])
 });
 vm.runInContext(extractFunction('runTripAction'), context);
 vm.runInContext(extractFunction('bindTripCardActions'), context);
@@ -82,11 +79,9 @@ const maliciousId = `trip-');window.__owned=true;//`;
 context.bindTripCardActions(card, { id: maliciousId });
 listeners.get('action:click')({ stopPropagation() {} });
 listeners.get('rename:click')({ stopPropagation() {} });
-listeners.get('delete:click')({ stopPropagation() {} });
 assert.deepEqual(calls, [
   ['recommendations', maliciousId],
-  ['rename', maliciousId],
-  ['delete', maliciousId]
+  ['rename', maliciousId]
 ]);
 
 console.log('Untrusted rendering tests passed.');

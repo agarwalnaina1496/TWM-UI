@@ -19,7 +19,7 @@ function extractFunction(name) {
   throw new Error(`Unclosed function ${name}`);
 }
 
-const storageWrites = [];
+let saveCount = 0;
 const responseState = {
   phase: 'PLACES_DRAFT',
   destinations: ['Rishikesh'],
@@ -44,22 +44,21 @@ const context = vm.createContext({
     requestBody = JSON.parse(options.body);
     return { ok: true, json: async () => ({ message: 'Draft updated.', guide_state: responseState }) };
   },
-  localStorage: {
-    getItem: () => null,
-    setItem: (...args) => storageWrites.push(args)
-  },
+  cloneJson: value => JSON.parse(JSON.stringify(value ?? {})),
   apiResponseError: () => new Error('API failure'),
-  markBackendActivity: () => {}
+  markBackendActivity: () => {},
+  saveTripState: () => { saveCount += 1; }
 });
 
 vm.runInContext(`
   let currentTripId = 'trip-1';
-  let tripState = { trip_context: { selected_option: { name: 'Rishikesh' }, duration: '3 days' } };
+  let tripState = { trip_context: { selected_option: { name: 'Rishikesh' }, duration: '3 days' }, planner_state: null };
   const guideSessions = new Map();
   const GUIDE_PHASES = new Set(['NEEDS_CLARIFICATION', 'PLACES_DRAFT', 'DAY_PLAN_DRAFT', 'PLAN_APPROVED']);
 `, context);
 ['isPlainObject', 'guideSession', 'validateGuideState', 'guideRequest', 'callGuide']
   .forEach(name => vm.runInContext(extractFunction(name), context));
+vm.runInContext("guideSessions.set('trip-1', { state: null, revision: 0 })", context);
 
 const plain = value => JSON.parse(JSON.stringify(value));
 const startRequest = plain(context.guideRequest('START'));
@@ -86,7 +85,8 @@ assert.throws(
   assert.deepEqual(requestBody, startRequest);
   assert.deepEqual(plain(vm.runInContext("guideSessions.get('trip-1').state", context)), responseState);
   assert.equal(vm.runInContext("guideSessions.get('trip-1').revision", context), 1);
-  assert.deepEqual(storageWrites, [], 'Guide must not write Planner state to localStorage');
+  assert.equal(saveCount, 1);
+  assert.deepEqual(plain(vm.runInContext('tripState.planner_state.guide_session.state', context)), responseState);
 
   const cardSource = extractFunction('renderGuidePlacesCard');
   assert.match(cardSource, /escapeHtml\(destinations\)/);

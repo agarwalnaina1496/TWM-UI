@@ -19,17 +19,16 @@ function extractFunction(name) {
   throw new Error(`Unclosed function ${name}`);
 }
 
-const storage = new Map();
+const records = new Map();
 const context = vm.createContext({
   Error,
-  localStorage: {
-    getItem: key => storage.get(key) ?? null,
-    setItem: (key, value) => storage.set(key, value)
-  },
+  tripStore: { records },
+  cloneJson: value => JSON.parse(JSON.stringify(value ?? {})),
+  queueTripSave: async () => {},
   syncTripFromState: () => {},
   renderStateBar: () => {}
 });
-vm.runInContext("let tripState = null; const STATE_KEY = 'state:';", context);
+vm.runInContext("let tripState = null;", context);
 [
   'defaultState',
   'loadTripState',
@@ -55,6 +54,7 @@ vm.runInContext("let tripState = null; const STATE_KEY = 'state:';", context);
 const plain = value => JSON.parse(JSON.stringify(value));
 
 vm.runInContext("tripState = defaultState('trip-1')", context);
+records.set('trip-1', { trip_state: vm.runInContext('tripState', context) });
 assert.equal(vm.runInContext('tripState.active_agent', context), 'scout');
 assert.equal(vm.runInContext('activeAgentFromState()', context), 'scout');
 
