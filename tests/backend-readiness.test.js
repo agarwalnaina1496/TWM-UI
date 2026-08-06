@@ -121,12 +121,12 @@ function deferred() {
   nextFetch.resolve({ ok: true, status: 200 });
   await recovered;
 
-  assert.match(extractFunction('callScout'), /markBackendActivity\(\)/);
-  assert.match(extractFunction('callMeridian'), /markBackendActivity\(\)/);
+  assert.match(html, /acceptAuthoritativeTrip\(result\.trip\);\s*if \(!superseded\) clearPersistenceNotice/);
+  assert.match(html, /markBackendActivity\(\);\s*const superseded = tripId !== currentTripId;\s*acceptAuthoritativeTrip\(result\.trip\)/);
   const sendStart = html.indexOf('async function sendActiveAgentMessage(');
   const sendEnd = html.indexOf('function turnFailurePresentation(', sendStart);
   const sendSource = html.slice(sendStart, sendEnd);
-  assert.ok(sendSource.indexOf('await waitForBackendReadinessForTurn()') < sendSource.indexOf('dispatchActiveAgentTurn(msg)'));
+  assert.ok(sendSource.indexOf('await waitForBackendReadinessForTurn()') < sendSource.indexOf('dispatchActiveAgentTurn(msg, idempotencyKey)'));
   assert.equal(sendSource.includes("appendMsg('user'"), false);
   assert.match(extractFunction('handleSend'), /waitForReadiness:\s*true/);
   assert.match(html, /addEventListener\('focus', warmBackendOnChatIntent\)/);
