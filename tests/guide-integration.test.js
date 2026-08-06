@@ -23,8 +23,14 @@ function extractFunction(name) {
 assert.match(html, /sendDeterministicCommand\('start_planning'/);
 assert.match(html, /sendDeterministicCommand\('approve_places'/);
 assert.match(html, /session\.state\?\.phase === 'PLACES_DRAFT'/);
-assert.match(extractFunction('approveGuidePlaces'), /pendingRetryTurn\.command === 'approve_places'[\s\S]*idempotencyKey: retryKey/);
-assert.match(extractFunction('handleTripConflict'), /tripState\?\.stage === 'planning'[\s\S]*deactivateOlderGuideCards\(\)[\s\S]*renderGuidePlacesCard\(session\.state, session\.revision\)/);
+const approveSource = extractFunction('approveGuidePlaces');
+assert.match(approveSource, /pendingRetryTurn\.command === 'approve_places'[\s\S]*idempotencyKey: retryKey/);
+assert.match(approveSource, /!card\?\.classList\.contains\('is-stale'\)[\s\S]*pendingRetryTurn\.command === 'approve_places'[\s\S]*if \(!outcome\.ok && canRetryApproval\)/);
+const conflictSource = extractFunction('handleTripConflict');
+assert.match(conflictSource, /document\.querySelector\('\.guide-card:not\(\.is-stale\)'\)[\s\S]*visibleRevision = visibleCard\?\.dataset\.guideRevision/);
+assert.match(conflictSource, /visibleRevision === String\(session\.revision\)[\s\S]*removeAttribute\('aria-disabled'\)[\s\S]*button\.disabled = false/);
+assert.match(conflictSource, /else \{[\s\S]*deactivateOlderGuideCards\(\)[\s\S]*renderGuidePlacesCard\(session\.state, session\.revision\)/);
+assert.match(conflictSource, /phase === 'DAY_PLAN_DRAFT' \|\| session\?\.state\?\.phase === 'PLAN_APPROVED'[\s\S]*deactivateOlderGuideCards\(\)/);
 assert.doesNotMatch(html, /function guideRequest\b/);
 assert.doesNotMatch(html, /function callGuide\b/);
 assert.doesNotMatch(html, /saveTripState/);

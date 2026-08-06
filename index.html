@@ -1041,12 +1041,22 @@ async function handleTripConflict(id) {
     }
     if (document.getElementById('screen-chat')?.classList.contains('active') && tripState?.stage === 'planning') {
       const session = guideSession(id);
-      deactivateOlderGuideCards();
+      const visibleCard = document.querySelector('.guide-card:not(.is-stale)');
+      const visibleRevision = visibleCard?.dataset.guideRevision;
       if (session?.state?.phase === 'NEEDS_CLARIFICATION') {
+        deactivateOlderGuideCards();
         appendMsg('assistant', session.state.pending_clarification);
       } else if (session?.state?.phase === 'PLACES_DRAFT') {
-        appendMsg('assistant', 'The latest saved places draft has been loaded.');
-        renderGuidePlacesCard(session.state, session.revision);
+        if (visibleRevision === String(session.revision)) {
+          visibleCard.removeAttribute('aria-disabled');
+          visibleCard.querySelectorAll('button').forEach(button => { button.disabled = false; });
+        } else {
+          deactivateOlderGuideCards();
+          appendMsg('assistant', 'The latest saved places draft has been loaded.');
+          renderGuidePlacesCard(session.state, session.revision);
+        }
+      } else if (session?.state?.phase === 'DAY_PLAN_DRAFT' || session?.state?.phase === 'PLAN_APPROVED') {
+        deactivateOlderGuideCards();
       }
     }
     showPersistenceNotice('This trip changed in another session. The latest saved version has been loaded.');
@@ -1600,7 +1610,12 @@ async function approveGuidePlaces(revision, row) {
     }
   });
   removeTyping();
-  if (!outcome.ok) {
+  const card = row.querySelector('.guide-card');
+  const canRetryApproval = !card?.classList.contains('is-stale')
+    && pendingRetryTurn?.kind === 'command'
+    && pendingRetryTurn.tripId === currentTripId
+    && pendingRetryTurn.command === 'approve_places';
+  if (!outcome.ok && canRetryApproval) {
     row.querySelectorAll('button').forEach(button => { button.disabled = false; });
   }
   busy = false;
