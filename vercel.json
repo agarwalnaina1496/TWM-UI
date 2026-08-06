@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/trips", "destination": "/api/trip-proxy" },
+    { "source": "/api/trips/:path*", "destination": "/api/trip-proxy?path=:path*" }
+  ]
+}

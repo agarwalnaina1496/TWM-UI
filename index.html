@@ -841,11 +841,9 @@ const API = {
   scout:    `${TWM_BASE_URL}/scout`,
   meridian: `${TWM_BASE_URL}/meridian`,
   guide:    `${TWM_BASE_URL}/guide`,
+  trips:    '/api/trips',
 };
 const WELCOME = "Hey, I'm Scout. Tell me about the trip you have in mind. I can help you find destinations that fit and explain why.";
-const TRIPS_KEY    = 'twm_trips_v1';
-const STATE_KEY    = 'twm_state_v1';
-const UI_STATE_KEY = 'twm_ui_state_v1';
 const BACKEND_ACTIVITY_KEY = 'twm_backend_activity_v1';
 const BACKEND_IDLE_MS = 14 * 60 * 1000;
 const READINESS_STATUS_DELAY_MS = 1200;
@@ -859,53 +857,148 @@ let tripFilter    = 'active'; // default filter
 let pendingRetryTurn = null;
 let backendReadinessPromise = null;
 let readinessStatusTimer = null;
-// Planner state is deliberately memory-only until canonical DB persistence is available.
-// Never attach these sessions to TripState or any localStorage-backed UI state.
+// Guide planning sessions are cached in memory and mirrored into persisted TripState.
 const guideSessions = new Map();
+const tripStore = {
+  trips: [],
+  records: new Map(),
+  saveChains: new Map(),
+  loaded: false,
+  loading: false,
+  error: null,
+};
 
 // ══════════════════════════════════════════
-// TRIPS LIST (localStorage)
+// DATABASE-BACKED TRIPS
 // ══════════════════════════════════════════
-function getTrips() {
-  try { return JSON.parse(localStorage.getItem(TRIPS_KEY)) || []; } catch { return []; }
+async function tripApi(path = '', options = {}) {
+  const response = await fetch(`${API.trips}${path}`, {
+    credentials: 'include',
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload?.detail?.message || payload?.detail || 'Trip persistence request failed.');
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+  return payload;
 }
-function saveTrips(trips) { localStorage.setItem(TRIPS_KEY, JSON.stringify(trips)); }
+
+function cloneJson(value) { return JSON.parse(JSON.stringify(value ?? {})); }
+
+function tripMetadata(record) {
+  return isPlainObject(record?.ui_state?.trip_metadata) ? record.ui_state.trip_metadata : {};
+}
+
+function tripView(record) {
+  const metadata = tripMetadata(record);
+  const state = isPlainObject(record.trip_state) && Object.keys(record.trip_state).length
+    ? record.trip_state
+    : defaultState(record.id);
+  return {
+    id: record.id,
+    title: record.title,
+    product_mode: record.product_mode,
+    status: metadata.status || state.stage || 'new',
+    inputs: Array.isArray(metadata.inputs) ? metadata.inputs : tripContextChips(state.trip_context || {}).slice(0, 4),
+    paid_plan: metadata.paid_plan || null,
+    version: record.version,
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+  };
+}
+
+function applyServerTrip(record) {
+  const normalized = {
+    ...record,
+    trip_state: isPlainObject(record.trip_state) && Object.keys(record.trip_state).length
+      ? record.trip_state
+      : defaultState(record.id),
+    ui_state: isPlainObject(record.ui_state) ? record.ui_state : {},
+  };
+  if (!normalized.trip_state.trip_id) normalized.trip_state.trip_id = normalized.id;
+  tripStore.records.set(normalized.id, normalized);
+  const view = tripView(normalized);
+  const index = tripStore.trips.findIndex(item => item.id === normalized.id);
+  if (index === -1) tripStore.trips.unshift(view);
+  else tripStore.trips[index] = view;
+  tripStore.trips.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+  return view;
+}
+
+async function loadTripsFromApi() {
+  tripStore.loading = true;
+  tripStore.error = null;
+  try {
+    const list = await tripApi();
+    const records = await Promise.all((list.trips || []).map(summary => tripApi(`/${summary.id}`)));
+    tripStore.trips = [];
+    tripStore.records.clear();
+    records.forEach(applyServerTrip);
+    tripStore.loaded = true;
+  } catch (error) {
+    tripStore.error = error;
+    throw error;
+  } finally {
+    tripStore.loading = false;
+  }
+}
+
+function getTrips() { return tripStore.trips; }
 function getTripById(id) { return getTrips().find(t => t.id === id) || null; }
 
-function createTrip() {
-  const id  = 'trip_' + Math.random().toString(36).slice(2, 8);
-  const now = Date.now();
-  const trip = { id, title: 'Untitled Trip', status: 'new', created_at: now, updated_at: now };
-  const trips = getTrips();
-  trips.unshift(trip);
-  saveTrips(trips);
-  return trip;
+async function createTrip() {
+  const created = await tripApi('', {
+    method: 'POST',
+    body: JSON.stringify({ title: 'Untitled Trip', product_mode: 'self_led', trip_state: {}, ui_state: {} }),
+  });
+  applyServerTrip(created);
+  const record = tripStore.records.get(created.id);
+  record.trip_state = defaultState(created.id);
+  record.ui_state = { trip_metadata: { status: 'new', inputs: [] } };
+  const saved = await persistTripNow(created.id);
+  return applyServerTrip(saved);
 }
 
 function updateTrip(id, delta) {
-  const trips = getTrips();
-  const idx = trips.findIndex(t => t.id === id);
-  if (idx === -1) return;
-  Object.assign(trips[idx], delta, { updated_at: Date.now() });
-  saveTrips(trips);
-}
-
-function deleteTrip(id) {
-  const trips = getTrips().filter(t => t.id !== id);
-  saveTrips(trips);
-  localStorage.removeItem(STATE_KEY + id);
-  localStorage.removeItem(UI_STATE_KEY + id);
+  const record = tripStore.records.get(id);
+  if (!record) return Promise.resolve();
+  const metadata = { ...tripMetadata(record) };
+  ['status', 'inputs', 'paid_plan'].forEach(key => {
+    if (key in delta) metadata[key] = delta[key];
+  });
+  record.ui_state = { ...record.ui_state, trip_metadata: metadata };
+  if (delta.title && delta.title !== record.title) {
+    record.title = delta.title;
+    applyServerTrip(record);
+    const rename = queueTripMutation(id, () => renameTripNow(id, delta.title));
+    rename.catch(() => {});
+    return rename;
+  }
+  applyServerTrip(record);
+  const save = queueTripSave(id);
+  save.catch(() => {});
+  return save;
 }
 
 function syncTripFromState(id, state) {
   const inputs = tripContextChips(state.trip_context || {}).slice(0, 4);
   const knownStages = ['new', 'matching', 'recommendation_ready', 'recommended', 'matched', 'planning', 'planned'];
   const status = knownStages.includes(state.stage) ? state.stage : 'matching';
-  updateTrip(id, { status, inputs });
+  const record = tripStore.records.get(id);
+  if (!record) return;
+  record.ui_state = {
+    ...record.ui_state,
+    trip_metadata: { ...tripMetadata(record), status, inputs },
+  };
+  applyServerTrip(record);
 }
 
 // ══════════════════════════════════════════
-// TRIP STATE (per-trip localStorage)
+// TRIP STATE (database-backed per trip)
 // ══════════════════════════════════════════
 function defaultState(tripId) {
   return {
@@ -928,16 +1021,107 @@ function defaultState(tripId) {
 }
 
 function loadTripState(tripId) {
-  const raw = localStorage.getItem(STATE_KEY + tripId);
-  if (raw) { try { return JSON.parse(raw); } catch {} }
-  return defaultState(tripId);
+  const record = tripStore.records.get(tripId);
+  return record ? cloneJson(record.trip_state) : defaultState(tripId);
 }
 
 function saveTripState() {
   if (!tripState) return;
-  localStorage.setItem(STATE_KEY + tripState.trip_id, JSON.stringify(tripState));
+  const record = tripStore.records.get(tripState.trip_id);
+  if (!record) return;
+  record.trip_state = cloneJson(tripState);
   syncTripFromState(tripState.trip_id, tripState);
   renderStateBar();
+  queueTripSave(tripState.trip_id).catch(() => {});
+}
+
+function showPersistenceNotice(message, { retry = false } = {}) {
+  let notice = document.getElementById('persistenceNotice');
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'persistenceNotice';
+    notice.setAttribute('role', 'status');
+    notice.setAttribute('aria-live', 'polite');
+    notice.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:1000;max-width:360px;padding:12px 14px;border:1px solid #dfcdbb;border-radius:10px;background:#fffaf4;color:#49372d;box-shadow:0 8px 30px rgba(63,42,28,.16);font-size:13px;';
+    document.body.appendChild(notice);
+  }
+  notice.innerHTML = `<span>${escapeHtml(message)}</span>${retry ? ' <button type="button" style="margin-left:8px;">Try again</button>' : ''}`;
+  notice.querySelector('button')?.addEventListener('click', retryPersistenceLoad);
+}
+
+function clearPersistenceNotice() {
+  document.getElementById('persistenceNotice')?.remove();
+}
+
+async function handleTripConflict(id) {
+  const latest = await tripApi(`/${id}`);
+  applyServerTrip(latest);
+  if (currentTripId === id) {
+    tripState = loadTripState(id);
+    guideSessions.delete(id);
+    restoreGuideSession(id);
+    renderStateBar();
+  }
+  showPersistenceNotice('This trip changed in another session. The latest saved version has been loaded.');
+}
+
+async function persistTripNow(id) {
+  const record = tripStore.records.get(id);
+  if (!record) throw new Error('Trip is no longer available.');
+  try {
+    const saved = await tripApi(`/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        expected_version: record.version,
+        trip_state: record.trip_state,
+        ui_state: record.ui_state,
+      }),
+    });
+    clearPersistenceNotice();
+    return saved;
+  } catch (error) {
+    if (error.status === 409) await handleTripConflict(id);
+    else showPersistenceNotice("We couldn't save this trip. Your latest change is still visible, but it isn't saved yet.");
+    throw error;
+  }
+}
+
+async function renameTripNow(id, title) {
+  const record = tripStore.records.get(id);
+  if (!record) throw new Error('Trip is no longer available.');
+  try {
+    const saved = await tripApi(`/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ expected_version: record.version, title }),
+    });
+    applyServerTrip(saved);
+    clearPersistenceNotice();
+    return saved;
+  } catch (error) {
+    if (error.status === 409) await handleTripConflict(id);
+    else showPersistenceNotice("We couldn't rename this trip. Please try again.");
+    throw error;
+  }
+}
+
+function queueTripMutation(id, mutation) {
+  const previous = tripStore.saveChains.get(id) || Promise.resolve();
+  const next = previous.catch(() => {}).then(mutation);
+  tripStore.saveChains.set(id, next);
+  next.then(() => {
+    if (tripStore.saveChains.get(id) === next) tripStore.saveChains.delete(id);
+  }, () => {
+    if (tripStore.saveChains.get(id) === next) tripStore.saveChains.delete(id);
+  });
+  return next;
+}
+
+function queueTripSave(id) {
+  return queueTripMutation(id, async () => {
+    const saved = await persistTripNow(id);
+    applyServerTrip(saved);
+    return saved;
+  });
 }
 
 function deepMerge(target, source) {
@@ -1071,15 +1255,23 @@ function applyMeridianRoutingOutcome(status) {
 }
 
 function loadUiState(tripId) {
-  const raw = localStorage.getItem(UI_STATE_KEY + tripId);
-  if (raw) { try { return JSON.parse(raw); } catch {} }
-  return { last_screen: 'chat', last_recommendation_index: null };
+  const record = tripStore.records.get(tripId);
+  const persisted = record && isPlainObject(record.ui_state) ? record.ui_state : {};
+  return {
+    last_screen: persisted.last_screen || 'chat',
+    last_recommendation_index: persisted.last_recommendation_index ?? null,
+    ...cloneJson(persisted),
+  };
 }
 
 function saveUiState(screen, extra = {}) {
   if (!currentTripId) return;
+  const record = tripStore.records.get(currentTripId);
+  if (!record) return;
   const uiState = { ...loadUiState(currentTripId), last_screen: screen, ...extra };
-  localStorage.setItem(UI_STATE_KEY + currentTripId, JSON.stringify(uiState));
+  record.ui_state = uiState;
+  applyServerTrip(record);
+  queueTripSave(currentTripId).catch(() => {});
 }
 
 function escapeHtml(value) {
@@ -1482,10 +1674,22 @@ async function callMeridian(message = null) {
 
 const GUIDE_PHASES = new Set(['NEEDS_CLARIFICATION', 'PLACES_DRAFT', 'DAY_PLAN_DRAFT', 'PLAN_APPROVED']);
 
+function restoreGuideSession(tripId = currentTripId) {
+  if (!tripId) return null;
+  const saved = tripStore.records.get(tripId)?.trip_state?.planner_state?.guide_session;
+  if (!isPlainObject(saved)) return null;
+  const restored = {
+    state: saved.state ? validateGuideState(cloneJson(saved.state)) : null,
+    revision: Number.isInteger(saved.revision) ? saved.revision : 0,
+  };
+  guideSessions.set(tripId, restored);
+  return restored;
+}
+
 function guideSession(tripId = currentTripId) {
   if (!tripId) throw new Error('Guide requires an active trip.');
   if (!guideSessions.has(tripId)) {
-    guideSessions.set(tripId, { state: null, revision: 0 });
+    restoreGuideSession(tripId) || guideSessions.set(tripId, { state: null, revision: 0 });
   }
   return guideSessions.get(tripId);
 }
@@ -1528,6 +1732,11 @@ async function callGuide(event, message = null) {
   const session = guideSession(tripId);
   session.state = validateGuideState(data.guide_state);
   session.revision += 1;
+  tripState.planner_state = {
+    ...(isPlainObject(tripState.planner_state) ? tripState.planner_state : {}),
+    guide_session: cloneJson(session),
+  };
+  saveTripState();
   console.debug('Guide turn', { event, response: data, revision: session.revision });
   return data;
 }
@@ -1756,17 +1965,16 @@ function startChat() {
   setTimeout(() => appendMsg('assistant', WELCOME), 200);
 }
 
-function startPlanningConvo() {
+async function startPlanningConvo() {
   // Called either from the recos screen (tripState/currentTripId already set)
   // or from Home's single entry module (no trip yet).
   // Planning now lives inside the same unified chat (screen-chat) as matching —
   // there's no separate screen or visible mode indicator; the user just keeps
   // talking to Scout in one continuous conversation.
   if (!currentTripId) {
-    const trip = createTrip();
+    const trip = await createTrip();
     currentTripId = trip.id;
-    tripState = defaultState(trip.id);
-    saveTripState();
+    tripState = loadTripState(trip.id);
   }
   // NOTE: stage stays as-is here (e.g. 'matched') until the user actually sends
   // their first message post-selection — see markPlanningStarted(), invoked from handleSend.
@@ -1792,8 +2000,8 @@ async function openTripForPlanning(id) {
   tripState = loadTripState(id);
   currentRecos = latestRecommendation();
   window._chosenDest = tripState?.trip_context?.selected_option?.name || tripState?.trip_context?.selected_option?.id || '';
-  startPlanningConvo();
-  if (guideSessions.get(id)?.state || busy) return;
+  await startPlanningConvo();
+  if (guideSession(id)?.state || busy) return;
   window._enteringPlanner = false;
   markPlanningStarted();
   clearInlineCta();
@@ -2109,12 +2317,12 @@ function resumeChat() {
   renderTripContextCard({ showContinue: stage === 'matching' && activeAgent === 'scout' });
 
   if (stage === 'planning') {
-    const session = currentTripId ? guideSessions.get(currentTripId) : null;
+    const session = currentTripId ? guideSession(currentTripId) : null;
     if (session?.state) {
       appendMsg('assistant', 'Continue refining your latest places draft here.');
       if (session.state.phase === 'PLACES_DRAFT') renderGuidePlacesCard(session.state, session.revision);
     } else {
-      appendMsg('assistant', 'Planner drafts are not saved yet. Send your planning request again and I’ll rebuild the places draft with you.');
+      appendMsg('assistant', 'Send your planning request and I’ll build the places draft with you.');
     }
     return;
   }
@@ -2214,10 +2422,18 @@ async function handleSend() {
   removeResumeBtn();
 
   if (!currentTripId) {
-    const trip = createTrip();
-    currentTripId = trip.id;
-    tripState = defaultState(trip.id);
-    setChatTripNameDisplay(trip.title);
+    try {
+      const trip = await createTrip();
+      currentTripId = trip.id;
+      tripState = loadTripState(trip.id);
+      setChatTripNameDisplay(trip.title);
+    } catch (error) {
+      console.error('[Trip create]', error);
+      showPersistenceNotice("We couldn't create this trip. Please try again.");
+      busy = false;
+      setSendDisabled(false);
+      return;
+    }
   }
 
   const stage = tripState.stage;
@@ -2584,13 +2800,27 @@ function renderTripsList() {
   const trips = getTrips();
   const el    = document.getElementById('tripsPageContent');
 
+  if (tripStore.loading) {
+    el.innerHTML = '<div class="trips-empty"><p>Loading your trips…</p></div>';
+    return;
+  }
+  if (tripStore.error) {
+    el.innerHTML = `<div class="trips-empty">
+      <p>We couldn't load your trips.</p>
+      <span>Your saved trips are still safe. Try again when the connection is available.</span>
+      <div style="margin-top:18px;"><button class="tb-btn retry-trips-action">Try again</button></div>
+    </div>`;
+    el.querySelector('.retry-trips-action')?.addEventListener('click', retryPersistenceLoad);
+    return;
+  }
+
   // ── ZERO TRIPS: no header, just empty state + New Trip below ──
   if (trips.length === 0) {
     el.innerHTML = `
       <div class="trips-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         <p>No trips yet</p>
-        <span>Start planning your next adventure.</span>
+        <span>Start planning your next adventure. Trips stay linked to this browser; clearing browser data starts a new guest session.</span>
         <div style="margin-top:18px;">${NEW_TRIP_BTN}</div>
       </div>`;
     el.querySelector('.new-trip-action')?.addEventListener('click', startChat);
@@ -2726,9 +2956,6 @@ function tripCardHTML(trip, tripIndex) {
           <button class="rename-btn" title="Rename">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button class="icon-btn danger" title="Delete" style="margin-left:auto;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-          </button>
         </div>
         <div class="tc-dest">${sel ? escapeHtml(sel) : 'Destination: TBD'}</div>
       </div>
@@ -2757,7 +2984,6 @@ function bindTripCardActions(card, trip) {
     runTripAction(button.dataset.tripAction, trip.id);
   }));
   card.querySelector('.rename-btn')?.addEventListener('click', event => startRename(trip.id, card.querySelector('.tc-name-text'), event));
-  card.querySelector('.icon-btn.danger')?.addEventListener('click', event => confirmDeleteTrip(trip.id, event));
   if (card.dataset.cardAction) card.addEventListener('click', () => runTripAction(card.dataset.cardAction, trip.id));
 }
 
@@ -2811,16 +3037,6 @@ function startRename(id, titleEl, e) {
   });
 }
 
-function confirmDeleteTrip(id, e) {
-  e.stopPropagation();
-  const trip = getTripById(id);
-  if (!trip) return;
-  if (!confirm(`Delete "${trip.title}"? This can't be undone.`)) return;
-  deleteTrip(id);
-  if (currentTripId === id) { currentTripId = null; tripState = null; }
-  renderTripsList();
-}
-
 // ══════════════════════════════════════════
 // TEXTAREA
 // ══════════════════════════════════════════
@@ -2842,14 +3058,22 @@ document.getElementById('userInput').addEventListener('keydown', function(e) {
 // ══════════════════════════════════════════
 // BOOT
 // ══════════════════════════════════════════
-(function boot() {
-  const trips = getTrips();
-  // If there are real trips, go to My Trips; otherwise show home
-  if (trips.length > 0) {
+async function retryPersistenceLoad() {
+  showPersistenceNotice('Loading your trips…');
+  try {
+    await loadTripsFromApi();
+    clearPersistenceNotice();
+    navigate(getTrips().length ? 'trips' : 'home');
+  } catch (error) {
+    console.error('[Trip persistence load]', error);
+    showPersistenceNotice("We couldn't load your trips.", { retry: true });
     navigate('trips');
-  } else {
-    navigate('home');
   }
+}
+
+(async function boot() {
+  navigate('home');
+  await retryPersistenceLoad();
 })();
 </script>
 </body>
