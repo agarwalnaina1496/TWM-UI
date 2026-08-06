@@ -101,6 +101,42 @@ assert.throws(
   assert.match(dispatchSource, /!session\.state && !message \? 'START' : 'TRAVELER_MESSAGE'/);
   assert.equal(dispatchSource.includes('saveTripState'), false);
 
+  const resumedMessages = [];
+  let resumedCardState = null;
+  Object.assign(context, {
+    activeAgentFromState: () => null,
+    renderTripContextCard: () => {},
+    appendMsg: (role, message) => resumedMessages.push([role, message]),
+    renderGuidePlacesCard: state => { resumedCardState = state; }
+  });
+  vm.runInContext(extractFunction('resumeChat'), context);
+  vm.runInContext(`
+    tripState.stage = 'planning';
+    guideSessions.set('trip-1', {
+      revision: 2,
+      state: { ...guideSessions.get('trip-1').state, phase: 'NEEDS_CLARIFICATION', pending_clarification: 'Which temple style do you prefer?' }
+    });
+    resumeChat();
+  `, context);
+  assert.deepEqual(resumedMessages.pop(), ['assistant', 'Which temple style do you prefer?']);
+  assert.equal(resumedCardState, null);
+
+  vm.runInContext(`
+    guideSessions.set('trip-1', {
+      revision: 3,
+      state: { ...guideSessions.get('trip-1').state, phase: 'PLACES_DRAFT', pending_clarification: null }
+    });
+    resumeChat();
+  `, context);
+  assert.equal(resumedMessages.pop()[1], 'Continue refining your latest places draft here.');
+  assert.equal(resumedCardState.phase, 'PLACES_DRAFT');
+
+  assert.match(html, /<h3 class="guide-card-title" id="guide-card-title-\$\{revision\}">Trip Design<\/h3>/);
+  assert.match(html, /aria-labelledby="guide-card-title-\$\{revision\}"/);
+  assert.match(extractFunction('deactivateOlderGuideCards'), /aria-disabled/);
+  assert.match(html, /\.guide-card-btn \{ min-height: 44px;/);
+  assert.match(html, /\.guide-card-actions \.guide-card-btn \{ flex: 1 1 130px; \}/);
+
   console.log('Guide integration tests passed.');
 })().catch(error => {
   console.error(error);
