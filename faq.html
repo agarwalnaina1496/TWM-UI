@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TravelWithMe — FAQs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  body{padding-bottom:0;}
+  .page-hero{padding:48px 0 8px;text-align:center;}
+  .faq-wrap{max-width:640px;margin:0 auto;}
+  .faq-cat{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--tm);margin:34px 0 4px;}
+  .faq-cat:first-child{margin-top:0;}
+</style>
+</head>
+<body>
+
+<script src="header.js"></script>
+
+<div class="mkt-wrap">
+  <section class="page-hero">
+    <div class="section-kicker">FAQs</div>
+    <div class="section-h">Good to <em>know</em></div>
+    <p class="section-sub">Everything travelers usually ask before their first trip with us.</p>
+  </section>
+
+  <section class="mkt-section" style="padding-top:8px;">
+    <div class="faq-wrap">
+      <div class="faq-cat">The basics</div>
+      <div id="faqCat1"></div>
+      <div class="faq-cat">Planning & control</div>
+      <div id="faqCat2"></div>
+      <div class="faq-cat">Self-Led vs TWM-Led</div>
+      <div id="faqCat3"></div>
+    </div>
+  </section>
+
+  <section class="final-cta">
+    <h2>Still have a question?</h2>
+    <p>Start a trip and ask Scout directly — most answers come faster in context.</p>
+    <a class="btn btn-primary btn-lg" href="start.html">Get started →</a>
+  </section>
+</div>
+
+<script src="footer.js"></script>
+
+<script>
+  const cat1 = [
+    {q:'What is TravelWithMe?', a:'TravelWithMe is a travel companion that helps you figure out where to go, plan your trip, and bring everything together in one place. We do the research and comparisons for you, while you stay in control of the decisions.'},
+    {q:'I already know where I want to go. Can I still use TWM?', a:'Absolutely. Destination discovery is optional. If you already have a destination in mind, TWM can jump straight into helping you plan your trip around your preferences.'},
+    {q:'What if I don’t know where I want to go?', a:'That’s exactly what our destination discovery is for. Tell us things like where you’re travelling from, your budget, trip duration, travel style, and what you want from the trip — we’ll narrow it down to destinations that fit and explain why each one works for you.'},
+    {q:'How is TWM different from asking ChatGPT to plan my trip?', a:'TWM is built specifically around the travel journey. Instead of just generating an itinerary, it brings destination discovery, personalized planning, comparisons, booking guidance, and trip management into one connected experience.'},
+    {q:'Can I use TWM just to discover destinations?', a:'Yes. You don’t need to plan or book an entire trip just to use destination discovery.'},
+    {q:'Is TWM a travel agent?', a:'Not exactly. TWM is a travel platform designed to stay with you across the journey, from figuring out where to go to planning and, with TWM-Led trips, coordinating the actual experience.'},
+  ];
+  const cat2 = [
+    {q:'Does TWM make decisions for me?', a:'No. TWM does the homework, but the final call stays with you. You choose your destination, flights, hotels, activities, food, and how you want your trip to feel.'},
+    {q:'Are the recommendations personalized?', a:'Yes. Recommendations are based on your trip, preferences, budget, travel style, and priorities — not the same list of popular places shown to everyone.'},
+    {q:'Why does TWM recommend a particular destination, hotel, flight, or activity?', a:'We don’t want recommendations to feel like a black box. Wherever possible, TWM explains why an option fits what you’ve told us, so you can make an informed decision.'},
+    {q:'Can I change the itinerary TWM creates?', a:'Yes. Your itinerary isn’t meant to be a rigid schedule. You can shape the pace of the trip, change your preferences, and keep room for spontaneity.'},
+    {q:'Does TWM always recommend the cheapest option?', a:'Not necessarily. The best option depends on what matters to you. Price can be important, but so can timing, location, convenience, comfort, trip style, and other preferences.'},
+    {q:'How does TWM make sure travel information is reliable?', a:'TWM is designed around transparency and verifiability. Recommendations come with reasoning, and important travel information is meant to be checked against reliable sources rather than just trusted blindly.'},
+  ];
+  const cat3 = [
+    {q:'What’s the difference between Self-Led and TWM-Led trips?', a:'With Self-Led, you make the calls and complete the bookings while TWM does the research and planning. With TWM-Led, TWM coordinates the trip for you, including bookings, logistics, and on-trip support.'},
+    {q:'Do I need to choose between Self-Led and TWM-Led before I start planning?', a:'No. You can start by exploring or planning your trip first. How much of the execution you want to handle yourself can come later.'},
+    {q:'Can I book flights, hotels, and activities through TWM?', a:'With a Self-Led trip, TWM helps you compare and shortlist suitable options and guides you to booking, while you complete the booking and payment yourself. With TWM-Led, we handle the booking end-to-end.'},
+  ];
+
+  function renderFaqs(id, list, offset){
+    document.getElementById(id).innerHTML = list.map((f,i)=>`
+      <div class="faq-item" id="faq-${offset+i}" onclick="toggleFaq(${offset+i})">
+        <div class="faq-q"><span>${f.q}</span><span class="plus">+</span></div>
+        <div class="faq-a"><p>${f.a}</p></div>
+      </div>
+    `).join('');
+  }
+  renderFaqs('faqCat1', cat1, 0);
+  renderFaqs('faqCat2', cat2, 100);
+  renderFaqs('faqCat3', cat3, 200);
+  function toggleFaq(i){ document.getElementById(`faq-${i}`).classList.toggle('open'); }
+</script>
+
+</body>
+</html>
