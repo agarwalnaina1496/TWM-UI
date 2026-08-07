@@ -1,0 +1,2 @@
+.auth-card{max-width:380px;margin:40px auto 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:26px;}
+.auth-card .field-title{margin-top:0;}

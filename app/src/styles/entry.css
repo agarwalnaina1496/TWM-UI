@@ -5,6 +5,8 @@
 .entry-hero h1{font-size:34px;margin-top:14px;}
 .entry-hero .lede{margin:0 auto 30px;text-align:center;}
 
+.resume-banner{background:var(--accent-bg);border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin:-6px auto 24px;max-width:520px;display:flex;flex-direction:column;gap:10px;align-items:center;font-size:13px;color:var(--ts);}
+
 .route-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:30px;}
 .route-btn{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:16px 12px;cursor:pointer;text-align:center;transition:all .15s ease;}
 .route-btn:hover{border-color:var(--accent);transform:translateY(-2px);}
