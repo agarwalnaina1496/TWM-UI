@@ -41,7 +41,7 @@ h2.section-title{font-family:'Fraunces',serif;font-size:19px;font-weight:600;mar
 .btn-ghost:hover{background:var(--accent-bg);}
 .btn-sage{background:var(--sage);color:#fff;}
 .btn-full{width:100%;}
-.btn[disabled]{opacity:.45;pointer-events:none;}
+.btn[disabled],.nav-cta[disabled]{opacity:.45;pointer-events:none;cursor:not-allowed;}
 
 .chip{font-size:12.5px;font-weight:600;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:9px 15px;cursor:pointer;transition:all .15s ease;display:inline-block;}
 .chip:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px);}
