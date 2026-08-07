@@ -1,0 +1,40 @@
+/* Design tokens ported from the marketing site's style.css, kept in sync deliberately (not auto-synced) */
+
+:root{
+  --bg:#F5F2EC; --surface:#FFFFFF; --border:#E4DED4;
+  --tp:#211C16; --ts:#7C7268; --tm:#AFA593;
+  --accent:#9C5A34; --accent-bg:#F3E7DB; --accent-bg-strong:#EBD8C4;
+  --sage:#5B6E5A; --sage-bg:#EAEFE6;
+  --blue:#3E5C76; --blue-bg:#E7EDF3;
+  --radius:14px;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--tp);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:inherit;}
+
+.wrap{max-width:640px;margin:0 auto;padding:0 20px;}
+
+header{position:sticky;top:0;z-index:30;background:rgba(245,242,236,0.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);}
+.header-inner{max-width:640px;margin:0 auto;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;}
+.brand{font-family:'Fraunces',serif;font-size:18px;font-weight:600;text-decoration:none;color:var(--tp);}
+.brand em{color:var(--accent);font-style:italic;font-weight:500;}
+
+.eyebrow{margin-top:24px;font-size:11px;font-weight:700;letter-spacing:0.07em;color:var(--tm);text-transform:uppercase;}
+h1{font-family:'Fraunces',serif;font-size:28px;font-weight:600;margin:8px 0 6px;letter-spacing:-0.01em;}
+h1 em{font-style:italic;color:var(--accent);font-weight:500;}
+.lede{font-size:13.5px;color:var(--ts);line-height:1.55;margin:0 0 18px;max-width:52ch;}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:14px;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:'Inter',sans-serif;font-weight:700;font-size:13px;border-radius:10px;padding:12px 18px;cursor:pointer;border:none;text-decoration:none;transition:transform .15s ease, background .15s ease;}
+.btn:hover{transform:translateY(-1px);}
+.btn-primary{background:var(--tp);color:#F5EFE6;}
+.btn-primary:hover{background:var(--accent);}
+.btn-ghost{background:var(--surface);color:var(--tp);border:1px solid var(--border);}
+.btn-ghost:hover{background:var(--accent-bg);}
+.btn-full{width:100%;}
+.btn[disabled]{opacity:.45;pointer-events:none;cursor:not-allowed;}
+
+.chip{font-size:12.5px;font-weight:600;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:9px 15px;cursor:pointer;transition:all .15s ease;display:inline-block;}
+.chip:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px);}
+
+::placeholder{color:var(--tm);}
