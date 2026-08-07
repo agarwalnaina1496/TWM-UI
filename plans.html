@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TravelWithMe — Plans & pricing</title>
+<title>TravelWithMe: Plans</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -12,6 +12,9 @@
   .page-hero{padding:48px 0 8px;text-align:center;}
   .page-hero .section-kicker{margin-bottom:8px;}
   .plan-you-handle{font-size:11.5px;color:var(--tm);margin:-10px 0 20px;}
+  .feat-mark{font-size:11.5px;line-height:1.3;}
+  .feat-mark.partial{color:var(--sage);font-weight:700;}
+  @media (max-width:520px){ .feat-mark{font-size:10px;} }
 </style>
 </head>
 <body>
@@ -23,7 +26,7 @@
   <section class="page-hero">
     <div class="section-kicker">Two ways to travel</div>
     <div class="section-h">Same control. <em>Different</em> amount of work.</div>
-    <p class="section-sub">The only thing that changes between the two is how much execution you decide to keep for yourself. Coverage of the whole trip, transparent reasoning, and your final say — constant across both.</p>
+    <p class="section-sub">The only thing that changes between the two is how much execution you decide to keep for yourself. Coverage of the whole trip, transparent reasoning, and your final say: constant across both.</p>
   </section>
 
   <section class="mkt-section" style="padding-top:8px;">
@@ -31,8 +34,6 @@
       <div class="plan-card">
         <div class="plan-name">Self-Led</div>
         <div class="plan-promise">You stay in control. We do the homework.</div>
-        <div class="plan-price">Free to plan<br><small>you book and pay directly</small></div>
-        <div class="plan-note">We may earn a small commission on bookings — never a cost to you</div>
         <ul class="plan-feats">
           <li>Destination discovery, if you haven't picked one</li>
           <li>Personalized day-by-day itinerary</li>
@@ -47,13 +48,11 @@
         <div class="plan-tag">Fully managed</div>
         <div class="plan-name">TWM-Led</div>
         <div class="plan-promise">You enjoy the trip. We handle the rest.</div>
-        <div class="plan-price">Service fee<br><small>on top of trip cost</small></div>
-        <div class="plan-note">Illustrative pricing — prototype only</div>
         <ul class="plan-feats">
           <li>Everything in Self-Led, plus:</li>
           <li>End-to-end booking coordination</li>
-          <li>Airport transfers & daily coordination</li>
-          <li>Disruptions handled directly — rebooked, not just flagged</li>
+          <li>Pickup, drop & daily coordination</li>
+          <li>Disruptions handled directly</li>
           <li>One point of contact for the whole trip</li>
         </ul>
         <div class="plan-cta"><a class="btn btn-primary btn-full" href="start.html">Start TWM-Led →</a></div>
@@ -65,10 +64,9 @@
   <section class="mkt-section alt">
     <div class="section-kicker">Feature by feature</div>
     <div class="section-h">What each product <em>actually</em> covers</div>
-    <p class="section-sub">✓ included &nbsp;·&nbsp; ~ guidance, you execute it &nbsp;·&nbsp; — not part of this product</p>
 
     <div class="feat-table" id="featTable"></div>
-    <p class="section-sub" style="margin-top:34px;">TWM-Led is built to feel effortless day to day — no logistics to chase, no vendors to coordinate, just the trip you planned, running the way you pictured it.</p>
+    <p class="section-sub" style="margin-top:34px;">TWM-Led is built to feel effortless day to day: no logistics to chase, no vendors to coordinate, just the trip you planned, running the way you pictured it.</p>
   </section>
 
   <section class="final-cta">
@@ -86,18 +84,16 @@
   const featGroups = [
     { cat:'Before the trip', rows:[
       ['Destination discovery', 'full', 'full'],
-      ['Day-wise itinerary', 'full', 'full'],
+      ['Shareable day-wise itinerary', 'full', 'full'],
       ['Attraction selection', 'full', 'full'],
       ['Flight booking', 'partial', 'full'],
       ['Hotel booking', 'partial', 'full'],
       ['Attraction ticket booking', 'partial', 'full'],
-      ['Ground transport planning', 'partial', 'full'],
-      ['Airport transfers', 'none', 'full'],
+      ['Local transport planning', 'partial', 'full'],
     ]},
-    { cat:'Coordination on the ground', rows:[
-      ['Itinerary shareable with driver/companions', 'full', 'full'],
-      ['Airport transfer coordinated', 'none', 'full'],
-      ['Ground transportation coordinated', 'none', 'full'],
+    { cat:'During the trip', rows:[
+      ['Pickup & drop coordinated', 'none', 'full'],
+      ['Local transport arranged', 'none', 'full'],
       ['Attraction entry coordination', 'none', 'full'],
       ['Vendor coordination behind the scenes', 'none', 'full'],
     ]},
@@ -107,16 +103,16 @@
       ['No need to coordinate multiple vendors', 'none', 'full'],
     ]},
     { cat:'Daily briefing, once you land', rows:[
-      ['Live itinerary, always up to date', 'full', 'full'],
-      ['Timings for every activity', 'full', 'full'],
-      ['Restaurant recommendations', 'full', 'full'],
-      ['Transportation instructions', 'full', 'full'],
+      ['Live itinerary, always up to date', 'none', 'full'],
+      ['Timings for every activity', 'none', 'full'],
+      ['Restaurant recommendations', 'none', 'full'],
+      ['Transportation instructions', 'none', 'full'],
       ['Proactive daily briefing, sent to you', 'none', 'full'],
-      ['Real-time reminders & notes', 'partial', 'full'],
+      ['Real-time reminders & notes', 'none', 'full'],
     ]},
   ];
 
-  const markSymbol = { full:'✓', partial:'~', none:'—' };
+  const markSymbol = { full:'✓', partial:'✓', none:'—' };
 
   let html = `<div class="feat-head-row"><span>Feature</span><span>Self-Led</span><span>TWM-Led</span></div>`;
   featGroups.forEach(g=>{

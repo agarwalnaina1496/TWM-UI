@@ -7,14 +7,14 @@ document.write(`
     </div>
     <div class="footer-links">
       <a href="index.html#how">How it works</a>
-      <a href="pricing.html">Pricing</a>
+      <a href="plans.html">Plans</a>
       <a href="faq.html">FAQs</a>
-      <a href="story.html">Our story</a>
+      <a href="story.html">Founder's story</a>
       <a href="contact.html">Contact</a>
       <a href="privacy.html">Privacy</a>
       <a href="terms.html">Terms</a>
     </div>
   </div>
-  <div class="footer-bottom">© TravelWithMe — prototype for internal review, not a live product.</div>
+  <div class="footer-bottom">© TravelWithMe</div>
 </footer>
 `);
