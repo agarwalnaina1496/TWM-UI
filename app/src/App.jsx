@@ -1,8 +1,8 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import { useTrip } from './context/TripContext.jsx';
 import GetStarted from './pages/GetStarted.jsx';
-import TripDetails from './pages/TripDetails.jsx';
+import ScoutChat from './pages/ScoutChat.jsx';
 import Destinations from './pages/Destinations.jsx';
 import TripPreview from './pages/TripPreview.jsx';
 import Logistics from './pages/Logistics.jsx';
@@ -15,10 +15,8 @@ import MyTrips from './pages/MyTrips.jsx';
 
 function RequireAuth({ children }) {
   const { auth } = useTrip();
-  const location = useLocation();
   if (!auth.loggedIn) {
-    const next = `${location.pathname}${location.search}`;
-    return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
+    return <Navigate to="/login" replace />;
   }
   return children;
 }
@@ -30,7 +28,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<RequireAuth><GetStarted /></RequireAuth>} />
-        <Route path="/trip-details" element={<RequireAuth><TripDetails /></RequireAuth>} />
+        <Route path="/scout-chat" element={<RequireAuth><ScoutChat /></RequireAuth>} />
         <Route path="/destinations" element={<RequireAuth><Destinations /></RequireAuth>} />
         <Route path="/trip-preview" element={<RequireAuth><TripPreview /></RequireAuth>} />
         <Route path="/logistics" element={<RequireAuth><Logistics /></RequireAuth>} />

@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import '../styles/auth.css';
 import '../styles/details.css';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { trip, login } = useTrip();
   const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [name, setName] = useState('');
@@ -16,12 +15,12 @@ export default function Login() {
 
   function continueNext() {
     login({ name: name.trim() || 'Traveler', email: email.trim() });
-    navigate(searchParams.get('next') || '/');
+    navigate('/');
   }
 
   function continueAsGuest() {
     login({ name: 'Guest', email: '' });
-    navigate(searchParams.get('next') || '/');
+    navigate('/');
   }
 
   function switchMode(next) {

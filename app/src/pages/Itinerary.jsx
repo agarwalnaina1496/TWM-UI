@@ -1,9 +1,7 @@
-import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import '../styles/itinerary.css';
 
 export default function Itinerary() {
-  const navigate = useNavigate();
   const { trip } = useTrip();
 
   return (
@@ -50,8 +48,6 @@ export default function Itinerary() {
         <p className="lede" style={{ marginBottom: 14 }}>This is for support on the plan you already have — not booking.</p>
         <span className="btn btn-ghost btn-full" onClick={() => alert('Prototype — this would open a support contact flow.')}>Talk to the TravelWithMe team</span>
       </div>
-
-      <span className="btn btn-primary btn-full" style={{ marginTop: 16 }} onClick={() => navigate('/my-trips')}>Go to My Trips →</span>
     </div>
   );
 }

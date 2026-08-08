@@ -71,6 +71,10 @@ export function TripProvider({ children }) {
     setTrip(prev => ({ ...prev, ...patch }));
   }
 
+  function startNewTrip() {
+    setTrip(DEFAULT_TRIP);
+  }
+
   function login({ name, email }) {
     setAuth({ loggedIn: true, name, email });
   }
@@ -80,7 +84,7 @@ export function TripProvider({ children }) {
   }
 
   return (
-    <TripContext.Provider value={{ trip, updateTrip, auth, login, logout, savedTrips }}>
+    <TripContext.Provider value={{ trip, updateTrip, startNewTrip, auth, login, logout, savedTrips }}>
       {children}
     </TripContext.Provider>
   );

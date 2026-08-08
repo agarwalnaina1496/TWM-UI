@@ -186,7 +186,7 @@ export default function TripPreview() {
 
   return (
     <div className="wrap">
-      <Link className="back-link" to="/trip-details">&larr; Back to details</Link>
+      <Link className="back-link" to="/scout-chat">&larr; Back to details</Link>
       <h1>{trip.destination || 'Your trip'} <em>| {trip.days.length || 3} Days</em></h1>
       <div className="trip-recap-row">
         <span className="recap-item">🕐 {trip.days.length || 3} Days</span>

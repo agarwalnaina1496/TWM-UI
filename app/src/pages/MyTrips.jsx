@@ -1,13 +1,24 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import '../styles/my-trips.css';
 
 export default function MyTrips() {
-  const { savedTrips, auth } = useTrip();
+  const { savedTrips, auth, startNewTrip } = useTrip();
+  const navigate = useNavigate();
+
+  function handleNewTrip() {
+    startNewTrip();
+    navigate('/');
+  }
 
   return (
     <div className="wrap">
-      <h1>Your <em>trips</em></h1>
+      <div className="my-trips-header">
+        <h1>Your <em>trips</em></h1>
+        {savedTrips.length > 0 && (
+          <span className="btn btn-primary" onClick={handleNewTrip}>+ New trip</span>
+        )}
+      </div>
       <p className="lede">{auth.loggedIn ? `Signed in as ${auth.name}.` : "You're browsing as a guest — trips here only persist on this device for now."}</p>
 
       {savedTrips.length === 0 ? (
