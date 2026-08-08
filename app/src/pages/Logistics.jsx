@@ -53,8 +53,8 @@ export default function Logistics() {
   const { trip, updateTrip } = useTrip();
   const set = logisticsFor(trip.destination || 'your destination');
   const modeGroups = groupByMode(set.modes);
-  // Pre-filled and searched already if dates were captured earlier in the flow.
-  const [searched, setSearched] = useState(!!trip.origin.trim() && !!trip.departDate && (trip.tripType === 'one-way' || !!trip.returnDate));
+  // Fields can arrive pre-filled from earlier in the flow, but results only ever show after an explicit search.
+  const [searched, setSearched] = useState(false);
   const readyToProceed = trip.bookingUploaded || (searched && (!!trip.travelMode || !!trip.hotel));
 
   function search() {

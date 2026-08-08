@@ -17,6 +17,7 @@ export default function Itinerary() {
       <div className="itin-actions">
         <span className="btn btn-ghost" onClick={() => alert('Prototype — PDF generation is simulated, per TWM-98.')}>Download PDF (simulated)</span>
         <span className="btn btn-ghost" onClick={() => alert('Prototype — sharing is simulated.')}>Share</span>
+        <span className="btn btn-ghost" onClick={() => alert('Prototype — this would open a support contact flow.')}>Questions or changes?</span>
       </div>
 
       <div className="why-box">
@@ -41,12 +42,6 @@ export default function Itinerary() {
         <div className="budget-row"><span>Local transport</span><span>₹4k–6k</span></div>
         <div className="budget-row"><span>Meals</span><span>₹5k–7k</span></div>
         <div className="budget-row"><span>Estimated total</span><span>₹27k–37k</span></div>
-      </div>
-
-      <div className="auth-card" style={{ marginTop: 24 }}>
-        <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 600, marginBottom: 6 }}>Questions or changes?</div>
-        <p className="lede" style={{ marginBottom: 14 }}>This is for support on the plan you already have — not booking.</p>
-        <span className="btn btn-ghost btn-full" onClick={() => alert('Prototype — this would open a support contact flow.')}>Talk to the TravelWithMe team</span>
       </div>
     </div>
   );
