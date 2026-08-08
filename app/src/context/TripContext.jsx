@@ -75,8 +75,12 @@ export function TripProvider({ children }) {
     setAuth({ loggedIn: true, name, email });
   }
 
+  function logout() {
+    setAuth(DEFAULT_AUTH);
+  }
+
   return (
-    <TripContext.Provider value={{ trip, updateTrip, auth, login, savedTrips }}>
+    <TripContext.Provider value={{ trip, updateTrip, auth, login, logout, savedTrips }}>
       {children}
     </TripContext.Provider>
   );
