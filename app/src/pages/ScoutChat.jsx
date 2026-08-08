@@ -20,6 +20,13 @@ const TRAVELER_CHIPS = [
 ];
 
 const MONTH_CHIPS = [{ label: 'Flexible / not sure', value: 'flexible' }];
+
+const EXAMPLE_CHIPS = [
+  { label: 'Plan my Coorg trip', q: 'Plan my trip to Coorg, Karnataka' },
+  { label: 'No idea where to go', q: 'I want a relaxing trip in December but have no idea where to go' },
+  { label: 'Just suggest destinations', q: 'Suggest a few beach destinations for a solo trip' },
+  { label: 'Is Ladakh safe in winter?', q: 'Is Ladakh safe to visit in December?' },
+];
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 
 const FIELD_DEFS = {
@@ -100,6 +107,10 @@ export default function ScoutChat() {
     if (entry === 'discover') {
       say('assistant', "No fixed destination yet — no problem. A few quick questions, then I'll match a few that fit.");
       beginQueue({ destinationNeeded: false, headingTo: 'destinations', nextMode: 'preview', filled: [] });
+      return;
+    }
+    if (entry === 'ask') {
+      say('assistant', "Ask me anything about your trip, or try one of these:", EXAMPLE_CHIPS.map(c => ({ label: c.label, value: c.q, kind: 'example' })));
       return;
     }
     // Reopened from an existing trip (e.g. "Back to details") — everything's already set.
@@ -198,6 +209,11 @@ export default function ScoutChat() {
 
   function handleChipClick(chip) {
     if (busy) return;
+    if (chip.kind === 'example') {
+      say('user', chip.label);
+      handleTravelIntent(chip.value);
+      return;
+    }
     if (chip.kind === 'advice-plan') {
       say('user', `Want to plan a trip to ${chip.value}?`);
       setAdviceWait(false);

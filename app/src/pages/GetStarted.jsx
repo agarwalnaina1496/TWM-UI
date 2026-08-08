@@ -2,13 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/entry.css';
 
-const EXAMPLE_CHIPS = [
-  { label: 'Plan my Coorg trip', q: 'Plan my trip to Coorg, Karnataka' },
-  { label: 'No idea where to go', q: 'I want a relaxing trip in December but have no idea where to go' },
-  { label: 'Just suggest destinations', q: 'Suggest a few beach destinations for a solo trip' },
-  { label: 'Is Ladakh safe in winter?', q: 'Is Ladakh safe to visit in December?' },
-];
-
 export default function GetStarted() {
   const navigate = useNavigate();
   const [input, setInput] = useState('');
@@ -22,7 +15,7 @@ export default function GetStarted() {
   function handleQuickRoute(kind) {
     if (kind === 'decided') navigate('/scout-chat?entry=decided');
     else if (kind === 'discover') navigate('/scout-chat?entry=discover');
-    // 'ask' just focuses the input — handled inline below
+    else if (kind === 'ask') navigate('/scout-chat?entry=ask');
   }
 
   return (
@@ -43,7 +36,7 @@ export default function GetStarted() {
             <div className="rb-t">Not sure yet</div>
             <div className="rb-s">Help me find a destination</div>
           </div>
-          <div className="route-btn" onClick={() => document.getElementById('askInput')?.focus()}>
+          <div className="route-btn" onClick={() => handleQuickRoute('ask')}>
             <div className="rb-icon">💬</div>
             <div className="rb-t">Just have a question</div>
             <div className="rb-s">Ask Scout directly</div>
@@ -65,12 +58,6 @@ export default function GetStarted() {
           <button className="ask-send" aria-label="Send" onClick={() => route()}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7Z" /></svg>
           </button>
-        </div>
-
-        <div className="example-row">
-          {EXAMPLE_CHIPS.map(c => (
-            <div key={c.label} className="chip" onClick={() => route(c.q)}>{c.label}</div>
-          ))}
         </div>
       </div>
     </div>
