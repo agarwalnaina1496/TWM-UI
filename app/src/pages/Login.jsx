@@ -1,18 +1,19 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import '../styles/auth.css';
 import '../styles/details.css';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { trip, login } = useTrip();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
 
   function continueNext() {
     login({ name: name.trim() || 'Traveler', email: email.trim() });
-    navigate(trip.plan === 'twm-led' ? '/request-quote' : '/payment');
+    navigate(searchParams.get('next') || '/');
   }
 
   return (
