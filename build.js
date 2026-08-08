@@ -22,3 +22,11 @@ console.log(`[build.js] ENVIRONMENT=${environment}, TWM_BASE_URL=${twmBaseUrl}`)
 console.log('[build.js] Building product app...');
 execSync('npm install && npm run build', { cwd: 'app', stdio: 'inherit' });
 console.log('[build.js] Product app build complete.');
+
+// Vercel serves this whole directory statically (Output Directory: "."), and
+// app/index.html is Vite's dev-only entry template (loads /src/main.jsx
+// unbundled). Left in place, it intercepts requests to /app via filesystem
+// routing before the /app rewrite in vercel.json ever runs (rewrites only
+// apply after a filesystem match fails), serving a blank page in production.
+// It's only needed for local `vite dev`, so strip it from the build output.
+fs.rmSync('app/index.html', { force: true });
