@@ -21,21 +21,19 @@ const TRAVELER_CHIPS = [
 
 const MONTH_CHIPS = [{ label: 'Flexible / not sure', value: 'flexible' }];
 
-const EXAMPLE_CHIPS = [
-  { label: 'Plan my Coorg trip', q: 'Plan my trip to Coorg, Karnataka' },
-  { label: 'No idea where to go', q: 'I want a relaxing trip in December but have no idea where to go' },
-  { label: 'Just suggest destinations', q: 'Suggest a few beach destinations for a solo trip' },
-  { label: 'Is Ladakh safe in winter?', q: 'Is Ladakh safe to visit in December?' },
-];
+const DECIDED_EXAMPLE = { label: 'Plan my Coorg trip', value: 'Plan my trip to Coorg, Karnataka', kind: 'example' };
+const ORIGIN_EXAMPLE = { label: 'Bengaluru', value: 'Bengaluru', kind: 'field-example' };
+const STYLE_EXAMPLE = { label: 'Relaxing, good food, no rushing', value: 'Relaxing, good food, no rushing between places', kind: 'field-example' };
+const ASK_EXAMPLE = { label: 'Is Ladakh safe in winter?', value: 'Is Ladakh safe to visit in December?', kind: 'example' };
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 
 const FIELD_DEFS = {
-  destination: { prompt: "Where are you headed?", type: 'text' },
-  origin: { prompt: "Where are you starting your journey from?", type: 'text' },
+  destination: { prompt: "Where are you headed?", type: 'text', examples: [DECIDED_EXAMPLE] },
+  origin: { prompt: "Where are you starting your journey from?", type: 'text', examples: [ORIGIN_EXAMPLE] },
   budget: { prompt: "Roughly what's the budget, per person?", type: 'chips', chips: BUDGET_CHIPS },
   travelers: { prompt: 'How many people are traveling?', type: 'chips', chips: TRAVELER_CHIPS },
   month: { prompt: 'Which month are you thinking of traveling?', type: 'chips', chips: MONTH_CHIPS },
-  style: { prompt: "What's the vibe for this trip — relaxing, adventure, food, a bit of everything?", type: 'text' },
+  style: { prompt: "What's the vibe for this trip — relaxing, adventure, food, a bit of everything?", type: 'text', examples: [STYLE_EXAMPLE] },
 };
 
 function titleCase(text) {
@@ -96,6 +94,7 @@ export default function ScoutChat() {
 
     if (entry === 'query' && msg.trim()) {
       say('assistant', "Hey, I'm Scout.");
+      say('user', msg.trim());
       handleTravelIntent(msg);
       return;
     }
@@ -105,12 +104,12 @@ export default function ScoutChat() {
       return;
     }
     if (entry === 'discover') {
-      say('assistant', "No fixed destination yet — no problem. A few quick questions, then I'll match a few that fit.");
+      say('assistant', "Help me decide where to go first — no problem. A few quick questions, then I'll match a few that fit.");
       beginQueue({ destinationNeeded: false, headingTo: 'destinations', nextMode: 'preview', filled: [] });
       return;
     }
     if (entry === 'ask') {
-      say('assistant', "Ask me anything about your trip, or try one of these:", EXAMPLE_CHIPS.map(c => ({ label: c.label, value: c.q, kind: 'example' })));
+      say('assistant', 'Ask me anything about your trip — or try this:', [ASK_EXAMPLE]);
       return;
     }
     // Reopened from an existing trip (e.g. "Back to details") — everything's already set.
@@ -147,7 +146,7 @@ export default function ScoutChat() {
     setQueue(rest);
     setPendingField(field);
     const def = FIELD_DEFS[field];
-    say('assistant', def.prompt, def.type === 'chips' ? def.chips : null);
+    say('assistant', def.prompt, def.type === 'chips' ? def.chips : (def.examples || null));
   }
 
   function handleTravelIntent(text) {
@@ -207,8 +206,14 @@ export default function ScoutChat() {
     askNext(queue);
   }
 
-  function handleChipClick(chip) {
+  function handleChipClick(chip, messageId) {
     if (busy) return;
+    setMessages(prev => prev.map(msg => (msg.id === messageId ? { ...msg, chips: null } : msg)));
+    if (chip.kind === 'field-example') {
+      say('user', chip.label);
+      answerField(pendingField, chip.value);
+      return;
+    }
     if (chip.kind === 'example') {
       say('user', chip.label);
       handleTravelIntent(chip.value);
@@ -263,7 +268,7 @@ export default function ScoutChat() {
             {m.chips && (
               <div className="chat-chip-row">
                 {m.chips.map(c => (
-                  <span key={c.label} className="chip" onClick={() => handleChipClick(c)}>{c.label}</span>
+                  <span key={c.label} className="chip" onClick={() => handleChipClick(c, m.id)}>{c.label}</span>
                 ))}
               </div>
             )}
