@@ -1,0 +1,6 @@
+.auth-card{max-width:380px;margin:40px auto 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:26px;}
+.auth-card .field-title{margin-top:0;}
+.auth-switch{font-size:13px;color:var(--tm);text-align:center;margin-top:14px;}
+.auth-switch span{color:var(--accent);cursor:pointer;text-decoration:underline;}
+.auth-divider{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--tm);text-transform:uppercase;letter-spacing:.04em;margin:16px 0;}
+.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border);}

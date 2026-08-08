@@ -7,7 +7,7 @@ document.write(`
       <a class="nav-link" href="plans.html">Plans</a>
       <a class="nav-link" href="faq.html">FAQs</a>
     </nav>
-    <a class="nav-cta" disabled aria-disabled="true">Get started</a>
+    <a class="nav-cta" href="/app">Get started</a>
   </div>
 </header>
 `);

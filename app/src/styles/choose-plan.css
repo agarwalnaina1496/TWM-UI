@@ -1,0 +1,11 @@
+.plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch;margin-top:24px;}
+@media (max-width:640px){ .plan-grid{grid-template-columns:1fr;} }
+.plan-card{background:var(--surface);border:1.5px solid var(--border);border-radius:18px;padding:26px 24px;display:flex;flex-direction:column;}
+.plan-card.hi{border-color:var(--accent);box-shadow:0 12px 30px rgba(156,90,52,.1);}
+.plan-name{font-family:'Fraunces',serif;font-size:19px;font-weight:600;}
+.plan-promise{font-size:12.5px;color:var(--ts);margin:4px 0 18px;line-height:1.5;}
+.plan-feats{list-style:none;margin:0 0 22px;padding:0;flex:1;}
+.plan-feats li{font-size:13px;padding:7px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:flex-start;}
+.plan-feats li:last-child{border-bottom:none;}
+.plan-feats li::before{content:'✓';color:var(--sage);font-weight:700;flex:none;}
+.plan-illustrative{text-align:center;font-size:10.5px;color:var(--tm);margin-top:20px;}
