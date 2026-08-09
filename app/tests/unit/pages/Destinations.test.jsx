@@ -3,14 +3,10 @@ import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Destinations from '../../../src/pages/Destinations.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
-
-const STORAGE_KEY = 'twm_prototype_state_v1';
+import { seedState } from '../testUtils.js';
 
 function seedTrip(trip) {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({ trip, auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' }, savedTrips: [] })
-  );
+  seedState({ trip, auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
 }
 
 function renderDestinations(initialEntries = ['/destinations?next=preview']) {

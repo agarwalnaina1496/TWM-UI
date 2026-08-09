@@ -3,11 +3,10 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../../src/App.jsx';
 import { TripProvider } from '../../src/context/TripContext.jsx';
-
-const STORAGE_KEY = 'twm_prototype_state_v1';
+import { seedState } from './testUtils.js';
 
 function seedAuth(auth) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ trip: {}, auth, savedTrips: [] }));
+  seedState({ auth });
 }
 
 function renderApp(initialEntries) {

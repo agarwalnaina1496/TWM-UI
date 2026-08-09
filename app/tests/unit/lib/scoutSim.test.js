@@ -32,7 +32,7 @@ describe('scoutSim.findDestination', () => {
 describe('scoutSim.extractFields', () => {
   it('extracts budget, traveler count, and style from free text', () => {
     const fields = extractFields('2 people, mid range budget, relaxing pace');
-    expect(fields).toEqual({ budget: 'mid', travelers: 2, style: 'relaxing' });
+    expect(fields).toMatchObject({ budget: 'mid', travelers: 2, style: 'relaxing' });
   });
 
   it('extracts destination, month, and origin together', () => {

@@ -3,12 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MyTrips from '../../../src/pages/MyTrips.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
-
-const STORAGE_KEY = 'twm_prototype_state_v1';
-
-function seedState({ auth, savedTrips }) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ trip: {}, auth, savedTrips }));
-}
+import { seedState } from '../testUtils.js';
 
 function renderMyTrips() {
   return render(
