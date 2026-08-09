@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { TripProvider, useTrip } from './TripContext.jsx';
+import { TripProvider, useTrip } from '../../../src/context/TripContext.jsx';
 
 function wrapper({ children }) {
   return <TripProvider>{children}</TripProvider>;

@@ -9,7 +9,7 @@ export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/app/dist/' : '/',
   test: {
     environment: 'jsdom',
-    setupFiles: './src/test/setup.js',
+    setupFiles: './tests/setup.js',
     globals: true,
     exclude: ['node_modules/**', 'e2e/**'],
   },

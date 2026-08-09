@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import Header from './Header.jsx';
-import { TripProvider } from '../context/TripContext.jsx';
+import Header from '../../../src/components/Header.jsx';
+import { TripProvider } from '../../../src/context/TripContext.jsx';
 
 const STORAGE_KEY = 'twm_prototype_state_v1';
 
