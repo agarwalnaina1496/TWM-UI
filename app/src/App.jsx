@@ -14,8 +14,8 @@ import Itinerary from './pages/Itinerary.jsx';
 import MyTrips from './pages/MyTrips.jsx';
 
 function RequireAuth({ children }) {
-  const { auth } = useTrip();
-  if (!auth.loggedIn) {
+  const { hasAccess } = useTrip();
+  if (!hasAccess) {
     return <Navigate to="/login" replace />;
   }
   return children;

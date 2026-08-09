@@ -3,7 +3,7 @@ import { useTrip } from '../context/TripContext.jsx';
 
 export default function Header() {
   const navigate = useNavigate();
-  const { auth, logout } = useTrip();
+  const { auth, hasAccess, logout } = useTrip();
 
   function handleLogout() {
     logout();
@@ -13,12 +13,12 @@ export default function Header() {
   return (
     <header>
       <div className="header-inner">
-        {auth.loggedIn ? (
+        {hasAccess ? (
           <Link className="brand" to="/">Travel<em>WithMe</em></Link>
         ) : (
           <a className="brand" href="/">Travel<em>WithMe</em></a>
         )}
-        {auth.loggedIn && (
+        {hasAccess && (
           <div className="header-nav-group">
             <Link className="my-trips-link" to="/my-trips">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -26,7 +26,7 @@ export default function Header() {
               </svg>
               My Trips
             </Link>
-            <span className="logout-link" onClick={handleLogout}>Log out</span>
+            {auth.loggedIn && <span className="logout-link" onClick={handleLogout}>Log out</span>}
           </div>
         )}
       </div>

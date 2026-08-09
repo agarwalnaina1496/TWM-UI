@@ -26,7 +26,7 @@ const DEFAULT_TRIP = {
   paid: false,
 };
 
-const DEFAULT_AUTH = { loggedIn: false, name: '', email: '' };
+const DEFAULT_AUTH = { loggedIn: false, isGuest: false, name: '', email: '' };
 
 function loadStored() {
   try {
@@ -76,15 +76,27 @@ export function TripProvider({ children }) {
   }
 
   function login({ name, email }) {
-    setAuth({ loggedIn: true, name, email });
+    setAuth({ loggedIn: true, isGuest: false, name, email });
+  }
+
+  function continueWithoutLogin() {
+    setAuth({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
   }
 
   function logout() {
     setAuth(DEFAULT_AUTH);
   }
 
+  // Updates contact details without changing loggedIn/isGuest — used where a
+  // form (e.g. request-quote) collects name/email but isn't a login action.
+  function setContact({ name, email }) {
+    setAuth(prev => ({ ...prev, name, email }));
+  }
+
+  const hasAccess = auth.loggedIn || auth.isGuest;
+
   return (
-    <TripContext.Provider value={{ trip, updateTrip, startNewTrip, auth, login, logout, savedTrips }}>
+    <TripContext.Provider value={{ trip, updateTrip, startNewTrip, auth, hasAccess, login, continueWithoutLogin, logout, setContact, savedTrips }}>
       {children}
     </TripContext.Provider>
   );
