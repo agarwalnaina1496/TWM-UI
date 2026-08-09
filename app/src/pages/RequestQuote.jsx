@@ -16,13 +16,13 @@ function formatDateRange(start, end) {
 }
 
 export default function RequestQuote() {
-  const { trip, auth, login } = useTrip();
+  const { trip, auth, setContact } = useTrip();
   const [name, setName] = useState(auth.name);
   const [email, setEmail] = useState(auth.email);
   const [sent, setSent] = useState(false);
 
   function submit() {
-    login({ name: name.trim() || 'Traveler', email: email.trim() });
+    setContact({ name: name.trim() || 'Traveler', email: email.trim() });
     setSent(true);
   }
 

@@ -6,7 +6,7 @@ import '../styles/details.css';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { trip, login } = useTrip();
+  const { trip, login, continueWithoutLogin } = useTrip();
   const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -18,8 +18,8 @@ export default function Login() {
     navigate('/');
   }
 
-  function continueAsGuest() {
-    login({ name: 'Guest', email: '' });
+  function handleContinueWithoutLogin() {
+    continueWithoutLogin();
     navigate('/');
   }
 
@@ -83,7 +83,7 @@ export default function Login() {
             {trip.plan !== 'twm-led' && (
               <>
                 <div className="auth-divider">or</div>
-                <span className="btn btn-ghost btn-full" onClick={continueAsGuest}>Continue as guest</span>
+                <span className="btn btn-ghost btn-full" onClick={handleContinueWithoutLogin}>Continue without login</span>
               </>
             )}
           </>
