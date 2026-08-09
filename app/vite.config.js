@@ -7,4 +7,9 @@ export default defineConfig(({ command }) => ({
   // Only the production build is served from /app/dist via the Vercel rewrite;
   // the dev server serves from its own root, so base must stay default there.
   base: command === 'build' ? '/app/dist/' : '/',
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+    globals: true,
+  },
 }))
