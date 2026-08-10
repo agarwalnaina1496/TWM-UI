@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
+import { safeRecommendationViewModel } from '../lib/recommendationViewModel.js';
 import '../styles/destinations.css';
 
 const BUDGET_LABEL = { budget: 'Under ₹30k', mid: '₹30k–70k', premium: '₹70k+', flexible: 'Flexible budget' };
@@ -40,17 +41,11 @@ function fakeMatchResults(trip, referenceOptionId = null) {
     ],
     options: [
       {
-        id: 'opt-1',
         rank: 1,
         type: 'single',
         name: 'Pondicherry',
-        places: null,
         destination_id: 'pondicherry',
         summary: 'Best overall fit for a relaxed, food-forward trip within budget.',
-        prototype: { estimated_per_person: [8200, 11200], access_summary: 'Chennai airport + ~3h road transfer', price_preview: [
-          { state: 'current', total: [16800, 22200], source: 'Prototype provider mix', checkedAt: 'Just now' },
-          { state: 'stale', total: [16100, 21900], source: 'Prototype provider mix', checkedAt: 'Checked 3 days ago' },
-        ] },
         evaluations: [
           {
             criterion_id: 'style',
@@ -77,17 +72,11 @@ function fakeMatchResults(trip, referenceOptionId = null) {
         other_considerations: ['Weekend crowds can be heavy near the beach promenade'],
       },
       {
-        id: 'opt-2',
         rank: 2,
         type: 'circuit',
         name: 'Kochi + Alleppey',
-        places: ['Kochi', 'Alleppey'],
         circuit_id: 'kochi-alleppey',
         summary: 'Backwaters + heritage town circuit — a slightly tighter budget fit.',
-        prototype: { estimated_per_person: [11500, 15800], access_summary: 'Kochi airport + ~90 min road transfer', price_preview: [
-          { state: 'partial', total: [23500, 30200], source: 'Prototype stays + transport sources', checkedAt: 'Just now', note: 'Houseboat availability was not returned.' },
-          { state: 'unavailable', source: 'Prototype provider mix', checkedAt: 'Just now', note: 'No safe price result is available.' },
-        ] },
         evaluations: [
           {
             criterion_id: 'style',
@@ -115,16 +104,11 @@ function fakeMatchResults(trip, referenceOptionId = null) {
         other_considerations: ['Two check-ins to manage', 'Backwater cruise timing is weather-dependent'],
       },
       {
-        id: 'opt-3',
         rank: 3,
         type: 'single',
         name: 'Munnar, Kerala',
-        places: null,
         destination_id: 'munnar',
         summary: 'Tea-garden hills, best for a slower trip — further to reach.',
-        prototype: { estimated_per_person: [9000, 12600], access_summary: 'Kochi airport + ~3.5h road transfer', price_preview: [
-          { state: 'unsafe', source: 'Malformed prototype response', checkedAt: 'Just now', note: 'The result was hidden because it could not be validated safely.' },
-        ] },
         evaluations: [
           {
             criterion_id: 'style',
@@ -152,17 +136,34 @@ function fakeMatchResults(trip, referenceOptionId = null) {
   };
 
   if (!referenceOptionId) return result;
-  const reference = result.options.find(option => option.id === referenceOptionId);
+  const reference = result.options.find(option => (option.destination_id || option.circuit_id) === referenceOptionId);
   return {
     ...result,
     message: `Refreshed around ${reference.name}, while keeping your existing preferences.`,
-    referenceOptionId,
-    options: [reference, ...result.options.filter(option => option.id !== referenceOptionId)].map((option, index) => ({ ...option, rank: index + 1 })),
+    options: [reference, ...result.options.filter(option => (option.destination_id || option.circuit_id) !== referenceOptionId)].map((option, index) => ({ ...option, rank: index + 1 })),
   };
 }
 
+const PROTOTYPE_METADATA = {
+  pondicherry: { places: null, estimated_per_person: [8200, 11200], access_summary: 'Chennai airport + ~3h road transfer', price_preview: [
+    { state: 'current', total: [16800, 22200], source: 'Prototype provider mix', checkedAt: 'Just now' },
+    { state: 'stale', total: [16100, 21900], source: 'Prototype provider mix', checkedAt: 'Checked 3 days ago' },
+  ] },
+  'kochi-alleppey': { places: ['Kochi', 'Alleppey'], estimated_per_person: [11500, 15800], access_summary: 'Kochi airport + ~90 min road transfer', price_preview: [
+    { state: 'partial', total: [23500, 30200], source: 'Prototype stays + transport sources', checkedAt: 'Just now', note: 'Houseboat availability was not returned.' },
+    { state: 'unavailable', source: 'Prototype provider mix', checkedAt: 'Just now', note: 'No safe price result is available.' },
+  ] },
+  munnar: { places: null, estimated_per_person: [9000, 12600], access_summary: 'Kochi airport + ~3.5h road transfer', price_preview: [
+    { state: 'unsafe', source: 'Malformed prototype response', checkedAt: 'Just now', note: 'The result was hidden because it could not be validated safely.' },
+  ] },
+};
+
+function matchViewModel(trip, referenceOptionId = null) {
+  return safeRecommendationViewModel(fakeMatchResults(trip, referenceOptionId), PROTOTYPE_METADATA);
+}
+
 function optionLabel(option) {
-  return option.type === 'circuit' ? `${option.places.join(' + ')} circuit` : 'Single destination';
+  return option.type === 'circuit' ? `${option.prototype.places.join(' + ')} circuit` : 'Single destination';
 }
 
 function criterionLabel(travelerCriteria, criterionId) {
@@ -246,12 +247,15 @@ export default function Destinations() {
 
   const [thinking, setThinking] = useState(true);
   const [match, setMatch] = useState(null);
+  const [matchError, setMatchError] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [priceSteps, setPriceSteps] = useState({});
 
   useEffect(() => {
     const t = setTimeout(() => {
-      setMatch(fakeMatchResults(trip));
+      const result = matchViewModel(trip);
+      setMatch(result.data);
+      setMatchError(result.error);
       setThinking(false);
     }, 900);
     return () => clearTimeout(t);
@@ -264,7 +268,7 @@ export default function Destinations() {
   if (trip.month !== 'flexible') pills.push(trip.month);
 
   function toOption(option) {
-    return { type: option.type, name: option.name, places: option.places };
+    return { type: option.type, name: option.name, places: option.prototype.places };
   }
 
   function planThis(option) {
@@ -273,7 +277,9 @@ export default function Destinations() {
   }
 
   function moreLikeThis(option) {
-    setMatch(fakeMatchResults(trip, option.id));
+    const result = matchViewModel(trip, option.key);
+    setMatch(result.data);
+    setMatchError(result.error);
     setOpenId(null);
     setPriceSteps({});
   }
@@ -281,7 +287,7 @@ export default function Destinations() {
   function checkPrices(option) {
     setPriceSteps(previous => ({
       ...previous,
-      [option.id]: ((previous[option.id] ?? -1) + 1) % option.prototype.price_preview.length,
+      [option.key]: ((previous[option.key] ?? -1) + 1) % option.prototype.price_preview.length,
     }));
   }
 
@@ -296,18 +302,25 @@ export default function Destinations() {
         <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Matching destinations to your answers…</div>
       )}
 
+      {!thinking && matchError && (
+        <div className="price-evidence state-unsafe" role="alert">
+          <strong>Recommendations unavailable</strong>
+          <span>We could not validate the recommendation response safely. Please try again.</span>
+        </div>
+      )}
+
       {!thinking && match && (
         <div>
           <h2 className="section-title">A few that fit well</h2>
           <p className="lede">{match.message}</p>
           {match.options.map((d, i) => {
             const isBest = i === 0;
-            const isOpen = openId === d.id;
-            const priceStep = priceSteps[d.id];
+            const isOpen = openId === d.key;
+            const priceStep = priceSteps[d.key];
             const priceEvidence = priceStep === undefined ? null : d.prototype.price_preview[priceStep];
             const totalEstimate = d.prototype.estimated_per_person.map(value => value * (trip.travelers || 1));
             return (
-              <div key={d.id} className={`dest-card${isBest ? ' best' : ''}`}>
+              <div key={d.key} className={`dest-card${isBest ? ' best' : ''}`}>
                 {isBest && <span className="pick-badge">Our pick</span>}
                 <div className="dest-name">{d.name}</div>
                 <div className="dest-tag">{optionLabel(d)}</div>
@@ -320,7 +333,7 @@ export default function Destinations() {
                 <div className="criteria-list">
                   {d.evaluations.map(ev => (
                     <span key={ev.criterion_id} className={`criteria-pill outcome-${ev.outcome.toLowerCase()}`}>
-                      {OUTCOME_ICON[ev.outcome]} {criterionLabel(match.traveler_criteria, ev.criterion_id)}
+                      {OUTCOME_ICON[ev.outcome]} {criterionLabel(match.criteria, ev.criterion_id)}
                     </span>
                   ))}
                   {d.other_considerations.length > 0 && (
@@ -332,7 +345,7 @@ export default function Destinations() {
                     </span>
                   )}
                 </div>
-                <button type="button" className="reason-toggle" onClick={() => setOpenId(isOpen ? null : d.id)}>
+                <button type="button" className="reason-toggle" onClick={() => setOpenId(isOpen ? null : d.key)}>
                   Why this one <span>{isOpen ? '▴' : '▾'}</span>
                 </button>
                 {isOpen && (
@@ -340,7 +353,7 @@ export default function Destinations() {
                     {d.evaluations.map(ev => (
                       <div key={ev.criterion_id} className="eval-block">
                         <div className="eval-head">
-                          <span className={`criteria-pill outcome-${ev.outcome.toLowerCase()}`}>{OUTCOME_ICON[ev.outcome]} {criterionLabel(match.traveler_criteria, ev.criterion_id)}</span>
+                          <span className={`criteria-pill outcome-${ev.outcome.toLowerCase()}`}>{OUTCOME_ICON[ev.outcome]} {criterionLabel(match.criteria, ev.criterion_id)}</span>
                           <span className="eval-conclusion">{ev.conclusion}</span>
                         </div>
                         {ev.details.map((detail, di) => <DetailBlock key={di} detail={detail} />)}
