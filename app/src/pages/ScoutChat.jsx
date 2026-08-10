@@ -1,300 +1,97 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { classify, findDestination, extractFields, adviceReplyFor } from '../lib/scoutSim.js';
+import { ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
+import { createEntryCommand, safeExecuteMockEntryCommand } from '../lib/mockTripCommands.js';
 import '../styles/chat.css';
-
-const BUDGET_CHIPS = [
-  { label: 'Under ₹30,000', value: 'budget' },
-  { label: '₹30,000–70,000', value: 'mid' },
-  { label: '₹70,000+', value: 'premium' },
-  { label: 'Flexible', value: 'flexible' },
-];
-
-const TRAVELER_CHIPS = [
-  { label: 'Just me', value: 1 },
-  { label: '2', value: 2 },
-  { label: '3', value: 3 },
-  { label: '4', value: 4 },
-  { label: '5+', value: 6 },
-];
-
-const MONTH_CHIPS = [{ label: 'Flexible / not sure', value: 'flexible' }];
-
-const DECIDED_EXAMPLE = { label: 'Plan my Coorg trip', value: 'Plan my trip to Coorg, Karnataka', kind: 'example' };
-const ORIGIN_EXAMPLE = { label: 'Bengaluru', value: 'Bengaluru', kind: 'field-example' };
-const STYLE_EXAMPLE = { label: 'Relaxing, good food, no rushing', value: 'Relaxing, good food, no rushing between places', kind: 'field-example' };
-const ASK_EXAMPLE = { label: 'Is Ladakh safe in winter?', value: 'Is Ladakh safe to visit in December?', kind: 'example' };
-const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-
-const FIELD_DEFS = {
-  destination: { prompt: "Where are you headed?", type: 'text', examples: [DECIDED_EXAMPLE] },
-  origin: { prompt: "Where are you starting your journey from?", type: 'text', examples: [ORIGIN_EXAMPLE] },
-  budget: { prompt: "Roughly what's the budget, per person?", type: 'chips', chips: BUDGET_CHIPS },
-  travelers: { prompt: 'How many people are traveling?', type: 'chips', chips: TRAVELER_CHIPS },
-  month: { prompt: 'Which month are you thinking of traveling?', type: 'chips', chips: MONTH_CHIPS },
-  style: { prompt: "What's the vibe for this trip — relaxing, adventure, food, a bit of everything?", type: 'text', examples: [STYLE_EXAMPLE] },
-};
-
-function titleCase(text) {
-  return text.replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function parseBudget(text) {
-  const t = text.toLowerCase();
-  if (t.includes('under 30') || t.includes('cheap') || t.includes('low')) return 'budget';
-  if (t.includes('70,000+') || t.includes('70000+') || t.includes('premium') || t.includes('luxury')) return 'premium';
-  if (t.includes('30,000') || t.includes('30000') || t.includes('mid')) return 'mid';
-  return 'flexible';
-}
-
-function parseTravelers(text) {
-  const match = text.match(/\d+/);
-  if (match) return Math.max(1, Math.min(10, parseInt(match[0], 10)));
-  if (/solo/i.test(text)) return 1;
-  if (/couple/i.test(text)) return 2;
-  return 2;
-}
-
-function parseMonth(text) {
-  const t = text.toLowerCase();
-  const found = MONTHS.find(m => t.includes(m));
-  return found ? titleCase(found) : 'flexible';
-}
 
 let nextId = 1;
 
 export default function ScoutChat() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { trip, updateTrip } = useTrip();
-
+  const { trip, commandSnapshot, applyMockCommandResponse } = useTrip();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
-  const [pendingField, setPendingField] = useState(null);
-  const [queue, setQueue] = useState([]);
-  const [headingTo, setHeadingTo] = useState(null); // 'preview' | 'destinations'
-  const [nextMode, setNextMode] = useState('preview');
-  const [adviceWait, setAdviceWait] = useState(false);
-  const [done, setDone] = useState(false);
+  const [error, setError] = useState(null);
   const initialized = useRef(false);
-  const bottomRef = useRef(null);
+  const lastCommand = useRef(null);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, pendingField]);
+  function say(role, text) {
+    if (text) setMessages(previous => [...previous, { id: nextId++, role, text }]);
+  }
+
+  function runAdvice(message, { showUser = true } = {}) {
+    if (!message.trim() || busy) return;
+    const command = createEntryCommand({
+      intent: ENTRY_INTENTS.ADVICE,
+      message: message.trim(),
+      expectedVersion: commandSnapshot?.version ?? 1,
+      idempotencyKey: lastCommand.current?.message === message.trim() ? lastCommand.current.idempotency_key : `fixture-${nextId}`,
+    });
+    lastCommand.current = command;
+    if (showUser) say('user', message.trim());
+    setBusy(true);
+    setError(null);
+    setTimeout(() => {
+      const outcome = safeExecuteMockEntryCommand(command, trip);
+      if (outcome.data) {
+        applyMockCommandResponse(outcome.data);
+        say('assistant', outcome.data.message);
+      } else setError(outcome.error);
+      setBusy(false);
+    }, 350);
+  }
 
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-
-    const entry = params.get('entry');
-    const msg = params.get('msg') || '';
-
-    if (entry === 'query' && msg.trim()) {
-      say('assistant', "Hey, I'm Scout.");
-      say('user', msg.trim());
-      handleTravelIntent(msg);
-      return;
-    }
-    if (entry === 'decided') {
-      say('assistant', "Great — let's build the plan. First things first:");
-      beginQueue({ destinationNeeded: true, headingTo: 'preview', nextMode: 'preview', filled: [] });
-      return;
-    }
-    if (entry === 'discover') {
-      say('assistant', "Help me decide where to go first — no problem. A few quick questions, then I'll match a few that fit.");
-      beginQueue({ destinationNeeded: false, headingTo: 'destinations', nextMode: 'preview', filled: [] });
-      return;
-    }
-    if (entry === 'ask') {
-      say('assistant', 'Ask me anything about your trip — or try this:', [ASK_EXAMPLE]);
-      return;
-    }
-    // Reopened from an existing trip (e.g. "Back to details") — everything's already set.
-    say('assistant', trip.destination
-      ? `You're set for ${trip.destination}. Want to jump back in?`
-      : "You're set. Want to jump back in?");
-    setHeadingTo(trip.destination ? 'preview' : 'destinations');
-    setNextMode('preview');
-    setDone(true);
+    say('assistant', "I'm Scout. Tell me the travel question or concern you want advice on.");
+    const message = params.get('msg')?.trim();
+    if (message) runAdvice(message);
+    // Fixture-backed entry intentionally initializes once; real resume belongs to TWM-110.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function say(role, text, chips = null) {
-    setMessages(prev => [...prev, { id: nextId++, role, text, chips }]);
-  }
-
-  function beginQueue({ destinationNeeded, headingTo: heading, nextMode: mode, filled }) {
-    setHeadingTo(heading);
-    setNextMode(mode);
-    const order = ['destination', 'origin', 'budget', 'travelers', 'month', 'style'];
-    const remaining = order.filter(f => (f !== 'destination' || destinationNeeded) && !filled.includes(f));
-    setQueue(remaining);
-    askNext(remaining);
-  }
-
-  function askNext(remaining) {
-    if (!remaining.length) {
-      setPendingField(null);
-      setDone(true);
-      say('assistant', "That's everything I need — here's what I've got. Ready to continue?");
-      return;
-    }
-    const [field, ...rest] = remaining;
-    setQueue(rest);
-    setPendingField(field);
-    const def = FIELD_DEFS[field];
-    say('assistant', def.prompt, def.type === 'chips' ? def.chips : (def.examples || null));
-  }
-
-  function handleTravelIntent(text) {
-    const kase = classify(text);
-    if (kase === 'advice') {
-      const reply = adviceReplyFor(text);
-      say('assistant', reply.message, reply.suggestDestination
-        ? [{ label: `Want to plan a trip to ${reply.suggestDestination}?`, value: reply.suggestDestination, kind: 'advice-plan' }]
-        : null);
-      setAdviceWait(true);
-      return;
-    }
-
-    const extracted = extractFields(text);
-    const filled = [];
-    if (kase === 'decided') {
-      const destination = findDestination(text) || extracted.destination;
-      updateTrip({ destination });
-      filled.push('destination');
-      say('assistant', `Got it — ${destination}. Let's fill in a few more details so the plan actually fits.`);
-      applyExtractedAndBegin(extracted, filled, { destinationNeeded: true, headingTo: 'preview', nextMode: 'preview' });
-      return;
-    }
-
-    const isDiscoverOnly = kase === 'discover_only';
-    say('assistant', isDiscoverOnly
-      ? "Sounds like you just want some ideas for now — a few quick questions and I'll shortlist some options."
-      : "No fixed destination yet — a few quick questions first, then I'll match a few that fit.");
-    applyExtractedAndBegin(extracted, filled, {
-      destinationNeeded: false,
-      headingTo: 'destinations',
-      nextMode: isDiscoverOnly ? 'none' : 'preview',
-    });
-  }
-
-  function applyExtractedAndBegin(extracted, filledSoFar, { destinationNeeded, headingTo: heading, nextMode: mode }) {
-    const patch = {};
-    const filled = [...filledSoFar];
-    ['origin', 'budget', 'travelers', 'month', 'style'].forEach(f => {
-      if (extracted[f] !== undefined) {
-        patch[f] = extracted[f];
-        filled.push(f);
-      }
-    });
-    if (Object.keys(patch).length) updateTrip(patch);
-    beginQueue({ destinationNeeded, headingTo: heading, nextMode: mode, filled });
-  }
-
-  function answerField(field, rawValue) {
-    let value = rawValue;
-    if (field === 'destination') value = titleCase(String(rawValue).trim());
-    if (field === 'origin') value = titleCase(String(rawValue).trim());
-    if (field === 'budget' && typeof rawValue === 'string' && !['budget', 'mid', 'premium', 'flexible'].includes(rawValue)) value = parseBudget(rawValue);
-    if (field === 'travelers' && typeof rawValue !== 'number') value = parseTravelers(String(rawValue));
-    if (field === 'month' && typeof rawValue === 'string' && rawValue !== 'flexible' && !MONTHS.includes(rawValue.toLowerCase())) value = parseMonth(rawValue);
-    updateTrip({ [field]: value });
-    askNext(queue);
-  }
-
-  function handleChipClick(chip, messageId) {
-    if (busy) return;
-    setMessages(prev => prev.map(msg => (msg.id === messageId ? { ...msg, chips: null } : msg)));
-    if (chip.kind === 'field-example') {
-      say('user', chip.label);
-      answerField(pendingField, chip.value);
-      return;
-    }
-    if (chip.kind === 'example') {
-      say('user', chip.label);
-      handleTravelIntent(chip.value);
-      return;
-    }
-    if (chip.kind === 'advice-plan') {
-      say('user', `Want to plan a trip to ${chip.value}?`);
-      setAdviceWait(false);
-      const extracted = extractFields(chip.value);
-      updateTrip({ destination: chip.value });
-      say('assistant', `Let's build the plan for ${chip.value}. A few more details:`);
-      applyExtractedAndBegin(extracted, ['destination'], { destinationNeeded: true, headingTo: 'preview', nextMode: 'preview' });
-      return;
-    }
-    say('user', chip.label);
-    answerField(pendingField, chip.value);
-  }
-
-  function handleSend() {
-    const text = input.trim();
-    if (!text || busy) return;
+  function send() {
+    const value = input.trim();
+    if (!value || busy) return;
     setInput('');
-    say('user', text);
-
-    if (adviceWait) {
-      setAdviceWait(false);
-      handleTravelIntent(text);
-      return;
-    }
-    if (pendingField) {
-      answerField(pendingField, text);
-      return;
-    }
-    // No pending question (e.g. user typed after "done") — treat as a fresh ask.
-    handleTravelIntent(text);
+    runAdvice(value);
   }
 
-  function goContinue() {
-    if (headingTo === 'preview') navigate('/trip-preview');
-    else navigate(`/destinations?next=${nextMode}`);
-  }
-
+  const activeAgent = commandSnapshot?.trip_state?.active_agent;
+  const awaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
+  const quickReplies = QUICK_REPLIES[awaiting] || [];
   return (
     <div className="wrap chat-page">
       <span className="eyebrow">✦ Scout</span>
-      <h1>Let's talk <em>trip</em></h1>
+      <h1>Tell Scout <em>in your own words</em></h1>
+      <p className="lede">Scout keeps the nuance in what you say, asks only for material gaps, and hands the trip to the right specialist.</p>
 
-      <div className="chat-log">
-        {messages.map(m => (
-          <div key={m.id} className={`chat-row chat-row-${m.role}`}>
-            <div className={`chat-bub chat-bub-${m.role}`}>{m.text}</div>
-            {m.chips && (
-              <div className="chat-chip-row">
-                {m.chips.map(c => (
-                  <span key={c.label} className="chip" onClick={() => handleChipClick(c, m.id)}>{c.label}</span>
-                ))}
-              </div>
-            )}
+      <div className="chat-log" aria-live="polite">
+        {messages.map(message => (
+          <div key={message.id} className={`chat-row chat-row-${message.role}`}>
+            <div className={`chat-bub chat-bub-${message.role}`} style={{ whiteSpace: 'pre-wrap' }}>{message.text}</div>
           </div>
         ))}
-        {done && (
-          <div className="chat-row chat-row-assistant">
-            <span className="btn btn-primary" onClick={goContinue}>Continue →</span>
+        {busy && <div className="think" role="status">Scout is thinking…</div>}
+        {!busy && quickReplies.length > 0 && (
+          <div className="chat-chip-row" aria-label={`Suggested ${awaiting} replies`}>
+            {quickReplies.map(reply => <button type="button" className="chip" key={reply} onClick={() => runAdvice(reply)}>{reply}</button>)}
           </div>
         )}
-        <div ref={bottomRef} />
+        {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={() => runAdvice(lastCommand.current?.message ?? '', { showUser: false })}>Try again</button></div>}
+        {activeAgent === 'meridian' && <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>Continue to destination discovery →</button>}
+        {activeAgent === 'guide' && <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue to planning →</button>}
       </div>
 
       <div className="chat-input-bar">
-        <input
-          type="text"
-          className="chat-input"
-          placeholder="Type your answer…"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleSend(); }}
-        />
-        <button className="chat-send" onClick={handleSend} aria-label="Send">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7Z" /></svg>
-        </button>
+        <input type="text" className="chat-input" placeholder="Ask Scout a travel question…" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') send(); }} />
+        <button type="button" className="chat-send" onClick={send} disabled={busy} aria-label="Send">→</button>
       </div>
+      <small>Fixture-backed Scout response — no Backend or agent call was made.</small>
     </div>
   );
 }

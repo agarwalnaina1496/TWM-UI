@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import { applyCommandSnapshot } from '../lib/mockTripCommands.js';
 
 const TripContext = createContext(null);
 
@@ -43,14 +44,15 @@ export function TripProvider({ children }) {
   const [trip, setTrip] = useState({ ...DEFAULT_TRIP, ...stored?.trip });
   const [auth, setAuth] = useState(stored?.auth ?? DEFAULT_AUTH);
   const [savedTrips, setSavedTrips] = useState(stored?.savedTrips ?? []);
+  const [commandSnapshot, setCommandSnapshot] = useState(stored?.commandSnapshot ?? null);
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ trip, auth, savedTrips }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ trip, auth, savedTrips, commandSnapshot }));
     } catch {
       // Storage unavailable (private browsing, quota, etc.) — prototype state just won't survive a reload.
     }
-  }, [trip, auth, savedTrips]);
+  }, [trip, auth, savedTrips, commandSnapshot]);
 
   // My Trips is auto-derived from the current trip — no manual "save" step needed.
   useEffect(() => {
@@ -69,6 +71,12 @@ export function TripProvider({ children }) {
 
   function updateTrip(patch) {
     setTrip(prev => ({ ...prev, ...patch }));
+  }
+
+  function applyMockCommandResponse(response) {
+    const applied = applyCommandSnapshot(response);
+    setTrip(previous => ({ ...previous, ...applied.tripPatch }));
+    setCommandSnapshot(applied.commandSnapshot);
   }
 
   function startNewTrip() {
@@ -96,7 +104,7 @@ export function TripProvider({ children }) {
   const hasAccess = auth.loggedIn || auth.isGuest;
 
   return (
-    <TripContext.Provider value={{ trip, updateTrip, startNewTrip, auth, hasAccess, login, continueWithoutLogin, logout, setContact, savedTrips }}>
+    <TripContext.Provider value={{ trip, updateTrip, startNewTrip, auth, hasAccess, login, continueWithoutLogin, logout, setContact, savedTrips, commandSnapshot, applyMockCommandResponse }}>
       {children}
     </TripContext.Provider>
   );
