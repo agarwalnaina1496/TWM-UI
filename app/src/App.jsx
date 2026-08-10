@@ -13,12 +13,20 @@ import RequestQuote from './pages/RequestQuote.jsx';
 import Itinerary from './pages/Itinerary.jsx';
 import MyTrips from './pages/MyTrips.jsx';
 import JourneyEntry from './pages/JourneyEntry.jsx';
+import ItineraryPreview from './pages/ItineraryPreview.jsx';
+import TripDashboard from './pages/TripDashboard.jsx';
 
 function RequireAuth({ children }) {
   const { hasAccess } = useTrip();
   if (!hasAccess) {
     return <Navigate to="/login" replace />;
   }
+  return children;
+}
+
+function RequireSelfLed({ children }) {
+  const { trip } = useTrip();
+  if (trip.plan !== 'self-led') return <Navigate to="/choose-plan" replace />;
   return children;
 }
 
@@ -33,11 +41,13 @@ export default function App() {
         <Route path="/journey-entry" element={<RequireAuth><JourneyEntry /></RequireAuth>} />
         <Route path="/destinations" element={<RequireAuth><Destinations /></RequireAuth>} />
         <Route path="/trip-preview" element={<RequireAuth><TripPreview /></RequireAuth>} />
+        <Route path="/itinerary-preview" element={<RequireAuth><ItineraryPreview /></RequireAuth>} />
         <Route path="/logistics" element={<RequireAuth><Logistics /></RequireAuth>} />
         <Route path="/choose-plan" element={<RequireAuth><ChoosePlan /></RequireAuth>} />
         <Route path="/payment" element={<RequireAuth><Payment /></RequireAuth>} />
         <Route path="/request-quote" element={<RequireAuth><RequestQuote /></RequireAuth>} />
         <Route path="/itinerary" element={<RequireAuth><Itinerary /></RequireAuth>} />
+        <Route path="/dashboard" element={<RequireAuth><RequireSelfLed><TripDashboard /></RequireSelfLed></RequireAuth>} />
         <Route path="/my-trips" element={<RequireAuth><MyTrips /></RequireAuth>} />
       </Routes>
     </>

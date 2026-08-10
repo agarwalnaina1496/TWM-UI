@@ -19,17 +19,16 @@ test('full fake-prototype flow: GetStarted through Itinerary', async ({ page }) 
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await page.getByText('Generate detailed itinerary →').click();
 
+  // Atlas detailed itinerary exists before bookings or dates.
+  await expect(page).toHaveURL(/\/app\/itinerary-preview/);
+  await expect(page.getByText('Duration-only · Day 1–14')).toBeVisible();
+  await page.getByText('Choose how to manage this trip →').click();
+
   // ChoosePlan -> Self-Led
   await expect(page).toHaveURL(/\/app\/choose-plan/);
-  await page.getByText('Get my itinerary →').click();
+  await expect(page.getByRole('button', { name: 'TWM-Led is Coming Soon' })).toBeDisabled();
+  await page.getByText('Open my Self-Led Dashboard →').click();
 
-  // Logistics: bring-your-own-booking path
-  await expect(page).toHaveURL(/\/app\/logistics/);
-  await page.getByText('Upload booking confirmation').click();
-  await expect(page.getByText('✓ Confirmation added')).toBeVisible();
-  await page.getByText('See my detailed itinerary →').click();
-
-  // Itinerary
-  await expect(page).toHaveURL(/\/app\/itinerary/);
-  await expect(page.getByText('Fixture-backed preview — not a live Atlas result')).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/dashboard/);
+  await expect(page.getByRole('navigation', { name: 'Trip Dashboard tabs' })).toBeVisible();
 });

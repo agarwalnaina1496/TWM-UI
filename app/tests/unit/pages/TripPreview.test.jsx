@@ -42,6 +42,7 @@ describe('TripPreview unified Plan Builder', () => {
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
     await user.click(screen.getByRole('button', { name: /Generate detailed itinerary/ }));
     expect(updateTrip).toHaveBeenLastCalledWith(expect.objectContaining({ guideSnapshot: expect.objectContaining({ status: 'PLAN_APPROVED', approved_revision: 1 }), tripLength: 14 }));
-    expect(navigate).toHaveBeenCalledWith('/choose-plan');
+    expect(updateTrip).toHaveBeenLastCalledWith(expect.objectContaining({ atlasState: expect.objectContaining({ current_version_id: 'atlas-v1' }) }));
+    expect(navigate).toHaveBeenCalledWith('/itinerary-preview');
   });
 });

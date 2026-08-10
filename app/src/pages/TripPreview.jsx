@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { approveGuidePlan, createInitialGuidePlan, executeGuideRevision } from '../lib/mockGuidePlan.js';
+import { createAtlasDashboardState } from '../lib/mockAtlasTrip.js';
 import '../styles/preview.css';
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -36,8 +37,9 @@ export default function TripPreview() {
       setMessage(response.message);
       return;
     }
-    updateTrip({ guidePlan: plan, guideSnapshot: response.snapshot, tripLength: plan.summary.duration_days });
-    navigate('/choose-plan');
+    const atlasState = createAtlasDashboardState(response.snapshot, trip.tripContext);
+    updateTrip({ guidePlan: plan, guideSnapshot: response.snapshot, atlasState, plan: null, tripLength: plan.summary.duration_days });
+    navigate('/itinerary-preview');
   }
 
   return (
