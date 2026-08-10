@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
 import { acceptProposedRevision, addUploadedBooking, computeBudget, createAtlasDashboardState, currentAtlasVersion, keepCurrentRevision, TRAVEL_TIPS } from '../lib/mockAtlasTrip.js';
@@ -19,11 +20,6 @@ const TIME_ICONS = [
   [/morning/i, '🌅'], [/afternoon/i, '🌤️'], [/evening/i, '🌆'], [/flexible/i, '🕒'], [/\d(am|pm)/i, '⏰'],
 ];
 const timeIcon = time => (TIME_ICONS.find(([re]) => re.test(time)) || [null, '📍'])[1];
-
-const MODE_ICONS = [
-  [/train/i, '🚆'], [/flight/i, '✈️'], [/bus/i, '🚌'], [/road/i, '🚗'],
-];
-const modeIcon = mode => (MODE_ICONS.find(([re]) => re.test(mode)) || [null, '🧭'])[1];
 
 const haversineKm = (a, b) => {
   const R = 6371;
@@ -48,9 +44,29 @@ function BookingRecords({ bookings, type }) {
   return <div className="booking-records"><h3>{type} confirmations</h3>{records.map(booking => <article className="dashboard-card" key={booking.id}><div><span className={`state ${booking.state}`}>{booking.state.replace('_', ' ')}</span><strong>{booking.label}</strong><p>{booking.detail}</p></div></article>)}</div>;
 }
 
+function BookingChoice({ label, logisticsTab, onUpload }) {
+  return (
+    <div className="booking-choice">
+      <div className="booking-choice-opt">
+        <strong>Already booked this yourself?</strong>
+        <p>Upload your confirmation and it'll show up here.</p>
+        <button type="button" className="btn btn-ghost" onClick={onUpload}>Upload {label} confirmation</button>
+      </div>
+      <span className="booking-choice-or">or</span>
+      <div className="booking-choice-opt">
+        <strong>Still need to arrange it?</strong>
+        <p>Browse real options and pick one.</p>
+        <Link className="btn btn-primary" to={`/logistics?tab=${logisticsTab}`}>Arrange bookings →</Link>
+      </div>
+    </div>
+  );
+}
+
 export default function TripDashboard() {
   const { trip, updateTrip } = useTrip();
-  const [tab, setTab] = useState('Days');
+  const [params] = useSearchParams();
+  const initialTab = TABS.some(t => t.name === params.get('tab')) ? params.get('tab') : 'Days';
+  const [tab, setTab] = useState(initialTab);
   const atlas = trip.atlasState || createAtlasDashboardState(trip.guideSnapshot, trip.tripContext);
   const version = currentAtlasVersion(atlas);
   const budget = computeBudget(atlas.cost_items);
@@ -115,38 +131,25 @@ export default function TripDashboard() {
       </section>}
 
       {tab === 'Transport' && <section>
-        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Real route and operator links — verify schedules and fares for your dates.</p></div><button type="button" className="btn btn-primary" onClick={() => save(addUploadedBooking(atlas, 'Transport'))}>Upload transport confirmation</button></div>
-        {atlas.transport.map(item => <div className="stay-block" key={item.id}>
-          <div className="stay-block-head">
-            <div><span className={`state ${item.state}`}>{item.state === 'confirmed' ? '✓ confirmed' : item.state}</span><h3>{item.route}</h3><p>{item.options} · <strong className="price-tag">{item.price}</strong></p></div>
+        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>What's confirmed so far for getting around — a view only, not a booking desk.</p></div></div>
+        {atlas.transport.filter(item => item.state === 'confirmed').map(item => <article className="dashboard-card" key={item.id}>
+          <div><span className="state confirmed">✓ confirmed</span><h3>{item.route}</h3>
             {item.confirmation && <div className="confirmation-chip">✓ {item.confirmation}</div>}
           </div>
-          <div className="stay-options-grid">{item.choices.map((choice, index) => <article className={`stay-option-card${index === 0 ? ' picked' : ''}`} key={`${item.id}-${choice.mode}-${choice.name}`}>
-            {index === 0 && <span className="pick-badge">Curated pick</span>}
-            <span className="mode-icon">{modeIcon(choice.mode)}</span>
-            <strong>{choice.name}</strong>
-            <span className="stay-option-tag">{choice.mode}</span>
-            <p>{choice.note}</p>
-            <a className={`btn ${index === 0 ? 'btn-primary' : 'btn-ghost'}`} href={choice.url} target="_blank" rel="noreferrer">Check ↗</a>
-          </article>)}</div>
-        </div>)}
+        </article>)}
         <BookingRecords bookings={atlas.bookings} type="Transport" />
+        <BookingChoice label="transport" logisticsTab="Transport" onUpload={() => save(addUploadedBooking(atlas, 'Transport'))} />
       </section>}
 
       {tab === 'Stays' && <section>
-        <div className="tab-intro"><div><h2>🏨 Stays</h2><p>Real properties for every base — check dates and price before booking.</p></div><button type="button" className="btn btn-primary" onClick={() => save(addUploadedBooking(atlas, 'Stay'))}>Upload stay confirmation</button></div>
-        {atlas.stays.map(stay => <div className="stay-block" key={stay.id}>
-          <div className="stay-block-head">
-            <div><span className={`state ${stay.state}`}>{stay.state === 'confirmed' ? '✓ confirmed' : stay.state}</span><h3>🏨 {stay.base} · {stay.nights} nights</h3><p>📍 {stay.area} · {stay.nightly}</p></div>
+        <div className="tab-intro"><div><h2>🏨 Stays</h2><p>What's confirmed so far for stays — a view only, not a booking desk.</p></div></div>
+        {atlas.stays.filter(stay => stay.state === 'confirmed').map(stay => <article className="dashboard-card" key={stay.id}>
+          <div><span className="state confirmed">✓ confirmed</span><h3>🏨 {stay.base} · {stay.nights} nights</h3><p>📍 {stay.area}</p>
+            {stay.confirmation && <div className="confirmation-chip">✓ {stay.confirmation}</div>}
           </div>
-          <div className="stay-options-grid">{stay.options.map((option, index) => <article className={`stay-option-card${index === 0 ? ' picked' : ''}`} key={`${stay.id}-${option.name}`}>
-            {index === 0 && <span className="pick-badge">Curated pick</span>}
-            <strong>{option.name}</strong>
-            <span className="stay-option-tag">Suggested option</span>
-            <p>{option.fit}</p>
-            <a className={`btn ${index === 0 ? 'btn-primary' : 'btn-ghost'}`} href={option.url} target="_blank" rel="noreferrer">Check stay ↗</a>
-          </article>)}</div>
-        </div>)}
+        </article>)}
+        <BookingRecords bookings={atlas.bookings} type="Stay" />
+        <BookingChoice label="stay" logisticsTab="Stays" onUpload={() => save(addUploadedBooking(atlas, 'Stay'))} />
       </section>}
 
       {tab === 'Map' && <section>

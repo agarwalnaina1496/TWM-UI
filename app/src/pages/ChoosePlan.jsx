@@ -7,7 +7,7 @@ export default function ChoosePlan() {
   const { trip, updateTrip } = useTrip();
   function chooseSelfLed() {
     updateTrip({ plan: 'self-led', atlasState: { ...trip.atlasState, mode: 'self-led' } });
-    navigate('/dashboard');
+    navigate('/logistics');
   }
   return (
     <main className="wrap">
