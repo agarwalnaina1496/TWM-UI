@@ -21,8 +21,8 @@ test('exact golden journey reaches Atlas preview, Choose Plan and Self-Led Dashb
   await page.getByRole('button', { name: /Choose how to manage this trip/ }).click();
 
   await expect(page).toHaveURL(/\/app\/choose-plan/);
-  await expect(page.getByRole('button', { name: 'TWM-Led is Coming Soon' })).toBeDisabled();
-  await page.getByRole('button', { name: /Open my Self-Led Dashboard/ }).click();
+  await expect(page.getByRole('button', { name: 'Choose TWM-Led →' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Choose Self-Led →' }).click();
 
   await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByRole('button', { name: 'Days' })).toHaveAttribute('aria-current', 'page');

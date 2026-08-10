@@ -196,16 +196,17 @@ function DetailBlock({ detail }) {
   }
   if (detail.type === 'cost_breakdown') {
     const currency = detail.currency === 'INR' ? '₹' : detail.currency;
+    const isGroupTotal = detail.items.some(item => item.group);
     return (
       <table className="detail-cost-table">
         <thead>
-          <tr><th>Item</th><th>Per person</th></tr>
+          <tr><th>Item</th><th>{isGroupTotal ? 'Total party' : 'Per person'}</th></tr>
         </thead>
         <tbody>
           {detail.items.map(item => (
             <tr key={item.label}>
               <td>{item.label}</td>
-              <td>{currency}{item.per_person.minimum.toLocaleString('en-IN')}–{item.per_person.maximum.toLocaleString('en-IN')}</td>
+              <td>{currency}{(item.per_person || item.group).minimum.toLocaleString('en-IN')}–{(item.per_person || item.group).maximum.toLocaleString('en-IN')}</td>
             </tr>
           ))}
         </tbody>
@@ -219,30 +220,6 @@ function moneyRange(range) {
   return `₹${range[0].toLocaleString('en-IN')}–₹${range[1].toLocaleString('en-IN')}`;
 }
 
-function PriceEvidence({ evidence }) {
-  if (!evidence) {
-    return <div className="price-evidence state-not-checked"><strong>Not checked</strong><span>Use Check prices to preview the final action state.</span></div>;
-  }
-
-  const label = {
-    current: 'Verified/current mock',
-    stale: 'Stale mock result',
-    partial: 'Partial mock result',
-    unavailable: 'Price unavailable',
-    unsafe: 'Unsafe result hidden',
-  }[evidence.state];
-
-  return (
-    <div className={`price-evidence state-${evidence.state}`} role="status">
-      <strong>{label}</strong>
-      {evidence.total && <span className="checked-total">{moneyRange(evidence.total)} total for the party</span>}
-      <span>{evidence.source} · {evidence.checkedAt}</span>
-      {evidence.note && <span>{evidence.note}</span>}
-      <small>Prototype only — not a live quote or availability guarantee.</small>
-    </div>
-  );
-}
-
 export default function Destinations() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -253,7 +230,6 @@ export default function Destinations() {
   const [match, setMatch] = useState(null);
   const [matchError, setMatchError] = useState(null);
   const [openId, setOpenId] = useState(null);
-  const [priceSteps, setPriceSteps] = useState({});
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -285,14 +261,6 @@ export default function Destinations() {
     setMatch(result.data);
     setMatchError(result.error);
     setOpenId(null);
-    setPriceSteps({});
-  }
-
-  function checkPrices(option) {
-    setPriceSteps(previous => ({
-      ...previous,
-      [option.key]: ((previous[option.key] ?? -1) + 1) % option.prototype.price_preview.length,
-    }));
   }
 
   return (
@@ -316,12 +284,10 @@ export default function Destinations() {
       {!thinking && match && (
         <div>
           <h2 className="section-title">A few that fit well</h2>
-          <p className="lede">{match.message}</p>
+          <p className="lede recommendation-summary">{match.message}</p>
           {match.options.map((d, i) => {
             const isBest = i === 0;
             const isOpen = openId === d.key;
-            const priceStep = priceSteps[d.key];
-            const priceEvidence = priceStep === undefined ? null : d.prototype.price_preview[priceStep];
             const totalEstimate = d.prototype.estimated_group
               || d.prototype.estimated_per_person.map(value => value * (trip.travelers || 1));
             return (
@@ -375,10 +341,8 @@ export default function Destinations() {
                     )}
                   </div>
                 )}
-                <PriceEvidence evidence={priceEvidence} />
                 <div className="dest-actions">
                   <button type="button" className="btn btn-ghost" onClick={() => moreLikeThis(d)}>✨ More like this</button>
-                  <button type="button" className="btn btn-ghost" onClick={() => checkPrices(d)}>{priceEvidence ? 'Refresh mock prices' : 'Check prices'}</button>
                   {nextMode === 'preview'
                     ? <span className="btn btn-primary" onClick={() => planThis(d)}>Plan this trip →</span>
                     : <Link className="btn btn-primary" to="/trip-preview" onClick={() => updateTrip({ destination: toOption(d) })}>Want to plan this? →</Link>}

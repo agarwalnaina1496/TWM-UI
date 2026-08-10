@@ -9,3 +9,4 @@
 .plan-feats li:last-child{border-bottom:none;}
 .plan-feats li::before{content:'✓';color:var(--sage);font-weight:700;flex:none;}
 .plan-illustrative{text-align:center;font-size:10.5px;color:var(--tm);margin-top:20px;}
+.plan-you-handle{font-size:11.5px;color:var(--tm);margin:-10px 0 20px;}

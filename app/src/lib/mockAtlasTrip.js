@@ -58,15 +58,53 @@ export function createAtlasDashboardState(guideSnapshot = {}, tripContext = {}) 
     current_version_id: version.id,
     proposed_revision: null,
     transport: [
-      { id: 'delhi-gwalior', route: 'Delhi → Gwalior', state: 'suggested', options: 'Train or flight + local transfer', price: '₹2,000–₹6,000 for two' },
-      { id: 'circuit', route: 'Gwalior → Orchha → Khajuraho → Panna', state: 'suggested', options: 'Train/private road mix', price: '₹7,000–₹10,000 for two' },
-      { id: 'return-delhi', route: 'Panna/Khajuraho → Delhi', state: 'suggested', options: 'Train or flight connection', price: '₹3,000–₹7,000 for two' },
+      { id: 'delhi-gwalior', route: 'Delhi → Gwalior', state: 'suggested', options: 'Direct train, flight search, bus or road', price: '₹2,000–₹6,000 for two', choices: [
+        { mode: 'Train', name: 'Gatimaan Express 12050 / other direct trains', note: 'Hazrat Nizamuddin or New Delhi to Gwalior; verify date and seats.', url: 'https://www.irctc.co.in/nget/train-search' },
+        { mode: 'Flight', name: 'Delhi to Gwalior flight search', note: 'Schedules vary by date; compare total airport-transfer time.', url: 'https://www.airindia.com/en-in/book-flights' },
+        { mode: 'Bus', name: 'Delhi–Gwalior intercity bus search', note: 'Overnight and daytime inventory varies.', url: 'https://www.redbus.in/bus-tickets/delhi-to-gwalior' },
+        { mode: 'Road', name: 'Private cab / self-drive route', note: 'Door-to-door fallback; materially costlier than train.', url: 'https://www.google.com/maps/dir/?api=1&origin=Delhi&destination=Gwalior' },
+      ] },
+      { id: 'gwalior-orchha', route: 'Gwalior → Orchha', state: 'suggested', options: 'Train via Jhansi, bus connection or road', price: '₹1,000–₹3,500 for two', choices: [
+        { mode: 'Train + road', name: 'Gwalior to Jhansi train + taxi/auto to Orchha', note: 'Jhansi is the practical major rail gateway; Orchha is about 16–18 km onward.', url: 'https://www.irctc.co.in/nget/train-search' },
+        { mode: 'Bus + road', name: 'Bus to Jhansi + local connection to Orchha', note: 'Check current state/private bus inventory.', url: 'https://www.onlineupsrtc.co.in/' },
+        { mode: 'Road', name: 'Direct private cab to Orchha', note: 'Simplest luggage transfer for two.', url: 'https://www.google.com/maps/dir/?api=1&origin=Gwalior&destination=Orchha' },
+      ] },
+      { id: 'orchha-khajuraho', route: 'Orchha → Khajuraho', state: 'suggested', options: 'Train, bus or direct road', price: '₹1,500–₹4,500 for two', choices: [
+        { mode: 'Train', name: 'Orchha/Jhansi to Khajuraho rail search', note: 'Availability and suitable timing must be checked for the travel date.', url: 'https://www.irctc.co.in/nget/train-search' },
+        { mode: 'Bus', name: 'Jhansi/Orchha to Khajuraho bus search', note: 'Private and state inventory varies.', url: 'https://www.redbus.in/bus-tickets/jhansi-to-khajuraho' },
+        { mode: 'Road', name: 'Direct private cab to Khajuraho', note: 'Most convenient direct circuit transfer.', url: 'https://www.google.com/maps/dir/?api=1&origin=Orchha&destination=Khajuraho' },
+      ] },
+      { id: 'khajuraho-panna', route: 'Khajuraho → Panna', state: 'suggested', options: 'Local bus or road transfer', price: '₹800–₹2,500 for two', choices: [
+        { mode: 'Road', name: 'Private cab to Panna / Madla', note: 'Panna district lists Khajuraho as the nearest rail and air gateway.', url: 'https://www.google.com/maps/dir/?api=1&origin=Khajuraho&destination=Panna' },
+        { mode: 'Bus', name: 'Local/private bus enquiry', note: 'Confirm current departure point and timing locally.', url: 'https://panna.nic.in/en/how-to-reach/' },
+      ] },
+      { id: 'return-delhi', route: 'Panna / Khajuraho → Delhi', state: 'suggested', options: 'Flight, train via Khajuraho/Satna, or road connection', price: '₹3,000–₹12,000 for two', choices: [
+        { mode: 'Flight', name: 'Air India Khajuraho (HJR) to Delhi (DEL)', note: 'Daily winter-network service is scheduled from 25 October 2026; verify dates and fare.', url: 'https://www.airindia.com/en-in/book-flights/khajuraho-to-delhi-flights' },
+        { mode: 'Train', name: 'Khajuraho or Satna to Delhi rail search', note: 'Panna has no railway station; compare Khajuraho (~40 km) and Satna (~75 km).', url: 'https://www.irctc.co.in/nget/train-search' },
+        { mode: 'Road + onward', name: 'Road to Khajuraho airport/station', note: 'Required first leg when staying near Panna.', url: 'https://www.google.com/maps/dir/?api=1&origin=Panna&destination=Khajuraho' },
+      ] },
     ],
     stays: [
-      { id: 'gwalior-stay', base: 'Gwalior', nights: 3, area: 'Fort/old-city access', nightly: '₹1,800–₹2,600', state: 'suggested' },
-      { id: 'orchha-stay', base: 'Orchha', nights: 3, area: 'Fort and Betwa riverside', nightly: '₹1,700–₹2,500', state: 'suggested' },
-      { id: 'khajuraho-stay', base: 'Khajuraho', nights: 4, area: 'Temple access area', nightly: '₹1,900–₹2,800', state: 'suggested' },
-      { id: 'panna-stay', base: 'Panna', nights: 3, area: 'Reserve-edge area', nightly: '₹2,000–₹3,000', state: 'suggested' },
+      { id: 'gwalior-stay', base: 'Gwalior', nights: 3, area: 'Fort/old-city access', nightly: 'Check live rates', state: 'suggested', options: [
+        { name: 'MPT Tansen Residency', fit: 'Value-oriented city base', url: 'https://www.mptourism.com/accomodation.php/destination-gwalior.php' },
+        { name: 'Taj Usha Kiran Palace', fit: 'Heritage splurge; likely above the core stay budget', url: 'https://www.tajhotels.com/en-in/hotels/taj-usha-kiran-palace-gwalior' },
+        { name: 'Gwalior district accommodation list', fit: 'Government-verified additional local options', url: 'https://gwalior.nic.in/en/where-to-stay/' },
+      ] },
+      { id: 'orchha-stay', base: 'Orchha', nights: 3, area: 'Fort and Betwa riverside', nightly: 'Check live rates', state: 'suggested', options: [
+        { name: 'MPT Betwa Retreat / MPT Sheesh Mahal', fit: 'Official MP Tourism choices near the river/fort', url: 'https://www.mptourism.com/accomodation.php?destination=Orchha' },
+        { name: 'Amar Mahal', fit: 'Heritage-style stay near the Betwa and monuments', url: 'https://www.amarmahal.com/' },
+        { name: 'Bundelkhand Riverside', fit: 'Riverside heritage property', url: 'https://www.bundelkhandriverside.com/' },
+      ] },
+      { id: 'khajuraho-stay', base: 'Khajuraho', nights: 4, area: 'Western temples access area', nightly: 'Check live rates', state: 'suggested', options: [
+        { name: 'The LaLiT Temple View Khajuraho', fit: 'Closest luxury temple-view option; budget trade-off', url: 'https://www.thelalit.com/the-lalit-khajuraho/' },
+        { name: 'Radisson Hotel Jass Khajuraho', fit: 'Full-service hotel near the temple circuit', url: 'https://www.radissonhotels.com/en-us/hotels/radisson-khajuraho' },
+        { name: 'MP Tourism Khajuraho accommodation', fit: 'Official local/value options including MPT properties', url: 'https://www.mptourism.com/accomodation.php?destination=Khajuraho' },
+      ] },
+      { id: 'panna-stay', base: 'Panna', nights: 3, area: 'Panna Tiger Reserve / Madla access', nightly: 'Check live rates', state: 'suggested', options: [
+        { name: 'Ken River Lodge', fit: 'Established reserve-edge wildlife lodge', url: 'https://www.kenriverlodge.com/' },
+        { name: 'Pashan Garh, a Taj Safari', fit: 'Premium wildlife lodge; major budget trade-off', url: 'https://www.tajhotels.com/en-in/hotels/pashan-garh-panna-national-park' },
+        { name: 'Hotel Shanvi Landmark', fit: 'Panna town alternative', url: 'https://hotelshanvilandmarkpanna.com/' },
+      ] },
     ],
     bookings: [],
     map_points: [
@@ -112,9 +150,9 @@ export function acceptProposedRevision(state) {
   return next;
 }
 
-export function addUploadedBooking(state) {
+export function addUploadedBooking(state, type) {
   const next = clone(state);
-  next.bookings.push({ id: `upload-${next.bookings.length + 1}`, type: 'Document', label: 'Uploaded confirmation', state: 'needs_review', detail: 'Fixture upload · details not yet extracted' });
+  next.bookings.push({ id: `upload-${next.bookings.length + 1}`, type, label: `Uploaded ${type.toLowerCase()} confirmation`, state: 'needs_review', detail: 'Fixture upload · details not yet extracted' });
   return next;
 }
 

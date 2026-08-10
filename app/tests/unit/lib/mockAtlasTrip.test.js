@@ -35,8 +35,8 @@ describe('mock Atlas itinerary and Dashboard contract', () => {
   });
 
   it('keeps uploaded confirmations honest and can confirm a suggested stay', () => {
-    let state = addUploadedBooking(createAtlasDashboardState());
-    expect(state.bookings[0]).toMatchObject({ state: 'needs_review', detail: expect.stringContaining('not yet extracted') });
+    let state = addUploadedBooking(createAtlasDashboardState(), 'Transport');
+    expect(state.bookings[0]).toMatchObject({ type: 'Transport', state: 'needs_review', detail: expect.stringContaining('not yet extracted') });
     state = confirmStay(state, 'gwalior-stay');
     expect(state.stays[0].state).toBe('confirmed');
     expect(state.bookings.at(-1).type).toBe('Stay');

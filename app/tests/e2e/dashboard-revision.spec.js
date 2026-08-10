@@ -50,7 +50,7 @@ test('Dashboard requires Self-Led and uploaded booking state survives refresh', 
   await page.goto('dashboard');
   await expect(page).toHaveURL(/\/app\/choose-plan/);
 
-  await page.getByRole('button', { name: /Open my Self-Led Dashboard/ }).click();
+  await page.getByRole('button', { name: 'Choose Self-Led →' }).click();
   await page.getByRole('button', { name: 'Bookings' }).click();
   await page.getByRole('button', { name: 'Upload confirmation' }).click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('twm_prototype_state_v1')).trip.atlasState.bookings.length)).toBe(1);

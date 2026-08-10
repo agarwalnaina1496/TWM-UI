@@ -47,7 +47,7 @@ export default function TripPreview() {
       <Link className="back-link" to="/destinations">← Back to destinations</Link>
       <span className="eyebrow">Guide Plan Builder · Draft revision {plan.revision}</span>
       <h1>{plan.circuit.name} <em>| {plan.summary.duration_days} days</em></h1>
-      <p className="lede">Shape the route, places, pace and broad days together. Dates can stay open until you book.</p>
+      <p className="lede">Shape the route, places and broad days together. Dates can stay open until you book.</p>
 
       <section className="plan-summary" aria-label="Plan summary">
         <div><strong>{plan.summary.route_stops}</strong><span>route stops</span></div>
@@ -56,14 +56,9 @@ export default function TripPreview() {
         <div><strong>{money(plan.summary.rough_group_cost_inr.low)}–{money(plan.summary.rough_group_cost_inr.high)}</strong><span>rough total for two</span></div>
       </section>
 
-      <section className="builder-controls" aria-label="Trip timing and pace">
+      <section className="builder-controls" aria-label="Trip timing">
         <label>Optional start date<input type="date" value={plan.start_date || ''} onChange={event => revise({ type: 'SET_START_DATE', value: event.target.value })} /></label>
         <div className="date-mode">{plan.start_date ? `${plan.start_date} → ${plan.end_date}` : `Duration-only · Day 1–${plan.summary.duration_days}`}</div>
-        <label>Pace<select value={plan.pace} onChange={event => revise({ type: 'SET_PACE', value: event.target.value })}>
-          <option>Easygoing and balanced — culture, relaxation and nature</option>
-          <option>Slower with more downtime</option>
-          <option>Active with fuller sightseeing days</option>
-        </select></label>
       </section>
 
       {plan.route_warning && <div className="route-warning" role="alert">⚠ {plan.route_warning}</div>}
