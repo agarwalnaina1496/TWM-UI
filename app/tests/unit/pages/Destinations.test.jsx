@@ -168,6 +168,27 @@ describe('Destinations', () => {
     expect(screen.getAllByText(/not checked prices/i).length).toBeGreaterThan(0);
   });
 
+  it('renders the golden Delhi journey and selects the Madhya Pradesh circuit', async () => {
+    localStorage.setItem('twm_prototype_state_v1', JSON.stringify({
+      auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' },
+      trip: { origin: 'Delhi', travelers: 2, scenarioId: 'self_led_mp_year_end_couple_v1' },
+      savedTrips: [],
+    }));
+    renderDestinations();
+    await act(async () => vi.advanceTimersByTime(900));
+    expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument();
+    expect(screen.getByText('Kerala Culture, Backwaters and Coast')).toBeInTheDocument();
+    expect(screen.getByText('Assam–Meghalaya Nature and Culture')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByText(/Plan this trip/)[0]);
+    await act(async () => {});
+    const saved = JSON.parse(localStorage.getItem('twm_prototype_state_v1'));
+    expect(saved.trip.destination).toEqual({
+      type: 'circuit',
+      name: 'Madhya Pradesh Heritage and Nature',
+      places: ['Gwalior', 'Orchha', 'Khajuraho', 'Panna'],
+    });
+  });
+
   it('More like this refreshes ranking around the referenced option without committing selection', () => {
     seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
     renderDestinations();

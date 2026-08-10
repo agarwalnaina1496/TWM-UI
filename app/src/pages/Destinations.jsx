@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { safeRecommendationViewModel } from '../lib/recommendationViewModel.js';
+import { GOLDEN_MERIDIAN_METADATA, GOLDEN_SCENARIO_ID, goldenMeridianFixture } from '../data/goldenMeridianFixture.js';
 import '../styles/destinations.css';
 
 const BUDGET_LABEL = { budget: 'Under ₹30k', mid: '₹30k–70k', premium: '₹70k+', flexible: 'Flexible budget' };
@@ -159,6 +160,9 @@ const PROTOTYPE_METADATA = {
 };
 
 function matchViewModel(trip, referenceOptionId = null) {
+  if (trip.scenarioId === GOLDEN_SCENARIO_ID || trip.origin === 'Delhi') {
+    return safeRecommendationViewModel(goldenMeridianFixture(referenceOptionId), GOLDEN_MERIDIAN_METADATA);
+  }
   return safeRecommendationViewModel(fakeMatchResults(trip, referenceOptionId), PROTOTYPE_METADATA);
 }
 
@@ -318,7 +322,8 @@ export default function Destinations() {
             const isOpen = openId === d.key;
             const priceStep = priceSteps[d.key];
             const priceEvidence = priceStep === undefined ? null : d.prototype.price_preview[priceStep];
-            const totalEstimate = d.prototype.estimated_per_person.map(value => value * (trip.travelers || 1));
+            const totalEstimate = d.prototype.estimated_group
+              || d.prototype.estimated_per_person.map(value => value * (trip.travelers || 1));
             return (
               <div key={d.key} className={`dest-card${isBest ? ' best' : ''}`}>
                 {isBest && <span className="pick-badge">Our pick</span>}
