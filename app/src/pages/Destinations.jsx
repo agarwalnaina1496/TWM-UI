@@ -9,6 +9,11 @@ const BUDGET_LABEL = { budget: 'Under ₹30k', mid: '₹30k–70k', premium: '�
 const STYLE_LABEL = { relaxed: 'Relaxed pace', packed: 'Packed days', nature: 'Nature-first', food: 'Food & culture-led' };
 
 const OUTCOME_ICON = { MATCH: '✓', TRADEOFF: '⚠', MISMATCH: '✕' };
+const BEEN_BEFORE_OPTIONS = [
+  { id: 'loved', icon: '❤️', label: 'Loved it' },
+  { id: 'would-go-back', icon: '🔁', label: 'Would go back' },
+  { id: 'not-for-me', icon: '😐', label: 'Not for me' },
+];
 
 // Fake-backend: stands in for a real Meridian/Matcher recommendation call.
 // Shaped to mirror Meridian's real contract — a shared traveler_criteria catalog
@@ -174,22 +179,27 @@ function criterionLabel(travelerCriteria, criterionId) {
   return travelerCriteria.find(c => c.id === criterionId)?.label || criterionId;
 }
 
+const CRITERION_ICON = { style: '🎨', budget: '💰', 'travel-time': '✈️', weather: '🌤️', duration: '📅', experience_mix: '🎨', pace: '🧭' };
+const criterionIcon = criterionId => CRITERION_ICON[criterionId] || '📌';
+
+const COST_ICON_RULES = [
+  [/fuel|road|transport/i, '🚗'], [/stay|hotel|houseboat/i, '🏨'], [/activit/i, '🎟️'],
+];
+const costIcon = label => (COST_ICON_RULES.find(([re]) => re.test(label)) || [null, '💳'])[1];
+
 function DetailBlock({ detail }) {
   if (detail.type === 'bullets') {
     return (
-      <div className="detail-tags">
-        {detail.items.map(item => <span key={item} className="detail-tag">{item}</span>)}
-      </div>
+      <ul className="detail-checklist">
+        {detail.items.map(item => <li key={item}>{item}</li>)}
+      </ul>
     );
   }
   if (detail.type === 'facts') {
     return (
-      <div className="detail-facts">
+      <div className="detail-fact-rows">
         {detail.facts.map(f => (
-          <div key={f.label} className="detail-fact">
-            <span className="detail-fact-label">{f.label}</span>
-            <span className="detail-fact-value">{f.value}</span>
-          </div>
+          <div key={f.label} className="detail-fact-row"><span className="fact-icon">📍</span><span className="detail-fact-label">{f.label}</span><span className="detail-fact-value">{f.value}</span></div>
         ))}
       </div>
     );
@@ -198,19 +208,16 @@ function DetailBlock({ detail }) {
     const currency = detail.currency === 'INR' ? '₹' : detail.currency;
     const isGroupTotal = detail.items.some(item => item.group);
     return (
-      <table className="detail-cost-table">
-        <thead>
-          <tr><th>Item</th><th>{isGroupTotal ? 'Total party' : 'Per person'}</th></tr>
-        </thead>
-        <tbody>
-          {detail.items.map(item => (
-            <tr key={item.label}>
-              <td>{item.label}</td>
-              <td>{currency}{(item.per_person || item.group).minimum.toLocaleString('en-IN')}–{(item.per_person || item.group).maximum.toLocaleString('en-IN')}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="detail-cost-rows">
+        <span className="cost-basis">{isGroupTotal ? 'Total party' : 'Per person'}</span>
+        {detail.items.map(item => (
+          <div key={item.label} className="detail-cost-row">
+            <span className="cost-icon">{costIcon(item.label)}</span>
+            <span className="cost-label">{item.label}</span>
+            <span className="cost-value">≈{currency}{(item.per_person || item.group).minimum.toLocaleString('en-IN')}–{(item.per_person || item.group).maximum.toLocaleString('en-IN')}</span>
+          </div>
+        ))}
+      </div>
     );
   }
   return null;
@@ -230,6 +237,7 @@ export default function Destinations() {
   const [match, setMatch] = useState(null);
   const [matchError, setMatchError] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [beenBefore, setBeenBefore] = useState({});
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -324,8 +332,9 @@ export default function Destinations() {
                     {d.evaluations.map(ev => (
                       <div key={ev.criterion_id} className="eval-block">
                         <div className="eval-head">
-                          <span className={`criteria-pill outcome-${ev.outcome.toLowerCase()}`}>{OUTCOME_ICON[ev.outcome]} {criterionLabel(match.criteria, ev.criterion_id)}</span>
+                          <span className="eval-icon">{criterionIcon(ev.criterion_id)}</span>
                           <span className="eval-conclusion">{ev.conclusion}</span>
+                          <span className={`criteria-pill outcome-${ev.outcome.toLowerCase()}`}>{OUTCOME_ICON[ev.outcome]}</span>
                         </div>
                         {ev.details.map((detail, di) => <DetailBlock key={di} detail={detail} />)}
                         {ev.tradeoffs?.map(t => <div key={t} className="eval-tradeoff">⚠ {t}</div>)}
@@ -346,6 +355,16 @@ export default function Destinations() {
                   {nextMode === 'preview'
                     ? <span className="btn btn-primary" onClick={() => planThis(d)}>Plan this trip →</span>
                     : <Link className="btn btn-primary" to="/trip-preview" onClick={() => updateTrip({ destination: toOption(d) })}>Want to plan this? →</Link>}
+                </div>
+                <div className="been-before">
+                  <span className="been-before-label">Been here before? <em>tell us how it was</em></span>
+                  <div className="been-before-opts">
+                    {BEEN_BEFORE_OPTIONS.map(opt => (
+                      <button type="button" key={opt.id} className={`been-before-pill${beenBefore[d.key] === opt.id ? ' selected' : ''}`} onClick={() => setBeenBefore(previous => ({ ...previous, [d.key]: previous[d.key] === opt.id ? null : opt.id }))}>
+                        <span>{opt.icon}</span>{opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             );

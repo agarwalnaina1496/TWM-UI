@@ -45,7 +45,7 @@ export default function TripPreview() {
   return (
     <main className="wrap plan-builder">
       <Link className="back-link" to="/destinations">← Back to destinations</Link>
-      <span className="eyebrow">Guide Plan Builder · Draft revision {plan.revision}</span>
+      <span className="eyebrow">Guide Plan Builder</span>
       <h1>{plan.circuit.name} <em>| {plan.summary.duration_days} days</em></h1>
       <p className="lede">Shape the route, places and broad days together. Dates can stay open until you book.</p>
 
@@ -68,7 +68,7 @@ export default function TripPreview() {
         {plan.day_blocks.map((block, blockIndex) => (
           <article className="day-card route-block" key={block.id}>
             <header className="day-card-head">
-              <div><span className="daynum">STOP {blockIndex + 1}</span><h2>{block.stop}</h2></div>
+              <div className="day-card-title"><span className="daynum">{blockIndex + 1}</span><div><span className="stop-eyebrow">Stop {blockIndex + 1}</span><h2>{block.stop}</h2></div></div>
               <div className="route-actions">
                 {block.id !== 'departure' && <>
                   <button type="button" aria-label={`Move ${block.stop} earlier`} onClick={() => revise({ type: 'MOVE_BLOCK', block_id: block.id, direction: -1 })}>↑</button>
@@ -82,8 +82,6 @@ export default function TripPreview() {
                 <li className="item-row" key={`${block.id}-${place}`}>
                   <span>{place}</span>
                   <span className="item-actions">
-                    <button type="button" aria-label={`Move ${place} up`} onClick={() => revise({ type: 'MOVE_PLACE', block_id: block.id, index, direction: -1 })}>↑</button>
-                    <button type="button" aria-label={`Move ${place} down`} onClick={() => revise({ type: 'MOVE_PLACE', block_id: block.id, index, direction: 1 })}>↓</button>
                     <button type="button" aria-label={`Remove ${place}`} onClick={() => revise({ type: 'REMOVE_PLACE', block_id: block.id, index })}>Remove</button>
                   </span>
                 </li>

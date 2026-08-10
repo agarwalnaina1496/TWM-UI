@@ -118,7 +118,7 @@ describe('Destinations', () => {
     expect(screen.getByText('Nearest airport')).toBeInTheDocument();
     expect(screen.getByText('Chennai, ~3h drive')).toBeInTheDocument();
     expect(screen.getByText('Stay + activities')).toBeInTheDocument();
-    expect(screen.getByText('₹6,000–9,000')).toBeInTheDocument();
+    expect(screen.getByText('≈₹6,000–9,000')).toBeInTheDocument();
   });
 
   it('expands the reason-toggle to reveal the disclosed trade-off explanation', () => {
@@ -216,7 +216,7 @@ describe('Destinations', () => {
 
     expect(screen.queryByText('Check prices')).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByText('Why this one')[0]);
-    expect(screen.getByText('₹8,000–13,000')).toBeInTheDocument();
+    expect(screen.getByText('≈₹8,000–13,000')).toBeInTheDocument();
     expect(screen.getByText('Total party')).toBeInTheDocument();
     expect(screen.getByText('Delhi round trip and intercity transport')).toBeInTheDocument();
   });

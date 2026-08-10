@@ -31,6 +31,13 @@ const INITIAL_DAYS = [
   day(14, 'Return', 'Journey toward Delhi', [{ time: 'Flexible', title: 'Return journey toward Delhi', note: 'Exact route depends on confirmed transport.' }], 3000, 5000),
 ];
 
+export const TRAVEL_TIPS = [
+  { icon: '📶', text: 'Network is patchy between Orchha and Khajuraho — download offline maps first.' },
+  { icon: '💵', text: 'Carry cash — many local vendors and stays near Panna do not accept cards.' },
+  { icon: '🧴', text: 'Pack sunscreen and a hat — December afternoons stay sunny at these forts.' },
+  { icon: '🧥', text: 'Evenings turn cool (8–15°C) — a light jacket helps after sunset.' },
+];
+
 const COST_ITEMS = [
   { id: 'transport', label: 'Delhi return and circuit transport', low: 12000, high: 18000 },
   { id: 'stays', label: '13 nights in suggested areas', low: 25000, high: 32000 },
