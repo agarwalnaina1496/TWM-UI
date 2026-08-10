@@ -1,305 +1,113 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
+import { approveGuidePlan, createInitialGuidePlan, executeGuideRevision } from '../lib/mockGuidePlan.js';
 import '../styles/preview.css';
 
-// Fake-backend: stands in for Guide's places-finalization + day-wise plan output.
-// Real, destination-specific places (not generic placeholders) — keeps the prototype
-// believable even though the itinerary logic behind it is still fixture-driven.
-const REAL_PLACE_SETS = {
-  'coorg': {
-    picked: ['Abbey Falls', "Raja's Seat", 'Namdroling Monastery', 'Coffee estate walk & tasting', 'Dubare Elephant Camp'],
-    more: ['Talakaveri', 'Mandalpatti viewpoint', 'Chelavara Falls', 'Iruppu Falls'],
-  },
-  'goa': {
-    picked: ['Fort Aguada', 'Baga Beach', 'Anjuna flea market', 'Basilica of Bom Jesus', 'Chapora Fort sunset'],
-    more: ['Dudhsagar Falls', 'Palolem Beach', 'Reis Magos Fort', 'Old Goa churches'],
-  },
-  'manali': {
-    picked: ['Solang Valley', 'Hadimba Temple', 'Old Manali cafes', 'Jogini Falls trek', 'Vashisht hot springs'],
-    more: ['Rohtang Pass', 'Naggar Castle', 'Manu Temple', 'Kasol day trip'],
-  },
-  'kerala': {
-    picked: ['Alleppey backwater houseboat', 'Fort Kochi walk', 'Munnar tea gardens', 'Periyar wildlife sanctuary', 'Kathakali performance'],
-    more: ['Varkala cliff beach', 'Kumarakom bird sanctuary', 'Thekkady spice plantation', 'Vypin lighthouse'],
-  },
-  'shillong': {
-    picked: ['Elephant Falls', 'Umiam Lake', 'Ward’s Lake', 'Living Root Bridges (Cherrapunji day trip)', 'Police Bazaar'],
-    more: ['Mawlynnong village', 'Shillong Peak', 'Dainthlen Falls', 'Laitlum Canyons'],
-  },
-  'kashmir': {
-    picked: ['Dal Lake shikara ride', 'Mughal Gardens', 'Gulmarg Gondola', 'Pahalgam valley', 'Old Srinagar houseboats'],
-    more: ['Betaab Valley', 'Sonmarg glacier', 'Shankaracharya Temple', 'Doodhpathri'],
-  },
-  'ladakh': {
-    picked: ['Pangong Tso', 'Leh Palace', 'Magnetic Hill', 'Shanti Stupa', 'Nubra Valley'],
-    more: ['Khardung La pass', 'Thiksey Monastery', 'Diskit Monastery', 'Tso Moriri'],
-  },
-  'pondicherry': {
-    picked: ['French Quarter (White Town)', 'Promenade Beach', 'Auroville & Matrimandir', 'Sri Aurobindo Ashram', 'Paradise Beach'],
-    more: ['Botanical Garden', 'Serenity Beach', 'Bharathi Park'],
-  },
-  'munnar': {
-    picked: ['Eravikulam National Park', 'Mattupetty Dam', 'Tea Museum', 'Top Station viewpoint', 'Kolukkumalai sunrise trek'],
-    more: ['Echo Point', 'Attukad Waterfalls', 'Pothamedu viewpoint'],
-  },
-  'ooty': {
-    picked: ['Ooty Lake', 'Botanical Garden', 'Doddabetta Peak', 'Nilgiri Mountain Railway', 'Rose Garden'],
-    more: ['Pykara Falls', 'Avalanche Lake', 'Wax World'],
-  },
-  'rishikesh': {
-    picked: ['Laxman Jhula', 'Triveni Ghat aarti', 'Beatles Ashram', 'River rafting on the Ganges', 'Neer Garh Waterfall'],
-    more: ['Kunjapuri Temple sunrise', 'Patna Waterfall', 'Ram Jhula'],
-  },
-};
-const DEFAULT_PLACE_SET = {
-  picked: ['Old town walking tour', 'Central viewpoint', 'Local market visit', 'Signature local meal', 'Sunset spot'],
-  more: ['Nearby day-trip viewpoint', 'Popular local cafe', 'Riverside walk'],
-};
-
-const BUDGET_LABELS = {
-  budget: 'Under ₹30,000', mid: '₹30,000–70,000', premium: '₹70,000+', flexible: 'Flexible budget',
-};
-
-function formatDateRange(start, end) {
-  if (!start) return '';
-  const opts = { day: 'numeric', month: 'short' };
-  const s = new Date(start).toLocaleDateString('en-IN', opts);
-  if (!end || end === start) return s;
-  const e = new Date(end).toLocaleDateString('en-IN', opts);
-  return `${s} – ${e}`;
-}
-
-function buildDays(places, tripLength) {
-  const n = Math.max(1, tripLength || 3);
-  const days = [];
-  for (let d = 1; d <= n; d++) {
-    const items = [];
-    if (d === 1) {
-      items.push({ id: `d${d}a`, text: 'Arrive + check in' });
-      const p = places[0];
-      if (p) items.push({ id: `d${d}b`, text: p.name });
-      days.push({ day: d, title: 'Settle in', items });
-    } else if (d === n) {
-      items.push({ id: `d${d}a`, text: 'Slow morning' });
-      items.push({ id: `d${d}b`, text: 'Depart' });
-      days.push({ day: d, title: 'Wind down + depart', items });
-    } else {
-      const p1 = places[(d - 1) % places.length];
-      const p2 = places[d % places.length];
-      if (p1) items.push({ id: `d${d}a`, text: p1.name });
-      if (p2 && p2 !== p1) items.push({ id: `d${d}b`, text: p2.name });
-      if (items.length === 0) items.push({ id: `d${d}a`, text: 'Free time to explore' });
-      days.push({ day: d, title: 'Explore', items });
-    }
-  }
-  return days;
-}
-
-function fakePlacesAndDays(destination, tripLength) {
-  const key = Object.keys(REAL_PLACE_SETS).find(k => destination.toLowerCase().includes(k));
-  const set = REAL_PLACE_SETS[key] || DEFAULT_PLACE_SET;
-  const places = set.picked.map((name, i) => ({ id: `p${i + 1}`, name }));
-  return { places, days: buildDays(places, tripLength) };
-}
-
-function moreSuggestions(destination) {
-  const key = Object.keys(REAL_PLACE_SETS).find(k => destination.toLowerCase().includes(k));
-  const set = REAL_PLACE_SETS[key] || DEFAULT_PLACE_SET;
-  return set.more.map((name, i) => ({ id: `s${i + 1}`, name }));
-}
-
-// Detects stale fixture places left over from before the destination was set
-// (e.g. from an earlier prototype session), so the UI never shows mismatched places.
-function placesMatchDestination(places, destination) {
-  const key = Object.keys(REAL_PLACE_SETS).find(k => destination.toLowerCase().includes(k));
-  const set = REAL_PLACE_SETS[key] || DEFAULT_PLACE_SET;
-  return places.length > 0 && places.every(p => set.picked.includes(p.name));
-}
+const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
 export default function TripPreview() {
   const navigate = useNavigate();
   const { trip, updateTrip } = useTrip();
-  const [placesApproved, setPlacesApproved] = useState(false);
-  const [itineraryApproved, setItineraryApproved] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [scoutOpen, setScoutOpen] = useState(false);
-  const [scoutContext, setScoutContext] = useState('');
-  const [scoutThread, setScoutThread] = useState([]);
-  const [scoutNote, setScoutNote] = useState('');
+  const [plan, setPlan] = useState(() => trip.guidePlan || createInitialGuidePlan(trip));
+  const [message, setMessage] = useState('');
+  const [newPlaces, setNewPlaces] = useState({});
 
   useEffect(() => {
-    const destination = trip.destination?.name || 'your destination';
-    if (trip.places.length === 0 || !placesMatchDestination(trip.places, destination)) {
-      const { places, days } = fakePlacesAndDays(destination, trip.tripLength);
-      updateTrip({ places, days });
-    }
-    setSuggestions(moreSuggestions(destination));
+    if (!trip.guidePlan) updateTrip({ guidePlan: plan });
+    // The initial authoritative fixture is persisted once for refresh/resume.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function removePlace(id) {
-    const removed = trip.places.find(p => p.id === id);
-    updateTrip({ places: trip.places.filter(p => p.id !== id) });
-    if (removed) setSuggestions(prev => [...prev, removed]);
+  function revise(command) {
+    const response = executeGuideRevision(plan, { ...command, expected_revision: plan.revision });
+    if (response.status !== 'SUCCESS') {
+      setMessage(response.message);
+      return;
+    }
+    setPlan(response.plan);
+    updateTrip({ guidePlan: response.plan });
+    setMessage(response.message);
   }
 
-  function addSuggestion(id) {
-    const added = suggestions.find(s => s.id === id);
-    if (!added) return;
-    setSuggestions(prev => prev.filter(s => s.id !== id));
-    updateTrip({ places: [...trip.places, added] });
-  }
-
-  function removeDayItem(dayNum, itemId) {
-    updateTrip({
-      days: trip.days.map(d => d.day === dayNum ? { ...d, items: d.items.filter(i => i.id !== itemId) } : d),
-    });
-  }
-
-  function openScout(context) {
-    setScoutContext(context);
-    setScoutThread([{ who: 'scout', text: `What would you like to change about ${context}?` }]);
-    setScoutNote('');
-    setScoutOpen(true);
-  }
-
-  function closeScout() {
-    setScoutOpen(false);
-  }
-
-  function approveItinerary() {
-    setItineraryApproved(true);
+  function generate() {
+    const response = approveGuidePlan(plan);
+    if (response.status !== 'PLAN_APPROVED') {
+      setMessage(response.message);
+      return;
+    }
+    updateTrip({ guidePlan: plan, guideSnapshot: response.snapshot, tripLength: plan.summary.duration_days });
     navigate('/choose-plan');
   }
 
-  function sendScout() {
-    if (!scoutNote.trim()) return;
-    const note = scoutNote.trim();
-    setScoutThread(prev => [
-      ...prev,
-      { who: 'user', text: note },
-      { who: 'scout', text: "Got it — noted for this prototype. Once this is wired to the real Guide backend, Scout would update the plan here directly." },
-    ]);
-    setScoutNote('');
-  }
-
   return (
-    <div className="wrap">
-      <Link className="back-link" to="/scout-chat">&larr; Back to details</Link>
-      <h1>{trip.destination?.name || 'Your trip'} <em>| {trip.days.length || 3} Days</em></h1>
-      <div className="trip-recap-row">
-        <span className="recap-item">🕐 {trip.days.length || 3} Days</span>
-        <span className="recap-item">👤 {trip.travelers} {trip.travelers === 1 ? 'traveler' : 'travelers'}</span>
-        <span className="recap-item">₹ Budget: {BUDGET_LABELS[trip.budget] || 'Flexible budget'}</span>
-        {trip.departDate ? (
-          <span className="recap-item">📅 {formatDateRange(trip.departDate, trip.returnDate)}</span>
-        ) : trip.month && trip.month !== 'flexible' && (
-          <span className="recap-item">📅 {trip.month}</span>
-        )}
-        {trip.origin && (
-          <span className="recap-item">📍 From {trip.origin}</span>
-        )}
-        {trip.style && (
-          <span className="recap-item">🎯 "{trip.style}"</span>
-        )}
-      </div>
-      <p className="lede" style={{ maxWidth: 'none', whiteSpace: 'nowrap' }}>Approve places first, then shape the day-by-day — nothing here is final until you're ready to move forward.</p>
+    <main className="wrap plan-builder">
+      <Link className="back-link" to="/destinations">← Back to destinations</Link>
+      <span className="eyebrow">Guide Plan Builder · Draft revision {plan.revision}</span>
+      <h1>{plan.circuit.name} <em>| {plan.summary.duration_days} days</em></h1>
+      <p className="lede">Shape the route, places, pace and broad days together. Dates can stay open until you book.</p>
 
-      <div>
-        <div className={`step ${placesApproved ? 'done' : 'active'}`}>
-          <div className="step-head"><div className="step-num">1</div><div className="step-title">Places to visit</div></div>
-          <div className="day-card">
-            <div className="day-card-head">
-              <div className="day-card-title">Places to visit</div>
-              <span className="change-pill" onClick={() => openScout('Places to visit')}>Change places</span>
-            </div>
+      <section className="plan-summary" aria-label="Plan summary">
+        <div><strong>{plan.summary.route_stops}</strong><span>route stops</span></div>
+        <div><strong>{plan.summary.place_count}</strong><span>planned items</span></div>
+        <div><strong>{plan.summary.duration_days}</strong><span>days</span></div>
+        <div><strong>{money(plan.summary.rough_group_cost_inr.low)}–{money(plan.summary.rough_group_cost_inr.high)}</strong><span>rough total for two</span></div>
+      </section>
+
+      <section className="builder-controls" aria-label="Trip timing and pace">
+        <label>Optional start date<input type="date" value={plan.start_date || ''} onChange={event => revise({ type: 'SET_START_DATE', value: event.target.value })} /></label>
+        <div className="date-mode">{plan.start_date ? `${plan.start_date} → ${plan.end_date}` : `Duration-only · Day 1–${plan.summary.duration_days}`}</div>
+        <label>Pace<select value={plan.pace} onChange={event => revise({ type: 'SET_PACE', value: event.target.value })}>
+          <option>Easygoing and balanced — culture, relaxation and nature</option>
+          <option>Slower with more downtime</option>
+          <option>Active with fuller sightseeing days</option>
+        </select></label>
+      </section>
+
+      {plan.route_warning && <div className="route-warning" role="alert">⚠ {plan.route_warning}</div>}
+      {message && <div className="revision-message" role="status">{message}</div>}
+
+      <section aria-label="Route and broad day plan">
+        {plan.day_blocks.map((block, blockIndex) => (
+          <article className="day-card route-block" key={block.id}>
+            <header className="day-card-head">
+              <div><span className="daynum">STOP {blockIndex + 1}</span><h2>{block.stop}</h2></div>
+              <div className="route-actions">
+                {block.id !== 'departure' && <>
+                  <button type="button" aria-label={`Move ${block.stop} earlier`} onClick={() => revise({ type: 'MOVE_BLOCK', block_id: block.id, direction: -1 })}>↑</button>
+                  <button type="button" aria-label={`Move ${block.stop} later`} onClick={() => revise({ type: 'MOVE_BLOCK', block_id: block.id, direction: 1 })}>↓</button>
+                </>}
+                <label>Days<input aria-label={`${block.stop} days`} type="number" min="1" value={block.days} onChange={event => revise({ type: 'SET_BLOCK_DAYS', block_id: block.id, value: Number(event.target.value) })} /></label>
+              </div>
+            </header>
             <ul className="plan-list">
-              {trip.places.map(p => (
-                <li key={p.id} className="item-row">
-                  <span>{p.name}</span>
-                  <span className="mini-btn danger icon-btn" onClick={() => removePlace(p.id)} title="Remove" aria-label="Remove">&minus;</span>
+              {block.places.map((place, index) => (
+                <li className="item-row" key={`${block.id}-${place}`}>
+                  <span>{place}</span>
+                  <span className="item-actions">
+                    <button type="button" aria-label={`Move ${place} up`} onClick={() => revise({ type: 'MOVE_PLACE', block_id: block.id, index, direction: -1 })}>↑</button>
+                    <button type="button" aria-label={`Move ${place} down`} onClick={() => revise({ type: 'MOVE_PLACE', block_id: block.id, index, direction: 1 })}>↓</button>
+                    <button type="button" aria-label={`Remove ${place}`} onClick={() => revise({ type: 'REMOVE_PLACE', block_id: block.id, index })}>Remove</button>
+                  </span>
                 </li>
               ))}
-              {trip.places.length === 0 && <li style={{ color: 'var(--tm)' }}>No places left — ask Scout to suggest some.</li>}
             </ul>
-            {suggestions.length > 0 && (
-              <div className="suggest-row">
-                {suggestions.map(s => (
-                  <span key={s.id} className="suggest-chip" onClick={() => addSuggestion(s.id)}>
-                    <span className="mini-btn icon-btn" title="Add" aria-label="Add">&#43;</span> {s.name}
-                  </span>
-                ))}
-              </div>
+            <div className="add-place-row">
+              <input aria-label={`Add place to ${block.stop}`} value={newPlaces[block.id] || ''} placeholder="Add a place or broad activity" onChange={event => setNewPlaces(previous => ({ ...previous, [block.id]: event.target.value }))} />
+              <button type="button" onClick={() => { revise({ type: 'ADD_PLACE', block_id: block.id, value: newPlaces[block.id] }); setNewPlaces(previous => ({ ...previous, [block.id]: '' })); }}>Add</button>
+            </div>
+            {block.suggestion && !block.places.includes(block.suggestion.name) && (
+              <div className="reasoned-suggestion"><span><strong>Guide suggests {block.suggestion.name}</strong> — {block.suggestion.reason}</span><button type="button" onClick={() => revise({ type: 'ADD_PLACE', block_id: block.id, value: block.suggestion.name })}>Add suggestion</button></div>
             )}
-            {!placesApproved && (
-              <div style={{ textAlign: 'right', marginTop: 12 }}>
-                <span className="btn btn-primary" onClick={() => setPlacesApproved(true)}>✓ Approve places</span>
-              </div>
-            )}
-          </div>
-        </div>
+          </article>
+        ))}
+      </section>
 
-        <div className={`step ${placesApproved ? 'active' : ''}`}>
-          <div className="step-head"><div className="step-num">2</div><div className="step-title">Day-by-day itinerary</div></div>
-
-          {trip.days.map(d => (
-            <div className="day-card" key={d.day}>
-              <div className="day-card-head">
-                <div className="day-card-title"><span className="daynum">DAY {d.day}</span> {d.title}</div>
-                <span className="change-pill" onClick={() => openScout(`Day ${d.day}`)}>Change day</span>
-              </div>
-              <ul className="plan-list">
-                {d.items.map(item => (
-                  <li key={item.id} className="item-row">
-                    <span>{item.text}</span>
-                    <span className="mini-btn icon-btn" onClick={() => removeDayItem(d.day, item.id)} title="Remove" aria-label="Remove">&minus;</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-          {placesApproved && !itineraryApproved && (
-            <div style={{ textAlign: 'right', marginBottom: 20 }}>
-              <span className="btn btn-primary" onClick={approveItinerary}>✓ Approve itinerary</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <span className="scout-fab" onClick={() => openScout(trip.destination?.name || 'your trip')} title="Chat with Scout">💬</span>
-
-      {scoutOpen && (
-        <>
-          <div className="scout-backdrop" onClick={closeScout} />
-          <div className="scout-sheet">
-
-            <div className="scout-sheet-head">
-              <div className="scout-avatar">S</div>
-              <div>
-                <div className="scout-name">Scout</div>
-                <div className="scout-sub">TravelWithMe assistant</div>
-              </div>
-              <span className="scout-close" onClick={closeScout} aria-label="Close">&times;</span>
-            </div>
-            <div className="scout-sheet-body">
-              {scoutThread.map((m, i) => (
-                <div key={i} className={`scout-bubble ${m.who}`}>{m.text}</div>
-              ))}
-            </div>
-            <div className="scout-sheet-footer">
-              <input
-                className="field-input"
-                placeholder="Type your reply…"
-                value={scoutNote}
-                onChange={e => setScoutNote(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') sendScout(); }}
-              />
-              <span className="scout-send" onClick={sendScout} aria-label="Send">➤</span>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+      <footer className="builder-footer">
+        <button type="button" className="btn btn-ghost" disabled={!plan.history.length} onClick={() => revise({ type: 'UNDO' })}>Undo last change</button>
+        <button type="button" className="btn btn-primary" onClick={generate}>Generate detailed itinerary →</button>
+      </footer>
+      <small>Fixture-backed Guide revisions — no Backend or agent call was made.</small>
+    </main>
   );
 }

@@ -17,6 +17,8 @@ const DEFAULT_TRIP = {
   tripLength: 3,   // number of days, either entered directly or derived from start/end dates
   places: [],   // [{ id, name, note }]
   days: [],     // [{ day, title, items: [{ id, text }] }]
+  guidePlan: null,     // authoritative mock Guide draft used by TWM-105
+  guideSnapshot: null, // frozen PLAN_APPROVED handoff consumed by TWM-107
   tripType: 'round',    // 'round' | 'one-way'
   departDate: '',       // ISO date string, e.g. '2026-11-14'
   returnDate: '',       // ISO date string, only used when tripType === 'round'
