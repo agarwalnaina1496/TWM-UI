@@ -17,10 +17,10 @@ describe('ChoosePlan operating-model fork', () => {
     expect(screen.getAllByText(/TWM-Led/).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Choose TWM-Led →' })).toBeDisabled();
   });
-  it('persists Self-Led ownership before entering Logistics', async () => {
+  it('persists Self-Led ownership before entering the Dashboard', async () => {
     render(<MemoryRouter><ChoosePlan /></MemoryRouter>);
     await userEvent.click(screen.getByRole('button', { name: 'Choose Self-Led →' }));
     expect(updateTrip).toHaveBeenCalledWith({ plan: 'self-led', atlasState: expect.objectContaining({ mode: 'self-led' }) });
-    expect(navigate).toHaveBeenCalledWith('/logistics');
+    expect(navigate).toHaveBeenCalledWith('/dashboard');
   });
 });

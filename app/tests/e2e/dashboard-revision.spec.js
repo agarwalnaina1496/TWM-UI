@@ -53,8 +53,6 @@ test('Dashboard/Logistics require Self-Led and uploaded booking state survives r
   await expect(page).toHaveURL(/\/app\/choose-plan/);
 
   await page.getByRole('button', { name: 'Choose Self-Led →' }).click();
-  await expect(page).toHaveURL(/\/app\/logistics/);
-  await page.getByRole('button', { name: /Continue to dashboard/ }).click();
 
   await expect(page).toHaveURL(/\/app\/dashboard/);
   await page.getByRole('button', { name: 'Transport' }).click();

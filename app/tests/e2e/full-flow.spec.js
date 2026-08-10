@@ -27,10 +27,6 @@ test('full fake-prototype flow: GetStarted through Itinerary', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Choose TWM-Led →' })).toBeDisabled();
   await page.getByText('Choose Self-Led →').click();
 
-  // Logistics -> Dashboard
-  await expect(page).toHaveURL(/\/app\/logistics/);
-  await page.getByRole('button', { name: /Continue to dashboard/ }).click();
-
   await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByRole('navigation', { name: 'Trip Dashboard tabs' })).toBeVisible();
 });
