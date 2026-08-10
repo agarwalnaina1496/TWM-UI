@@ -12,6 +12,7 @@ import Payment from './pages/Payment.jsx';
 import RequestQuote from './pages/RequestQuote.jsx';
 import Itinerary from './pages/Itinerary.jsx';
 import MyTrips from './pages/MyTrips.jsx';
+import JourneyEntry from './pages/JourneyEntry.jsx';
 
 function RequireAuth({ children }) {
   const { hasAccess } = useTrip();
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<RequireAuth><GetStarted /></RequireAuth>} />
         <Route path="/scout-chat" element={<RequireAuth><ScoutChat /></RequireAuth>} />
+        <Route path="/journey-entry" element={<RequireAuth><JourneyEntry /></RequireAuth>} />
         <Route path="/destinations" element={<RequireAuth><Destinations /></RequireAuth>} />
         <Route path="/trip-preview" element={<RequireAuth><TripPreview /></RequireAuth>} />
         <Route path="/logistics" element={<RequireAuth><Logistics /></RequireAuth>} />

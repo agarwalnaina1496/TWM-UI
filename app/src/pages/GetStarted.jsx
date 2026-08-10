@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import '../styles/entry.css';
 
 export default function GetStarted() {
@@ -9,13 +10,13 @@ export default function GetStarted() {
   function route(text) {
     const value = (text ?? input).trim();
     if (!value) return;
-    navigate(`/scout-chat?entry=query&msg=${encodeURIComponent(value)}`);
+    navigate(`/scout-chat?entry=advice&msg=${encodeURIComponent(value)}`);
   }
 
   function handleQuickRoute(kind) {
-    if (kind === 'decided') navigate('/scout-chat?entry=decided');
-    else if (kind === 'discover') navigate('/scout-chat?entry=discover');
-    else if (kind === 'ask') navigate('/scout-chat?entry=ask');
+    if (kind === 'decided') navigate(`/journey-entry?intent=${ENTRY_INTENTS.KNOWN_DESTINATION}`);
+    else if (kind === 'discover') navigate(`/journey-entry?intent=${ENTRY_INTENTS.DISCOVER}`);
+    else if (kind === 'ask') navigate('/scout-chat?entry=advice');
   }
 
   return (
@@ -23,7 +24,7 @@ export default function GetStarted() {
       <div className="entry-hero">
         <span className="eyebrow">✦ Scout &middot; your travel companion</span>
         <h1>Where are we <em>headed</em>?</h1>
-        <p className="lede">Tell Scout a destination, a vague idea, or just a question. The research happens here, with the reasoning shown, and the decisions stay yours.</p>
+        <p className="lede">Choose a direct path, or tell Scout the whole trip in your own words. Scout preserves what matters and hands the trip to the right specialist.</p>
 
         <div className="route-buttons">
           <div className="route-btn" onClick={() => handleQuickRoute('decided')}>
