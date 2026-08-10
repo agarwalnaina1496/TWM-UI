@@ -6,7 +6,6 @@ export const ENTRY_INTENTS = Object.freeze({
 
 export const GOLDEN_SCENARIO_ID = 'self_led_mp_year_end_couple_v1';
 export const GOLDEN_QUERY = `**Planning a 2-week end-of-year trip in India with my spouse — need destinations with mild weather (not too hot, not too cold)!**
-[❓ Travel Question](https://www.reddit.com/r/TravelInIndia/?f=flair_name%3A%22%E2%9D%93%20Travel%20Question%22)
 
 Hey everyone,
 

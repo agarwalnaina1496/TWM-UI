@@ -51,7 +51,7 @@ function groupByMode(modes) {
 export default function Logistics() {
   const navigate = useNavigate();
   const { trip, updateTrip } = useTrip();
-  const set = logisticsFor(trip.destination || 'your destination');
+  const set = logisticsFor(trip.destination?.name || 'your destination');
   const modeGroups = groupByMode(set.modes);
   // Fields can arrive pre-filled from earlier in the flow, but results only ever show after an explicit search.
   const [searched, setSearched] = useState(false);
@@ -79,7 +79,7 @@ export default function Logistics() {
 
   return (
     <div className="wrap">
-      <h1>Stays & travel for <em>{trip.destination || 'your trip'}</em></h1>
+      <h1>Stays & travel for <em>{trip.destination?.name || 'your trip'}</em></h1>
       <p className="lede">Every feasible way to get there, within budget — pick what works, or bring your own booking.</p>
 
       <div className="day-card">
@@ -101,7 +101,7 @@ export default function Logistics() {
           <div>
             <div className="field-label">To</div>
             <div className="field-input" style={{ display: 'flex', alignItems: 'center', color: 'var(--ts)' }}>
-              {trip.destination || 'Your destination'}
+              {trip.destination?.name || 'Your destination'}
             </div>
           </div>
         </div>

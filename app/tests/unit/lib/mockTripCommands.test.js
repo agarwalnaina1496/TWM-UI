@@ -9,6 +9,8 @@ function run(message, trip = {}, expectedVersion = 1) {
 describe('golden Scout command fixtures', () => {
   it('preserves the exact query and verbatim values while asking only origin', () => {
     const response = run(GOLDEN_QUERY);
+    expect(GOLDEN_QUERY).not.toContain('reddit.com');
+    expect(GOLDEN_QUERY).not.toContain('Travel Question');
     expect(response.message).toBe(GOLDEN_MESSAGES.askOrigin);
     expect(response.trip.trip_state.matcher_state.conversation_context.awaiting).toBe('origin');
     expect(response.trip.trip_state.trip_context).toMatchObject(GOLDEN_CONTEXT);
