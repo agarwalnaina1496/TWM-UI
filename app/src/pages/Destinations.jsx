@@ -272,7 +272,7 @@ export default function Destinations() {
   if (trip.month !== 'flexible') pills.push(trip.month);
 
   function toOption(option) {
-    return { type: option.type, name: option.name, places: option.prototype.places };
+    return { id: option.circuit_id || option.destination_id, type: option.type, name: option.name, places: option.prototype.places };
   }
 
   function planThis(option) {

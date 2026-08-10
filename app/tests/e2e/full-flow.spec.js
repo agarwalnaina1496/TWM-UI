@@ -17,8 +17,7 @@ test('full fake-prototype flow: GetStarted through Itinerary', async ({ page }) 
 
   // TripPreview
   await expect(page).toHaveURL(/\/app\/trip-preview/);
-  await page.getByText('✓ Approve places').click();
-  await page.getByText('✓ Approve itinerary').click();
+  await page.getByText('Generate detailed itinerary →').click();
 
   // ChoosePlan -> Self-Led
   await expect(page).toHaveURL(/\/app\/choose-plan/);

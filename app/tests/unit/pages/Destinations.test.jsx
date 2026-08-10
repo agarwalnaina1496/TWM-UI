@@ -151,7 +151,7 @@ describe('Destinations', () => {
     fireEvent.click(planButtons[1]); // second card is the Kochi + Alleppey circuit
 
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    expect(stored.trip.destination).toEqual({ type: 'circuit', name: 'Kochi + Alleppey', places: ['Kochi', 'Alleppey'] });
+    expect(stored.trip.destination).toEqual({ id: 'kochi-alleppey', type: 'circuit', name: 'Kochi + Alleppey', places: ['Kochi', 'Alleppey'] });
   });
 
   it('shows a qualified total-party estimate and practical access without presenting it as checked prices', () => {
@@ -183,6 +183,7 @@ describe('Destinations', () => {
     await act(async () => {});
     const saved = JSON.parse(localStorage.getItem('twm_prototype_state_v1'));
     expect(saved.trip.destination).toEqual({
+      id: 'gwalior-orchha-khajuraho-panna',
       type: 'circuit',
       name: 'Madhya Pradesh Heritage and Nature',
       places: ['Gwalior', 'Orchha', 'Khajuraho', 'Panna'],
