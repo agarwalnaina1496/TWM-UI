@@ -33,8 +33,8 @@ export function executeMockEntryCommand(command, currentTrip = {}) {
     const input = command.message?.trim();
     if (!input) throw new Error('Advice requires a traveler message.');
     agentMeta = { agent: 'scout', prompt_version: 'scout-v1-fixture' };
-    if (!context.scenario_id && (input === GOLDEN_QUERY || /2-week end-of-year trip/i.test(input))) {
-      context = { ...context, ...GOLDEN_CONTEXT };
+    if (input === GOLDEN_QUERY || /2-week end-of-year trip/i.test(input)) {
+      context = { ...GOLDEN_CONTEXT };
       message = GOLDEN_MESSAGES.askOrigin; stage = 'new'; activeAgent = 'scout'; awaiting = 'origin';
     } else if (context.scenario_id === GOLDEN_SCENARIO_ID && !context.origin && input.toLowerCase() === 'delhi') {
       context = { ...context, origin: 'Delhi' };

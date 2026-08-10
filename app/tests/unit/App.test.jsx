@@ -48,7 +48,9 @@ describe('App RequireAuth guard', () => {
     renderApp(['/journey-entry?intent=discover_destination']);
 
     expect(screen.getByPlaceholderText('Tell Scout about your trip…')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Planning a 2-week end-of-year trip/i }));
+    await user.click(screen.getByRole('button', { name: 'Planning a 2-week end-of-year India trip with mild weather' }));
+    expect(screen.getByText(/Hey everyone, My spouse and I are planning/)).toBeInTheDocument();
+    expect(screen.queryByText(/\*\*Planning a 2-week/)).not.toBeInTheDocument();
     expect(screen.getByText(/Where will you be travelling from\?/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Delhi' }));
@@ -56,5 +58,16 @@ describe('App RequireAuth guard', () => {
 
     await user.click(screen.getByRole('button', { name: '₹1,00,000 total for both' }));
     expect(screen.getByRole('button', { name: 'See destinations →' })).toBeInTheDocument();
+  });
+
+  it('uses the full-height chat shell for advice and known-destination entry', () => {
+    seedAuth({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    const advice = renderApp(['/scout-chat?entry=advice']);
+    expect(screen.getByText('Scout is here to help with your trip.').closest('.chat-screen')).toBeInTheDocument();
+    advice.unmount();
+
+    renderApp(['/journey-entry?intent=known_destination']);
+    expect(screen.getByText('Guide is here to help plan your destination.').closest('.chat-screen')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('e.g. Coorg, Karnataka')).toBeInTheDocument();
   });
 });

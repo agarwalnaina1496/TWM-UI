@@ -6,6 +6,14 @@ import { createEntryCommand, safeExecuteMockEntryCommand } from '../lib/mockTrip
 import '../styles/chat.css';
 
 let nextMessageId = 1;
+const GOLDEN_QUERY_REPLY = {
+  label: 'Planning a 2-week end-of-year India trip with mild weather',
+  value: GOLDEN_QUERY,
+};
+
+function compactTravelerMessage(text) {
+  return text.replace(/^\*\*(.*?)\**/s, '$1').replace(/\s+/g, ' ').trim();
+}
 
 export default function JourneyEntry() {
   const navigate = useNavigate();
@@ -20,13 +28,13 @@ export default function JourneyEntry() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  function sendDiscover(message = input) {
-    const value = message.trim();
+  function sendDiscover(reply = input) {
+    const value = (typeof reply === 'string' ? reply : reply.value).trim();
     if (!value || busy) return;
     setInput('');
     setBusy(true);
     setError(null);
-    setMessages(previous => [...previous, { id: nextMessageId++, role: 'user', text: value }]);
+    setMessages(previous => [...previous, { id: nextMessageId++, role: 'user', text: compactTravelerMessage(value) }]);
     const outcome = safeExecuteMockEntryCommand(createEntryCommand({
       intent: ENTRY_INTENTS.ADVICE,
       message: value,
@@ -59,10 +67,16 @@ export default function JourneyEntry() {
 
   const activeAgent = result?.trip?.trip_state?.active_agent || 'scout';
   const awaiting = result?.trip?.trip_state?.matcher_state?.conversation_context?.awaiting;
-  const quickReplies = result ? (QUICK_REPLIES[awaiting] || []) : [GOLDEN_QUERY];
+  const quickReplies = result
+    ? (QUICK_REPLIES[awaiting] || []).map(value => ({ label: value, value }))
+    : [GOLDEN_QUERY_REPLY];
 
   return (
-    <div className="wrap chat-page">
+    <div className="chat-page chat-screen">
+      <div className="chat-context-bar" role="status">
+        <span aria-hidden="true">ⓘ</span>
+        {isDiscover ? `${activeAgent === 'meridian' ? 'Meridian' : 'Scout'} is here to help with your trip.` : 'Guide is here to help plan your destination.'}
+      </div>
       <span className="eyebrow">{isDiscover ? `✦ ${activeAgent === 'meridian' ? 'Meridian' : 'Scout'}` : 'Trip setup'}</span>
       <h1>{isDiscover ? <>Tell Scout <em>in your own words</em></> : <>Start with <em>your destination</em></>}</h1>
       {isDiscover ? (
@@ -77,7 +91,7 @@ export default function JourneyEntry() {
             {busy && <div className="think" role="status">{activeAgent === 'meridian' ? 'Meridian' : 'Scout'} is thinking…</div>}
             {!busy && quickReplies.length > 0 && (
               <div className="chat-chip-row" aria-label="Suggested traveler replies">
-                {quickReplies.map(reply => <button type="button" className="chip chat-chip-long" key={reply} onClick={() => sendDiscover(reply)}>{reply}</button>)}
+                {quickReplies.map(reply => <button type="button" className="chip chat-chip-long" key={reply.value} onClick={() => sendDiscover(reply)}>{reply.label}</button>)}
               </div>
             )}
             {activeAgent === 'meridian' && <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>See destinations →</button>}
@@ -90,12 +104,17 @@ export default function JourneyEntry() {
       ) : (
         <>
           <p className="lede">Tell us where you are going. We’ll take you straight to planning—no Scout or destination matching needed.</p>
+          <div className="chat-log" aria-live="polite">
+            <div className="chat-row chat-row-assistant">
+              <div className="chat-bub chat-bub-assistant">Where are you going?</div>
+            </div>
+            {result && <div className="chat-row chat-row-assistant"><div className="chat-bub chat-bub-assistant">{result.message}</div></div>}
+            {result && <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue to planning →</button>}
+          </div>
           <div className="chat-input-bar">
             <input className="chat-input" aria-label="Destination" placeholder="e.g. Coorg, Karnataka" value={destination} onChange={event => setDestination(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') submitDestination(); }} />
             <button type="button" className="chat-send" onClick={submitDestination} aria-label="Start planning">→</button>
           </div>
-          {result && <div className="chat-bub chat-bub-assistant">{result.message}</div>}
-          {result && <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue to planning →</button>}
         </>
       )}
       {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={isDiscover ? () => sendDiscover() : submitDestination}>Try again</button></div>}

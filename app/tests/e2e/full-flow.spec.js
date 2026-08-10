@@ -8,7 +8,7 @@ test('full fake-prototype flow: GetStarted through Itinerary', async ({ page }) 
   // GetStarted -> "Not sure yet" (discover) route
   await page.getByText('Not sure yet').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
-  await page.getByText(/Planning a 2-week end-of-year trip/).click();
+  await page.getByRole('button', { name: 'Planning a 2-week end-of-year India trip with mild weather' }).click();
   await page.getByRole('button', { name: 'Delhi' }).click();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
   await page.getByText('See destinations →').click();

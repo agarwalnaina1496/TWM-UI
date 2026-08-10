@@ -17,6 +17,20 @@ describe('golden Scout command fixtures', () => {
     expect(response.trip.trip_state.trip_context.original_traveler_request).toBe(GOLDEN_QUERY);
   });
 
+  it('restarts the golden conversation when persisted fixture state is stale', () => {
+    const response = run(GOLDEN_QUERY, {
+      scenarioId: GOLDEN_SCENARIO_ID,
+      origin: 'Delhi',
+      budget: '₹1,00,000 total for both',
+      tripContext: { ...GOLDEN_CONTEXT, origin: 'Delhi', budget: '₹1,00,000 total for both' },
+    });
+
+    expect(response.message).toBe(GOLDEN_MESSAGES.askOrigin);
+    expect(response.trip.trip_state.matcher_state.conversation_context.awaiting).toBe('origin');
+    expect(response.trip.trip_state.trip_context).not.toHaveProperty('origin');
+    expect(response.trip.trip_state.trip_context).not.toHaveProperty('budget');
+  });
+
   it('accepts Delhi, then the total-party budget, and hands off to Meridian', () => {
     const first = applyCommandSnapshot(run(GOLDEN_QUERY));
     const secondResponse = run('Delhi', first.tripPatch, first.commandSnapshot.version);
