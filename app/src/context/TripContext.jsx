@@ -7,7 +7,7 @@ const TripContext = createContext(null);
 const STORAGE_KEY = 'twm_prototype_state_v1';
 
 const DEFAULT_TRIP = {
-  destination: '',
+  destination: null,   // { type: 'single' | 'circuit', name, places: [string] | null } — selected matcher option
   origin: '',
   budget: 'flexible',
   style: '',   // free-text trip goal, e.g. "slow, relaxing, good food"
@@ -56,7 +56,7 @@ export function TripProvider({ children }) {
   useEffect(() => {
     if (!trip.destination) return;
     setSavedTrips(prev => {
-      const idx = prev.findIndex(t => t.destination === trip.destination);
+      const idx = prev.findIndex(t => t.destination?.name === trip.destination.name);
       const entry = { ...trip, savedAt: new Date().toISOString() };
       if (idx !== -1 && JSON.stringify(prev[idx]) === JSON.stringify({ ...entry, savedAt: prev[idx].savedAt })) return prev;
       if (idx === -1) return [...prev, entry];

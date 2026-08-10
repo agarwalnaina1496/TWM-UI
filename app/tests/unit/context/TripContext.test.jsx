@@ -49,18 +49,19 @@ describe('TripContext auth state', () => {
   it('persists trip and auth to localStorage and reloads them', () => {
     const { result, unmount } = renderHook(() => useTrip(), { wrapper });
     act(() => result.current.login({ name: 'Traveler', email: 't@example.com' }));
-    act(() => result.current.updateTrip({ destination: 'Coorg' }));
+    act(() => result.current.updateTrip({ destination: { type: 'single', name: 'Coorg', places: null } }));
     unmount();
 
     const { result: reloaded } = renderHook(() => useTrip(), { wrapper });
     expect(reloaded.current.auth.name).toBe('Traveler');
-    expect(reloaded.current.trip.destination).toBe('Coorg');
+    expect(reloaded.current.trip.destination).toEqual({ type: 'single', name: 'Coorg', places: null });
   });
 
   it('startNewTrip resets trip fields', () => {
     const { result } = renderHook(() => useTrip(), { wrapper });
-    act(() => result.current.updateTrip({ destination: 'Coorg' }));
+    act(() => result.current.updateTrip({ destination: { type: 'single', name: 'Coorg', places: null } }));
     act(() => result.current.startNewTrip());
-    expect(result.current.trip.destination).toBe('');
+    expect(result.current.trip.destination).toBe(null);
   });
+
 });

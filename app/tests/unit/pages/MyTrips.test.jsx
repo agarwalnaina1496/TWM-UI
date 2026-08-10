@@ -31,7 +31,7 @@ describe('MyTrips', () => {
   it('shows guest copy and renders a saved trip card', () => {
     seedState({
       auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' },
-      savedTrips: [{ destination: 'Coorg', days: [{ day: 1 }, { day: 2 }], plan: 'self-led', paid: false }],
+      savedTrips: [{ destination: { type: 'single', name: 'Coorg', places: null }, days: [{ day: 1 }, { day: 2 }], plan: 'self-led', paid: false }],
     });
     renderMyTrips();
     expect(screen.getByText(/browsing as a guest/i)).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe('MyTrips', () => {
   it('shows signed-in copy and a View link for a paid trip', () => {
     seedState({
       auth: { loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' },
-      savedTrips: [{ destination: 'Manali', days: [{ day: 1 }], plan: 'self-led', paid: true }],
+      savedTrips: [{ destination: { type: 'single', name: 'Manali', places: null }, days: [{ day: 1 }], plan: 'self-led', paid: true }],
     });
     renderMyTrips();
     expect(screen.getByText('Signed in as Traveler.')).toBeInTheDocument();

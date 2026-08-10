@@ -129,7 +129,7 @@ export default function TripPreview() {
   const [scoutNote, setScoutNote] = useState('');
 
   useEffect(() => {
-    const destination = trip.destination || 'your destination';
+    const destination = trip.destination?.name || 'your destination';
     if (trip.places.length === 0 || !placesMatchDestination(trip.places, destination)) {
       const { places, days } = fakePlacesAndDays(destination, trip.tripLength);
       updateTrip({ places, days });
@@ -187,7 +187,7 @@ export default function TripPreview() {
   return (
     <div className="wrap">
       <Link className="back-link" to="/scout-chat">&larr; Back to details</Link>
-      <h1>{trip.destination || 'Your trip'} <em>| {trip.days.length || 3} Days</em></h1>
+      <h1>{trip.destination?.name || 'Your trip'} <em>| {trip.days.length || 3} Days</em></h1>
       <div className="trip-recap-row">
         <span className="recap-item">🕐 {trip.days.length || 3} Days</span>
         <span className="recap-item">👤 {trip.travelers} {trip.travelers === 1 ? 'traveler' : 'travelers'}</span>
@@ -267,7 +267,7 @@ export default function TripPreview() {
         </div>
       </div>
 
-      <span className="scout-fab" onClick={() => openScout(trip.destination || 'your trip')} title="Chat with Scout">💬</span>
+      <span className="scout-fab" onClick={() => openScout(trip.destination?.name || 'your trip')} title="Chat with Scout">💬</span>
 
       {scoutOpen && (
         <>

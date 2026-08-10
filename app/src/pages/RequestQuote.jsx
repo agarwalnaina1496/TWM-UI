@@ -46,7 +46,7 @@ export default function RequestQuote() {
             <div className="field-block">
               <div className="field-title">Trip details</div>
               <div className="field-hint">
-                {trip.destination || 'Destination TBD'} · {trip.days.length || trip.tripLength} days · {trip.travelers} {trip.travelers === 1 ? 'traveler' : 'travelers'}
+                {trip.destination?.name || 'Destination TBD'} · {trip.days.length || trip.tripLength} days · {trip.travelers} {trip.travelers === 1 ? 'traveler' : 'travelers'}
               </div>
               {trip.origin && <div className="field-hint">From {trip.origin}</div>}
               <div className="field-hint">Budget: {BUDGET_LABELS[trip.budget] || 'Flexible budget'}</div>
