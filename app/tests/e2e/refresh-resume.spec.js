@@ -21,5 +21,5 @@ test('Plan Builder revision survives refresh via prototype persistence', async (
   await page.reload();
 
   await expect(page.getByText('Duration-only · Day 1–15')).toBeVisible();
-  await expect(page.getByText('Guide Plan Builder · Draft revision 2')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('twm_prototype_state_v1')).trip.guidePlan?.revision)).toBe(2);
 });

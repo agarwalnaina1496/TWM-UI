@@ -8,6 +8,9 @@ test('full fake-prototype flow: GetStarted through Itinerary', async ({ page }) 
   // GetStarted -> "Not sure yet" (discover) route
   await page.getByText('Not sure yet').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
+  await page.getByRole('button', { name: 'Planning a 2-week end-of-year India trip with mild weather' }).click();
+  await page.getByRole('button', { name: 'Delhi' }).click();
+  await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
   await page.getByText('See destinations →').click();
 
   // Destinations
@@ -21,15 +24,9 @@ test('full fake-prototype flow: GetStarted through Itinerary', async ({ page }) 
 
   // ChoosePlan -> Self-Led
   await expect(page).toHaveURL(/\/app\/choose-plan/);
-  await page.getByText('Get my itinerary →').click();
+  await expect(page.getByRole('button', { name: 'Choose TWM-Led →' })).toBeDisabled();
+  await page.getByText('Choose Self-Led →').click();
 
-  // Logistics: bring-your-own-booking path
-  await expect(page).toHaveURL(/\/app\/logistics/);
-  await page.getByText('Upload booking confirmation').click();
-  await expect(page.getByText('✓ Confirmation added')).toBeVisible();
-  await page.getByText('See my detailed itinerary →').click();
-
-  // Itinerary
-  await expect(page).toHaveURL(/\/app\/itinerary/);
-  await expect(page.getByText('Fixture-backed preview — not a live Atlas result')).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/dashboard/);
+  await expect(page.getByRole('navigation', { name: 'Trip Dashboard tabs' })).toBeVisible();
 });

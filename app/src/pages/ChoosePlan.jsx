@@ -4,46 +4,21 @@ import '../styles/choose-plan.css';
 
 export default function ChoosePlan() {
   const navigate = useNavigate();
-  const { updateTrip } = useTrip();
-
-  function choose(plan) {
-    updateTrip({ plan });
-    // Login + payment temporarily skipped for both paths — pages stay intact, just bypassed in navigation for now.
-    navigate(plan === 'self-led' ? '/logistics' : '/request-quote');
+  const { trip, updateTrip } = useTrip();
+  function chooseSelfLed() {
+    updateTrip({ plan: 'self-led', atlasState: { ...trip.atlasState, mode: 'self-led' } });
+    navigate('/dashboard');
   }
-
   return (
-    <div className="wrap">
-      <span className="eyebrow">How do you want to take it from here?</span>
-      <h1>Same control. <em>Different</em> amount of work.</h1>
-      <p className="lede">Book and manage the trip yourself, or let us handle it for you. Either way, the plan you just built stays exactly as is.</p>
-
+    <main className="wrap">
+      <span className="eyebrow">Choose who handles booking and on-trip execution</span>
+      <h1>Your itinerary is ready. <em>How should the trip run?</em></h1>
+      <p className="lede">This choice changes who books, uploads confirmations and handles the trip—not the itinerary you just reviewed.</p>
       <div className="plan-grid">
-        <div className="plan-card">
-          <div className="plan-name">Self-Led</div>
-          <div className="plan-promise">You stay in control. We do the homework.</div>
-          <ul className="plan-feats">
-            <li>Your finalized itinerary, day by day</li>
-            <li>Booking links for flights, hotels & activities</li>
-            <li>Budget breakdown</li>
-            <li>Downloadable PDF</li>
-          </ul>
-          <span className="btn btn-primary btn-full" onClick={() => choose('self-led')}>Get my itinerary →</span>
-        </div>
-
-        <div className="plan-card hi">
-          <div className="plan-name">TWM-Led</div>
-          <div className="plan-promise">You enjoy the trip. We handle the rest.</div>
-          <ul className="plan-feats">
-            <li>Everything in Self-Led, plus:</li>
-            <li>End-to-end booking coordination</li>
-            <li>Pickup, drop & daily coordination</li>
-            <li>One point of contact for the whole trip</li>
-          </ul>
-          <span className="btn btn-primary btn-full" onClick={() => choose('twm-led')}>Request a quote →</span>
-        </div>
+        <article className="plan-card"><div className="plan-name">Self-Led</div><div className="plan-promise">You stay in control. We do the homework.</div><ul className="plan-feats"><li>Destination discovery, if you haven't picked one</li><li>Personalized day-by-day itinerary</li><li>2–3 curated flight, hotel &amp; activity options with reasoning</li><li>Deep links straight to checkout</li></ul><div className="plan-you-handle">You handle: booking, payment and on-trip changes.</div><button type="button" className="btn btn-primary btn-full" onClick={chooseSelfLed}>Choose Self-Led →</button></article>
+        <article className="plan-card hi" aria-disabled="true"><div className="plan-name">TWM-Led <span className="chip">Coming Soon</span></div><div className="plan-promise">You enjoy the trip. We handle the rest.</div><ul className="plan-feats"><li>Everything in Self-Led, plus:</li><li>End-to-end booking coordination</li><li>Pickup, drop &amp; daily coordination</li><li>Disruptions handled directly</li><li>One point of contact for the whole trip</li></ul><button type="button" className="btn btn-primary btn-full" disabled>Choose TWM-Led →</button></article>
       </div>
-      <p className="plan-illustrative">Illustrative — this is a prototype, nothing here is a real charge.</p>
-    </div>
+      <p className="plan-illustrative">No payment or reservation happens in this prototype.</p>
+    </main>
   );
 }

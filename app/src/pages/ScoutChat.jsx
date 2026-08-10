@@ -65,7 +65,8 @@ export default function ScoutChat() {
   const awaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
   const quickReplies = QUICK_REPLIES[awaiting] || [];
   return (
-    <div className="wrap chat-page">
+    <div className="chat-page chat-screen">
+      <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
       <span className="eyebrow">✦ Scout</span>
       <h1>Tell Scout <em>in your own words</em></h1>
       <p className="lede">Scout keeps the nuance in what you say, asks only for material gaps, and hands the trip to the right specialist.</p>

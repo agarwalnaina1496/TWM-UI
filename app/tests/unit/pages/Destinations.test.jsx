@@ -118,7 +118,7 @@ describe('Destinations', () => {
     expect(screen.getByText('Nearest airport')).toBeInTheDocument();
     expect(screen.getByText('Chennai, ~3h drive')).toBeInTheDocument();
     expect(screen.getByText('Stay + activities')).toBeInTheDocument();
-    expect(screen.getByText('₹6,000–9,000')).toBeInTheDocument();
+    expect(screen.getByText('≈₹6,000–9,000')).toBeInTheDocument();
   });
 
   it('expands the reason-toggle to reveal the disclosed trade-off explanation', () => {
@@ -206,32 +206,18 @@ describe('Destinations', () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).trip.destination).toBe(null);
   });
 
-  it('Check prices safely renders current, stale, partial, unavailable, and malformed mock evidence states', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
+  it('removes mock price actions and safely expands golden total-party cost details', () => {
+    seedTrip({ scenarioId: 'self_led_mp_year_end_couple_v1', origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2, month: 'Dec–Jan' });
     renderDestinations();
 
     act(() => {
       vi.advanceTimersByTime(900);
     });
 
-    const cards = screen.getAllByText('Check prices').map(button => button.closest('.dest-card'));
-
-    fireEvent.click(screen.getAllByText('Check prices')[0]);
-    expect(screen.getByText('Verified/current mock')).toBeInTheDocument();
-    expect(screen.getByText('₹16,800–₹22,200 total for the party')).toBeInTheDocument();
-    expect(screen.getByText(/Prototype provider mix · Just now/)).toBeInTheDocument();
-
-    fireEvent.click(cards[0].querySelectorAll('button')[2]);
-    expect(screen.getByText('Stale mock result')).toBeInTheDocument();
-
-    fireEvent.click(screen.getAllByText('Check prices')[0]);
-    expect(screen.getByText('Partial mock result')).toBeInTheDocument();
-    fireEvent.click(cards[1].querySelectorAll('button')[2]);
-    expect(screen.getByText('Price unavailable')).toBeInTheDocument();
-
-    fireEvent.click(screen.getAllByText('Check prices')[0]);
-    expect(screen.getByText('Unsafe result hidden')).toBeInTheDocument();
-    expect(screen.getByText(/hidden because it could not be validated safely/)).toBeInTheDocument();
-    expect(screen.getAllByText(/not a live quote or availability guarantee/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Check prices')).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByText('Why this one')[0]);
+    expect(screen.getByText('≈₹8,000–13,000')).toBeInTheDocument();
+    expect(screen.getByText('Total party')).toBeInTheDocument();
+    expect(screen.getByText('Delhi round trip and intercity transport')).toBeInTheDocument();
   });
 });

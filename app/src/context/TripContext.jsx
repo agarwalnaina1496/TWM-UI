@@ -19,6 +19,7 @@ const DEFAULT_TRIP = {
   days: [],     // [{ day, title, items: [{ id, text }] }]
   guidePlan: null,     // authoritative mock Guide draft used by TWM-105
   guideSnapshot: null, // frozen PLAN_APPROVED handoff consumed by TWM-107
+  atlasState: null,    // Atlas-shaped itinerary, versions, logistics and Dashboard state
   tripType: 'round',    // 'round' | 'one-way'
   departDate: '',       // ISO date string, e.g. '2026-11-14'
   returnDate: '',       // ISO date string, only used when tripType === 'round'

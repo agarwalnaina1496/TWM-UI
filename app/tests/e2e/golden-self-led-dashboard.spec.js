@@ -1,0 +1,25 @@
+import { test, expect } from '@playwright/test';
+import { GOLDEN_QUERY } from '../../src/data/entryCommandFixtures.js';
+
+test('exact golden journey reaches Atlas preview, Choose Plan and Self-Led Dashboard', async ({ page }) => {
+  await page.goto('login');
+  await page.getByText('Continue without login').click();
+  await page.getByPlaceholder(/Plan my Coorg trip/).fill(GOLDEN_QUERY);
+  await page.getByLabel('Send').click();
+  await page.getByRole('button', { name: 'Delhi' }).click();
+  await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
+  await page.getByRole('button', { name: /Continue to destination discovery/ }).click();
+
+  await expect(page).toHaveURL(/\/app\/destinations/);
+  const mp = page.locator('.dest-card').filter({ hasText: 'Madhya Pradesh Heritage and Nature' });
+  await mp.getByText('Plan this trip →').click();
+  await page.getByRole('button', { name: /Generate detailed itinerary/ }).click();
+
+  await expect(page).toHaveURL(/\/app\/choose-plan/);
+  await expect(page.getByRole('button', { name: 'Choose TWM-Led →' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Choose Self-Led →' }).click();
+
+  await expect(page).toHaveURL(/\/app\/dashboard/);
+  await expect(page.getByRole('button', { name: /Days/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByText('Dec – Jan')).toBeVisible();
+});
