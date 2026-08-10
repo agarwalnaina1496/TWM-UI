@@ -7,6 +7,7 @@
 .chat-bub-assistant{background:var(--surface);border:1px solid var(--border);border-radius:3px 14px 14px 14px;color:var(--tp);}
 .chat-bub-user{background:var(--tp);color:var(--bg);border-radius:14px 3px 14px 14px;}
 .chat-chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+.chat-chip-long{max-width:100%;text-align:left;white-space:normal;line-height:1.45;}
 
 .chat-input-bar{position:sticky;bottom:0;background:var(--bg);padding:14px 0 20px;margin-top:18px;display:flex;gap:8px;align-items:center;}
 .chat-input{flex:1;border:1px solid var(--border);border-radius:12px;padding:12px 15px;font-size:13.5px;font-family:'Inter',sans-serif;background:var(--surface);}
