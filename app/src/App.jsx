@@ -13,7 +13,6 @@ import RequestQuote from './pages/RequestQuote.jsx';
 import Itinerary from './pages/Itinerary.jsx';
 import MyTrips from './pages/MyTrips.jsx';
 import JourneyEntry from './pages/JourneyEntry.jsx';
-import ItineraryPreview from './pages/ItineraryPreview.jsx';
 import TripDashboard from './pages/TripDashboard.jsx';
 
 function RequireAuth({ children }) {
@@ -41,7 +40,6 @@ export default function App() {
         <Route path="/journey-entry" element={<RequireAuth><JourneyEntry /></RequireAuth>} />
         <Route path="/destinations" element={<RequireAuth><Destinations /></RequireAuth>} />
         <Route path="/trip-preview" element={<RequireAuth><TripPreview /></RequireAuth>} />
-        <Route path="/itinerary-preview" element={<RequireAuth><ItineraryPreview /></RequireAuth>} />
         <Route path="/logistics" element={<RequireAuth><Logistics /></RequireAuth>} />
         <Route path="/choose-plan" element={<RequireAuth><ChoosePlan /></RequireAuth>} />
         <Route path="/payment" element={<RequireAuth><Payment /></RequireAuth>} />

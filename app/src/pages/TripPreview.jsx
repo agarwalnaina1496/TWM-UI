@@ -39,7 +39,7 @@ export default function TripPreview() {
     }
     const atlasState = createAtlasDashboardState(response.snapshot, trip.tripContext);
     updateTrip({ guidePlan: plan, guideSnapshot: response.snapshot, atlasState, plan: null, tripLength: plan.summary.duration_days });
-    navigate('/itinerary-preview');
+    navigate('/choose-plan');
   }
 
   return (

@@ -22,11 +22,6 @@ test('full fake-prototype flow: GetStarted through Itinerary', async ({ page }) 
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await page.getByText('Generate detailed itinerary →').click();
 
-  // Atlas detailed itinerary exists before bookings or dates.
-  await expect(page).toHaveURL(/\/app\/itinerary-preview/);
-  await expect(page.getByText('Duration-only · Day 1–14')).toBeVisible();
-  await page.getByText('Choose how to manage this trip →').click();
-
   // ChoosePlan -> Self-Led
   await expect(page).toHaveURL(/\/app\/choose-plan/);
   await expect(page.getByRole('button', { name: 'Choose TWM-Led →' })).toBeDisabled();

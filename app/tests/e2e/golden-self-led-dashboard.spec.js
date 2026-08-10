@@ -15,16 +15,11 @@ test('exact golden journey reaches Atlas preview, Choose Plan and Self-Led Dashb
   await mp.getByText('Plan this trip →').click();
   await page.getByRole('button', { name: /Generate detailed itinerary/ }).click();
 
-  await expect(page).toHaveURL(/\/app\/itinerary-preview/);
-  await expect(page.getByText('What Atlas is assuming')).toBeVisible();
-  await expect(page.getByText('₹60,000–₹82,000 for two')).toBeVisible();
-  await page.getByRole('button', { name: /Choose how to manage this trip/ }).click();
-
   await expect(page).toHaveURL(/\/app\/choose-plan/);
   await expect(page.getByRole('button', { name: 'Choose TWM-Led →' })).toBeDisabled();
   await page.getByRole('button', { name: 'Choose Self-Led →' }).click();
 
   await expect(page).toHaveURL(/\/app\/dashboard/);
-  await expect(page.getByRole('button', { name: 'Days' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByText('No dates confirmed · Itinerary version 1')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Days/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByText('Dec – Jan')).toBeVisible();
 });

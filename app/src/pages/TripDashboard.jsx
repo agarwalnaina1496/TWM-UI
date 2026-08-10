@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTrip } from '../context/TripContext.jsx';
+import TripHero from '../components/TripHero.jsx';
 import { acceptProposedRevision, addUploadedBooking, computeBudget, createAtlasDashboardState, currentAtlasVersion, keepCurrentRevision, TRAVEL_TIPS } from '../lib/mockAtlasTrip.js';
 import '../styles/dashboard.css';
 
@@ -62,27 +63,13 @@ export default function TripDashboard() {
   const dayTips = TRAVEL_TIPS.slice((selectedDay.number - 1) % TRAVEL_TIPS.length).concat(TRAVEL_TIPS).slice(0, 2);
   const mapPoints = atlas.map_points.filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lng));
   const travelers = trip.travelers || 2;
-  const tripDatesLabel = atlas.start_date || (atlas.scenario_id?.includes('year_end') ? 'Dec – Jan' : 'Flexible dates');
 
   return (
     <main className="wrap dashboard">
-      <section className="dashboard-hero">
-        <div className="hero-top">
-          <div className="hero-actions"><button className="btn btn-ghost" type="button" onClick={() => alert('Prototype — PDF generation is simulated.')}>📄 PDF</button><button className="btn btn-ghost" type="button" onClick={() => alert('Prototype — sharing is simulated.')}>🔗 Share</button></div>
-        </div>
-        <h1 className="hero-title">Your <em>circuit</em> escape</h1>
-        <p className="hero-desc">Built for two who want forts, temples and unhurried travel across four bases — Gwalior, Orchha, Khajuraho and Panna — over fourteen flexible days.</p>
-        <div className="hero-stats">
-          <div><strong>{version.days.length}</strong><span>Days</span></div>
-          <div><strong>{travelers}</strong><span>Travelers</span></div>
-          <div><strong>{tripDatesLabel}</strong><span>Trip dates</span></div>
-          <div><strong>{money(budget.low)}–{money(budget.high)}</strong><span>Total for {travelers}</span></div>
-        </div>
-        <div className="hero-why">
-          <span className="hero-why-label">Why this route</span>
-          <p>Gwalior anchors the arrival gateway from Delhi. Orchha and Khajuraho follow without backtracking, adding riverside forts and temple heritage. Panna closes the loop as a reserve-edge stay before the return leg — the order keeps every transfer moving forward, not in circles.</p>
-        </div>
-      </section>
+      <TripHero atlas={atlas} version={version} travelers={travelers} actions={<>
+        <button className="btn btn-ghost" type="button" onClick={() => alert('Prototype — PDF generation is simulated.')}>📄 PDF</button>
+        <button className="btn btn-ghost" type="button" onClick={() => alert('Prototype — sharing is simulated.')}>🔗 Share</button>
+      </>} />
       <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">{TABS.map(({ name, icon }) => <button type="button" aria-current={tab === name ? 'page' : undefined} className={tab === name ? 'active' : ''} key={name} onClick={() => setTab(name)}><span className="tab-icon">{icon}</span> {name}</button>)}</nav>
 
       {atlas.proposed_revision && <section className="revision-review" aria-label="Proposed itinerary revision"><strong>⚠️ Booking affects Days {atlas.proposed_revision.affected_days.join(' and ')}</strong><p>{atlas.proposed_revision.reason}</p><ul>{atlas.proposed_revision.changes.map(change => <li key={change}>{change}</li>)}</ul><div><button type="button" className="btn btn-ghost" onClick={() => save(keepCurrentRevision(atlas))}>Keep current</button><button type="button" className="btn btn-primary" onClick={() => save(acceptProposedRevision(atlas))}>Accept changes</button></div></section>}
