@@ -7,7 +7,7 @@ export default function Itinerary() {
   return (
     <div className="wrap">
       <span className="eyebrow">Fixture-backed preview — not a live Atlas result</span>
-      <h1>Your <em>{trip.destination || 'trip'}</em> itinerary</h1>
+      <h1>Your <em>{trip.destination?.name || 'trip'}</em> itinerary</h1>
 
       <div className="itin-banner">
         <div className="t1">{trip.days.length} days · {trip.travelers} {trip.travelers === 1 ? 'traveler' : 'travelers'}</div>

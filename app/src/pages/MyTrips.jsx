@@ -28,9 +28,9 @@ export default function MyTrips() {
         </div>
       ) : (
         savedTrips.map(t => (
-          <div className="trip-card" key={t.destination}>
+          <div className="trip-card" key={t.destination?.name}>
             <div>
-              <div className="name">{t.destination || 'Untitled trip'}</div>
+              <div className="name">{t.destination?.name || 'Untitled trip'}</div>
               <div className="meta">{t.days.length} days · {t.plan === 'twm-led' ? 'TWM-Led' : t.plan === 'self-led' ? 'Self-Led' : 'Planning'}{t.paid ? ' · Itinerary ready' : ''}</div>
             </div>
             {t.paid ? <Link className="btn btn-ghost" to="/itinerary">View →</Link> : <Link className="btn btn-ghost" to="/trip-preview">Continue →</Link>}

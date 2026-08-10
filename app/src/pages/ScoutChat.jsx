@@ -114,7 +114,7 @@ export default function ScoutChat() {
     }
     // Reopened from an existing trip (e.g. "Back to details") — everything's already set.
     say('assistant', trip.destination
-      ? `You're set for ${trip.destination}. Want to jump back in?`
+      ? `You're set for ${trip.destination.name}. Want to jump back in?`
       : "You're set. Want to jump back in?");
     setHeadingTo(trip.destination ? 'preview' : 'destinations');
     setNextMode('preview');
@@ -164,7 +164,7 @@ export default function ScoutChat() {
     const filled = [];
     if (kase === 'decided') {
       const destination = findDestination(text) || extracted.destination;
-      updateTrip({ destination });
+      updateTrip({ destination: { type: 'single', name: destination, places: null } });
       filled.push('destination');
       say('assistant', `Got it — ${destination}. Let's fill in a few more details so the plan actually fits.`);
       applyExtractedAndBegin(extracted, filled, { destinationNeeded: true, headingTo: 'preview', nextMode: 'preview' });
@@ -202,6 +202,7 @@ export default function ScoutChat() {
     if (field === 'budget' && typeof rawValue === 'string' && !['budget', 'mid', 'premium', 'flexible'].includes(rawValue)) value = parseBudget(rawValue);
     if (field === 'travelers' && typeof rawValue !== 'number') value = parseTravelers(String(rawValue));
     if (field === 'month' && typeof rawValue === 'string' && rawValue !== 'flexible' && !MONTHS.includes(rawValue.toLowerCase())) value = parseMonth(rawValue);
+    if (field === 'destination') value = { type: 'single', name: value, places: null };
     updateTrip({ [field]: value });
     askNext(queue);
   }
@@ -223,7 +224,7 @@ export default function ScoutChat() {
       say('user', `Want to plan a trip to ${chip.value}?`);
       setAdviceWait(false);
       const extracted = extractFields(chip.value);
-      updateTrip({ destination: chip.value });
+      updateTrip({ destination: { type: 'single', name: chip.value, places: null } });
       say('assistant', `Let's build the plan for ${chip.value}. A few more details:`);
       applyExtractedAndBegin(extracted, ['destination'], { destinationNeeded: true, headingTo: 'preview', nextMode: 'preview' });
       return;

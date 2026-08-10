@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { seedState } from './testUtils.js';
 
 const TRIP = {
-  destination: 'Coorg',
+  destination: { type: 'single', name: 'Coorg', places: null },
   travelers: 2,
   budget: 'flexible',
   plan: 'self-led',
