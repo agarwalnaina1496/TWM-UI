@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
-import { acceptProposedRevision, addUploadedBooking, computeBudget, createAtlasDashboardState, currentAtlasVersion, keepCurrentRevision, TRAVEL_TIPS } from '../lib/mockAtlasTrip.js';
+import { bookingReadinessLabel, dayCostRange, routeLocations, timelineIcon } from '../lib/atlasView.js';
 import '../styles/dashboard.css';
 
 const TABS = [
@@ -15,21 +15,7 @@ const TABS = [
 ];
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
-
-const TIME_ICONS = [
-  [/morning/i, '🌅'], [/afternoon/i, '🌤️'], [/evening/i, '🌆'], [/flexible/i, '🕒'], [/\d(am|pm)/i, '⏰'],
-];
-const timeIcon = time => (TIME_ICONS.find(([re]) => re.test(time)) || [null, '📍'])[1];
-
-const haversineKm = (a, b) => {
-  const R = 6371;
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLng = (b.lng - a.lng) * Math.PI / 180;
-  const lat1 = a.lat * Math.PI / 180;
-  const lat2 = b.lat * Math.PI / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
-};
+const moneyRange = (low, high) => (low == null || high == null ? null : `${money(low)}–${money(high)}`);
 
 function BudgetBar({ low, high, min, max }) {
   const span = Math.max(max - min, 1);
@@ -38,19 +24,18 @@ function BudgetBar({ low, high, min, max }) {
   return <div className="budget-track"><div className="budget-fill" style={{ left: `${left}%`, width: `${width}%` }} /></div>;
 }
 
-function BookingRecords({ bookings, type }) {
-  const records = bookings.filter(booking => booking.type === type);
-  if (records.length === 0) return null;
-  return <div className="booking-records"><h3>{type} confirmations</h3>{records.map(booking => <article className="dashboard-card" key={booking.id}><div><span className={`state ${booking.state}`}>{booking.state.replace('_', ' ')}</span><strong>{booking.label}</strong><p>{booking.detail}</p></div></article>)}</div>;
+function BookingReadinessBadge({ status }) {
+  if (!status) return null;
+  return <span className={`badge badge-readiness-${status}`}>{bookingReadinessLabel(status)}</span>;
 }
 
-function BookingChoice({ label, logisticsTab, onUpload }) {
+function InertBookingActions({ label, logisticsTab }) {
   return (
     <div className="booking-choice">
       <div className="booking-choice-opt">
         <strong>Already booked this yourself?</strong>
-        <p>Upload your confirmation and it'll show up here.</p>
-        <button type="button" className="btn btn-ghost" onClick={onUpload}>Upload {label} confirmation</button>
+        <p>Confirmation upload is coming soon.</p>
+        <button type="button" className="btn btn-ghost" disabled title="Coming soon">Upload {label} confirmation</button>
       </div>
       <span className="booking-choice-or">or</span>
       <div className="booking-choice-opt">
@@ -63,114 +48,189 @@ function BookingChoice({ label, logisticsTab, onUpload }) {
 }
 
 export default function TripDashboard() {
-  const { trip, updateTrip } = useTrip();
+  const { commandSnapshot, sendTripCommand } = useTrip();
   const [params] = useSearchParams();
   const initialTab = TABS.some(t => t.name === params.get('tab')) ? params.get('tab') : 'Days';
   const [tab, setTab] = useState(initialTab);
-  const atlas = trip.atlasState || createAtlasDashboardState(trip.guideSnapshot, trip.tripContext);
-  const version = currentAtlasVersion(atlas);
-  const budget = computeBudget(atlas.cost_items);
-  const save = next => updateTrip({ atlasState: next });
-  const [activeDay, setActiveDay] = useState(version.days[0]?.number);
-  const selectedDay = version.days.find(day => day.number === activeDay) || version.days[0];
-  const allCosts = version.days.flatMap(d => [d.cost_inr.low, d.cost_inr.high]);
-  const costMin = Math.min(...allCosts);
-  const costMax = Math.max(...allCosts);
-  const dayTips = TRAVEL_TIPS.slice((selectedDay.number - 1) % TRAVEL_TIPS.length).concat(TRAVEL_TIPS).slice(0, 2);
-  const mapPoints = atlas.map_points.filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lng));
-  const travelers = trip.travelers || 2;
+  const [activeDay, setActiveDay] = useState(null);
+
+  const itineraryState = commandSnapshot?.trip_state?.itinerary_state;
+  const [bootStatus, setBootStatus] = useState('idle'); // idle | booting | ready | error
+  const [bootError, setBootError] = useState(null);
+  const bootStarted = useRef(false);
+
+  // Reopen never re-invokes Atlas: once ready, render the saved result and
+  // never call start_itinerary again for this trip.
+  useEffect(() => {
+    if (itineraryState?.status === 'ready') {
+      setBootStatus('ready');
+      return;
+    }
+    if (bootStarted.current) return;
+    bootStarted.current = true;
+    setBootStatus('booting');
+    sendTripCommand('start_itinerary')
+      .then(() => setBootStatus('ready'))
+      .catch(error => {
+        setBootStatus('error');
+        setBootError(error.message || 'Could not generate the detailed itinerary.');
+      });
+  }, [itineraryState?.status, sendTripCommand]);
+
+  if (bootStatus === 'error') {
+    return (
+      <main className="wrap dashboard">
+        <div className="price-evidence state-unsafe" role="alert">
+          <strong>Itinerary unavailable</strong>
+          <span>{bootError}</span>
+        </div>
+      </main>
+    );
+  }
+
+  if (bootStatus !== 'ready' || itineraryState?.status !== 'ready') {
+    return (
+      <main className="wrap dashboard">
+        <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Building your detailed itinerary…</div>
+      </main>
+    );
+  }
+
+  const result = itineraryState.result;
+  const finalItinerary = result.final_itinerary;
+  const days = finalItinerary.days;
+  const selectedDay = days.find(day => day.day_number === activeDay) || days[0];
+  const selectedDayCost = dayCostRange(selectedDay);
+  const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });
+  const costMin = Math.min(...allCosts, 0);
+  const costMax = Math.max(...allCosts, 1);
+  const locations = routeLocations(days);
 
   return (
     <main className="wrap dashboard">
-      <TripHero atlas={atlas} version={version} travelers={travelers} actions={<>
-        <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
-        <button className="btn btn-ghost" type="button" onClick={() => alert('Sharing is not available yet.')}>🔗 Share</button>
-      </>} />
-      <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">{TABS.map(({ name, icon }) => <button type="button" aria-current={tab === name ? 'page' : undefined} className={tab === name ? 'active' : ''} key={name} onClick={() => setTab(name)}><span className="tab-icon">{icon}</span> {name}</button>)}</nav>
+      <TripHero
+        finalItinerary={finalItinerary}
+        travelers={finalItinerary.trip_summary.travelers}
+        actions={<>
+          <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
+          <button className="btn btn-ghost" type="button" onClick={() => alert('Sharing is not available yet.')}>🔗 Share</button>
+        </>}
+      />
+      <p className="version-note">Itinerary version {itineraryState.version}.</p>
 
-      {atlas.proposed_revision && <section className="revision-review" aria-label="Proposed itinerary revision"><strong>⚠️ Booking affects Days {atlas.proposed_revision.affected_days.join(' and ')}</strong><p>{atlas.proposed_revision.reason}</p><ul>{atlas.proposed_revision.changes.map(change => <li key={change}>{change}</li>)}</ul><div><button type="button" className="btn btn-ghost" onClick={() => save(keepCurrentRevision(atlas))}>Keep current</button><button type="button" className="btn btn-primary" onClick={() => save(acceptProposedRevision(atlas))}>Accept changes</button></div></section>}
+      {(finalItinerary.assumptions.length > 0 || result.unresolved.length > 0) && (
+        <section className="assumptions-panel" aria-label="Assumptions and unresolved items">
+          {finalItinerary.assumptions.length > 0 && (
+            <div><h3>Planning assumptions</h3><ul>{finalItinerary.assumptions.map((item, index) => <li key={index}><strong>{item.category}:</strong> {item.detail}</li>)}</ul></div>
+          )}
+          {result.unresolved.length > 0 && (
+            <div><h3>Unresolved</h3><ul>{result.unresolved.map((item, index) => <li key={index}><strong>{item.item}:</strong> {item.generic_guidance}</li>)}</ul></div>
+          )}
+        </section>
+      )}
+
+      <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">{TABS.map(({ name, icon }) => <button type="button" aria-current={tab === name ? 'page' : undefined} className={tab === name ? 'active' : ''} key={name} onClick={() => setTab(name)}><span className="tab-icon">{icon}</span> {name}</button>)}</nav>
 
       {tab === 'Days' && selectedDay && <section aria-label="Detailed days" className="dashboard-days-wrap">
         <nav className="dashboard-day-nav" aria-label="Select a day">
-          {version.days.map(day => <button type="button" key={day.number} className={`dashboard-day-pill${day.number === selectedDay.number ? ' active' : ''}`} aria-current={day.number === selectedDay.number ? 'page' : undefined} onClick={() => setActiveDay(day.number)}>
-            <span className="pill-num">{day.number}</span>
-            <span className="pill-text"><span className="label">Day {day.number}</span><span className="base">{day.base}</span></span>
+          {days.map(day => <button type="button" key={day.day_number} className={`dashboard-day-pill${day.day_number === selectedDay.day_number ? ' active' : ''}`} aria-current={day.day_number === selectedDay.day_number ? 'page' : undefined} onClick={() => setActiveDay(day.day_number)}>
+            <span className="pill-num">{day.day_number}</span>
+            <span className="pill-text"><span className="label">Day {day.day_number}</span><span className="base">{day.primary_location}</span></span>
           </button>)}
         </nav>
         <div className="dashboard-days-main">
           <article className="atlas-day compact">
             <header>
-              <span className="atlas-day-eyebrow">Day {String(selectedDay.number).padStart(2, '0')} · {version.days.length} days total</span>
+              <span className="atlas-day-eyebrow">Day {String(selectedDay.day_number).padStart(2, '0')} · {days.length} days total</span>
               <h2>{selectedDay.title}</h2>
-              <p className="atlas-day-route">📍 {selectedDay.base}</p>
+              <p className="atlas-day-route">📍 {selectedDay.primary_location}</p>
+              <p>{selectedDay.summary}</p>
             </header>
             <div className="atlas-timeline">
-              {selectedDay.items.map(item => <div className={`atlas-item flex-${item.flexibility}`} key={item.id}>
-                <span className="atlas-dot">{timeIcon(item.time)}</span>
+              {selectedDay.timeline.map((item, index) => <div className="atlas-item" key={index}>
+                <span className="atlas-dot">{timelineIcon(item.kind)}</span>
                 <div>
-                  <time>{item.time}</time>
+                  <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
                   <strong>{item.title}</strong>
-                  {item.note && <p>{item.note}</p>}
-                  {(item.status === 'confirmed' || item.flexibility === 'locked') && <span className={`badge badge-${item.status}`}>{item.status === 'confirmed' ? '✓ confirmed' : '🔒 locked'}</span>}
+                  <p>{item.detail}</p>
+                  {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
+                  <BookingReadinessBadge status={item.booking_readiness} />
+                  {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
                 </div>
               </div>)}
             </div>
             <div className="atlas-day-footer">
               <div className="footer-budget">
-                <span className="footer-label">💰 Budget for two</span>
-                <strong>{money(selectedDay.cost_inr.low)}–{money(selectedDay.cost_inr.high)}</strong>
-                <BudgetBar low={selectedDay.cost_inr.low} high={selectedDay.cost_inr.high} min={costMin} max={costMax} />
+                <span className="footer-label">💰 Estimated for this day</span>
+                <strong>{moneyRange(selectedDayCost.low, selectedDayCost.high) || 'Not estimated'}</strong>
+                <BudgetBar low={selectedDayCost.low} high={selectedDayCost.high} min={costMin} max={costMax} />
               </div>
               <div className="footer-tips">
                 <span className="footer-label">🎒 Good to know</span>
-                <ul className="tips-list">{dayTips.map(tip => <li key={tip.text}><span>{tip.icon}</span>{tip.text}</li>)}</ul>
+                <ul className="tips-list">
+                  <li><span>🌦️</span>{selectedDay.seasonal_guidance}</li>
+                  <li><span>🎫</span>{selectedDay.permit_or_ticket_guidance}</li>
+                  {selectedDay.backup_plan && <li><span>🔁</span>{selectedDay.backup_plan}</li>}
+                </ul>
               </div>
             </div>
           </article>
+          {finalItinerary.practical_notes.length > 0 && (
+            <section aria-label="Practical notes" className="practical-notes">
+              <h3>Practical notes</h3>
+              {finalItinerary.practical_notes.map((note, index) => <article className="dashboard-card" key={index}><strong>{note.title}</strong><p>{note.detail}</p></article>)}
+            </section>
+          )}
         </div>
       </section>}
 
       {tab === 'Transport' && <section>
-        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>What's confirmed so far for getting around — a view only, not a booking desk.</p></div></div>
-        {atlas.transport.filter(item => item.state === 'confirmed').map(item => <article className="dashboard-card" key={item.id}>
-          <div><span className="state confirmed">✓ confirmed</span><h3>{item.route}</h3>
-            {item.confirmation && <div className="confirmation-chip">✓ {item.confirmation}</div>}
+        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Atlas-suggested options — a view only, not a booking desk.</p></div></div>
+        {finalItinerary.travel_options.map((option, index) => <article className="dashboard-card" key={index}>
+          <div>
+            <BookingReadinessBadge status={option.booking_readiness} />
+            <h3>{option.from_place} → {option.to_place} · {option.mode}</h3>
+            <p>{option.suggestion}</p>
+            {option.duration_guidance && <p className="movement-guidance">{option.duration_guidance}</p>}
+            {moneyRange(option.estimated_cost_low, option.estimated_cost_high) && <span className="item-cost">{moneyRange(option.estimated_cost_low, option.estimated_cost_high)}</span>}
+            {option.reference.status === 'VERIFIED' && option.reference.source_url && <a className="source-link" href={option.reference.source_url} target="_blank" rel="noreferrer">{option.reference.source_title || 'Source'} ↗</a>}
           </div>
         </article>)}
-        <BookingRecords bookings={atlas.bookings} type="Transport" />
-        <BookingChoice label="transport" logisticsTab="Transport" onUpload={() => save(addUploadedBooking(atlas, 'Transport'))} />
+        <InertBookingActions label="transport" logisticsTab="Transport" />
       </section>}
 
       {tab === 'Stays' && <section>
-        <div className="tab-intro"><div><h2>🏨 Stays</h2><p>What's confirmed so far for stays — a view only, not a booking desk.</p></div></div>
-        {atlas.stays.filter(stay => stay.state === 'confirmed').map(stay => <article className="dashboard-card" key={stay.id}>
-          <div><span className="state confirmed">✓ confirmed</span><h3>🏨 {stay.base} · {stay.nights} nights</h3><p>📍 {stay.area}</p>
-            {stay.confirmation && <div className="confirmation-chip">✓ {stay.confirmation}</div>}
+        <div className="tab-intro"><div><h2>🏨 Stays</h2><p>Atlas-suggested options — a view only, not a booking desk.</p></div></div>
+        {finalItinerary.stay_options.map((option, index) => <article className="dashboard-card" key={index}>
+          <div>
+            <BookingReadinessBadge status={option.booking_readiness} />
+            <h3>🏨 {option.location} · {option.nights} nights</h3>
+            <p>Day {option.check_in_day} – Day {option.check_out_day}</p>
+            <p>{option.suggestion}</p>
+            <p>{option.why_it_fits}</p>
+            {moneyRange(option.estimated_cost_low, option.estimated_cost_high) && <span className="item-cost">{moneyRange(option.estimated_cost_low, option.estimated_cost_high)}</span>}
+            {option.reference.status === 'VERIFIED' && option.reference.source_url && <a className="source-link" href={option.reference.source_url} target="_blank" rel="noreferrer">{option.reference.source_title || 'Source'} ↗</a>}
           </div>
         </article>)}
-        <BookingRecords bookings={atlas.bookings} type="Stay" />
-        <BookingChoice label="stay" logisticsTab="Stays" onUpload={() => save(addUploadedBooking(atlas, 'Stay'))} />
+        <InertBookingActions label="stay" logisticsTab="Stays" />
       </section>}
 
       {tab === 'Map' && <section>
-        <div className="tab-intro"><div><h2>🗺️ Circuit map</h2><p>Only fixture locations with known coordinates are shown.</p></div></div>
-        <div className="route-map" role="img" aria-label="Route from Gwalior through Orchha and Khajuraho to Panna">
-          {mapPoints.map((point, index) => <div className="route-node-wrap" key={point.id}>
-            <div className="route-node">
-              <span className="route-marker">{index + 1}</span>
-              <div><strong>{point.label}</strong><small>{point.lat}, {point.lng}</small></div>
-            </div>
-            {index < mapPoints.length - 1 && <div className="route-connector"><span className="route-line" /><span className="route-distance">~{haversineKm(point, mapPoints[index + 1])} km</span></div>}
-          </div>)}
-        </div>
+        <div className="tab-intro"><div><h2>🗺️ Route order</h2><p>Live coordinates aren't available yet — here's the order of the trip.</p></div></div>
+        <ol className="route-order-list" aria-label="Route order">
+          {locations.map((location, index) => <li key={`${index}-${location}`}>{location}</li>)}
+        </ol>
       </section>}
 
       {tab === 'Budget breakdown' && <section>
-        <div className="tab-intro"><div><h2>💰 Estimated budget breakdown</h2><p>Reference estimate for {travelers} travelers — mid-range comfort, not a hard cap.</p></div></div>
+        <div className="tab-intro"><div><h2>💰 Estimated budget breakdown</h2><p>{finalItinerary.budget_summary.budget_fit}</p></div></div>
         <div className="budget-summary-card">
-          {atlas.cost_items.map(item => <div className="budget-summary-row" key={item.id}><span>{item.label}</span><strong>{money(item.low)}–{money(item.high)}</strong></div>)}
-          <div className="budget-summary-row total"><span>Estimated total</span><strong>{money(budget.low)}–{money(budget.high)}</strong></div>
+          {finalItinerary.budget_summary.lines.map((line, index) => <div className="budget-summary-row" key={index}><span>{line.category}</span><strong>{moneyRange(line.amount_low, line.amount_high)}</strong><p>{line.note}</p></div>)}
+          <div className="budget-summary-row total"><span>Estimated total</span><strong>{moneyRange(finalItinerary.budget_summary.total_low, finalItinerary.budget_summary.total_high)}</strong></div>
         </div>
+        {finalItinerary.sources.length > 0 && (
+          <div className="sources-list"><h3>Sources</h3><ul>{finalItinerary.sources.map((source, index) => <li key={index}><a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a></li>)}</ul></div>
+        )}
       </section>}
 
       {tab === 'Support' && <section>

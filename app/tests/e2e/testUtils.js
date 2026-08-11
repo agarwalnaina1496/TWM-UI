@@ -68,4 +68,36 @@ export async function mockTripCommandFlow(page, steps, { initialTrip } = {}) {
   });
 }
 
-export { TRIP_ID, tripRecord, commandResponse };
+// A minimal, schema-valid AtlasResponse (twm/schemas/atlas.py) for e2e specs
+// that just need to reach the Dashboard and see real content render.
+function atlasResult({ title = 'Abbey Falls Getaway', destination = 'Coorg', primaryLocation = 'Coorg' } = {}) {
+  const reference = { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
+  return {
+    final_itinerary: {
+      trip_summary: {
+        title, destinations: [destination], duration_days: 1, travelers: 2,
+        date_range: null, overview: 'A relaxed one-day visit.', route_rationale: 'Everything is within one base.',
+      },
+      travel_options: [],
+      stay_options: [],
+      days: [{
+        day_number: 1, date: null, title: 'Arrival and exploring', primary_location: primaryLocation,
+        summary: 'An easy first day.',
+        timeline: [{
+          start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Abbey Falls', location: primaryLocation,
+          detail: 'Visit at a relaxed pace.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
+          reference, requires_advance_booking: false, booking_readiness: null,
+        }],
+        seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'None required.', backup_plan: null,
+      }],
+      budget_summary: { currency: 'INR', lines: [{ category: 'Local movement', amount_low: 500, amount_high: 800, note: 'General range.' }], total_low: 500, total_high: 800, budget_fit: 'Within a typical budget.' },
+      practical_notes: [],
+      sources: [],
+      assumptions: [],
+    },
+    unresolved: [],
+    agent_meta: { agent: 'atlas', prompt_version: '1.2.0' },
+  };
+}
+
+export { TRIP_ID, tripRecord, commandResponse, atlasResult };
