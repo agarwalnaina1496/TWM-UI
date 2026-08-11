@@ -1,6 +1,18 @@
 import { test, expect } from '@playwright/test';
 import { commandResponse, mockTripCommandFlow, tripRecord } from './testUtils.js';
 
+function successOutcome() {
+  return {
+    status: 'SUCCESS', message: 'Great, here are a few options.', trip_type: 'single',
+    traveler_criteria: [{ id: 'budget', label: '₹1,00,000 total for both', requirement_type: 'HARD', source_context_paths: ['budget'] }],
+    options: [{
+      rank: 1, type: 'single', name: 'Coorg', destination_id: 'coorg', summary: 'A comfortable fit within budget.',
+      evaluations: [{ criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Fits within budget.', details: [{ type: 'bullets', items: ['Estimated total stays within budget.'] }] }],
+      other_considerations: [],
+    }],
+  };
+}
+
 test('full flow: GetStarted through Dashboard', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
@@ -17,6 +29,20 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
         trip_state: { stage: 'recommended', active_agent: null },
       })),
     },
+    {
+      command: 'continue',
+      response: commandResponse(null, tripRecord({
+        version: 4,
+        trip_state: { stage: 'recommended', active_agent: null, matcher_state: { conversation_context: { awaiting: null }, recommendations: [successOutcome()] } },
+      })),
+    },
+    {
+      command: 'select_destination',
+      response: commandResponse('Coorg is confirmed.', tripRecord({
+        version: 5,
+        trip_state: { stage: 'matched', active_agent: null, matcher_state: { conversation_context: { awaiting: null }, recommendations: [successOutcome()] } },
+      })),
+    },
   ]);
 
   await page.goto('login');
@@ -31,7 +57,7 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'See destinations →' })).toBeVisible();
   await page.getByText('See destinations →').click();
 
-  // Destinations (local mock data, unaffected by real trip commands)
+  // Destinations (real Meridian recommendations via the continue command)
   await expect(page).toHaveURL(/\/app\/destinations/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
   await page.getByText('Plan this trip →').first().click();

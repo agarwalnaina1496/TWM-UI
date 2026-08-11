@@ -79,6 +79,11 @@ export function TripProvider({ children }) {
       const records = await listTrips();
       const record = records[0] ?? await createTrip();
       setTripRecord(record);
+      // The Backend-fetched record is the freshest truth for this trip's
+      // state, so it must also become the readable commandSnapshot — pages
+      // (e.g. Destinations) that resume mid-flow read commandSnapshot only,
+      // and would otherwise see nothing until the next command response.
+      setCommandSnapshot(record);
       setTripLoadStatus('ready');
       return record;
     } catch (error) {
@@ -134,7 +139,7 @@ export function TripProvider({ children }) {
   // The single browser mutation boundary (TWM-110): POST /api/trips/{id}/commands.
   // Every entry path (Advice/Discover/Known Destination) and every follow-up
   // traveler message goes through here — React never sends canonical TripState.
-  async function sendTripCommand(command, { message, optionId, destination, idempotencyKey } = {}) {
+  async function sendTripCommand(command, { message, optionId, destination, refinement, idempotencyKey } = {}) {
     const record = await ensureTrip();
     return queueTripMutation(record.id, async () => {
       const current = tripRecordRef.current || record;
@@ -146,6 +151,7 @@ export function TripProvider({ children }) {
       if (message !== undefined) payload.message = message;
       if (optionId !== undefined) payload.option_id = optionId;
       if (destination !== undefined) payload.destination = destination;
+      if (refinement !== undefined) payload.refinement = refinement;
       try {
         const response = await sendTripCommandApi(current.id, payload);
         setTripRecord(response.trip);

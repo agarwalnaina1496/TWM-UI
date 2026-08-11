@@ -29,8 +29,10 @@ function validDetail(detail) {
       && (validRange(item.per_person) || validRange(item.group)));
 }
 
+const OPTION_STATUSES = new Set(['SUCCESS', 'SOFT_FAIL']);
+
 export function recommendationViewModel(payload, metadataByOption = {}) {
-  if (!isObject(payload) || payload.status !== 'SUCCESS') throw new Error('Recommendation response is invalid.');
+  if (!isObject(payload) || !OPTION_STATUSES.has(payload.status)) throw new Error('Recommendation response is invalid.');
   const { traveler_criteria: criteria, options } = payload;
   if (!Array.isArray(criteria) || criteria.length === 0) throw new Error('Traveler criteria are missing.');
   if (!Array.isArray(options) || options.length === 0 || options.length > 3) throw new Error('Recommendation options are invalid.');
@@ -80,7 +82,7 @@ export function recommendationViewModel(payload, metadataByOption = {}) {
   if (joinedOptions.some((option, index) => option.rank !== index + 1)) {
     throw new Error('Recommendation ranks must be sequential.');
   }
-  return { message: payload.message ?? '', criteria, options: joinedOptions };
+  return { status: payload.status, message: payload.message ?? '', criteria, options: joinedOptions };
 }
 
 export function safeRecommendationViewModel(payload, metadataByOption = {}) {
@@ -89,4 +91,46 @@ export function safeRecommendationViewModel(payload, metadataByOption = {}) {
   } catch (error) {
     return { data: null, error: error instanceof Error ? error.message : 'Recommendation response is invalid.' };
   }
+}
+
+const FAILURE_STATUSES = new Set(['HARD_FAIL', 'BUDGET_FAIL', 'CONFLICT_FAIL']);
+
+// A terminal failure carries no options, only an honest explanation and
+// optional adjustment suggestions — a distinct, simpler shape from the
+// ranked-options view model above.
+export function failureOutcomeViewModel(payload) {
+  if (!isObject(payload) || !FAILURE_STATUSES.has(payload.status) || !payload.message) {
+    throw new Error('Recommendation failure response is invalid.');
+  }
+  const suggestions = payload.constraint_adjustment_suggestions;
+  if (suggestions !== undefined && (!Array.isArray(suggestions) || suggestions.some(item => typeof item !== 'string' || !item))) {
+    throw new Error('Constraint adjustment suggestions are invalid.');
+  }
+  return {
+    status: payload.status,
+    message: payload.message,
+    constraintAdjustmentSuggestions: suggestions ?? [],
+  };
+}
+
+export function safeFailureOutcomeViewModel(payload) {
+  try {
+    return { data: failureOutcomeViewModel(payload), error: null };
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : 'Recommendation failure response is invalid.' };
+  }
+}
+
+// Dispatches a raw saved matcher_state.recommendations entry to the right
+// safe view model by its status, or reports it as invalid.
+export function safeMatcherOutcomeViewModel(payload, metadataByOption = {}) {
+  if (isObject(payload) && OPTION_STATUSES.has(payload.status)) {
+    const result = safeRecommendationViewModel(payload, metadataByOption);
+    return { kind: 'options', ...result };
+  }
+  if (isObject(payload) && FAILURE_STATUSES.has(payload.status)) {
+    const result = safeFailureOutcomeViewModel(payload);
+    return { kind: 'failure', ...result };
+  }
+  return { kind: 'options', data: null, error: 'Recommendation response is invalid.' };
 }
