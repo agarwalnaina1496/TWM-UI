@@ -1,12 +1,64 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Destinations from '../../../src/pages/Destinations.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
-import { seedState, STORAGE_KEY } from '../testUtils.js';
 
-function seedTrip(trip) {
-  seedState({ trip, auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
+function jsonResponse(body, { status = 200 } = {}) {
+  return { ok: status >= 200 && status < 300, status, json: async () => body };
+}
+
+function successOutcome(overrides = {}) {
+  return {
+    status: 'SUCCESS',
+    message: 'Madhya Pradesh is the strongest overall match.',
+    trip_type: 'circuit',
+    traveler_criteria: [
+      { id: 'budget', label: '₹1,00,000 total for two from Delhi', requirement_type: 'HARD', source_context_paths: ['budget'] },
+      { id: 'pace', label: 'Easygoing balance of exploring and relaxing', requirement_type: 'PREFERENCE', source_context_paths: ['traveler_style'] },
+    ],
+    options: [{
+      rank: 1, type: 'circuit', name: 'Madhya Pradesh Heritage and Nature', circuit_id: 'gwalior-orchha-khajuraho-panna',
+      summary: 'The strongest balance of connectivity and pace.',
+      evaluations: [
+        {
+          criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Comfortably within budget.',
+          details: [{ type: 'cost_breakdown', currency: 'INR', items: [
+            { label: 'Delhi round trip', group: { minimum: 8000, maximum: 13000 } },
+            { label: '13 nights', group: { minimum: 24000, maximum: 32000 } },
+          ] }],
+        },
+        {
+          criterion_id: 'pace', outcome: 'MATCH', conclusion: 'Multi-night bases avoid a checklist itinerary.',
+          details: [{ type: 'bullets', items: ['No daily hotel changes'] }],
+        },
+      ],
+      other_considerations: [],
+    }],
+    ...overrides,
+  };
+}
+
+function tripStateWithLatest(latest, extra = {}) {
+  return {
+    stage: 'recommended',
+    active_agent: null,
+    trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2 },
+    advisor_state: { conversation_context: { last_advisor_message: null }, artifacts: [] },
+    matcher_state: {
+      conversation_context: { last_meridian_message: null, awaiting: null },
+      recommendations: latest ? [latest] : [],
+      rejected_options: [],
+    },
+    planner_state: null,
+    ...extra,
+  };
+}
+
+function seedFetch(fetchMock, tripState) {
+  fetchMock
+    .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
+    .mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Trip', version: 3, trip_state: tripState, ui_state: {} }));
 }
 
 function renderDestinations(initialEntries = ['/destinations?next=preview']) {
@@ -19,205 +71,202 @@ function renderDestinations(initialEntries = ['/destinations?next=preview']) {
   );
 }
 
-describe('Destinations', () => {
+describe('Destinations (real Meridian integration)', () => {
+  let fetchMock;
+
   beforeEach(() => {
     localStorage.clear();
-    vi.useFakeTimers();
+    fetchMock = vi.fn();
+    global.fetch = fetchMock;
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
-  it('shows a thinking indicator before the fixture match results load', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
+  it('shows a thinking indicator while the trip loads', () => {
+    fetchMock.mockImplementation(() => new Promise(() => {}));
     renderDestinations();
     expect(screen.getByText(/Matching destinations to your answers/)).toBeInTheDocument();
   });
 
-  it('renders fixture match results with a Plan-this-trip action after the match delay', () => {
-    seedTrip({ budget: 'budget', style: 'nature', travelers: 2, month: 'flexible' });
-    renderDestinations();
-
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
-
-    expect(screen.getByText('Pondicherry')).toBeInTheDocument();
-    expect(screen.getAllByText('Plan this trip →').length).toBeGreaterThan(0);
-  });
-
-  it('shows a Want-to-plan-this link instead of a button when entered from discover-only', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
-    renderDestinations(['/destinations?next=none']);
-
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
-
-    expect(screen.getAllByText('Want to plan this? →').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Plan this trip →')).not.toBeInTheDocument();
-  });
-
-  it('renders a circuit option with its places joined and a single option as "Single destination"', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
-    renderDestinations();
-
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
-
-    expect(screen.getByText('Kochi + Alleppey')).toBeInTheDocument();
-    expect(screen.getByText(/Kochi \+ Alleppey circuit/)).toBeInTheDocument();
-    expect(screen.getAllByText(/Single destination/).length).toBeGreaterThan(0);
-  });
-
-  it('shows a trade-off and a mismatch criteria pill, not just match scores', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
-    renderDestinations();
-
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
-
-    expect(screen.getByText('⚠ Budget')).toBeInTheDocument();
-    expect(screen.getByText('✕ Travel time')).toBeInTheDocument();
-  });
-
-  it('collapses other_considerations to an intuitive "+N other considerations" chip with a tooltip preview, and expands them under the reason toggle', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
-    renderDestinations();
-
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
-
-    const chip = screen.getByText('+2 other considerations');
-    expect(chip).toBeInTheDocument();
-    expect(chip).toHaveAttribute('title', 'Two check-ins to manage · Backwater cruise timing is weather-dependent');
-
-    const singularChip = screen.getByText('+1 other consideration');
-    expect(singularChip).toBeInTheDocument();
-    expect(screen.queryByText('Two check-ins to manage')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getAllByText('Why this one')[1]); // second card: Kochi + Alleppey
-    expect(screen.getByText('Two check-ins to manage')).toBeInTheDocument();
-  });
-
-  it('renders structured details (bullets, facts, cost table) instead of a single explanation string', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
-    renderDestinations();
-
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
-
-    fireEvent.click(screen.getAllByText('Why this one')[0]); // first card: Pondicherry
-
-    expect(screen.getByText('French Quarter cafes and slow beach mornings')).toBeInTheDocument();
-    expect(screen.getByText('Nearest airport')).toBeInTheDocument();
-    expect(screen.getByText('Chennai, ~3h drive')).toBeInTheDocument();
-    expect(screen.getByText('Stay + activities')).toBeInTheDocument();
-    expect(screen.getByText('≈₹6,000–9,000')).toBeInTheDocument();
-  });
-
-  it('expands the reason-toggle to reveal the disclosed trade-off explanation', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
-    renderDestinations();
-
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
-
-    const toggles = screen.getAllByText('Why this one');
-    expect(screen.queryByText(/houseboat night pushes the daily average up/)).not.toBeInTheDocument();
-
-    fireEvent.click(toggles[1]); // second card: Kochi + Alleppey
-    expect(screen.getByText(/houseboat night pushes the daily average up/)).toBeInTheDocument();
-
-    fireEvent.click(toggles[1]);
-    expect(screen.queryByText(/houseboat night pushes the daily average up/)).not.toBeInTheDocument();
-  });
-
-  it('persists the structured { type, name, places } shape to trip state when a circuit option is selected', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
-    renderDestinations();
-
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
-
-    const planButtons = screen.getAllByText('Plan this trip →');
-    fireEvent.click(planButtons[1]); // second card is the Kochi + Alleppey circuit
-
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    expect(stored.trip.destination).toEqual({ id: 'kochi-alleppey', type: 'circuit', name: 'Kochi + Alleppey', places: ['Kochi', 'Alleppey'] });
-  });
-
-  it('shows a qualified total-party estimate and practical access without presenting it as checked prices', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
-    renderDestinations();
-
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
-
-    expect(screen.getByText('₹16,400–₹22,400')).toBeInTheDocument();
-    expect(screen.getAllByText(/estimated total for 2/)).toHaveLength(3);
-    expect(screen.getByText('Chennai airport + ~3h road transfer')).toBeInTheDocument();
-    expect(screen.getAllByText(/not checked prices/i).length).toBeGreaterThan(0);
-  });
-
-  it('renders the golden Delhi journey and selects the Madhya Pradesh circuit', async () => {
-    localStorage.setItem('twm_prototype_state_v1', JSON.stringify({
-      auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' },
-      trip: { origin: 'Delhi', travelers: 2, scenarioId: 'self_led_mp_year_end_couple_v1' },
-      savedTrips: [],
+  it('sends the continue command when no recommendation exists yet, then renders the real result', async () => {
+    seedFetch(fetchMock, tripStateWithLatest(null));
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      message: null, agent_meta: null,
+      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
     }));
+
     renderDestinations();
-    await act(async () => vi.advanceTimersByTime(900));
-    expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument();
-    expect(screen.getByText('Kerala Culture, Backwaters and Coast')).toBeInTheDocument();
-    expect(screen.getByText('Assam–Meghalaya Nature and Culture')).toBeInTheDocument();
-    fireEvent.click(screen.getAllByText(/Plan this trip/)[0]);
-    await act(async () => {});
-    const saved = JSON.parse(localStorage.getItem('twm_prototype_state_v1'));
-    expect(saved.trip.destination).toEqual({
-      id: 'gwalior-orchha-khajuraho-panna',
-      type: 'circuit',
-      name: 'Madhya Pradesh Heritage and Nature',
-      places: ['Gwalior', 'Orchha', 'Khajuraho', 'Panna'],
-    });
+
+    await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('"command":"continue"'),
+    }));
   });
 
-  it('More like this refreshes ranking around the referenced option without committing selection', () => {
-    seedTrip({ budget: 'flexible', style: 'relaxed', travelers: 2, month: 'flexible' });
+  it('renders a real SUCCESS result already saved on the trip without re-triggering matching', async () => {
+    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
     renderDestinations();
 
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
-
-    const circuitCard = screen.getByText('Kochi + Alleppey').closest('.dest-card');
-    fireEvent.click(circuitCard.querySelectorAll('button')[1]);
-
-    expect(screen.getByText(/Refreshed around Kochi \+ Alleppey/)).toBeInTheDocument();
-    expect(screen.getAllByText('Kochi + Alleppey')[0].closest('.dest-card')).toHaveClass('best');
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)).trip.destination).toBe(null);
+    await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
+    expect(screen.getByText('Multi-stop circuit')).toBeInTheDocument();
+    expect(screen.getByText('₹32,000–₹45,000')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2); // list + get only, no continue command
   });
 
-  it('removes mock price actions and safely expands golden total-party cost details', () => {
-    seedTrip({ scenarioId: 'self_led_mp_year_end_couple_v1', origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2, month: 'Dec–Jan' });
+  it('shows the exact persisted budget/origin/traveler recap, not a generic bucketed label', async () => {
+    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
     renderDestinations();
 
-    act(() => {
-      vi.advanceTimersByTime(900);
-    });
+    await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
+    expect(screen.getByText('From Delhi')).toBeInTheDocument();
+    expect(screen.getByText('₹1,00,000 total for both')).toBeInTheDocument();
+    expect(screen.getByText('2 travelers')).toBeInTheDocument();
+  });
 
-    expect(screen.queryByText('Check prices')).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByText('Why this one')[0]);
-    expect(screen.getByText('≈₹8,000–13,000')).toBeInTheDocument();
-    expect(screen.getByText('Total party')).toBeInTheDocument();
-    expect(screen.getByText('Delhi round trip and intercity transport')).toBeInTheDocument();
+  it('renders SOFT_FAIL results with a visible trade-off, not just a match score', async () => {
+    const softFail = successOutcome({
+      status: 'SOFT_FAIL',
+      options: [{
+        rank: 1, type: 'single', name: 'Pondicherry', destination_id: 'pondicherry',
+        summary: 'Closest fit with a compromise.',
+        evaluations: [
+          { criterion_id: 'budget', outcome: 'TRADEOFF', conclusion: 'Slightly above budget.', details: [{ type: 'bullets', items: ['About 10% over.'] }], tradeoffs: ['Slightly above the stated budget.'] },
+          { criterion_id: 'pace', outcome: 'MATCH', conclusion: 'Relaxed pace.', details: [{ type: 'bullets', items: ['Short transfers.'] }] },
+        ],
+        other_considerations: [],
+      }],
+    });
+    seedFetch(fetchMock, tripStateWithLatest(softFail));
+    renderDestinations();
+
+    await waitFor(() => expect(screen.getByText('Pondicherry')).toBeInTheDocument());
+    expect(screen.getByText(/⚠/)).toBeInTheDocument();
+    expect(screen.queryByText('Our pick')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Why this one'));
+    expect(screen.getByText(/Slightly above the stated budget\./)).toBeInTheDocument();
+  });
+
+  it('renders a terminal failure honestly and lets the traveler retry with an adjustment', async () => {
+    const hardFail = {
+      status: 'HARD_FAIL',
+      message: 'No option satisfies the stated hard requirements.',
+      constraint_adjustment_suggestions: ['Consider raising the budget.'],
+    };
+    seedFetch(fetchMock, tripStateWithLatest(hardFail));
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      message: 'Here is an option within the new budget.', agent_meta: null,
+      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
+    }));
+
+    renderDestinations();
+
+    await waitFor(() => expect(screen.getByText('No option satisfies the stated hard requirements.')).toBeInTheDocument());
+    expect(screen.getByText('Consider raising the budget.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Adjust and try again…'), { target: { value: 'Raise the budget to 1.2L' } });
+    fireEvent.click(screen.getByLabelText('Send'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+      body: expect.stringContaining('"command":"traveler_message"'),
+    })));
+  });
+
+  it('renders a pending clarification question and submits the answer as a traveler_message', async () => {
+    const clarifying = tripStateWithLatest(null, {
+      stage: 'matching',
+      matcher_state: {
+        conversation_context: { last_meridian_message: 'What is your budget?', awaiting: 'budget' },
+        recommendations: [],
+        rejected_options: [],
+      },
+    });
+    seedFetch(fetchMock, clarifying);
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      message: null, agent_meta: null,
+      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
+    }));
+
+    renderDestinations();
+
+    await waitFor(() => expect(screen.getByText('What is your budget?')).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledTimes(2); // no continue command sent while awaiting a clarification
+
+    fireEvent.change(screen.getByPlaceholderText('Your answer…'), { target: { value: 'INR 1,00,000 total' } });
+    fireEvent.click(screen.getByLabelText('Send'));
+
+    await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+      body: expect.stringContaining('"command":"traveler_message"'),
+    }));
+  });
+
+  it('fails closed on a malformed saved recommendation instead of partially rendering it', async () => {
+    seedFetch(fetchMock, tripStateWithLatest({ status: 'SUCCESS', message: 'x', traveler_criteria: [], options: [] }));
+    renderDestinations();
+
+    await waitFor(() => expect(screen.getByText('Recommendations unavailable')).toBeInTheDocument());
+    expect(screen.getByText(/could not validate the recommendation response safely/)).toBeInTheDocument();
+  });
+
+  it('Plan this trip persists selection through select_destination and navigates to Trip Preview', async () => {
+    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      message: 'Madhya Pradesh Heritage and Nature is confirmed.', agent_meta: null,
+      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
+    }));
+
+    renderDestinations();
+    await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Plan this trip →'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+      body: expect.stringContaining('"command":"select_destination"'),
+    })));
+    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+    const body = JSON.parse(lastCall[1].body);
+    expect(body.option_id).toBe('gwalior-orchha-khajuraho-panna');
+  });
+
+  it('More like this sends the structured reference without committing selection', async () => {
+    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      message: 'Refreshed around Madhya Pradesh Heritage and Nature.', agent_meta: null,
+      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome({ message: 'Refreshed around Madhya Pradesh Heritage and Nature.' })), ui_state: {} },
+    }));
+
+    renderDestinations();
+    await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('✨ More like this'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+      body: expect.stringContaining('"command":"more_like_this"'),
+    })));
+    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+    const body = JSON.parse(lastCall[1].body);
+    expect(body.refinement).toEqual({ type: 'MORE_LIKE_THIS', reference: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna' } });
+    expect(body.option_id).toBeUndefined();
+    await waitFor(() => expect(screen.getByText(/Refreshed around Madhya Pradesh/)).toBeInTheDocument());
+  });
+
+  it('shows a Want-to-plan-this link and still calls select_destination when entered discover-only', async () => {
+    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      message: 'Confirmed.', agent_meta: null,
+      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
+    }));
+
+    renderDestinations(['/destinations?next=none']);
+    await waitFor(() => expect(screen.getByText('Want to plan this? →')).toBeInTheDocument());
+    expect(screen.queryByText('Plan this trip →')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Want to plan this? →'));
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+      body: expect.stringContaining('"command":"select_destination"'),
+    })));
   });
 });

@@ -2,11 +2,9 @@ import { test, expect } from '@playwright/test';
 import { GOLDEN_QUERY } from '../../src/data/entryCommandFixtures.js';
 import { commandResponse, mockTripCommandFlow, tripRecord } from './testUtils.js';
 
-// Destinations.jsx's golden Meridian fixture switch (trip.origin === 'Delhi' /
-// trip.scenarioId) was only ever driven by the old client-side applyCommandSnapshot
-// flattening, which TWM-110 removed — real trip commands don't populate those flat
-// fields. Wiring Destinations to real trip_context is TWM-104's job, so this now
-// exercises the default (non-golden) match results instead of the MP circuit card.
+// TWM-104 wired Destinations.jsx to real trip commands: it now sends a
+// `continue` command on entry when no recommendation is saved yet, and reads
+// the result from the real matcher_state.recommendations entry.
 test('advice journey reaches destination match, Choose Plan and Self-Led Dashboard', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
@@ -29,6 +27,31 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
         version: 4,
         trip_state: { stage: 'matching', active_agent: 'meridian' },
       })),
+    },
+    {
+      command: 'continue',
+      response: commandResponse(null, tripRecord({
+        version: 5,
+        trip_state: {
+          stage: 'recommended', active_agent: null,
+          matcher_state: {
+            conversation_context: { awaiting: null },
+            recommendations: [{
+              status: 'SUCCESS', message: 'Coorg is a comfortable fit within budget.', trip_type: 'single',
+              traveler_criteria: [{ id: 'budget', label: '₹1,00,000 total for both', requirement_type: 'HARD', source_context_paths: ['budget'] }],
+              options: [{
+                rank: 1, type: 'single', name: 'Coorg', destination_id: 'coorg', summary: 'A comfortable fit within budget.',
+                evaluations: [{ criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Fits within budget.', details: [{ type: 'bullets', items: ['Estimated total stays within budget.'] }] }],
+                other_considerations: [],
+              }],
+            }],
+          },
+        },
+      })),
+    },
+    {
+      command: 'select_destination',
+      response: commandResponse('Coorg is confirmed.', tripRecord({ version: 6, trip_state: { stage: 'matched', active_agent: null } })),
     },
   ]);
 
