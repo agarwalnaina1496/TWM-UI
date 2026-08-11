@@ -14,11 +14,17 @@ const BEEN_BEFORE_OPTIONS = [
 // Verbatim, top-level trip_context fields shown before any recommendation
 // exists. Never bucketed into a generic label — an exact persisted value or
 // nothing, so "₹1,00,000 total for both" never degrades to "Flexible budget".
+// trip_context is free-form (Scout extracts whatever field names fit the
+// conversation), so this list is a best-effort set of the field names Scout
+// commonly uses, not a guaranteed schema.
 const RECAP_FIELDS = [
   ['origin', value => `From ${value}`],
   ['budget', value => String(value)],
   ['duration_days', value => `${value} day${value === 1 ? '' : 's'}`],
   ['travelers', value => `${value} traveler${value === 1 ? '' : 's'}`],
+  ['travel_window', value => String(value)],
+  ['month', value => String(value)],
+  ['dates', value => String(value)],
 ];
 
 function contextRecapPills(tripContext) {
@@ -113,21 +119,40 @@ function totalPartyEstimate(option) {
   return best;
 }
 
+const ACCESS_LABEL_PATTERN = /access|route|connect|transfer|flight|airport|drive|reach/i;
+
+// Heuristic: the first fact whose label reads as access/route information,
+// so the collapsed card can show a practical-access line without inventing
+// a dedicated "access_summary" field the real contract doesn't have.
+function accessFact(option) {
+  for (const evaluation of option.evaluations) {
+    for (const detail of evaluation.details) {
+      if (detail.type !== 'facts') continue;
+      const fact = detail.facts.find(f => ACCESS_LABEL_PATTERN.test(f.label));
+      if (fact) return fact;
+    }
+  }
+  return null;
+}
+
 export default function Destinations() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad } = useTrip();
+  const { updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState } = useTrip();
   const nextMode = params.get('next') || 'preview'; // 'preview' or 'none'
 
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState(null);
-  const [openId, setOpenId] = useState(null);
+  // Backend-persisted (ui_state.destinationsOpenId) so it survives a refresh;
+  // openId itself stays local React state for instant toggling.
+  const [openId, setOpenId] = useState(() => uiState.destinationsOpenId ?? null);
   const [beenBefore, setBeenBefore] = useState({});
   const [clarifyInput, setClarifyInput] = useState('');
   const [planError, setPlanError] = useState(null);
   const [planningId, setPlanningId] = useState(null);
   const [moreLikeThisId, setMoreLikeThisId] = useState(null);
   const triggered = useRef(false);
+  const restoredOpenId = useRef(false);
 
   const tripState = commandSnapshot?.trip_state;
   const recommendations = tripState?.matcher_state?.recommendations || [];
@@ -135,19 +160,32 @@ export default function Destinations() {
   const awaiting = tripState?.matcher_state?.conversation_context?.awaiting;
   const lastMeridianMessage = tripState?.matcher_state?.conversation_context?.last_meridian_message;
 
+  function triggerContinue() {
+    triggered.current = true;
+    setTriggering(true);
+    setTriggerError(null);
+    return sendTripCommand('continue')
+      .catch(commandError => setTriggerError(commandError.message || 'Something went wrong.'))
+      .finally(() => setTriggering(false));
+  }
+
   // Trigger matching once per mount if this trip has never reached Meridian,
   // or resume an in-flight clarification round without re-asking.
   useEffect(() => {
     if (triggered.current || tripLoadStatus !== 'ready') return;
     if (latest || awaiting) return;
-    triggered.current = true;
-    setTriggering(true);
-    setTriggerError(null);
-    sendTripCommand('continue')
-      .catch(commandError => setTriggerError(commandError.message || 'Something went wrong.'))
-      .finally(() => setTriggering(false));
+    triggerContinue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripLoadStatus, latest, awaiting]);
+
+  // Restores which card was expanded before a refresh, once, without
+  // clobbering a toggle the traveler makes afterward.
+  useEffect(() => {
+    if (restoredOpenId.current || tripLoadStatus !== 'ready') return;
+    restoredOpenId.current = true;
+    if (uiState.destinationsOpenId) setOpenId(uiState.destinationsOpenId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripLoadStatus, uiState.destinationsOpenId]);
 
   const outcome = useMemo(
     () => (latest ? safeMatcherOutcomeViewModel(latest) : null),
@@ -155,9 +193,16 @@ export default function Destinations() {
   );
 
   const pills = contextRecapPills(tripState?.trip_context);
+  const selectedOption = tripState?.trip_context?.selected_option ?? null;
 
   function toggleBeenBefore(key, id) {
     setBeenBefore(previous => ({ ...previous, [key]: previous[key] === id ? null : id }));
+  }
+
+  function toggleOpen(key) {
+    const next = openId === key ? null : key;
+    setOpenId(next);
+    updateUiState({ destinationsOpenId: next }).catch(() => {});
   }
 
   async function planThis(option) {
@@ -184,6 +229,7 @@ export default function Destinations() {
         refinement: { type: 'MORE_LIKE_THIS', reference: { type: option.type, id: option.key } },
       });
       setOpenId(null);
+      updateUiState({ destinationsOpenId: null }).catch(() => {});
     } catch (commandError) {
       setPlanError(commandError.message || 'Something went wrong.');
     } finally {
@@ -232,7 +278,7 @@ export default function Destinations() {
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Recommendations unavailable</strong>
           <span>{triggerError}</span>
-          <button type="button" className="btn btn-ghost" onClick={() => { triggered.current = false; setTriggerError(null); }}>Try again</button>
+          <button type="button" className="btn btn-ghost" onClick={triggerContinue}>Try again</button>
         </div>
       )}
 
@@ -276,17 +322,20 @@ export default function Destinations() {
           {outcome.data.options.map((d, i) => {
             const isBest = i === 0 && outcome.data.status === 'SUCCESS';
             const isOpen = openId === d.key;
+            const isSelected = selectedOption && selectedOption.type === d.type && selectedOption.id === d.key;
             const totalEstimate = totalPartyEstimate(d);
+            const access = accessFact(d);
             const travelers = tripState?.trip_context?.travelers;
             return (
               <div key={d.key} className={`dest-card${isBest ? ' best' : ''}`}>
-                {isBest && <span className="pick-badge">Our pick</span>}
+                {isSelected ? <span className="pick-badge">Selected</span> : isBest && <span className="pick-badge">Our pick</span>}
                 <div className="dest-name">{d.name}</div>
                 <div className="dest-tag">{optionLabel(d)}</div>
                 <p className="dest-summary">{d.summary}</p>
-                {totalEstimate && (
+                {(totalEstimate || access) && (
                   <div className="decision-facts">
-                    <span><strong>{moneyRange(totalEstimate)}</strong> estimated total{travelers ? ` for ${travelers}` : ''}</span>
+                    {totalEstimate && <span><strong>{moneyRange(totalEstimate)}</strong> estimated total{travelers ? ` for ${travelers}` : ''}</span>}
+                    {access && <span>{access.value}</span>}
                   </div>
                 )}
                 <div className="estimate-qualifier">Qualified planning estimate · not checked prices</div>
@@ -305,7 +354,7 @@ export default function Destinations() {
                     </span>
                   )}
                 </div>
-                <button type="button" className="reason-toggle" onClick={() => setOpenId(isOpen ? null : d.key)}>
+                <button type="button" className="reason-toggle" onClick={() => toggleOpen(d.key)}>
                   Why this one <span>{isOpen ? '▴' : '▾'}</span>
                 </button>
                 {isOpen && (
@@ -333,9 +382,11 @@ export default function Destinations() {
                 )}
                 <div className="dest-actions">
                   <button type="button" className="btn btn-ghost" onClick={() => moreLikeThis(d)} disabled={moreLikeThisId === d.key}>✨ More like this</button>
-                  {nextMode === 'preview'
-                    ? <button type="button" className="btn btn-primary" onClick={() => planThis(d)} disabled={planningId === d.key}>Plan this trip →</button>
-                    : <Link className="btn btn-primary" to="/trip-preview" onClick={() => { sendTripCommand('select_destination', { optionId: d.key }).catch(() => {}); updateTrip({ destination: { type: d.type, name: d.name } }); }}>Want to plan this? →</Link>}
+                  {isSelected
+                    ? <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue planning →</button>
+                    : nextMode === 'preview'
+                      ? <button type="button" className="btn btn-primary" onClick={() => planThis(d)} disabled={planningId === d.key}>Plan this trip →</button>
+                      : <Link className="btn btn-primary" to="/trip-preview" onClick={() => { sendTripCommand('select_destination', { optionId: d.key }).catch(() => {}); updateTrip({ destination: { type: d.type, name: d.name } }); }}>Want to plan this? →</Link>}
                 </div>
                 <div className="been-before">
                   <span className="been-before-label">Been here before? <em>tell us how it was</em></span>
