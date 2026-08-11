@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { createAtlasDashboardState } from '../lib/mockAtlasTrip.js';
 import {
   buildAddPlaceMessage, buildRemovePlaceMessage, buildSetPaceMessage, buildSetStartDateMessage,
-  planBuilderSummary, toFrozenSnapshot, UNDO_MESSAGE,
+  planBuilderSummary, UNDO_MESSAGE,
 } from '../lib/guidePlanAdapter.js';
 import '../styles/preview.css';
 
 export default function TripPreview() {
   const navigate = useNavigate();
-  const { updateTrip, commandSnapshot, sendTripCommand } = useTrip();
+  const { commandSnapshot, sendTripCommand } = useTrip();
 
   const tripState = commandSnapshot?.trip_state;
   const plannerState = tripState?.planner_state;
@@ -27,14 +26,12 @@ export default function TripPreview() {
   const bootStarted = useRef(false);
 
   // Already frozen (e.g. the traveler navigated back after approving) — Guide
-  // never reruns, so skip straight to the dashboard with the same handoff.
+  // never reruns, so skip straight to the dashboard. TripDashboard.jsx owns
+  // triggering the (also idempotent) Atlas itinerary generation from there.
   useEffect(() => {
     if (!frozenPlan) return;
-    const atlasState = createAtlasDashboardState(toFrozenSnapshot(frozenPlan, tripState?.trip_context), tripState?.trip_context);
-    updateTrip({ atlasState: { ...atlasState, mode: 'self-led' }, plan: 'self-led', tripLength: frozenPlan.guide_state?.duration_days });
     navigate('/dashboard', { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frozenPlan]);
+  }, [frozenPlan, navigate]);
 
   // Bootstraps the real Guide session: START, then a silent APPROVE_PLACES so
   // the single-screen Plan Builder has a day plan to show immediately — the

@@ -65,6 +65,36 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
         trip_state: { stage: 'matched', active_agent: null },
       })),
     },
+    {
+      // TWM-106: landing on the Plan Builder immediately bootstraps a real
+      // Guide session — scripted so the route mock doesn't reject it.
+      command: 'start_planning',
+      response: commandResponse('Here are the places I suggest.', tripRecord({
+        version: 7,
+        trip_state: {
+          stage: 'planning', active_agent: 'guide',
+          planner_state: { guide_session: { revision: 1, state: {
+            phase: 'PLACES_DRAFT', destinations: ['Madhya Pradesh'], duration_days: null, start_date: null,
+            places: ['Gwalior Fort'], day_plan: [], preferences: [], exclusions: [],
+            applied_changes: [], pending_clarification: null,
+          } } },
+        },
+      })),
+    },
+    {
+      command: 'approve_places',
+      response: commandResponse('Places approved; here is the day plan.', tripRecord({
+        version: 8,
+        trip_state: {
+          stage: 'planning', active_agent: 'guide',
+          planner_state: { guide_session: { revision: 2, state: {
+            phase: 'DAY_PLAN_DRAFT', destinations: ['Madhya Pradesh'], duration_days: 1, start_date: null,
+            places: ['Gwalior Fort'], day_plan: [{ day_number: 1, date: null, places: ['Gwalior Fort'] }],
+            preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
+          } } },
+        },
+      })),
+    },
   ]);
 
   await page.goto('login');
@@ -96,4 +126,5 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
 
   await mpCard.getByText('Plan this trip →').click();
   await expect(page).toHaveURL(/\/app\/trip-preview/);
+  await expect(page.getByText('Gwalior Fort')).toBeVisible();
 });

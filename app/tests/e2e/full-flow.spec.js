@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { commandResponse, mockTripCommandFlow, tripRecord } from './testUtils.js';
+import { atlasResult, commandResponse, mockTripCommandFlow, tripRecord } from './testUtils.js';
 
 function successOutcome() {
   return {
@@ -92,6 +92,20 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
         },
       })),
     },
+    {
+      command: 'start_itinerary',
+      response: commandResponse(null, tripRecord({
+        version: 9,
+        trip_state: {
+          stage: 'planned', active_agent: null,
+          planner_state: {
+            guide_session: { revision: 3, state: { phase: 'PLAN_APPROVED' } },
+            frozen_plan: { guide_revision: 3, guide_state: { phase: 'PLAN_APPROVED' } },
+          },
+          itinerary_state: { status: 'ready', version: 1, source_guide_revision: 3, result: atlasResult() },
+        },
+      })),
+    },
   ]);
 
   await page.goto('login');
@@ -118,6 +132,8 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
   await page.getByText('Generate detailed itinerary →').click();
 
   // TWM-140: no Choose Plan interstitial — approve_plan navigates straight in.
+  // TWM-97: the Dashboard itself triggers start_itinerary and renders the real result.
   await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByRole('navigation', { name: 'Trip Dashboard tabs' })).toBeVisible();
+  await expect(page.getByText('Abbey Falls Getaway')).toBeVisible();
 });
