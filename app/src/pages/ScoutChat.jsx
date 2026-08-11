@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
-import { createEntryCommand, safeExecuteMockEntryCommand } from '../lib/mockTripCommands.js';
+import { QUICK_REPLIES } from '../data/entryCommandFixtures.js';
+import { newIdempotencyKey } from '../lib/tripApi.js';
 import '../styles/chat.css';
 
 let nextId = 1;
@@ -10,38 +10,39 @@ let nextId = 1;
 export default function ScoutChat() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { trip, commandSnapshot, applyMockCommandResponse } = useTrip();
+  const { commandSnapshot, sendTripCommand } = useTrip();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const initialized = useRef(false);
   const lastCommand = useRef(null);
+  // The very first turn is a typed advice_entry (Scout entry, no rediscovery);
+  // once a specialist owns the trip, follow-ups are plain traveler_message.
+  const entered = useRef(false);
 
   function say(role, text) {
     if (text) setMessages(previous => [...previous, { id: nextId++, role, text }]);
   }
 
-  function runAdvice(message, { showUser = true } = {}) {
-    if (!message.trim() || busy) return;
-    const command = createEntryCommand({
-      intent: ENTRY_INTENTS.ADVICE,
-      message: message.trim(),
-      expectedVersion: commandSnapshot?.version ?? 1,
-      idempotencyKey: lastCommand.current?.message === message.trim() ? lastCommand.current.idempotency_key : `fixture-${nextId}`,
-    });
-    lastCommand.current = command;
-    if (showUser) say('user', message.trim());
+  async function runAdvice(message, { showUser = true } = {}) {
+    const text = message.trim();
+    if (!text || busy) return;
+    const idempotencyKey = lastCommand.current?.message === text ? lastCommand.current.idempotencyKey : newIdempotencyKey();
+    lastCommand.current = { message: text, idempotencyKey };
+    if (showUser) say('user', text);
     setBusy(true);
     setError(null);
-    setTimeout(() => {
-      const outcome = safeExecuteMockEntryCommand(command, trip);
-      if (outcome.data) {
-        applyMockCommandResponse(outcome.data);
-        say('assistant', outcome.data.message);
-      } else setError(outcome.error);
+    try {
+      const command = entered.current ? 'traveler_message' : 'advice_entry';
+      const response = await sendTripCommand(command, { message: text, idempotencyKey });
+      entered.current = true;
+      say('assistant', response.message);
+    } catch (commandError) {
+      setError(commandError.message || 'Something went wrong.');
+    } finally {
       setBusy(false);
-    }, 350);
+    }
   }
 
   useEffect(() => {
@@ -50,7 +51,6 @@ export default function ScoutChat() {
     say('assistant', "I'm Scout. Tell me the travel question or concern you want advice on.");
     const message = params.get('msg')?.trim();
     if (message) runAdvice(message);
-    // Fixture-backed entry intentionally initializes once; real resume belongs to TWM-110.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -92,7 +92,6 @@ export default function ScoutChat() {
         <input type="text" className="chat-input" placeholder="Ask Scout a travel question…" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') send(); }} />
         <button type="button" className="chat-send" onClick={send} disabled={busy} aria-label="Send">→</button>
       </div>
-      <small>Fixture-backed Scout response — no Backend or agent call was made.</small>
     </div>
   );
 }

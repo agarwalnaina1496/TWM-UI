@@ -29,8 +29,8 @@ async function request(path = '', options = {}) {
   return payload;
 }
 
-// Backend hasn't wired real trip commands yet (TWM-110), so a freshly created
-// trip has no meaningful trip_state — this mirrors index_old.html's defaultState.
+// A freshly created trip has no meaningful trip_state yet — mirrors
+// index_old.html's defaultState, used until the first command is sent.
 export function defaultTripState(tripId) {
   return {
     trip_id: tripId,
@@ -81,6 +81,25 @@ export async function saveUiState(id, uiState, expectedVersion) {
     body: JSON.stringify({ expected_version: expectedVersion, ui_state: uiState }),
   });
   return normalizeTripRecord(saved);
+}
+
+export function newIdempotencyKey() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
+    const value = Math.floor(Math.random() * 16);
+    return (character === 'x' ? value : (value & 0x3) | 0x8).toString(16);
+  });
+}
+
+// The single browser mutation boundary: POST /api/trips/{id}/commands.
+// React never sends canonical TripState — only a typed command + bounded payload.
+export async function sendTripCommand(id, payload) {
+  const saved = await request(`/${id}/commands`, { method: 'POST', body: JSON.stringify(payload) });
+  return {
+    message: saved.message ?? null,
+    agent_meta: saved.agent_meta ?? null,
+    trip: normalizeTripRecord(saved.trip),
+  };
 }
 
 // Serializes mutations per trip id so concurrent saves for the same trip never race.

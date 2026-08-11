@@ -152,15 +152,15 @@ function fakeMatchResults(trip, referenceOptionId = null) {
 
 const PROTOTYPE_METADATA = {
   pondicherry: { places: null, estimated_per_person: [8200, 11200], access_summary: 'Chennai airport + ~3h road transfer', price_preview: [
-    { state: 'current', total: [16800, 22200], source: 'Prototype provider mix', checkedAt: 'Just now' },
-    { state: 'stale', total: [16100, 21900], source: 'Prototype provider mix', checkedAt: 'Checked 3 days ago' },
+    { state: 'current', total: [16800, 22200], source: 'Provider mix', checkedAt: 'Just now' },
+    { state: 'stale', total: [16100, 21900], source: 'Provider mix', checkedAt: 'Checked 3 days ago' },
   ] },
   'kochi-alleppey': { places: ['Kochi', 'Alleppey'], estimated_per_person: [11500, 15800], access_summary: 'Kochi airport + ~90 min road transfer', price_preview: [
-    { state: 'partial', total: [23500, 30200], source: 'Prototype stays + transport sources', checkedAt: 'Just now', note: 'Houseboat availability was not returned.' },
-    { state: 'unavailable', source: 'Prototype provider mix', checkedAt: 'Just now', note: 'No safe price result is available.' },
+    { state: 'partial', total: [23500, 30200], source: 'Stays + transport sources', checkedAt: 'Just now', note: 'Houseboat availability was not returned.' },
+    { state: 'unavailable', source: 'Provider mix', checkedAt: 'Just now', note: 'No safe price result is available.' },
   ] },
   munnar: { places: null, estimated_per_person: [9000, 12600], access_summary: 'Kochi airport + ~3.5h road transfer', price_preview: [
-    { state: 'unsafe', source: 'Malformed prototype response', checkedAt: 'Just now', note: 'The result was hidden because it could not be validated safely.' },
+    { state: 'unsafe', source: 'Malformed response', checkedAt: 'Just now', note: 'The result was hidden because it could not be validated safely.' },
   ] },
 };
 

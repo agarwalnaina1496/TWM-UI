@@ -83,8 +83,8 @@ export default function TripDashboard() {
   return (
     <main className="wrap dashboard">
       <TripHero atlas={atlas} version={version} travelers={travelers} actions={<>
-        <button className="btn btn-ghost" type="button" onClick={() => alert('Prototype — PDF generation is simulated.')}>📄 PDF</button>
-        <button className="btn btn-ghost" type="button" onClick={() => alert('Prototype — sharing is simulated.')}>🔗 Share</button>
+        <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
+        <button className="btn btn-ghost" type="button" onClick={() => alert('Sharing is not available yet.')}>🔗 Share</button>
       </>} />
       <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">{TABS.map(({ name, icon }) => <button type="button" aria-current={tab === name ? 'page' : undefined} className={tab === name ? 'active' : ''} key={name} onClick={() => setTab(name)}><span className="tab-icon">{icon}</span> {name}</button>)}</nav>
 
@@ -178,15 +178,13 @@ export default function TripDashboard() {
         <section className="support-box">
           <span className="support-label">Questions or changes to this itinerary?</span>
           <p>This is specifically for support on the plan you've already received — swapping something, adjusting dates, or anything unclear. For actually booking the trip, use the option below instead.</p>
-          <button type="button" className="btn btn-primary" onClick={() => alert('Prototype — this would open a conversation with the TravelWithMe team.')}>Talk to the TravelWithMe team</button>
+          <button type="button" className="btn btn-primary" onClick={() => alert('This would open a conversation with the TravelWithMe team.')}>Talk to the TravelWithMe team</button>
         </section>
         <section className="booking-help-box">
           <div><h3>Want us to help book this trip?</h3><p>Our team can handle flights, stays, and every reservation end-to-end, so you don't have to.</p></div>
-          <button type="button" className="btn btn-amber" onClick={() => alert('Prototype — this would start a TravelWithMe-led booking request.')}>Get booking help →</button>
+          <button type="button" className="btn btn-amber" onClick={() => alert('This would start a TravelWithMe-led booking request.')}>Get booking help →</button>
         </section>
       </section>}
-
-      <small>Fixture-backed Self-Led Dashboard — no provider, OCR, booking or Atlas call was made.</small>
     </main>
   );
 }

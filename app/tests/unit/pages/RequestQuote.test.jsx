@@ -33,9 +33,9 @@ describe('RequestQuote', () => {
     await userEvent.clear(emailInput);
     await userEvent.type(emailInput, 'jane@example.com');
 
-    await userEvent.click(screen.getByText('Request a quote (simulated) →'));
+    await userEvent.click(screen.getByText('Request a quote →'));
 
-    expect(screen.getByText('Request sent (simulated)')).toBeInTheDocument();
+    expect(screen.getByText('Request sent')).toBeInTheDocument();
     expect(screen.getByText('Auth: not-logged-in - Jane - jane@example.com')).toBeInTheDocument();
   });
 });

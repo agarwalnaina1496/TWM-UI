@@ -42,7 +42,7 @@ export default function Login() {
         {mode === 'forgot' ? (
           resetSent ? (
             <>
-              <p style={{ fontSize: 13, color: 'var(--tm)', textAlign: 'center' }}>If an account exists for <b>{email || 'that email'}</b>, a reset link would be sent (prototype — nothing is actually sent).</p>
+              <p style={{ fontSize: 13, color: 'var(--tm)', textAlign: 'center' }}>If an account exists for <b>{email || 'that email'}</b>, a reset link would be sent.</p>
               <span className="btn btn-primary btn-full" onClick={() => switchMode('login')} style={{ marginTop: 14 }}>Back to log in</span>
             </>
           ) : (
@@ -88,7 +88,6 @@ export default function Login() {
             )}
           </>
         )}
-        <p style={{ fontSize: 11, color: 'var(--tm)', textAlign: 'center', marginTop: 10 }}>Prototype — nothing is actually sent or stored.</p>
       </div>
     </div>
   );

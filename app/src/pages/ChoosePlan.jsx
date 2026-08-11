@@ -18,7 +18,6 @@ export default function ChoosePlan() {
         <article className="plan-card"><div className="plan-name">Self-Led</div><div className="plan-promise">You stay in control. We do the homework.</div><ul className="plan-feats"><li>Destination discovery, if you haven't picked one</li><li>Personalized day-by-day itinerary</li><li>2–3 curated flight, hotel &amp; activity options with reasoning</li><li>Deep links straight to checkout</li></ul><div className="plan-you-handle">You handle: booking, payment and on-trip changes.</div><button type="button" className="btn btn-primary btn-full" onClick={chooseSelfLed}>Choose Self-Led →</button></article>
         <article className="plan-card hi" aria-disabled="true"><div className="plan-name">TWM-Led <span className="chip">Coming Soon</span></div><div className="plan-promise">You enjoy the trip. We handle the rest.</div><ul className="plan-feats"><li>Everything in Self-Led, plus:</li><li>End-to-end booking coordination</li><li>Pickup, drop &amp; daily coordination</li><li>Disruptions handled directly</li><li>One point of contact for the whole trip</li></ul><button type="button" className="btn btn-primary btn-full" disabled>Choose TWM-Led →</button></article>
       </div>
-      <p className="plan-illustrative">No payment or reservation happens in this prototype.</p>
     </main>
   );
 }
