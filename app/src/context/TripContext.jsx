@@ -1,10 +1,14 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { applyCommandSnapshot } from '../lib/mockTripCommands.js';
+import { createTrip, getTrip, listTrips, queueTripMutation, renameTrip as renameTripApi, TripApiError } from '../lib/tripApi.js';
 
 const TripContext = createContext(null);
 
-// Fake-backend prototype only: persists to localStorage so a refresh doesn't
-// wipe progress. Not a substitute for real trip persistence (see TWM-64/65/66).
+// Mock trip content only (destination, places, days, plan...) — this is not
+// canonical TripState. Real command wiring lands in TWM-110; until then this
+// content has no Backend home, so it stays cached here to avoid losing demo
+// progress on refresh. See currentTripId below for the Backend-authoritative
+// trip record (id/title/version), which TWM-102 owns.
 const STORAGE_KEY = 'twm_prototype_state_v1';
 
 const DEFAULT_TRIP = {
@@ -48,6 +52,67 @@ export function TripProvider({ children }) {
   const [auth, setAuth] = useState(stored?.auth ?? DEFAULT_AUTH);
   const [savedTrips, setSavedTrips] = useState(stored?.savedTrips ?? []);
   const [commandSnapshot, setCommandSnapshot] = useState(stored?.commandSnapshot ?? null);
+
+  // Backend-authoritative trip record (id/title/version + guest session cookie).
+  // Does not carry the mock trip content above — see TWM-102/TWM-110 split.
+  const [tripRecord, setTripRecord] = useState(null);
+  const [tripLoadStatus, setTripLoadStatus] = useState('idle'); // idle | loading | ready | error
+  const [tripLoadError, setTripLoadError] = useState(null);
+  const ensureTripPromise = useRef(null);
+
+  async function loadOrCreateTrip() {
+    setTripLoadStatus('loading');
+    setTripLoadError(null);
+    try {
+      const records = await listTrips();
+      const record = records[0] ?? await createTrip();
+      setTripRecord(record);
+      setTripLoadStatus('ready');
+      return record;
+    } catch (error) {
+      setTripLoadStatus('error');
+      setTripLoadError(error instanceof TripApiError ? error : new TripApiError('Trip persistence is unavailable.'));
+      throw error;
+    }
+  }
+
+  useEffect(() => {
+    loadOrCreateTrip().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function retryTripLoad() {
+    return loadOrCreateTrip().catch(() => {});
+  }
+
+  // Guarantees a Backend trip record exists before a mutation that needs one,
+  // serialized so concurrent callers await the same in-flight attempt.
+  function ensureTrip() {
+    if (tripRecord) return Promise.resolve(tripRecord);
+    if (!ensureTripPromise.current) {
+      ensureTripPromise.current = loadOrCreateTrip().finally(() => {
+        ensureTripPromise.current = null;
+      });
+    }
+    return ensureTripPromise.current;
+  }
+
+  async function renameCurrentTrip(title) {
+    const record = await ensureTrip();
+    return queueTripMutation(record.id, async () => {
+      try {
+        const saved = await renameTripApi(record.id, title, record.version);
+        setTripRecord(saved);
+        return saved;
+      } catch (error) {
+        if (error instanceof TripApiError && error.status === 409) {
+          const latest = await getTrip(record.id);
+          setTripRecord(latest);
+        }
+        throw error;
+      }
+    });
+  }
 
   useEffect(() => {
     try {
@@ -107,7 +172,11 @@ export function TripProvider({ children }) {
   const hasAccess = auth.loggedIn || auth.isGuest;
 
   return (
-    <TripContext.Provider value={{ trip, updateTrip, startNewTrip, auth, hasAccess, login, continueWithoutLogin, logout, setContact, savedTrips, commandSnapshot, applyMockCommandResponse }}>
+    <TripContext.Provider value={{
+      trip, updateTrip, startNewTrip, auth, hasAccess, login, continueWithoutLogin, logout, setContact,
+      savedTrips, commandSnapshot, applyMockCommandResponse,
+      currentTripId: tripRecord?.id ?? null, tripLoadStatus, tripLoadError, retryTripLoad, renameCurrentTrip,
+    }}>
       {children}
     </TripContext.Provider>
   );
