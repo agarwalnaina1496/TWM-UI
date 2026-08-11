@@ -32,20 +32,20 @@ function tripRecord(overrides = {}) {
   };
 }
 
-describe('App RequireAuth guard', () => {
+describe('App guest-first routing (TWM-140)', () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it('redirects to /login when there is no access', () => {
-    renderApp(['/scout-chat']);
-    expect(screen.getByRole('heading', { name: /log in to/i })).toBeInTheDocument();
-  });
-
-  it('renders the protected route directly when access already exists', () => {
-    seedAuth({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+  it('enters the journey directly for a fresh anonymous visitor, never redirecting to Login', () => {
     renderApp(['/']);
     expect(screen.getByRole('heading', { name: /where are we headed/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /log in to/i })).not.toBeInTheDocument();
+  });
+
+  it('renders a deep-linked journey route directly without an explicit guest seed', () => {
+    renderApp(['/my-trips']);
+    expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
   });
 
   it('lets a logged-in user reach My Trips without a redirect', () => {

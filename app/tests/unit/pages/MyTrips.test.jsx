@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import MyTrips from '../../../src/pages/MyTrips.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
@@ -48,5 +49,36 @@ describe('MyTrips', () => {
     renderMyTrips();
     expect(screen.getByText('Signed in as Traveler.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /view/i })).toHaveAttribute('href', '/itinerary');
+  });
+
+  it('shows an explanatory locked section for account-only history instead of redirecting (TWM-140)', () => {
+    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' }, savedTrips: [] });
+    renderMyTrips();
+    expect(screen.getByText(/trip history from other devices or a previous account/i)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('does not show the account-only history lock for a logged-in traveler', () => {
+    seedState({ auth: { loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' }, savedTrips: [] });
+    renderMyTrips();
+    expect(screen.queryByText(/trip history from other devices/i)).not.toBeInTheDocument();
+  });
+
+  it('opens the contextual sync invitation only after an explicit click, never automatically', async () => {
+    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' }, savedTrips: [] });
+    renderMyTrips();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText('Log in to sync across devices'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Log in to sync this trip across devices')).toBeInTheDocument();
+  });
+
+  it('choosing Continue without login on the invitation keeps the traveler on My Trips and stops re-offering the locked-history prompt this session', async () => {
+    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' }, savedTrips: [] });
+    renderMyTrips();
+    await userEvent.click(screen.getByText('Log in to sync across devices'));
+    await userEvent.click(screen.getByRole('button', { name: 'Continue without login' }));
+    expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
+    expect(screen.queryByText('Log in to see synced trip history')).not.toBeInTheDocument();
   });
 });

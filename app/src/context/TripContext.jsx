@@ -33,11 +33,13 @@ const DEFAULT_TRIP = {
   travelMode: null,   // { id, mode, label, price, details } — selected travel option
   hotel: null,        // { id, name, price } — selected or uploaded
   bookingUploaded: false,
-  plan: null,   // 'self-led' | 'twm-led'
+  plan: 'self-led',   // 'self-led' | 'twm-led' — TWM-Led is not yet available, so this is the only real option
   paid: false,
 };
 
-const DEFAULT_AUTH = { loggedIn: false, isGuest: false, name: '', email: '' };
+// Guest-first (TWM-140): every visitor starts as an anonymous guest with a
+// working session; login is an explicit upgrade, never a precondition.
+const DEFAULT_AUTH = { loggedIn: false, isGuest: true, name: 'Guest', email: '' };
 
 function loadStored() {
   try {
@@ -55,6 +57,11 @@ export function TripProvider({ children }) {
   const [auth, setAuth] = useState(stored?.auth ?? DEFAULT_AUTH);
   const [savedTrips, setSavedTrips] = useState(stored?.savedTrips ?? []);
   const [commandSnapshot, setCommandSnapshot] = useState(stored?.commandSnapshot ?? null);
+  // In-app route to return to after an explicit login action (TWM-140
+  // contextual auth invitation). Only ever set from internal route strings
+  // (useLocation().pathname) — never from external input — so it can't be
+  // used as an open redirect.
+  const [pendingReturnTo, setPendingReturnTo] = useState(null);
 
   // Backend-authoritative trip record (id/title/version + guest session cookie).
   // Does not carry the mock trip content above — see TWM-102/TWM-110 split.
@@ -208,6 +215,7 @@ export function TripProvider({ children }) {
   return (
     <TripContext.Provider value={{
       trip, updateTrip, startNewTrip, auth, hasAccess, login, continueWithoutLogin, logout, setContact,
+      pendingReturnTo, setPendingReturnTo,
       savedTrips, commandSnapshot, sendTripCommand,
       currentTripId: tripRecord?.id ?? null, tripLoadStatus, tripLoadError, retryTripLoad, renameCurrentTrip,
     }}>
