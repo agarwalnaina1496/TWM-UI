@@ -58,12 +58,11 @@ export default function RequestQuote() {
               {trip.style && <div className="field-hint">Goal: "{trip.style}"</div>}
             </div>
 
-            <span className="btn btn-primary btn-full" onClick={submit}>Request a quote (simulated) →</span>
-            <p style={{ fontSize: 11, color: 'var(--tm)', textAlign: 'center', marginTop: 10 }}>Prototype — no request is actually sent to a coordinator.</p>
+            <span className="btn btn-primary btn-full" onClick={submit}>Request a quote →</span>
           </>
         ) : (
           <>
-            <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 600, marginBottom: 6 }}>Request sent (simulated)</div>
+            <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 600, marginBottom: 6 }}>Request sent</div>
             <p className="lede">Someone from the TravelWithMe team will reach out within 24 hours with a quote for this trip.</p>
           </>
         )}

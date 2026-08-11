@@ -87,7 +87,7 @@ export default function Logistics() {
         <span className="lede">You can come back here anytime before your trip to arrange more bookings.</span>
         <button type="button" className="btn btn-primary" onClick={() => navigate('/dashboard')}>Continue to dashboard →</button>
       </div>
-      <small>Fixture-backed logistics — no provider, OCR or booking call was made. Itinerary version {version.number}.</small>
+      <small>Itinerary version {version.number}.</small>
     </main>
   );
 }

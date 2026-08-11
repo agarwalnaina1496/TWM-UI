@@ -7,10 +7,11 @@ import {
 const TripContext = createContext(null);
 
 // Mock trip content only (destination, places, days, plan...) — this is not
-// canonical TripState. Real command wiring lands in TWM-110; until then this
-// content has no Backend home, so it stays cached here to avoid losing demo
-// progress on refresh. See currentTripId below for the Backend-authoritative
-// trip record (id/title/version), which TWM-102 owns.
+// canonical TripState. TWM-110 wired entry/advice commands, but this content
+// still has no Backend home (Destinations/Guide/Atlas commands land later in
+// TWM-104/106/107), so it stays cached here to avoid losing demo progress on
+// refresh. See currentTripId below for the Backend-authoritative trip record
+// (id/title/version), which TWM-102 owns.
 const STORAGE_KEY = 'twm_prototype_state_v1';
 
 const DEFAULT_TRIP = {

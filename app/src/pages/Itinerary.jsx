@@ -6,7 +6,6 @@ export default function Itinerary() {
 
   return (
     <div className="wrap">
-      <span className="eyebrow">Fixture-backed preview — not a live Atlas result</span>
       <h1>Your <em>{trip.destination?.name || 'trip'}</em> itinerary</h1>
 
       <div className="itin-banner">
@@ -15,9 +14,9 @@ export default function Itinerary() {
       </div>
 
       <div className="itin-actions">
-        <span className="btn btn-ghost" onClick={() => alert('Prototype — PDF generation is simulated, per TWM-98.')}>Download PDF (simulated)</span>
-        <span className="btn btn-ghost" onClick={() => alert('Prototype — sharing is simulated.')}>Share</span>
-        <span className="btn btn-ghost" onClick={() => alert('Prototype — this would open a support contact flow.')}>Questions or changes?</span>
+        <span className="btn btn-ghost" onClick={() => alert('PDF generation is not available yet.')}>Download PDF</span>
+        <span className="btn btn-ghost" onClick={() => alert('Sharing is not available yet.')}>Share</span>
+        <span className="btn btn-ghost" onClick={() => alert('This would open a support contact flow.')}>Questions or changes?</span>
       </div>
 
       <div className="why-box">
@@ -30,7 +29,7 @@ export default function Itinerary() {
           {d.items.map((item, i) => (
             <div className="itin-row" key={item.id}>
               <div className="time">{['9:00 AM', '1:00 PM', '6:00 PM'][i] || '—'}</div>
-              <div>{item.text} <a className="link" href="#" onClick={e => { e.preventDefault(); alert('Prototype — this would deep-link to a real booking partner.'); }}>Check availability →</a></div>
+              <div>{item.text} <a className="link" href="#" onClick={e => { e.preventDefault(); alert('This would deep-link to a real booking partner.'); }}>Check availability →</a></div>
             </div>
           ))}
         </div>

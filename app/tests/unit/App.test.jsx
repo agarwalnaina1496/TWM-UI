@@ -109,7 +109,7 @@ describe('App RequireAuth guard', () => {
     advice.unmount();
 
     renderApp(['/journey-entry?intent=known_destination']);
-    expect(screen.getByText('Guide is here to help plan your destination.').closest('.chat-screen')).toBeInTheDocument();
+    expect(screen.getByText('Scout is here to help plan your destination.').closest('.chat-screen')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('e.g. Coorg, Karnataka')).toBeInTheDocument();
   });
 

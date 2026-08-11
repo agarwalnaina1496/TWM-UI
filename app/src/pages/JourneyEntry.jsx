@@ -85,20 +85,20 @@ export default function JourneyEntry() {
     <div className="chat-page chat-screen">
       <div className="chat-context-bar" role="status">
         <span aria-hidden="true">ⓘ</span>
-        {isDiscover ? 'Meridian is here to help find your destination.' : 'Guide is here to help plan your destination.'}
+        {isDiscover ? 'Scout is here to help find your destination.' : 'Scout is here to help plan your destination.'}
       </div>
-      <span className="eyebrow">{isDiscover ? '✦ Meridian' : 'Trip setup'}</span>
+      <span className="eyebrow">{isDiscover ? '✦ Scout' : 'Trip setup'}</span>
       <h1>{isDiscover ? <>Let's find <em>your destination</em></> : <>Start with <em>your destination</em></>}</h1>
       {isDiscover ? (
         <>
-          <p className="lede">Tell Meridian what matters to you, and it'll narrow down destinations that fit.</p>
+          <p className="lede">Tell Scout what matters to you, and it'll narrow down destinations that fit.</p>
           <div className="chat-log" aria-live="polite">
             {messages.map(message => (
               <div key={message.id} className={`chat-row chat-row-${message.role}`}>
                 <div className={`chat-bub chat-bub-${message.role}`} style={{ whiteSpace: 'pre-wrap' }}>{message.text}</div>
               </div>
             ))}
-            {busy && <div className="think" role="status">Meridian is thinking…</div>}
+            {busy && <div className="think" role="status">Scout is thinking…</div>}
             {!busy && quickReplies.length > 0 && (
               <div className="chat-chip-row" aria-label="Suggested traveler replies">
                 {quickReplies.map(reply => <button type="button" className="chip chat-chip-long" key={reply.value} onClick={() => sendDiscover(reply)}>{reply.label}</button>)}
@@ -109,13 +109,13 @@ export default function JourneyEntry() {
             )}
           </div>
           <div className="chat-input-bar">
-            <input className="chat-input" aria-label="Message Meridian" placeholder="Tell Meridian about your trip…" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') sendDiscover(); }} />
+            <input className="chat-input" aria-label="Message Scout" placeholder="Tell Scout about your trip…" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') sendDiscover(); }} />
             <button type="button" className="chat-send" onClick={() => sendDiscover()} disabled={busy} aria-label="Send">→</button>
           </div>
         </>
       ) : (
         <>
-          <p className="lede">Tell us where you are going. We’ll take you straight to planning—no Scout or destination matching needed.</p>
+          <p className="lede">Tell us where you are going. We’ll take you straight to planning—no matching needed.</p>
           <div className="chat-log" aria-live="polite">
             <div className="chat-row chat-row-assistant">
               <div className="chat-bub chat-bub-assistant">Where are you going?</div>

@@ -45,7 +45,7 @@ export default function TripPreview() {
   return (
     <main className="wrap plan-builder">
       <Link className="back-link" to="/destinations">← Back to destinations</Link>
-      <span className="eyebrow">Guide Plan Builder</span>
+      <span className="eyebrow">Scout Plan Builder</span>
       <h1>{plan.circuit.name} <em>| {plan.summary.duration_days} days</em></h1>
       <p className="lede">Shape the route, places and broad days together. Dates can stay open until you book.</p>
 
@@ -92,7 +92,7 @@ export default function TripPreview() {
               <button type="button" onClick={() => { revise({ type: 'ADD_PLACE', block_id: block.id, value: newPlaces[block.id] }); setNewPlaces(previous => ({ ...previous, [block.id]: '' })); }}>Add</button>
             </div>
             {block.suggestion && !block.places.includes(block.suggestion.name) && (
-              <div className="reasoned-suggestion"><span><strong>Guide suggests {block.suggestion.name}</strong> — {block.suggestion.reason}</span><button type="button" onClick={() => revise({ type: 'ADD_PLACE', block_id: block.id, value: block.suggestion.name })}>Add suggestion</button></div>
+              <div className="reasoned-suggestion"><span><strong>Scout suggests {block.suggestion.name}</strong> — {block.suggestion.reason}</span><button type="button" onClick={() => revise({ type: 'ADD_PLACE', block_id: block.id, value: block.suggestion.name })}>Add suggestion</button></div>
             )}
           </article>
         ))}
@@ -102,7 +102,6 @@ export default function TripPreview() {
         <button type="button" className="btn btn-ghost" disabled={!plan.history.length} onClick={() => revise({ type: 'UNDO' })}>Undo last change</button>
         <button type="button" className="btn btn-primary" onClick={generate}>Generate detailed itinerary →</button>
       </footer>
-      <small>Fixture-backed Guide revisions — no Backend or agent call was made.</small>
     </main>
   );
 }
