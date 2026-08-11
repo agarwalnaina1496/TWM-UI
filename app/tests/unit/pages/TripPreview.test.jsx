@@ -37,12 +37,12 @@ describe('TripPreview unified Plan Builder', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('persists the frozen handoff and continues to choose plan', async () => {
+  it('persists the frozen handoff and enters the Dashboard directly (TWM-140: no Choose Plan interstitial)', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
     await user.click(screen.getByRole('button', { name: /Generate detailed itinerary/ }));
-    expect(updateTrip).toHaveBeenLastCalledWith(expect.objectContaining({ guideSnapshot: expect.objectContaining({ status: 'PLAN_APPROVED', approved_revision: 1 }), tripLength: 14 }));
-    expect(updateTrip).toHaveBeenLastCalledWith(expect.objectContaining({ atlasState: expect.objectContaining({ current_version_id: 'atlas-v1' }) }));
-    expect(navigate).toHaveBeenCalledWith('/choose-plan');
+    expect(updateTrip).toHaveBeenLastCalledWith(expect.objectContaining({ guideSnapshot: expect.objectContaining({ status: 'PLAN_APPROVED', approved_revision: 1 }), tripLength: 14, plan: 'self-led' }));
+    expect(updateTrip).toHaveBeenLastCalledWith(expect.objectContaining({ atlasState: expect.objectContaining({ current_version_id: 'atlas-v1', mode: 'self-led' }) }));
+    expect(navigate).toHaveBeenCalledWith('/dashboard');
   });
 });

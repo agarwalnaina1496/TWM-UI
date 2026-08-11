@@ -15,10 +15,10 @@ describe('TripContext auth state', () => {
     localStorage.clear();
   });
 
-  it('defaults to no access', () => {
+  it('defaults to an anonymous guest with access (TWM-140 guest-first)', () => {
     const { result } = renderHook(() => useTrip(), { wrapper });
-    expect(result.current.auth).toEqual({ loggedIn: false, isGuest: false, name: '', email: '' });
-    expect(result.current.hasAccess).toBe(false);
+    expect(result.current.auth).toEqual({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    expect(result.current.hasAccess).toBe(true);
   });
 
   it('login sets loggedIn true and isGuest false', () => {
@@ -35,12 +35,12 @@ describe('TripContext auth state', () => {
     expect(result.current.hasAccess).toBe(true);
   });
 
-  it('logout resets to default and removes access', () => {
+  it('logout resets to the default anonymous-guest state, keeping access', () => {
     const { result } = renderHook(() => useTrip(), { wrapper });
     act(() => result.current.login({ name: 'Traveler', email: 't@example.com' }));
     act(() => result.current.logout());
-    expect(result.current.auth).toEqual({ loggedIn: false, isGuest: false, name: '', email: '' });
-    expect(result.current.hasAccess).toBe(false);
+    expect(result.current.auth).toEqual({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    expect(result.current.hasAccess).toBe(true);
   });
 
   it('setContact updates name/email without changing loggedIn/isGuest', () => {
@@ -66,6 +66,15 @@ describe('TripContext auth state', () => {
     act(() => result.current.updateTrip({ destination: { type: 'single', name: 'Coorg', places: null } }));
     act(() => result.current.startNewTrip());
     expect(result.current.trip.destination).toBe(null);
+  });
+
+  it('preserves and clears a pending return route around a login action (TWM-140)', () => {
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    expect(result.current.pendingReturnTo).toBe(null);
+    act(() => result.current.setPendingReturnTo('/my-trips'));
+    expect(result.current.pendingReturnTo).toBe('/my-trips');
+    act(() => result.current.setPendingReturnTo(null));
+    expect(result.current.pendingReturnTo).toBe(null);
   });
 
 });

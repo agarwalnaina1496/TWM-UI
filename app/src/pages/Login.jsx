@@ -6,21 +6,29 @@ import '../styles/details.css';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { trip, login, continueWithoutLogin } = useTrip();
+  const { trip, login, continueWithoutLogin, pendingReturnTo, setPendingReturnTo } = useTrip();
   const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [resetSent, setResetSent] = useState(false);
 
+  // pendingReturnTo is only ever set from in-app route strings (see Header
+  // and ContextualAuthModal), so it's safe to navigate to directly.
+  function resolveReturnTo() {
+    const dest = pendingReturnTo || '/';
+    setPendingReturnTo(null);
+    return dest;
+  }
+
   function continueNext() {
     login({ name: name.trim() || 'Traveler', email: email.trim() });
-    navigate('/');
+    navigate(resolveReturnTo());
   }
 
   function handleContinueWithoutLogin() {
     continueWithoutLogin();
-    navigate('/');
+    navigate(resolveReturnTo());
   }
 
   function switchMode(next) {

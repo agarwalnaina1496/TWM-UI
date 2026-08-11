@@ -38,8 +38,10 @@ export default function TripPreview() {
       return;
     }
     const atlasState = createAtlasDashboardState(response.snapshot, trip.tripContext);
-    updateTrip({ guidePlan: plan, guideSnapshot: response.snapshot, atlasState, plan: null, tripLength: plan.summary.duration_days });
-    navigate('/choose-plan');
+    // TWM-140: TWM-Led isn't available yet, so skip the plan-choice step and
+    // enter self-led execution directly rather than interrupting the journey.
+    updateTrip({ guidePlan: plan, guideSnapshot: response.snapshot, atlasState: { ...atlasState, mode: 'self-led' }, plan: 'self-led', tripLength: plan.summary.duration_days });
+    navigate('/dashboard');
   }
 
   return (
