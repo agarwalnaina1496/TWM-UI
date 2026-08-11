@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
-import { bookingReadinessLabel, dayCostRange, routeLocations, timelineIcon } from '../lib/atlasView.js';
+import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, routeLocations, timelineIcon } from '../lib/atlasView.js';
 import '../styles/dashboard.css';
 
 const TABS = [
@@ -17,6 +17,8 @@ const TABS = [
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 const moneyRange = (low, high) => (low == null || high == null ? null : `${money(low)}–${money(high)}`);
 
+const EMPTY_CONFIRM_FIELDS = { label: '', detail: '', dayNumber: '', reference: '', notes: '' };
+
 function BudgetBar({ low, high, min, max }) {
   const span = Math.max(max - min, 1);
   const left = ((low - min) / span) * 100;
@@ -29,21 +31,52 @@ function BookingReadinessBadge({ status }) {
   return <span className={`badge badge-readiness-${status}`}>{bookingReadinessLabel(status)}</span>;
 }
 
-function InertBookingActions({ label, logisticsTab }) {
+function AnchorList({ anchors }) {
+  if (!anchors.length) return null;
   return (
-    <div className="booking-choice">
-      <div className="booking-choice-opt">
-        <strong>Already booked this yourself?</strong>
-        <p>Confirmation upload is coming soon.</p>
-        <button type="button" className="btn btn-ghost" disabled title="Coming soon">Upload {label} confirmation</button>
-      </div>
-      <span className="booking-choice-or">or</span>
-      <div className="booking-choice-opt">
-        <strong>Still need to arrange it?</strong>
-        <p>Browse real options and pick one.</p>
-        <Link className="btn btn-primary" to={`/logistics?tab=${logisticsTab}`}>Arrange bookings →</Link>
-      </div>
+    <div className="anchor-list" aria-label="Confirmed">
+      {anchors.map(anchor => (
+        <article className="dashboard-card anchor-card" key={anchor.id}>
+          <div>
+            <span className="badge badge-confirmed">🔒 confirmed</span>
+            <h3>{anchor.label}</h3>
+            <p>{anchor.detail}</p>
+            {anchor.reference && <div className="confirmation-chip">✓ {anchor.reference}</div>}
+            {anchor.notes && <p className="anchor-notes">{anchor.notes}</p>}
+          </div>
+        </article>
+      ))}
     </div>
+  );
+}
+
+function ConfirmationForm({ dayOptions, fields, setFields, onSubmit, onCancel, pending, error }) {
+  return (
+    <form className="confirmation-form" onSubmit={onSubmit}>
+      <label>What's confirmed?
+        <input required value={fields.label} disabled={pending} placeholder="e.g. Delhi to Rishikesh train" onChange={event => setFields(previous => ({ ...previous, label: event.target.value }))} />
+      </label>
+      <label>Details
+        <textarea required value={fields.detail} disabled={pending} placeholder="e.g. Confirmed arrival at 2:00 PM via train 12050" onChange={event => setFields(previous => ({ ...previous, detail: event.target.value }))} />
+      </label>
+      <label>Day
+        <select value={fields.dayNumber} disabled={pending} onChange={event => setFields(previous => ({ ...previous, dayNumber: event.target.value }))}>
+          <option value="">Not day-specific</option>
+          {dayOptions.map(day => <option key={day} value={day}>Day {day}</option>)}
+        </select>
+      </label>
+      <label>Confirmation code (optional)
+        <input value={fields.reference} disabled={pending} onChange={event => setFields(previous => ({ ...previous, reference: event.target.value }))} />
+      </label>
+      <label>Notes (optional)
+        <input value={fields.notes} disabled={pending} onChange={event => setFields(previous => ({ ...previous, notes: event.target.value }))} />
+      </label>
+      {error && <p className="confirm-error" role="alert">{error}</p>}
+      <div className="confirmation-form-actions">
+        <button type="button" className="btn btn-ghost" disabled={pending} onClick={onCancel}>Cancel</button>
+        <button type="submit" className="btn btn-primary" disabled={pending || !fields.label.trim() || !fields.detail.trim()}>Save confirmation</button>
+      </div>
+    </form>
   );
 }
 
@@ -55,9 +88,18 @@ export default function TripDashboard() {
   const [activeDay, setActiveDay] = useState(null);
 
   const itineraryState = commandSnapshot?.trip_state?.itinerary_state;
+  const anchors = commandSnapshot?.trip_state?.logistics_state?.anchors ?? [];
   const [bootStatus, setBootStatus] = useState('idle'); // idle | booting | ready | error
   const [bootError, setBootError] = useState(null);
   const bootStarted = useRef(false);
+
+  const [confirmType, setConfirmType] = useState(null); // 'transport' | 'stay' | 'activity' | null
+  const [confirmFields, setConfirmFields] = useState(EMPTY_CONFIRM_FIELDS);
+  const [confirmPending, setConfirmPending] = useState(false);
+  const [confirmError, setConfirmError] = useState(null);
+
+  const [revisionPending, setRevisionPending] = useState(false);
+  const [revisionError, setRevisionError] = useState(null);
 
   // Reopen never re-invokes Atlas: once ready, render the saved result and
   // never call start_itinerary again for this trip.
@@ -76,6 +118,47 @@ export default function TripDashboard() {
         setBootError(error.message || 'Could not generate the detailed itinerary.');
       });
   }, [itineraryState?.status, sendTripCommand]);
+
+  function openConfirmForm(type, dayNumber) {
+    setConfirmType(type);
+    setConfirmFields({ ...EMPTY_CONFIRM_FIELDS, dayNumber: dayNumber ? String(dayNumber) : '' });
+    setConfirmError(null);
+  }
+
+  async function submitConfirmForm(event) {
+    event.preventDefault();
+    setConfirmPending(true);
+    setConfirmError(null);
+    try {
+      await sendTripCommand('confirm_logistics', {
+        logisticsConfirmation: {
+          type: confirmType,
+          label: confirmFields.label.trim(),
+          detail: confirmFields.detail.trim(),
+          day_number: confirmFields.dayNumber ? Number(confirmFields.dayNumber) : null,
+          reference: confirmFields.reference.trim() || null,
+          notes: confirmFields.notes.trim() || null,
+        },
+      });
+      setConfirmType(null);
+    } catch (error) {
+      setConfirmError(error.message || 'Could not save that confirmation.');
+    } finally {
+      setConfirmPending(false);
+    }
+  }
+
+  async function resolveRevision(command) {
+    setRevisionPending(true);
+    setRevisionError(null);
+    try {
+      await sendTripCommand(command);
+    } catch (error) {
+      setRevisionError(error.message || 'Could not update the itinerary.');
+    } finally {
+      setRevisionPending(false);
+    }
+  }
 
   if (bootStatus === 'error') {
     return (
@@ -96,15 +179,19 @@ export default function TripDashboard() {
     );
   }
 
-  const result = itineraryState.result;
+  const currentVersion = itineraryState.current_version;
+  const result = currentVersion.result;
   const finalItinerary = result.final_itinerary;
   const days = finalItinerary.days;
+  const dayNumbers = days.map(day => day.day_number);
   const selectedDay = days.find(day => day.day_number === activeDay) || days[0];
   const selectedDayCost = dayCostRange(selectedDay);
   const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });
   const costMin = Math.min(...allCosts, 0);
   const costMax = Math.max(...allCosts, 1);
   const locations = routeLocations(days);
+  const proposedRevision = itineraryState.proposed_revision;
+  const history = itineraryState.history || [];
 
   return (
     <main className="wrap dashboard">
@@ -116,7 +203,19 @@ export default function TripDashboard() {
           <button className="btn btn-ghost" type="button" onClick={() => alert('Sharing is not available yet.')}>🔗 Share</button>
         </>}
       />
-      <p className="version-note">Itinerary version {itineraryState.version}.</p>
+      <p className="version-note">Itinerary version {currentVersion.version}.</p>
+
+      {history.length > 0 && (
+        <details className="prior-versions">
+          <summary>Prior versions ({history.length})</summary>
+          {history.map(entry => (
+            <details className="prior-version-entry" key={entry.version}>
+              <summary>Version {entry.version}</summary>
+              <ul>{entry.result.final_itinerary.days.map(day => <li key={day.day_number}>Day {day.day_number}: {day.title}</li>)}</ul>
+            </details>
+          ))}
+        </details>
+      )}
 
       {(finalItinerary.assumptions.length > 0 || result.unresolved.length > 0) && (
         <section className="assumptions-panel" aria-label="Assumptions and unresolved items">
@@ -126,6 +225,18 @@ export default function TripDashboard() {
           {result.unresolved.length > 0 && (
             <div><h3>Unresolved</h3><ul>{result.unresolved.map((item, index) => <li key={index}><strong>{item.item}:</strong> {item.generic_guidance}</li>)}</ul></div>
           )}
+        </section>
+      )}
+
+      {proposedRevision && (
+        <section className="revision-review" aria-label="Proposed itinerary revision">
+          <strong>⚠️ This affects Day{proposedRevision.affected_days.length > 1 ? 's' : ''} {proposedRevision.affected_days.join(' and ')}</strong>
+          <ul>{proposedRevision.changes.map((change, index) => <li key={index}>{change}</li>)}</ul>
+          {revisionError && <p className="revision-error" role="alert">{revisionError}</p>}
+          <div>
+            <button type="button" className="btn btn-ghost" disabled={revisionPending} onClick={() => resolveRevision('keep_current_itinerary')}>Keep current</button>
+            <button type="button" className="btn btn-primary" disabled={revisionPending} onClick={() => resolveRevision('accept_itinerary_revision')}>Accept changes</button>
+          </div>
         </section>
       )}
 
@@ -146,6 +257,7 @@ export default function TripDashboard() {
               <p className="atlas-day-route">📍 {selectedDay.primary_location}</p>
               <p>{selectedDay.summary}</p>
             </header>
+            <AnchorList anchors={anchorsForDay(anchors, selectedDay.day_number)} />
             <div className="atlas-timeline">
               {selectedDay.timeline.map((item, index) => <div className="atlas-item" key={index}>
                 <span className="atlas-dot">{timelineIcon(item.kind)}</span>
@@ -174,6 +286,11 @@ export default function TripDashboard() {
                 </ul>
               </div>
             </div>
+            {confirmType === 'activity' ? (
+              <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
+            ) : (
+              <button type="button" className="btn btn-ghost" onClick={() => openConfirmForm('activity', selectedDay.day_number)}>Confirm something for this day</button>
+            )}
           </article>
           {finalItinerary.practical_notes.length > 0 && (
             <section aria-label="Practical notes" className="practical-notes">
@@ -186,6 +303,7 @@ export default function TripDashboard() {
 
       {tab === 'Transport' && <section>
         <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Atlas-suggested options — a view only, not a booking desk.</p></div></div>
+        <AnchorList anchors={anchorsByType(anchors, 'transport')} />
         {finalItinerary.travel_options.map((option, index) => <article className="dashboard-card" key={index}>
           <div>
             <BookingReadinessBadge status={option.booking_readiness} />
@@ -196,11 +314,30 @@ export default function TripDashboard() {
             {option.reference.status === 'VERIFIED' && option.reference.source_url && <a className="source-link" href={option.reference.source_url} target="_blank" rel="noreferrer">{option.reference.source_title || 'Source'} ↗</a>}
           </div>
         </article>)}
-        <InertBookingActions label="transport" logisticsTab="Transport" />
+        <div className="booking-choice">
+          <div className="booking-choice-opt">
+            {confirmType === 'transport' ? (
+              <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
+            ) : (
+              <>
+                <strong>Already booked this yourself?</strong>
+                <p>Add the confirmation and it'll show up here as locked.</p>
+                <button type="button" className="btn btn-ghost" onClick={() => openConfirmForm('transport')}>Add a confirmation</button>
+              </>
+            )}
+          </div>
+          <span className="booking-choice-or">or</span>
+          <div className="booking-choice-opt">
+            <strong>Still need to arrange it?</strong>
+            <p>Browse real options and pick one.</p>
+            <Link className="btn btn-primary" to="/logistics?tab=Transport">Arrange bookings →</Link>
+          </div>
+        </div>
       </section>}
 
       {tab === 'Stays' && <section>
         <div className="tab-intro"><div><h2>🏨 Stays</h2><p>Atlas-suggested options — a view only, not a booking desk.</p></div></div>
+        <AnchorList anchors={anchorsByType(anchors, 'stay')} />
         {finalItinerary.stay_options.map((option, index) => <article className="dashboard-card" key={index}>
           <div>
             <BookingReadinessBadge status={option.booking_readiness} />
@@ -212,7 +349,25 @@ export default function TripDashboard() {
             {option.reference.status === 'VERIFIED' && option.reference.source_url && <a className="source-link" href={option.reference.source_url} target="_blank" rel="noreferrer">{option.reference.source_title || 'Source'} ↗</a>}
           </div>
         </article>)}
-        <InertBookingActions label="stay" logisticsTab="Stays" />
+        <div className="booking-choice">
+          <div className="booking-choice-opt">
+            {confirmType === 'stay' ? (
+              <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
+            ) : (
+              <>
+                <strong>Already booked this yourself?</strong>
+                <p>Add the confirmation and it'll show up here as locked.</p>
+                <button type="button" className="btn btn-ghost" onClick={() => openConfirmForm('stay')}>Add a confirmation</button>
+              </>
+            )}
+          </div>
+          <span className="booking-choice-or">or</span>
+          <div className="booking-choice-opt">
+            <strong>Still need to arrange it?</strong>
+            <p>Browse real options and pick one.</p>
+            <Link className="btn btn-primary" to="/logistics?tab=Stays">Arrange bookings →</Link>
+          </div>
+        </div>
       </section>}
 
       {tab === 'Map' && <section>

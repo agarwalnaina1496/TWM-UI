@@ -100,4 +100,15 @@ function atlasResult({ title = 'Abbey Falls Getaway', destination = 'Coorg', pri
   };
 }
 
-export { TRIP_ID, tripRecord, commandResponse, atlasResult };
+// TWM-138: itinerary_state.result nests under current_version alongside
+// history/proposed_revision, not the flat TWM-96 shape.
+function readyItineraryState(options) {
+  return {
+    status: 'ready',
+    current_version: { version: 1, source_guide_revision: 3, result: atlasResult(options) },
+    history: [],
+    proposed_revision: null,
+  };
+}
+
+export { TRIP_ID, tripRecord, commandResponse, atlasResult, readyItineraryState };

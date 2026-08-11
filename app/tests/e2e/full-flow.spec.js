@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { atlasResult, commandResponse, mockTripCommandFlow, tripRecord } from './testUtils.js';
+import { commandResponse, mockTripCommandFlow, readyItineraryState, tripRecord } from './testUtils.js';
 
 function successOutcome() {
   return {
@@ -102,7 +102,7 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
             guide_session: { revision: 3, state: { phase: 'PLAN_APPROVED' } },
             frozen_plan: { guide_revision: 3, guide_state: { phase: 'PLAN_APPROVED' } },
           },
-          itinerary_state: { status: 'ready', version: 1, source_guide_revision: 3, result: atlasResult() },
+          itinerary_state: readyItineraryState(),
         },
       })),
     },
