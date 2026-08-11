@@ -210,8 +210,8 @@ export default function Destinations() {
     setPlanningId(option.key);
     try {
       await sendTripCommand('select_destination', { optionId: option.key });
-      // TripPreview still reads this local mock field until it is separately
-      // wired to Backend-persisted trip_context.selected_option.
+      // Display-only field read by Itinerary/Logistics/RequestQuote; TWM-106
+      // moved the Plan Builder itself onto Backend-persisted trip_context.
       updateTrip({ destination: { type: option.type, name: option.name } });
       navigate('/trip-preview');
     } catch (commandError) {

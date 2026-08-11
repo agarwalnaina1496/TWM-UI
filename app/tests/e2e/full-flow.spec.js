@@ -43,6 +43,55 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
         trip_state: { stage: 'matched', active_agent: null, matcher_state: { conversation_context: { awaiting: null }, recommendations: [successOutcome()] } },
       })),
     },
+    {
+      command: 'start_planning',
+      response: commandResponse('Here are the places I suggest.', tripRecord({
+        version: 6,
+        trip_state: {
+          stage: 'planning', active_agent: 'guide',
+          planner_state: { guide_session: { revision: 1, state: {
+            phase: 'PLACES_DRAFT', destinations: ['Coorg'], duration_days: null, start_date: null,
+            places: ['Abbey Falls'], day_plan: [], preferences: [], exclusions: [],
+            applied_changes: [], pending_clarification: null,
+          } } },
+        },
+      })),
+    },
+    {
+      command: 'approve_places',
+      response: commandResponse('Places approved; here is the day plan.', tripRecord({
+        version: 7,
+        trip_state: {
+          stage: 'planning', active_agent: 'guide',
+          planner_state: { guide_session: { revision: 2, state: {
+            phase: 'DAY_PLAN_DRAFT', destinations: ['Coorg'], duration_days: 1, start_date: null,
+            places: ['Abbey Falls'], day_plan: [{ day_number: 1, date: null, places: ['Abbey Falls'] }],
+            preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
+          } } },
+        },
+      })),
+    },
+    {
+      command: 'approve_plan',
+      response: commandResponse('Plan approved.', tripRecord({
+        version: 8,
+        trip_state: {
+          stage: 'planned', active_agent: null,
+          planner_state: {
+            guide_session: { revision: 3, state: {
+              phase: 'PLAN_APPROVED', destinations: ['Coorg'], duration_days: 1, start_date: null,
+              places: ['Abbey Falls'], day_plan: [{ day_number: 1, date: null, places: ['Abbey Falls'] }],
+              preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
+            } },
+            frozen_plan: { guide_revision: 3, guide_state: {
+              phase: 'PLAN_APPROVED', destinations: ['Coorg'], duration_days: 1, start_date: null,
+              places: ['Abbey Falls'], day_plan: [{ day_number: 1, date: null, places: ['Abbey Falls'] }],
+              preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
+            } },
+          },
+        },
+      })),
+    },
   ]);
 
   await page.goto('login');
@@ -62,15 +111,13 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
   await expect(page.getByText('A few that fit well')).toBeVisible();
   await page.getByText('Plan this trip →').first().click();
 
-  // TripPreview
+  // TripPreview: real Guide session bootstraps (start_planning + silent
+  // approve_places), then a single Generate action freezes the plan.
   await expect(page).toHaveURL(/\/app\/trip-preview/);
+  await expect(page.getByText('Abbey Falls')).toBeVisible();
   await page.getByText('Generate detailed itinerary →').click();
 
-  // ChoosePlan -> Self-Led
-  await expect(page).toHaveURL(/\/app\/choose-plan/);
-  await expect(page.getByRole('button', { name: 'Choose TWM-Led →' })).toBeDisabled();
-  await page.getByText('Choose Self-Led →').click();
-
+  // TWM-140: no Choose Plan interstitial — approve_plan navigates straight in.
   await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByRole('navigation', { name: 'Trip Dashboard tabs' })).toBeVisible();
 });
