@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { applyCommandSnapshot } from '../lib/mockTripCommands.js';
-import { createTrip, getTrip, listTrips, queueTripMutation, renameTrip as renameTripApi, TripApiError } from '../lib/tripApi.js';
+import {
+  createTrip, getTrip, listTrips, newIdempotencyKey, queueTripMutation,
+  renameTrip as renameTripApi, sendTripCommand as sendTripCommandApi, TripApiError,
+} from '../lib/tripApi.js';
 
 const TripContext = createContext(null);
 
@@ -59,8 +61,10 @@ export function TripProvider({ children }) {
   const [tripLoadStatus, setTripLoadStatus] = useState('idle'); // idle | loading | ready | error
   const [tripLoadError, setTripLoadError] = useState(null);
   const ensureTripPromise = useRef(null);
+  const tripRecordRef = useRef(null);
+  useEffect(() => { tripRecordRef.current = tripRecord; }, [tripRecord]);
 
-  async function loadOrCreateTrip() {
+  async function loadOrCreateTripNow() {
     setTripLoadStatus('loading');
     setTripLoadError(null);
     try {
@@ -76,6 +80,16 @@ export function TripProvider({ children }) {
     }
   }
 
+  // Dedupes concurrent boot/ensureTrip callers against the same in-flight load.
+  function loadOrCreateTrip() {
+    if (!ensureTripPromise.current) {
+      ensureTripPromise.current = loadOrCreateTripNow().finally(() => {
+        ensureTripPromise.current = null;
+      });
+    }
+    return ensureTripPromise.current;
+  }
+
   useEffect(() => {
     loadOrCreateTrip().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -89,12 +103,7 @@ export function TripProvider({ children }) {
   // serialized so concurrent callers await the same in-flight attempt.
   function ensureTrip() {
     if (tripRecord) return Promise.resolve(tripRecord);
-    if (!ensureTripPromise.current) {
-      ensureTripPromise.current = loadOrCreateTrip().finally(() => {
-        ensureTripPromise.current = null;
-      });
-    }
-    return ensureTripPromise.current;
+    return loadOrCreateTrip();
   }
 
   async function renameCurrentTrip(title) {
@@ -107,6 +116,36 @@ export function TripProvider({ children }) {
       } catch (error) {
         if (error instanceof TripApiError && error.status === 409) {
           const latest = await getTrip(record.id);
+          setTripRecord(latest);
+        }
+        throw error;
+      }
+    });
+  }
+
+  // The single browser mutation boundary (TWM-110): POST /api/trips/{id}/commands.
+  // Every entry path (Advice/Discover/Known Destination) and every follow-up
+  // traveler message goes through here — React never sends canonical TripState.
+  async function sendTripCommand(command, { message, optionId, destination, idempotencyKey } = {}) {
+    const record = await ensureTrip();
+    return queueTripMutation(record.id, async () => {
+      const current = tripRecordRef.current || record;
+      const payload = {
+        command,
+        expected_version: current.version,
+        idempotency_key: idempotencyKey || newIdempotencyKey(),
+      };
+      if (message !== undefined) payload.message = message;
+      if (optionId !== undefined) payload.option_id = optionId;
+      if (destination !== undefined) payload.destination = destination;
+      try {
+        const response = await sendTripCommandApi(current.id, payload);
+        setTripRecord(response.trip);
+        setCommandSnapshot(response.trip);
+        return response;
+      } catch (error) {
+        if (error instanceof TripApiError && error.status === 409) {
+          const latest = await getTrip(current.id);
           setTripRecord(latest);
         }
         throw error;
@@ -141,12 +180,6 @@ export function TripProvider({ children }) {
     setTrip(prev => ({ ...prev, ...patch }));
   }
 
-  function applyMockCommandResponse(response) {
-    const applied = applyCommandSnapshot(response);
-    setTrip(previous => ({ ...previous, ...applied.tripPatch }));
-    setCommandSnapshot(applied.commandSnapshot);
-  }
-
   function startNewTrip() {
     setTrip(DEFAULT_TRIP);
   }
@@ -174,7 +207,7 @@ export function TripProvider({ children }) {
   return (
     <TripContext.Provider value={{
       trip, updateTrip, startNewTrip, auth, hasAccess, login, continueWithoutLogin, logout, setContact,
-      savedTrips, commandSnapshot, applyMockCommandResponse,
+      savedTrips, commandSnapshot, sendTripCommand,
       currentTripId: tripRecord?.id ?? null, tripLoadStatus, tripLoadError, retryTripLoad, renameCurrentTrip,
     }}>
       {children}

@@ -1,103 +1,115 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { ENTRY_INTENTS, GOLDEN_QUERY, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
-import { createEntryCommand, safeExecuteMockEntryCommand } from '../lib/mockTripCommands.js';
+import { ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import '../styles/chat.css';
 
 let nextMessageId = 1;
-const GOLDEN_QUERY_REPLY = {
-  label: 'Planning a 2-week end-of-year India trip with mild weather',
-  value: GOLDEN_QUERY,
-};
-
-function compactTravelerMessage(text) {
-  return text.replace(/^\*\*(.*?)\**/s, '$1').replace(/\s+/g, ' ').trim();
-}
 
 export default function JourneyEntry() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { trip, commandSnapshot, applyMockCommandResponse } = useTrip();
+  const { commandSnapshot, sendTripCommand } = useTrip();
   const intent = params.get('intent');
   const isDiscover = intent === ENTRY_INTENTS.DISCOVER;
   const [destination, setDestination] = useState('');
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState(isDiscover ? [{ id: nextMessageId++, role: 'assistant', text: "I'm Scout. Tell me what kind of trip you're planning, in your own words." }] : []);
+  const [messages, setMessages] = useState([]);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const initialized = useRef(false);
+  // discover_entry establishes Meridian ownership on entry; every message
+  // after that is a plain traveler_message to the specialist already owning the trip.
+  const entered = useRef(false);
 
-  function sendDiscover(reply = input) {
+  async function enterDiscover() {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await sendTripCommand('discover_entry');
+      entered.current = true;
+      setResult(response);
+      if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
+    } catch (commandError) {
+      setError(commandError.message || 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isDiscover || initialized.current) return;
+    initialized.current = true;
+    enterDiscover();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDiscover]);
+
+  async function sendDiscover(reply = input) {
     const value = (typeof reply === 'string' ? reply : reply.value).trim();
     if (!value || busy) return;
     setInput('');
     setBusy(true);
     setError(null);
-    setMessages(previous => [...previous, { id: nextMessageId++, role: 'user', text: compactTravelerMessage(value) }]);
-    const outcome = safeExecuteMockEntryCommand(createEntryCommand({
-      intent: ENTRY_INTENTS.ADVICE,
-      message: value,
-      expectedVersion: commandSnapshot?.version ?? 1,
-    }), trip);
-    if (outcome.data) {
-      applyMockCommandResponse(outcome.data);
-      setResult(outcome.data);
-      setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: outcome.data.message }]);
-    } else setError(outcome.error);
-    setBusy(false);
+    setMessages(previous => [...previous, { id: nextMessageId++, role: 'user', text: value }]);
+    try {
+      const response = await sendTripCommand('traveler_message', { message: value });
+      setResult(response);
+      if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
+    } catch (commandError) {
+      setError(commandError.message || 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function submitDestination() {
-    if (busy) return;
+  async function submitDestination() {
+    const value = destination.trim();
+    if (!value || busy) return;
     setBusy(true);
     setError(null);
-    const outcome = safeExecuteMockEntryCommand(createEntryCommand({
-      intent: ENTRY_INTENTS.KNOWN_DESTINATION,
-      destination,
-      expectedVersion: commandSnapshot?.version ?? 1,
-    }), trip);
-    if (outcome.data?.status === 'SUCCESS') {
-      applyMockCommandResponse(outcome.data);
-      setResult(outcome.data);
-    } else if (outcome.data) setError(outcome.data.message);
-    else setError(outcome.error);
-    setBusy(false);
+    try {
+      const response = await sendTripCommand('known_destination_entry', { destination: value });
+      setResult(response);
+    } catch (commandError) {
+      setError(commandError.message || 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const activeAgent = result?.trip?.trip_state?.active_agent || 'scout';
-  const awaiting = result?.trip?.trip_state?.matcher_state?.conversation_context?.awaiting;
-  const quickReplies = result
-    ? (QUICK_REPLIES[awaiting] || []).map(value => ({ label: value, value }))
-    : [GOLDEN_QUERY_REPLY];
+  const awaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
+  const quickReplies = (QUICK_REPLIES[awaiting] || []).map(value => ({ label: value, value }));
 
   return (
     <div className="chat-page chat-screen">
       <div className="chat-context-bar" role="status">
         <span aria-hidden="true">ⓘ</span>
-        {isDiscover ? `${activeAgent === 'meridian' ? 'Meridian' : 'Scout'} is here to help with your trip.` : 'Guide is here to help plan your destination.'}
+        {isDiscover ? 'Meridian is here to help find your destination.' : 'Guide is here to help plan your destination.'}
       </div>
-      <span className="eyebrow">{isDiscover ? `✦ ${activeAgent === 'meridian' ? 'Meridian' : 'Scout'}` : 'Trip setup'}</span>
-      <h1>{isDiscover ? <>Tell Scout <em>in your own words</em></> : <>Start with <em>your destination</em></>}</h1>
+      <span className="eyebrow">{isDiscover ? '✦ Meridian' : 'Trip setup'}</span>
+      <h1>{isDiscover ? <>Let's find <em>your destination</em></> : <>Start with <em>your destination</em></>}</h1>
       {isDiscover ? (
         <>
-          <p className="lede">Chat naturally, or use the fixture quick replies to run the exact demo conversation.</p>
+          <p className="lede">Tell Meridian what matters to you, and it'll narrow down destinations that fit.</p>
           <div className="chat-log" aria-live="polite">
             {messages.map(message => (
               <div key={message.id} className={`chat-row chat-row-${message.role}`}>
                 <div className={`chat-bub chat-bub-${message.role}`} style={{ whiteSpace: 'pre-wrap' }}>{message.text}</div>
               </div>
             ))}
-            {busy && <div className="think" role="status">{activeAgent === 'meridian' ? 'Meridian' : 'Scout'} is thinking…</div>}
+            {busy && <div className="think" role="status">Meridian is thinking…</div>}
             {!busy && quickReplies.length > 0 && (
               <div className="chat-chip-row" aria-label="Suggested traveler replies">
                 {quickReplies.map(reply => <button type="button" className="chip chat-chip-long" key={reply.value} onClick={() => sendDiscover(reply)}>{reply.label}</button>)}
               </div>
             )}
-            {activeAgent === 'meridian' && <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>See destinations →</button>}
+            {commandSnapshot?.trip_state?.stage === 'recommended' && (
+              <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>See destinations →</button>
+            )}
           </div>
           <div className="chat-input-bar">
-            <input className="chat-input" aria-label="Message Scout" placeholder="Tell Scout about your trip…" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') sendDiscover(); }} />
+            <input className="chat-input" aria-label="Message Meridian" placeholder="Tell Meridian about your trip…" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') sendDiscover(); }} />
             <button type="button" className="chat-send" onClick={() => sendDiscover()} disabled={busy} aria-label="Send">→</button>
           </div>
         </>
@@ -109,7 +121,7 @@ export default function JourneyEntry() {
               <div className="chat-bub chat-bub-assistant">Where are you going?</div>
             </div>
             {result && <div className="chat-row chat-row-assistant"><div className="chat-bub chat-bub-assistant">{result.message}</div></div>}
-            {result && <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue to planning →</button>}
+            {result?.trip?.trip_state?.active_agent === 'guide' && <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue to planning →</button>}
           </div>
           <div className="chat-input-bar">
             <input className="chat-input" aria-label="Destination" placeholder="e.g. Coorg, Karnataka" value={destination} onChange={event => setDestination(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') submitDestination(); }} />
@@ -117,8 +129,7 @@ export default function JourneyEntry() {
           </div>
         </>
       )}
-      {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={isDiscover ? () => sendDiscover() : submitDestination}>Try again</button></div>}
-      <small>Fixture-backed {isDiscover ? 'conversation' : 'preview'} — no Backend or agent call was made.</small>
+      {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={isDiscover ? (entered.current ? () => sendDiscover() : enterDiscover) : submitDestination}>Try again</button></div>}
     </div>
   );
 }
