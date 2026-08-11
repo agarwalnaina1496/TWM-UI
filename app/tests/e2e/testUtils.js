@@ -31,18 +31,28 @@ function commandResponse(message, trip) {
 // {message, trip} pair built with commandResponse/tripRecord. Each command
 // sent by the app is matched to the next step in order; command name is
 // asserted so a mis-sequenced test fails loudly instead of silently mismatching.
-export async function mockTripCommandFlow(page, steps) {
+//
+// `initialTrip`, when given, makes GET /api/trips (list) and GET /api/trips/{id}
+// (single) serve a persisted trip record instead of the default "no trips yet"
+// behavior — needed for refresh/resume specs, since TripContext always re-fetches
+// from the Backend on mount rather than trusting cached localStorage state.
+export async function mockTripCommandFlow(page, steps, { initialTrip } = {}) {
   let pending = [...steps];
+  let current = initialTrip ?? null;
   await page.route('**/api/trips**', async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     const method = request.method();
 
     if (method === 'GET' && /\/api\/trips\/?$/.test(pathname)) {
-      return route.fulfill({ json: { trips: [] } });
+      return route.fulfill({ json: { trips: current ? [current] : [] } });
+    }
+    if (method === 'GET' && current && pathname.endsWith(`/${current.id}`)) {
+      return route.fulfill({ json: current });
     }
     if (method === 'POST' && /\/api\/trips\/?$/.test(pathname)) {
-      return route.fulfill({ status: 201, json: tripRecord() });
+      current = tripRecord();
+      return route.fulfill({ status: 201, json: current });
     }
     if (method === 'POST' && pathname.endsWith('/commands')) {
       const body = request.postDataJSON();
@@ -51,6 +61,7 @@ export async function mockTripCommandFlow(page, steps) {
       if (step.command !== body.command) {
         throw new Error(`Expected command "${step.command}" but got "${body.command}".`);
       }
+      current = step.response.trip;
       return route.fulfill({ json: step.response });
     }
     return route.continue();

@@ -1,108 +1,187 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { approveGuidePlan, createInitialGuidePlan, executeGuideRevision } from '../lib/mockGuidePlan.js';
 import { createAtlasDashboardState } from '../lib/mockAtlasTrip.js';
+import {
+  buildAddPlaceMessage, buildRemovePlaceMessage, buildSetPaceMessage, buildSetStartDateMessage,
+  planBuilderSummary, toFrozenSnapshot, UNDO_MESSAGE,
+} from '../lib/guidePlanAdapter.js';
 import '../styles/preview.css';
-
-const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
 export default function TripPreview() {
   const navigate = useNavigate();
-  const { trip, updateTrip } = useTrip();
-  const [plan, setPlan] = useState(() => trip.guidePlan || createInitialGuidePlan(trip));
+  const { updateTrip, commandSnapshot, sendTripCommand } = useTrip();
+
+  const tripState = commandSnapshot?.trip_state;
+  const plannerState = tripState?.planner_state;
+  const frozenPlan = plannerState?.frozen_plan;
+  const session = plannerState?.guide_session;
+  const guideState = session?.state;
+
+  const [bootStatus, setBootStatus] = useState('idle'); // idle | booting | ready | error
+  const [bootError, setBootError] = useState(null);
+  const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
-  const [newPlaces, setNewPlaces] = useState({});
+  const [newPlaceByDay, setNewPlaceByDay] = useState({});
+  const [freeText, setFreeText] = useState('');
+  const bootStarted = useRef(false);
 
+  // Already frozen (e.g. the traveler navigated back after approving) — Guide
+  // never reruns, so skip straight to the dashboard with the same handoff.
   useEffect(() => {
-    if (!trip.guidePlan) updateTrip({ guidePlan: plan });
-    // The initial authoritative fixture is persisted once for refresh/resume.
+    if (!frozenPlan) return;
+    const atlasState = createAtlasDashboardState(toFrozenSnapshot(frozenPlan, tripState?.trip_context), tripState?.trip_context);
+    updateTrip({ atlasState: { ...atlasState, mode: 'self-led' }, plan: 'self-led', tripLength: frozenPlan.guide_state?.duration_days });
+    navigate('/dashboard', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [frozenPlan]);
 
-  function revise(command) {
-    const response = executeGuideRevision(plan, { ...command, expected_revision: plan.revision });
-    if (response.status !== 'SUCCESS') {
-      setMessage(response.message);
+  // Bootstraps the real Guide session: START, then a silent APPROVE_PLACES so
+  // the single-screen Plan Builder has a day plan to show immediately — the
+  // traveler never sees the Backend's two-phase places/day approval split.
+  useEffect(() => {
+    if (frozenPlan || bootStarted.current) return;
+    if (guideState?.phase === 'DAY_PLAN_DRAFT' || guideState?.phase === 'NEEDS_CLARIFICATION') {
+      setBootStatus('ready');
       return;
     }
-    setPlan(response.plan);
-    updateTrip({ guidePlan: response.plan });
-    setMessage(response.message);
+    bootStarted.current = true;
+    setBootStatus('booting');
+    (async () => {
+      try {
+        let state = guideState;
+        if (!state) {
+          const response = await sendTripCommand('start_planning');
+          state = response.trip.trip_state.planner_state.guide_session.state;
+        }
+        if (state.phase === 'PLACES_DRAFT') await sendTripCommand('approve_places');
+        setBootStatus('ready');
+      } catch (error) {
+        setBootStatus('error');
+        setBootError(error.message || 'Could not start planning.');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frozenPlan, guideState?.phase]);
+
+  async function sendEdit(text) {
+    setPending(true);
+    setMessage('');
+    try {
+      const response = await sendTripCommand('traveler_message', { message: text });
+      setMessage(response.message || '');
+    } catch (error) {
+      // A 409 already refreshed commandSnapshot with the authoritative state;
+      // surface that instead of the traveler's stale local intent.
+      setMessage(error.message || 'That change could not be applied. The plan shown is now the latest saved version.');
+    } finally {
+      setPending(false);
+    }
   }
 
   function generate() {
-    const response = approveGuidePlan(plan);
-    if (response.status !== 'PLAN_APPROVED') {
-      setMessage(response.message);
-      return;
-    }
-    const atlasState = createAtlasDashboardState(response.snapshot, trip.tripContext);
-    // TWM-140: TWM-Led isn't available yet, so skip the plan-choice step and
-    // enter self-led execution directly rather than interrupting the journey.
-    updateTrip({ guidePlan: plan, guideSnapshot: response.snapshot, atlasState: { ...atlasState, mode: 'self-led' }, plan: 'self-led', tripLength: plan.summary.duration_days });
-    navigate('/dashboard');
+    setPending(true);
+    setMessage('');
+    sendTripCommand('approve_plan')
+      .catch(error => setMessage(error.message || 'Could not generate the detailed itinerary.'))
+      .finally(() => setPending(false));
+    // Freezing navigates via the frozenPlan effect above once commandSnapshot updates.
   }
+
+  if (bootStatus === 'error') {
+    return (
+      <main className="wrap plan-builder">
+        <div className="price-evidence state-unsafe" role="alert">
+          <strong>Planning could not start</strong>
+          <span>{bootError}</span>
+        </div>
+      </main>
+    );
+  }
+
+  if (bootStatus !== 'ready' || !guideState) {
+    return (
+      <main className="wrap plan-builder">
+        <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Guide is drafting your plan…</div>
+      </main>
+    );
+  }
+
+  const summary = planBuilderSummary(guideState);
+  const dayPlan = guideState.day_plan || [];
 
   return (
     <main className="wrap plan-builder">
       <Link className="back-link" to="/destinations">← Back to destinations</Link>
-      <span className="eyebrow">Scout Plan Builder</span>
-      <h1>{plan.circuit.name} <em>| {plan.summary.duration_days} days</em></h1>
-      <p className="lede">Shape the route, places and broad days together. Dates can stay open until you book.</p>
+      <span className="eyebrow">Guide Plan Builder</span>
+      <h1>{summary.destinations.join(', ') || 'Your trip'} <em>| {summary.durationDays} days</em></h1>
+      <p className="lede">Shape the places and broad days together. Dates can stay open until you book.</p>
 
       <section className="plan-summary" aria-label="Plan summary">
-        <div><strong>{plan.summary.route_stops}</strong><span>route stops</span></div>
-        <div><strong>{plan.summary.place_count}</strong><span>planned items</span></div>
-        <div><strong>{plan.summary.duration_days}</strong><span>days</span></div>
-        <div><strong>{money(plan.summary.rough_group_cost_inr.low)}–{money(plan.summary.rough_group_cost_inr.high)}</strong><span>rough total for two</span></div>
+        <div><strong>{summary.destinations.length}</strong><span>destinations</span></div>
+        <div><strong>{summary.placeCount}</strong><span>planned places</span></div>
+        <div><strong>{summary.durationDays}</strong><span>days</span></div>
       </section>
 
       <section className="builder-controls" aria-label="Trip timing">
-        <label>Optional start date<input type="date" value={plan.start_date || ''} onChange={event => revise({ type: 'SET_START_DATE', value: event.target.value })} /></label>
-        <div className="date-mode">{plan.start_date ? `${plan.start_date} → ${plan.end_date}` : `Duration-only · Day 1–${plan.summary.duration_days}`}</div>
+        <label>Optional start date<input type="date" defaultValue={guideState.start_date || ''} disabled={pending} onBlur={event => sendEdit(buildSetStartDateMessage(event.target.value))} /></label>
+        <div className="date-mode">{guideState.start_date ? guideState.start_date : `Duration-only · Day 1–${summary.durationDays}`}</div>
+        <label>Pace<input type="text" defaultValue={guideState.preferences?.join(', ') || ''} disabled={pending} onBlur={event => event.target.value && sendEdit(buildSetPaceMessage(event.target.value))} /></label>
       </section>
 
-      {plan.route_warning && <div className="route-warning" role="alert">⚠ {plan.route_warning}</div>}
+      {guideState.phase === 'NEEDS_CLARIFICATION' && guideState.pending_clarification && (
+        <div className="revision-message" role="status">Guide needs to know: {guideState.pending_clarification}</div>
+      )}
       {message && <div className="revision-message" role="status">{message}</div>}
 
-      <section aria-label="Route and broad day plan">
-        {plan.day_blocks.map((block, blockIndex) => (
-          <article className="day-card route-block" key={block.id}>
+      <section aria-label="Day plan">
+        {dayPlan.map(dayEntry => (
+          <article className="day-card" key={dayEntry.day_number}>
             <header className="day-card-head">
-              <div className="day-card-title"><span className="daynum">{blockIndex + 1}</span><div><span className="stop-eyebrow">Stop {blockIndex + 1}</span><h2>{block.stop}</h2></div></div>
-              <div className="route-actions">
-                {block.id !== 'departure' && <>
-                  <button type="button" aria-label={`Move ${block.stop} earlier`} onClick={() => revise({ type: 'MOVE_BLOCK', block_id: block.id, direction: -1 })}>↑</button>
-                  <button type="button" aria-label={`Move ${block.stop} later`} onClick={() => revise({ type: 'MOVE_BLOCK', block_id: block.id, direction: 1 })}>↓</button>
-                </>}
-                <label>Days<input aria-label={`${block.stop} days`} type="number" min="1" value={block.days} onChange={event => revise({ type: 'SET_BLOCK_DAYS', block_id: block.id, value: Number(event.target.value) })} /></label>
-              </div>
+              <div className="day-card-title"><span className="daynum">{dayEntry.day_number}</span><div><h2>Day {dayEntry.day_number}</h2></div></div>
             </header>
             <ul className="plan-list">
-              {block.places.map((place, index) => (
-                <li className="item-row" key={`${block.id}-${place}`}>
+              {dayEntry.places.map(place => (
+                <li className="item-row" key={`${dayEntry.day_number}-${place}`}>
                   <span>{place}</span>
                   <span className="item-actions">
-                    <button type="button" aria-label={`Remove ${place}`} onClick={() => revise({ type: 'REMOVE_PLACE', block_id: block.id, index })}>Remove</button>
+                    <button type="button" disabled={pending} aria-label={`Remove ${place}`} onClick={() => sendEdit(buildRemovePlaceMessage(dayEntry.day_number, place))}>Remove</button>
                   </span>
                 </li>
               ))}
             </ul>
             <div className="add-place-row">
-              <input aria-label={`Add place to ${block.stop}`} value={newPlaces[block.id] || ''} placeholder="Add a place or broad activity" onChange={event => setNewPlaces(previous => ({ ...previous, [block.id]: event.target.value }))} />
-              <button type="button" onClick={() => { revise({ type: 'ADD_PLACE', block_id: block.id, value: newPlaces[block.id] }); setNewPlaces(previous => ({ ...previous, [block.id]: '' })); }}>Add</button>
+              <input
+                aria-label={`Add place to Day ${dayEntry.day_number}`}
+                value={newPlaceByDay[dayEntry.day_number] || ''}
+                placeholder="Add a place or broad activity"
+                disabled={pending}
+                onChange={event => setNewPlaceByDay(previous => ({ ...previous, [dayEntry.day_number]: event.target.value }))}
+              />
+              <button
+                type="button"
+                disabled={pending || !newPlaceByDay[dayEntry.day_number]?.trim()}
+                onClick={() => {
+                  const value = newPlaceByDay[dayEntry.day_number]?.trim();
+                  if (!value) return;
+                  sendEdit(buildAddPlaceMessage(dayEntry.day_number, value));
+                  setNewPlaceByDay(previous => ({ ...previous, [dayEntry.day_number]: '' }));
+                }}
+              >Add</button>
             </div>
-            {block.suggestion && !block.places.includes(block.suggestion.name) && (
-              <div className="reasoned-suggestion"><span><strong>Scout suggests {block.suggestion.name}</strong> — {block.suggestion.reason}</span><button type="button" onClick={() => revise({ type: 'ADD_PLACE', block_id: block.id, value: block.suggestion.name })}>Add suggestion</button></div>
-            )}
           </article>
         ))}
       </section>
 
+      <section className="builder-controls" aria-label="Anything else">
+        <label>Anything else to change?
+          <input type="text" value={freeText} disabled={pending} placeholder="Tell Guide what to change…" onChange={event => setFreeText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && freeText.trim()) { sendEdit(freeText.trim()); setFreeText(''); } }} />
+        </label>
+      </section>
+
       <footer className="builder-footer">
-        <button type="button" className="btn btn-ghost" disabled={!plan.history.length} onClick={() => revise({ type: 'UNDO' })}>Undo last change</button>
-        <button type="button" className="btn btn-primary" onClick={generate}>Generate detailed itinerary →</button>
+        <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => sendEdit(UNDO_MESSAGE)}>Undo last change</button>
+        <button type="button" className="btn btn-primary" disabled={pending || guideState.phase !== 'DAY_PLAN_DRAFT'} onClick={generate}>Generate detailed itinerary →</button>
       </footer>
     </main>
   );

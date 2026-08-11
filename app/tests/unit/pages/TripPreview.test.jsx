@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,42 +7,111 @@ import TripPreview from '../../../src/pages/TripPreview.jsx';
 const updateTrip = vi.fn();
 const navigate = vi.fn();
 let trip;
-vi.mock('../../../src/context/TripContext.jsx', () => ({ useTrip: () => ({ trip, updateTrip }) }));
+let commandSnapshot;
+let sendTripCommand;
+
+vi.mock('../../../src/context/TripContext.jsx', () => ({
+  useTrip: () => ({ trip, updateTrip, commandSnapshot, sendTripCommand }),
+}));
 vi.mock('react-router-dom', async () => ({ ...(await vi.importActual('react-router-dom')), useNavigate: () => navigate }));
 
-describe('TripPreview unified Plan Builder', () => {
+function guideState(overrides = {}) {
+  return {
+    phase: 'DAY_PLAN_DRAFT',
+    destinations: ['Rishikesh'],
+    duration_days: 2,
+    start_date: null,
+    places: ['Triveni Ghat', 'Ram Jhula'],
+    day_plan: [
+      { day_number: 1, date: null, places: ['Triveni Ghat'] },
+      { day_number: 2, date: null, places: ['Ram Jhula'] },
+    ],
+    preferences: [],
+    exclusions: [],
+    applied_changes: [],
+    pending_clarification: null,
+    ...overrides,
+  };
+}
+
+function snapshotWith(plannerState) {
+  return { version: 1, trip_state: { trip_context: {}, planner_state: plannerState } };
+}
+
+describe('TripPreview real Guide Plan Builder', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    trip = { destination: { id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' }, tripContext: { original_traveler_request: 'exact request' } };
+    trip = {};
   });
 
-  it('shows places and broad days together with one generation action', () => {
+  it('bootstraps a fresh session with start_planning then a silent approve_places', async () => {
+    commandSnapshot = snapshotWith({});
+    sendTripCommand = vi.fn(async command => {
+      if (command === 'start_planning') {
+        commandSnapshot = snapshotWith({ guide_session: { revision: 1, state: guideState({ phase: 'PLACES_DRAFT', day_plan: [] }) } });
+      } else if (command === 'approve_places') {
+        commandSnapshot = snapshotWith({ guide_session: { revision: 2, state: guideState() } });
+      }
+      return { message: null, agent_meta: null, trip: commandSnapshot };
+    });
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
-    expect(screen.getByRole('heading', { name: /Madhya Pradesh Heritage and Nature/ })).toBeInTheDocument();
-    expect(screen.getByText('Gwalior Fort')).toBeInTheDocument();
-    expect(screen.getByLabelText('Gwalior days')).toHaveValue(3);
-    expect(screen.getByText('Duration-only · Day 1–14')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Triveni Ghat')).toBeInTheDocument());
+    expect(sendTripCommand).toHaveBeenNthCalledWith(1, 'start_planning');
+    expect(sendTripCommand).toHaveBeenNthCalledWith(2, 'approve_places');
     expect(screen.getAllByRole('button', { name: /Generate detailed itinerary/ })).toHaveLength(1);
     expect(screen.queryByText(/Approve places|Approve itinerary/)).not.toBeInTheDocument();
   });
 
-  it('recalculates duration, supports undo and displays a route warning', async () => {
+  it('translates a place removal into a real traveler_message command', async () => {
+    commandSnapshot = snapshotWith({ guide_session: { revision: 2, state: guideState() } });
+    sendTripCommand = vi.fn(async () => ({ message: 'Guide revised the plan.', agent_meta: null, trip: commandSnapshot }));
     const user = userEvent.setup();
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
-    fireEvent.change(screen.getByLabelText('Gwalior days'), { target: { value: '4' } });
-    expect(screen.getByText('Duration-only · Day 1–15')).toBeInTheDocument();
-    await user.click(screen.getByLabelText('Move Orchha earlier'));
-    expect(screen.getByRole('alert')).toHaveTextContent('Route order changed');
-    await user.click(screen.getByRole('button', { name: 'Undo last change' }));
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Remove Triveni Ghat' }));
+    expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', { message: 'Remove "Triveni Ghat" from Day 1.' });
   });
 
-  it('persists the frozen handoff and enters the Dashboard directly (TWM-140: no Choose Plan interstitial)', async () => {
+  it('sends the conversational undo request', async () => {
+    commandSnapshot = snapshotWith({ guide_session: { revision: 2, state: guideState() } });
+    sendTripCommand = vi.fn(async () => ({ message: null, agent_meta: null, trip: commandSnapshot }));
+    const user = userEvent.setup();
+    render(<MemoryRouter><TripPreview /></MemoryRouter>);
+    await user.click(screen.getByRole('button', { name: 'Undo last change' }));
+    expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', { message: 'Undo my last change and restore the previous version of the plan.' });
+  });
+
+  it('shows a Guide clarification question instead of the day plan when Guide asks one', () => {
+    commandSnapshot = snapshotWith({ guide_session: { revision: 2, state: guideState({ phase: 'NEEDS_CLARIFICATION', day_plan: [], pending_clarification: 'How many travelers?' }) } });
+    sendTripCommand = vi.fn();
+    render(<MemoryRouter><TripPreview /></MemoryRouter>);
+    expect(screen.getByText(/Guide needs to know: How many travelers\?/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate detailed itinerary/ })).toBeDisabled();
+  });
+
+  it('approves the plan on Generate detailed itinerary', async () => {
+    commandSnapshot = snapshotWith({ guide_session: { revision: 2, state: guideState() } });
+    sendTripCommand = vi.fn(async command => {
+      if (command === 'approve_plan') {
+        const frozen = guideState({ phase: 'PLAN_APPROVED' });
+        commandSnapshot = snapshotWith({
+          guide_session: { revision: 3, state: frozen },
+          frozen_plan: { guide_revision: 3, guide_state: frozen },
+        });
+      }
+      return { message: null, agent_meta: null, trip: commandSnapshot };
+    });
     const user = userEvent.setup();
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
     await user.click(screen.getByRole('button', { name: /Generate detailed itinerary/ }));
-    expect(updateTrip).toHaveBeenLastCalledWith(expect.objectContaining({ guideSnapshot: expect.objectContaining({ status: 'PLAN_APPROVED', approved_revision: 1 }), tripLength: 14, plan: 'self-led' }));
-    expect(updateTrip).toHaveBeenLastCalledWith(expect.objectContaining({ atlasState: expect.objectContaining({ current_version_id: 'atlas-v1', mode: 'self-led' }) }));
-    expect(navigate).toHaveBeenCalledWith('/dashboard');
+    expect(sendTripCommand).toHaveBeenCalledWith('approve_plan');
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/dashboard', { replace: true }));
+  });
+
+  it('skips straight to the Dashboard when the plan is already frozen (no re-invocation of Guide)', () => {
+    commandSnapshot = snapshotWith({ frozen_plan: { guide_revision: 1, guide_state: guideState({ phase: 'PLAN_APPROVED' }) } });
+    sendTripCommand = vi.fn();
+    render(<MemoryRouter><TripPreview /></MemoryRouter>);
+    expect(sendTripCommand).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith('/dashboard', { replace: true });
   });
 });
