@@ -73,8 +73,29 @@ function atlasResult(overrides = {}) {
   };
 }
 
-function snapshotWith(itineraryState) {
-  return { version: 1, trip_state: { trip_context: {}, itinerary_state: itineraryState } };
+function readyItineraryState({ version = 1, history = [], proposedRevision = null } = {}) {
+  return {
+    status: 'ready',
+    current_version: { version, source_guide_revision: 3, result: atlasResult() },
+    history,
+    proposed_revision: proposedRevision,
+  };
+}
+
+function snapshotWith(itineraryState, { anchors = [] } = {}) {
+  return {
+    version: 1,
+    trip_state: { trip_context: {}, itinerary_state: itineraryState, logistics_state: { anchors } },
+  };
+}
+
+function anchor(overrides = {}) {
+  return {
+    id: 'anchor-1', type: 'transport', label: 'Delhi to Rishikesh arrival',
+    detail: 'Confirmed arrival at 2:00 PM.', day_number: 1, reference: 'PNR-123', notes: null,
+    confirmed_at_version: 1,
+    ...overrides,
+  };
 }
 
 function renderDashboard() {
@@ -88,7 +109,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     commandSnapshot = snapshotWith({});
     sendTripCommand = vi.fn(async command => {
       if (command === 'start_itinerary') {
-        commandSnapshot = snapshotWith({ status: 'ready', version: 1, source_guide_revision: 3, result: atlasResult() });
+        commandSnapshot = snapshotWith(readyItineraryState());
       }
       return { message: null, agent_meta: null, trip: commandSnapshot };
     });
@@ -99,10 +120,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   });
 
   it('reopen never re-invokes Atlas when a result is already saved', () => {
-    commandSnapshot = snapshotWith({ status: 'ready', version: 1, source_guide_revision: 3, result: atlasResult() });
+    commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     renderDashboard();
     expect(screen.getByText('Rishikesh Getaway')).toBeInTheDocument();
+    expect(screen.getByText('Itinerary version 1.')).toBeInTheDocument();
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
@@ -114,38 +136,128 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   });
 
   it('renders assumptions and unresolved items safely', () => {
-    commandSnapshot = snapshotWith({ status: 'ready', version: 1, result: atlasResult() });
+    commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     renderDashboard();
     expect(screen.getByText(/Assumed a start date since none was confirmed\./)).toBeInTheDocument();
     expect(screen.getByText(/Check schedules closer to travel\./)).toBeInTheDocument();
   });
 
-  it('renders Transport with booking-readiness and only a source link for VERIFIED references', async () => {
-    commandSnapshot = snapshotWith({ status: 'ready', version: 1, result: atlasResult() });
+  it('renders Transport with booking-readiness, a confirmed anchor, and the confirmation form', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor()] });
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
     renderDashboard();
     await user.click(screen.getByRole('button', { name: /Transport/ }));
     expect(screen.getByText('Needs advance booking')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Official rail booking/ })).toHaveAttribute('href', 'https://example.com/rail');
-    expect(screen.getByRole('button', { name: 'Upload transport confirmation' })).toBeDisabled();
+    expect(screen.getByText('Delhi to Rishikesh arrival')).toBeInTheDocument();
+    expect(screen.getByText('🔒 confirmed')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Arrange bookings/ })).toHaveAttribute('href', '/logistics?tab=Transport');
+
+    await user.click(screen.getByRole('button', { name: 'Add a confirmation' }));
+    expect(screen.getByRole('button', { name: 'Save confirmation' })).toBeDisabled();
   });
 
-  it('renders Stays with booking-readiness and no source link for GENERAL_GUIDANCE references', async () => {
-    commandSnapshot = snapshotWith({ status: 'ready', version: 1, result: atlasResult() });
+  it('submits a transport confirmation as a real confirm_logistics command', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState());
+    sendTripCommand = vi.fn(async () => {
+      commandSnapshot = snapshotWith(
+        { ...readyItineraryState(), proposed_revision: { version: 2, base_version: 1, affected_days: [1], changes: ['Day 1: updated'], triggered_by: { anchor_id: 'a1', type: 'transport', label: 'x' }, result: atlasResult() } },
+        { anchors: [anchor()] },
+      );
+      return { message: null, agent_meta: null, trip: commandSnapshot };
+    });
+    const user = userEvent.setup();
+    renderDashboard();
+    await user.click(screen.getByRole('button', { name: /Transport/ }));
+    await user.click(screen.getByRole('button', { name: 'Add a confirmation' }));
+    await user.type(screen.getByLabelText("What's confirmed?"), 'Delhi to Rishikesh train');
+    await user.type(screen.getByLabelText('Details'), 'Confirmed arrival at 2:00 PM via train 12050.');
+    await user.click(screen.getByRole('button', { name: 'Save confirmation' }));
+
+    expect(sendTripCommand).toHaveBeenCalledWith('confirm_logistics', {
+      logisticsConfirmation: {
+        type: 'transport', label: 'Delhi to Rishikesh train',
+        detail: 'Confirmed arrival at 2:00 PM via train 12050.',
+        day_number: null, reference: null, notes: null,
+      },
+    });
+    await waitFor(() => expect(screen.getByText(/This affects Day 1/)).toBeInTheDocument());
+  });
+
+  it('shows a proposed-revision banner and resolves it via accept', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState({
+      proposedRevision: { version: 2, base_version: 1, affected_days: [1], changes: ['Day 1: updated for confirmed arrival'], triggered_by: { anchor_id: 'a1', type: 'transport', label: 'x' }, result: atlasResult() },
+    }));
+    sendTripCommand = vi.fn(async command => {
+      if (command === 'accept_itinerary_revision') {
+        commandSnapshot = snapshotWith(readyItineraryState({ version: 2 }));
+      }
+      return { message: null, agent_meta: null, trip: commandSnapshot };
+    });
+    const user = userEvent.setup();
+    renderDashboard();
+    expect(screen.getByText(/This affects Day 1/)).toBeInTheDocument();
+    expect(screen.getByText('Day 1: updated for confirmed arrival')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Accept changes' }));
+    expect(sendTripCommand).toHaveBeenCalledWith('accept_itinerary_revision');
+    await waitFor(() => expect(screen.queryByText(/This affects Day 1/)).not.toBeInTheDocument());
+    expect(screen.getByText('Itinerary version 2.')).toBeInTheDocument();
+  });
+
+  it('keep current discards the proposal without changing the version', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState({
+      proposedRevision: { version: 2, base_version: 1, affected_days: [1], changes: ['Day 1: updated'], triggered_by: { anchor_id: 'a1', type: 'transport', label: 'x' }, result: atlasResult() },
+    }));
+    sendTripCommand = vi.fn(async command => {
+      if (command === 'keep_current_itinerary') {
+        commandSnapshot = snapshotWith(readyItineraryState());
+      }
+      return { message: null, agent_meta: null, trip: commandSnapshot };
+    });
+    const user = userEvent.setup();
+    renderDashboard();
+    await user.click(screen.getByRole('button', { name: 'Keep current' }));
+    expect(sendTripCommand).toHaveBeenCalledWith('keep_current_itinerary');
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Accept changes' })).not.toBeInTheDocument());
+    expect(screen.getByText('Itinerary version 1.')).toBeInTheDocument();
+  });
+
+  it('shows an inline error and preserves the banner when accept fails', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState({
+      proposedRevision: { version: 2, base_version: 1, affected_days: [1], changes: ['Day 1: updated'], triggered_by: { anchor_id: 'a1', type: 'transport', label: 'x' }, result: atlasResult() },
+    }));
+    sendTripCommand = vi.fn().mockRejectedValue(new Error('Trip has a newer version.'));
+    const user = userEvent.setup();
+    renderDashboard();
+    await user.click(screen.getByRole('button', { name: 'Accept changes' }));
+    await waitFor(() => expect(screen.getByText('Trip has a newer version.')).toBeInTheDocument());
+    expect(screen.getByText(/This affects Day 1/)).toBeInTheDocument();
+  });
+
+  it('places an anchor under the matching day, not other days', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor({ day_number: 2, label: 'Riverside stay' })] });
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
     renderDashboard();
-    await user.click(screen.getByRole('button', { name: /Stays/ }));
-    expect(screen.getByText('Suggested')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Source/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Upload stay confirmation' })).toBeDisabled();
+    expect(screen.queryByText('Riverside stay')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Day 2/ }));
+    expect(screen.getByText('Riverside stay')).toBeInTheDocument();
+  });
+
+  it('renders prior versions as a read-only disclosure', () => {
+    commandSnapshot = snapshotWith(readyItineraryState({
+      version: 2,
+      history: [{ version: 1, source_guide_revision: 3, result: atlasResult() }],
+    }));
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    expect(screen.getByText('Prior versions (1)')).toBeInTheDocument();
   });
 
   it('Map tab renders a text-only, deduped route order with no coordinates', async () => {
-    commandSnapshot = snapshotWith({ status: 'ready', version: 1, result: atlasResult() });
+    commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
     renderDashboard();
@@ -156,7 +268,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   });
 
   it('Budget breakdown renders real budget_summary totals', async () => {
-    commandSnapshot = snapshotWith({ status: 'ready', version: 1, result: atlasResult() });
+    commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
     renderDashboard();
@@ -167,8 +279,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
   it('renders unsafe text as inert content, never as markup', () => {
     commandSnapshot = snapshotWith({
-      status: 'ready', version: 1,
-      result: atlasResult({ final_itinerary: { assumptions: [{ category: 'other', detail: '<img src=x onerror=alert(1)>' }] } }),
+      status: 'ready',
+      current_version: { version: 1, source_guide_revision: 3, result: atlasResult({ final_itinerary: { assumptions: [{ category: 'other', detail: '<img src=x onerror=alert(1)>' }] } }) },
+      history: [], proposed_revision: null,
     });
     sendTripCommand = vi.fn();
     renderDashboard();

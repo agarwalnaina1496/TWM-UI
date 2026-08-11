@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { GOLDEN_QUERY } from '../../src/data/entryCommandFixtures.js';
-import { atlasResult, commandResponse, mockTripCommandFlow, tripRecord } from './testUtils.js';
+import { commandResponse, mockTripCommandFlow, readyItineraryState, tripRecord } from './testUtils.js';
 
 // TWM-104 wired Destinations.jsx to real trip commands: it now sends a
 // `continue` command on entry when no recommendation is saved yet, and reads
@@ -112,7 +112,7 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
             guide_session: { revision: 3, state: { phase: 'PLAN_APPROVED' } },
             frozen_plan: { guide_revision: 3, guide_state: { phase: 'PLAN_APPROVED' } },
           },
-          itinerary_state: { status: 'ready', version: 1, source_guide_revision: 3, result: atlasResult() },
+          itinerary_state: readyItineraryState(),
         },
       })),
     },

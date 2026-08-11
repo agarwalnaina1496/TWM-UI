@@ -39,3 +39,14 @@ export function routeLocations(days) {
   }
   return locations;
 }
+
+// Confirmed logistics anchors (application-owned, twm/schemas/logistics.py)
+// are shown as their own list — never fuzzy-matched onto specific Atlas
+// timeline items, which have no stable identity across regenerations.
+export function anchorsForDay(anchors, dayNumber) {
+  return (anchors || []).filter(anchor => anchor.day_number === dayNumber);
+}
+
+export function anchorsByType(anchors, type) {
+  return (anchors || []).filter(anchor => anchor.type === type);
+}

@@ -45,6 +45,36 @@ test('loads real recommendations via the continue command, shows a disclosed tra
   await mockTripCommandFlow(page, [
     { command: 'continue', response: commandResponse(null, tripRecord({ version: 2, trip_state: recommendedTripState(successOutcome()) })) },
     { command: 'select_destination', response: commandResponse('Madhya Pradesh Heritage and Nature is confirmed.', tripRecord({ version: 3, trip_state: recommendedTripState(successOutcome()) })) },
+    // TWM-106: landing on the Plan Builder immediately bootstraps a real
+    // Guide session — scripted so the route mock doesn't reject it.
+    {
+      command: 'start_planning',
+      response: commandResponse('Here are the places I suggest.', tripRecord({
+        version: 4,
+        trip_state: {
+          stage: 'planning', active_agent: 'guide',
+          planner_state: { guide_session: { revision: 1, state: {
+            phase: 'PLACES_DRAFT', destinations: ['Madhya Pradesh'], duration_days: null, start_date: null,
+            places: ['Gwalior Fort'], day_plan: [], preferences: [], exclusions: [],
+            applied_changes: [], pending_clarification: null,
+          } } },
+        },
+      })),
+    },
+    {
+      command: 'approve_places',
+      response: commandResponse('Places approved; here is the day plan.', tripRecord({
+        version: 5,
+        trip_state: {
+          stage: 'planning', active_agent: 'guide',
+          planner_state: { guide_session: { revision: 2, state: {
+            phase: 'DAY_PLAN_DRAFT', destinations: ['Madhya Pradesh'], duration_days: 1, start_date: null,
+            places: ['Gwalior Fort'], day_plan: [{ day_number: 1, date: null, places: ['Gwalior Fort'] }],
+            preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
+          } } },
+        },
+      })),
+    },
   ]);
 
   await page.goto('login');
@@ -63,6 +93,7 @@ test('loads real recommendations via the continue command, shows a disclosed tra
 
   await circuitCard.getByText('Plan this trip →').click();
   await expect(page).toHaveURL(/\/app\/trip-preview/);
+  await expect(page.getByText('Gwalior Fort')).toBeVisible();
 });
 
 test('More like this refreshes recommendations through the real command without committing selection', async ({ page }) => {
