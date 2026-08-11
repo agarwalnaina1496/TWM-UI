@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
   createTrip, getTrip, listTrips, newIdempotencyKey, queueTripMutation,
-  renameTrip as renameTripApi, sendTripCommand as sendTripCommandApi, TripApiError,
+  renameTrip as renameTripApi, saveUiState as saveUiStateApi, sendTripCommand as sendTripCommandApi, TripApiError,
 } from '../lib/tripApi.js';
 
 const TripContext = createContext(null);
@@ -119,6 +119,28 @@ export function TripProvider({ children }) {
     return loadOrCreateTrip();
   }
 
+  // Merges a patch into the Backend-persisted, per-trip ui_state (e.g. which
+  // recommendation card is expanded) — small presentation state that should
+  // survive a refresh but has no place in canonical TripState.
+  async function updateUiState(patch) {
+    const record = await ensureTrip();
+    return queueTripMutation(record.id, async () => {
+      const current = tripRecordRef.current || record;
+      const nextUiState = { ...current.ui_state, ...patch };
+      try {
+        const saved = await saveUiStateApi(current.id, nextUiState, current.version);
+        setTripRecord(saved);
+        return saved;
+      } catch (error) {
+        if (error instanceof TripApiError && error.status === 409) {
+          const latest = await getTrip(current.id);
+          setTripRecord(latest);
+        }
+        throw error;
+      }
+    });
+  }
+
   async function renameCurrentTrip(title) {
     const record = await ensureTrip();
     return queueTripMutation(record.id, async () => {
@@ -224,6 +246,7 @@ export function TripProvider({ children }) {
       pendingReturnTo, setPendingReturnTo,
       savedTrips, commandSnapshot, sendTripCommand,
       currentTripId: tripRecord?.id ?? null, tripLoadStatus, tripLoadError, retryTripLoad, renameCurrentTrip,
+      uiState: tripRecord?.ui_state ?? {}, updateUiState,
     }}>
       {children}
     </TripContext.Provider>
