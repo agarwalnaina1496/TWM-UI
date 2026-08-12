@@ -4,17 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../../src/App.jsx';
 import { TripProvider } from '../../src/context/TripContext.jsx';
-import { seedState } from './testUtils.js';
+import { SeedAuth } from './testUtils.js';
 
-function seedAuth(auth) {
-  seedState({ auth });
-}
-
-function renderApp(initialEntries) {
+function renderApp(initialEntries, auth) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <TripProvider>
-        <App />
+        {auth ? <SeedAuth auth={auth}><App /></SeedAuth> : <App />}
       </TripProvider>
     </MemoryRouter>
   );
@@ -49,8 +45,7 @@ describe('App guest-first routing (TWM-140)', () => {
   });
 
   it('lets a logged-in user reach My Trips without a redirect', () => {
-    seedAuth({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
-    renderApp(['/my-trips']);
+    renderApp(['/my-trips'], { loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
     expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
   });
 
@@ -68,9 +63,9 @@ describe('App guest-first routing (TWM-140)', () => {
 
     it('fires discover_entry on entry with no Scout call, then routes replies to Meridian only', async () => {
       const user = userEvent.setup();
-      seedAuth({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
       fetchMock
-        // TripContext boot: list then create
+        // TripContext boot: list (empty, no trip yet) — the trip itself is
+        // created lazily below, by the first command (discover_entry).
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
         .mockResolvedValueOnce(jsonResponse(tripRecord()))
         // discover_entry: Meridian needs clarification, no Scout call
@@ -103,7 +98,6 @@ describe('App guest-first routing (TWM-140)', () => {
   });
 
   it('uses the full-height chat shell for advice and known-destination entry', () => {
-    seedAuth({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     const advice = renderApp(['/scout-chat?entry=advice']);
     expect(screen.getByText('Scout is here to help with your trip.').closest('.chat-screen')).toBeInTheDocument();
     advice.unmount();
@@ -127,7 +121,6 @@ describe('App guest-first routing (TWM-140)', () => {
 
     it('sends the first turn as advice_entry, then plain traveler_message on follow-ups', async () => {
       const user = userEvent.setup();
-      seedAuth({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
         .mockResolvedValueOnce(jsonResponse(tripRecord()))
@@ -169,7 +162,6 @@ describe('App guest-first routing (TWM-140)', () => {
 
     it('sends known_destination_entry with the typed destination and invokes Guide', async () => {
       const user = userEvent.setup();
-      seedAuth({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
         .mockResolvedValueOnce(jsonResponse(tripRecord()))

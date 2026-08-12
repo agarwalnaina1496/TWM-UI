@@ -52,7 +52,12 @@ test('exact natural-language journey preserves nuance and hands off after two qu
   await expect(page.getByText(HANDOFF)).toBeVisible();
   await expect(page.getByRole('button', { name: /Continue to destination discovery/ })).toBeVisible();
 
-  const state = await page.evaluate(() => JSON.parse(localStorage.getItem('twm_prototype_state_v1')));
-  expect(state.commandSnapshot.trip_state.trip_context.original_traveler_request).toBe(GOLDEN_QUERY);
-  expect(state.commandSnapshot.trip_state.active_agent).toBe('meridian');
+  // TripContext no longer mirrors state to localStorage — read the Backend's
+  // own record of the trip (via the mocked /api/trips list, fetched through
+  // the page itself so it hits the page.route mock — page.request would
+  // bypass that routing) instead of a client-side cache, confirming context
+  // survived the two-turn handoff.
+  const { trips } = await page.evaluate(() => fetch('/api/trips', { credentials: 'include' }).then(r => r.json()));
+  expect(trips[0].trip_state.trip_context.original_traveler_request).toBe(GOLDEN_QUERY);
+  expect(trips[0].trip_state.active_agent).toBe('meridian');
 });

@@ -9,9 +9,10 @@ const navigate = vi.fn();
 let trip;
 let commandSnapshot;
 let sendTripCommand;
+let tripLoadStatus;
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ trip, updateTrip, commandSnapshot, sendTripCommand }),
+  useTrip: () => ({ trip, updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus }),
 }));
 vi.mock('react-router-dom', async () => ({ ...(await vi.importActual('react-router-dom')), useNavigate: () => navigate }));
 
@@ -42,6 +43,7 @@ describe('TripPreview real Guide Plan Builder', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     trip = {};
+    tripLoadStatus = 'ready';
   });
 
   it('bootstraps a fresh session with start_planning then a silent approve_places', async () => {

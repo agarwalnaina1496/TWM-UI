@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
 import { isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta } from '../lib/tripLifecycle.js';
@@ -110,17 +110,14 @@ export default function MyTrips() {
       {auth.loggedIn ? (
         <p className="lede">Signed in as {auth.name}.</p>
       ) : (
-        <p className="lede">
-          You're browsing as a guest — trips here are saved for this session.{' '}
-          <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span>
-        </p>
+        <p className="lede">You're browsing as a guest — trips here are saved for this session.</p>
       )}
 
       {!auth.loggedIn && (
         <div className="account-history-locked">
           <p>Trip history from other devices or a previous account isn't available as a guest.</p>
           {!syncDismissed && (
-            <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to see synced trip history</span>
+            <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span>
           )}
         </div>
       )}
@@ -138,7 +135,12 @@ export default function MyTrips() {
       {visibleTrips.length === 0 ? (
         <div className="empty-trips">
           <p>Nothing saved yet.</p>
-          <span className="btn btn-primary" style={{ marginTop: 12, display: 'inline-flex' }} onClick={handleNewTrip}>Start a trip →</span>
+          {/* No trip exists yet here, so this must not eagerly create one via
+              startNewTrip (unlike "+ New trip" above, a deliberate action
+              against an existing list) — it just sends the traveler to
+              GetStarted, where the Backend trip is created lazily on their
+              first message. */}
+          <Link className="btn btn-primary" style={{ marginTop: 12, display: 'inline-flex' }} to="/">Start a trip →</Link>
         </div>
       ) : (
         <>

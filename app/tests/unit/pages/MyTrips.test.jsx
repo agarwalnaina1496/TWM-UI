@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import MyTrips from '../../../src/pages/MyTrips.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
-import { seedState } from '../testUtils.js';
+import { SeedAuth } from '../testUtils.js';
 
 function jsonResponse(body, { status = 200 } = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -18,11 +18,11 @@ function tripRecord(overrides = {}) {
   };
 }
 
-function renderMyTrips() {
+function renderMyTrips(auth) {
   return render(
     <MemoryRouter>
       <TripProvider>
-        <MyTrips />
+        {auth ? <SeedAuth auth={auth}><MyTrips /></SeedAuth> : <MyTrips />}
       </TripProvider>
     </MemoryRouter>
   );
@@ -42,23 +42,20 @@ describe('MyTrips (TWM-108)', () => {
   });
 
   it('shows the empty state when the only trip is fresh/empty', async () => {
-    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord()));
-    renderMyTrips();
+      .mockResolvedValueOnce(jsonResponse({ trips: [] }));
+    renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     expect(await screen.findByText('Nothing saved yet.')).toBeInTheDocument();
     expect(screen.queryByText('+ New trip')).not.toBeInTheDocument();
   });
 
   it('renders stage-aware badge and CTA for a real trip', async () => {
-    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
       .mockResolvedValueOnce(jsonResponse(tripRecord({
         title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
       })));
-    renderMyTrips();
+    renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     expect(await screen.findByText(/browsing as a guest/i)).toBeInTheDocument();
     expect(screen.getByText('Coorg')).toBeInTheDocument();
     expect(screen.getByText('Destination chosen')).toBeInTheDocument();
@@ -66,13 +63,12 @@ describe('MyTrips (TWM-108)', () => {
   });
 
   it('shows the Dashboard CTA for an itinerary-ready trip', async () => {
-    seedState({ auth: { loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' } });
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
       .mockResolvedValueOnce(jsonResponse(tripRecord({
         title: 'Manali', trip_state: { stage: 'planned', trip_context: { origin: 'Delhi' }, itinerary_state: { status: 'ready' } },
       })));
-    renderMyTrips();
+    renderMyTrips({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
     expect(await screen.findByText('Signed in as Traveler.')).toBeInTheDocument();
     expect(screen.getByText('Itinerary ready')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /open dashboard/i })).toBeInTheDocument();
@@ -83,7 +79,6 @@ describe('MyTrips (TWM-108)', () => {
     ['upcoming', 'planned', 'Itinerary ready'],
     ['completed', 'done', 'Completed'],
   ])('filters to the %s section', async (filterKey, stage, badgeText) => {
-    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
     const itinerary = stage === 'planned' ? { itinerary_state: { status: 'ready' } } : {};
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }, { id: 'trip-2' }] }))
@@ -94,7 +89,7 @@ describe('MyTrips (TWM-108)', () => {
         id: 'trip-2', title: 'Recommended trip', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } },
         updated_at: '2025-12-01T00:00:00.000Z',
       })));
-    renderMyTrips();
+    renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Matches filter');
 
     const label = filterKey[0].toUpperCase() + filterKey.slice(1);
@@ -105,14 +100,13 @@ describe('MyTrips (TWM-108)', () => {
   });
 
   it('New Trip creates a real Backend trip and preserves the existing one', async () => {
-    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
       .mockResolvedValueOnce(jsonResponse(tripRecord({
         title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
       })))
       .mockResolvedValueOnce(jsonResponse(tripRecord({ id: 'trip-2', title: 'Untitled Trip' }), { status: 201 }));
-    renderMyTrips();
+    renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Coorg');
 
     await userEvent.click(screen.getByText('+ New trip'));
@@ -121,14 +115,13 @@ describe('MyTrips (TWM-108)', () => {
   });
 
   it('renames a trip through the Backend', async () => {
-    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
       .mockResolvedValueOnce(jsonResponse(tripRecord({
         title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
       })))
       .mockResolvedValueOnce(jsonResponse(tripRecord({ title: 'Coorg Weekend', version: 2 })));
-    renderMyTrips();
+    renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Coorg');
 
     await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
@@ -143,7 +136,6 @@ describe('MyTrips (TWM-108)', () => {
   });
 
   it('opening a trip that returns 404 shows an unavailable notice and drops the card (TWM-109)', async () => {
-    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }, { id: 'trip-2' }] }))
       .mockResolvedValueOnce(jsonResponse(tripRecord({
@@ -154,7 +146,7 @@ describe('MyTrips (TWM-108)', () => {
         updated_at: '2025-12-01T00:00:00.000Z',
       })))
       .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
-    renderMyTrips();
+    renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Deleted elsewhere');
 
     await userEvent.click(within(screen.getByText('Deleted elsewhere').closest('.trip-card')).getByRole('button', { name: /review recommendations/i }));
@@ -165,14 +157,13 @@ describe('MyTrips (TWM-108)', () => {
   });
 
   it('renaming a trip that returns 404 shows an unavailable notice (TWM-109)', async () => {
-    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
       .mockResolvedValueOnce(jsonResponse(tripRecord({
         title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
       })))
       .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
-    renderMyTrips();
+    renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Coorg');
 
     await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
@@ -185,31 +176,25 @@ describe('MyTrips (TWM-108)', () => {
   });
 
   it('shows an explanatory locked section for account-only history instead of redirecting (TWM-140)', async () => {
-    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord()));
-    renderMyTrips();
+      .mockResolvedValueOnce(jsonResponse({ trips: [] }));
+    renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     expect(await screen.findByText(/trip history from other devices or a previous account/i)).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('does not show the account-only history lock for a logged-in traveler', async () => {
-    seedState({ auth: { loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' } });
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord()));
-    renderMyTrips();
+      .mockResolvedValueOnce(jsonResponse({ trips: [] }));
+    renderMyTrips({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
     await screen.findByText('Nothing saved yet.');
     expect(screen.queryByText(/trip history from other devices/i)).not.toBeInTheDocument();
   });
 
   it('opens the contextual sync invitation only after an explicit click, never automatically', async () => {
-    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord()));
-    renderMyTrips();
+      .mockResolvedValueOnce(jsonResponse({ trips: [] }));
+    renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Nothing saved yet.');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await userEvent.click(screen.getByText('Log in to sync across devices'));
@@ -218,15 +203,13 @@ describe('MyTrips (TWM-108)', () => {
   });
 
   it('choosing Continue without login on the invitation keeps the traveler on My Trips and stops re-offering the locked-history prompt this session', async () => {
-    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord()));
-    renderMyTrips();
+      .mockResolvedValueOnce(jsonResponse({ trips: [] }));
+    renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Nothing saved yet.');
     await userEvent.click(screen.getByText('Log in to sync across devices'));
     await userEvent.click(screen.getByRole('button', { name: 'Continue without login' }));
     expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
-    expect(screen.queryByText('Log in to see synced trip history')).not.toBeInTheDocument();
+    expect(screen.queryByText('Log in to sync across devices')).not.toBeInTheDocument();
   });
 });

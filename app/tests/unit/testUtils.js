@@ -1,6 +1,16 @@
-// Shared helpers for seeding TripContext's localStorage-backed state in unit tests.
-export const STORAGE_KEY = 'twm_prototype_state_v1';
+import { useEffect } from 'react';
+import { useTrip } from '../../src/context/TripContext.jsx';
 
-export function seedState({ trip = {}, auth }) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ trip, auth }));
+// Seeds TripContext's in-memory auth state via its own login/continueWithoutLogin
+// API. TripContext no longer persists auth to localStorage, so a test that
+// needs a pre-authenticated session must seed it through the context itself —
+// mount this once, inside a TripProvider, above the component under test.
+export function SeedAuth({ auth, children }) {
+  const { login, continueWithoutLogin } = useTrip();
+  useEffect(() => {
+    if (auth?.loggedIn) login({ name: auth.name, email: auth.email });
+    else continueWithoutLogin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return children;
 }

@@ -7,13 +7,10 @@ import {
 const TripContext = createContext(null);
 
 // Mock trip content only (destination, places, days, plan...) — this is not
-// canonical TripState. TWM-110 wired entry/advice commands, but this content
-// still has no Backend home (Destinations/Guide/Atlas commands land later in
-// TWM-104/106/107), so it stays cached here to avoid losing demo progress on
-// refresh. See currentTripId below for the Backend-authoritative trip record
-// (id/title/version), which TWM-102 owns.
-const STORAGE_KEY = 'twm_prototype_state_v1';
-
+// canonical TripState. It has no Backend home yet (Destinations/Guide/Atlas
+// commands land later in TWM-104/106/107), so it lives only in memory for
+// this session and does not survive a refresh — canonical trip state (see
+// currentTripId/commandSnapshot below) is Backend-owned and Postgres-backed.
 const DEFAULT_TRIP = {
   destination: null,   // { type: 'single' | 'circuit', name, places: [string] | null } — selected matcher option
   origin: '',
@@ -41,21 +38,10 @@ const DEFAULT_TRIP = {
 // working session; login is an explicit upgrade, never a precondition.
 const DEFAULT_AUTH = { loggedIn: false, isGuest: true, name: 'Guest', email: '' };
 
-function loadStored() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
 export function TripProvider({ children }) {
-  const stored = loadStored();
-  const [trip, setTrip] = useState({ ...DEFAULT_TRIP, ...stored?.trip });
-  const [auth, setAuth] = useState(stored?.auth ?? DEFAULT_AUTH);
-  const [commandSnapshot, setCommandSnapshot] = useState(stored?.commandSnapshot ?? null);
+  const [trip, setTrip] = useState(DEFAULT_TRIP);
+  const [auth, setAuth] = useState(DEFAULT_AUTH);
+  const [commandSnapshot, setCommandSnapshot] = useState(null);
   // In-app route to return to after an explicit login action (TWM-140
   // contextual auth invitation). Only ever set from internal route strings
   // (useLocation().pathname) — never from external input — so it can't be
@@ -72,16 +58,20 @@ export function TripProvider({ children }) {
   const [tripLoadStatus, setTripLoadStatus] = useState('idle'); // idle | loading | ready | error
   const [tripLoadError, setTripLoadError] = useState(null);
   const ensureTripPromise = useRef(null);
+  const bootPromiseRef = useRef(null);
   const tripRecordRef = useRef(null);
   useEffect(() => { tripRecordRef.current = tripRecord; }, [tripRecord]);
 
-  async function loadOrCreateTripNow() {
+  // Lists the guest's existing Backend trips only — never creates one. A
+  // Backend trip record must not exist until the traveler's first message
+  // (see ensureTrip below), so a guest with zero trips stays that way here.
+  async function loadTripsNow() {
     setTripLoadStatus('loading');
     setTripLoadError(null);
     try {
       const records = await listTrips();
-      const record = records[0] ?? await createTrip();
-      setTrips(records.length ? records : [record]);
+      const record = records[0] ?? null;
+      setTrips(records);
       setTripRecord(record);
       // The Backend-fetched record is the freshest truth for this trip's
       // state, so it must also become the readable commandSnapshot — pages
@@ -100,30 +90,52 @@ export function TripProvider({ children }) {
     }
   }
 
-  // Dedupes concurrent boot/ensureTrip callers against the same in-flight load.
-  function loadOrCreateTrip() {
-    if (!ensureTripPromise.current) {
-      ensureTripPromise.current = loadOrCreateTripNow().finally(() => {
-        ensureTripPromise.current = null;
-      });
+  // Idempotent: a page's own effect (e.g. auto-firing discover_entry) can
+  // mount and race ensureTrip() below before this component's own boot
+  // effect has run — React fires child effects before parent effects in the
+  // same commit — so whichever caller gets here first must be the one that
+  // actually starts the list call; the other reuses the same promise.
+  function ensureBootStarted() {
+    if (!bootPromiseRef.current) {
+      bootPromiseRef.current = loadTripsNow().catch(() => {});
     }
-    return ensureTripPromise.current;
+    return bootPromiseRef.current;
   }
 
   useEffect(() => {
-    loadOrCreateTrip().catch(() => {});
+    ensureBootStarted();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function retryTripLoad() {
-    return loadOrCreateTrip().catch(() => {});
+    const promise = loadTripsNow().catch(() => {});
+    bootPromiseRef.current = promise;
+    return promise;
   }
 
-  // Guarantees a Backend trip record exists before a mutation that needs one,
-  // serialized so concurrent callers await the same in-flight attempt.
+  // Guarantees a Backend trip record exists before a mutation that needs
+  // one — this is the only place a trip is ever created on demand, so the
+  // first call a traveler makes (their first chat message, or an explicit
+  // "+ New Trip"/entry action) is what actually creates the Backend record.
+  // Serialized so concurrent callers await the same in-flight attempt.
   function ensureTrip() {
-    if (tripRecord) return Promise.resolve(tripRecord);
-    return loadOrCreateTrip();
+    if (tripRecordRef.current) return Promise.resolve(tripRecordRef.current);
+    if (!ensureTripPromise.current) {
+      ensureTripPromise.current = (async () => {
+        // Wait for the initial trips list so we don't race a fresh create
+        // against an existing trip the boot load is still fetching.
+        await ensureBootStarted();
+        if (tripRecordRef.current) return tripRecordRef.current;
+        const created = await createTrip();
+        setTrips(prev => [created, ...prev]);
+        setTripRecord(created);
+        setCommandSnapshot(created);
+        return created;
+      })().finally(() => {
+        ensureTripPromise.current = null;
+      });
+    }
+    return ensureTripPromise.current;
   }
 
   // Merges a patch into the Backend-persisted, per-trip ui_state (e.g. which
@@ -260,14 +272,6 @@ export function TripProvider({ children }) {
       }
     });
   }
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ trip, auth, commandSnapshot }));
-    } catch {
-      // Storage unavailable (private browsing, quota, etc.) — prototype state just won't survive a reload.
-    }
-  }, [trip, auth, commandSnapshot]);
 
   function updateTrip(patch) {
     setTrip(prev => ({ ...prev, ...patch }));

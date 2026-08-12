@@ -50,15 +50,16 @@ describe('TripContext auth state', () => {
     expect(result.current.auth).toEqual({ loggedIn: false, isGuest: true, name: 'Jane', email: 'jane@example.com' });
   });
 
-  it('persists trip and auth to localStorage and reloads them', () => {
+  it('keeps trip and auth in memory only — nothing survives a remount via localStorage', () => {
     const { result, unmount } = renderHook(() => useTrip(), { wrapper });
     act(() => result.current.login({ name: 'Traveler', email: 't@example.com' }));
     act(() => result.current.updateTrip({ destination: { type: 'single', name: 'Coorg', places: null } }));
+    expect(localStorage.length).toBe(0);
     unmount();
 
     const { result: reloaded } = renderHook(() => useTrip(), { wrapper });
-    expect(reloaded.current.auth.name).toBe('Traveler');
-    expect(reloaded.current.trip.destination).toEqual({ type: 'single', name: 'Coorg', places: null });
+    expect(reloaded.current.auth.name).toBe('Guest');
+    expect(reloaded.current.trip.destination).toBe(null);
   });
 
   it('preserves and clears a pending return route around a login action (TWM-140)', () => {
@@ -96,13 +97,28 @@ describe('TripContext Backend-authoritative trip record', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('creates a trip on boot when none exist yet', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-new', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }));
+  it('does not create a trip on boot when none exist yet — stays trip-less until the first message', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    expect(result.current.currentTripId).toBe(null);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates a trip lazily on the first sendTripCommand (e.g. the traveler\'s first message)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ trips: [] }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'trip-new', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({ trip: { id: 'trip-new', title: 'Untitled Trip', version: 2, trip_state: {}, ui_state: {} } }));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    expect(result.current.currentTripId).toBe(null);
+
+    await act(async () => { await result.current.sendTripCommand('advice_entry', { message: 'Plan my Coorg trip' }); });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/trips', expect.objectContaining({ method: 'POST' }));
     expect(result.current.currentTripId).toBe('trip-new');
   });
 
@@ -133,7 +149,7 @@ describe('TripContext Backend-authoritative trip record', () => {
     expect(result.current.currentTripId).toBe('trip-1');
   });
 
-  it('does not persist mock trip content (destination/places/days) to the Backend', async () => {
+  it('does not persist mock trip content (destination/places/days) to the Backend or localStorage', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
       .mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }));
@@ -144,8 +160,8 @@ describe('TripContext Backend-authoritative trip record', () => {
     act(() => result.current.updateTrip({ destination: { type: 'single', name: 'Coorg', places: null } }));
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    const stored = JSON.parse(localStorage.getItem('twm_prototype_state_v1'));
-    expect(stored.trip.destination).toEqual({ type: 'single', name: 'Coorg', places: null });
+    expect(result.current.trip.destination).toEqual({ type: 'single', name: 'Coorg', places: null });
+    expect(localStorage.length).toBe(0);
   });
 });
 
