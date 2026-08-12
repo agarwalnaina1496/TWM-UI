@@ -33,6 +33,7 @@ export default function MyTrips() {
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [busyId, setBusyId] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   // Fresh, no-progress trips (e.g. the record TripContext auto-creates)
   // aren't real trips from the traveler's point of view — TWM-108 keeps
@@ -51,11 +52,20 @@ export default function MyTrips() {
     navigate('/');
   }
 
+  // TWM-109: opening a trip that turned out to be gone (deleted, or a stale
+  // card from another session) fails closed — the context already dropped
+  // it from `trips`, so the card disappears and we just surface why instead
+  // of navigating into a dead trip.
   async function handleOpen(t) {
     if (busyId) return;
     setBusyId(t.id);
+    setNotice(null);
     try {
-      await openTrip(t.id);
+      const result = await openTrip(t.id);
+      if (!result.ok) {
+        setNotice('This trip is no longer available.');
+        return;
+      }
       navigate(stageCta(t.trip_state).to);
     } finally {
       setBusyId(null);
@@ -65,6 +75,7 @@ export default function MyTrips() {
   function startRename(t) {
     setRenamingId(t.id);
     setRenameValue(t.title || '');
+    setNotice(null);
   }
 
   async function commitRename(id) {
@@ -72,7 +83,8 @@ export default function MyTrips() {
     setRenamingId(null);
     if (!title) return;
     try {
-      await renameTrip(id, title);
+      const result = await renameTrip(id, title);
+      if (!result.ok) setNotice('This trip is no longer available.');
     } catch {
       // Rename failures leave the prior title in place — no local state to roll back.
     }
@@ -120,6 +132,8 @@ export default function MyTrips() {
         guestNote="Your current trip stays available on this device either way."
         onContinueWithoutLogin={handleSyncDismiss}
       />
+
+      {notice && <div className="price-evidence state-unsafe" role="alert">{notice}</div>}
 
       {visibleTrips.length === 0 ? (
         <div className="empty-trips">

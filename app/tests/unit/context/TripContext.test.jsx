@@ -229,4 +229,55 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
     expect(result.current.currentTripId).toBe('trip-a');
     expect(result.current.trips.find(t => t.id === 'trip-b').title).toBe('Goa');
   });
+
+  it('openTrip fails closed on a 404 instead of throwing uncaught (TWM-109)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-a' }, { id: 'trip-b' }] }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+
+    let outcome;
+    await act(async () => { outcome = await result.current.openTrip('trip-b'); });
+
+    expect(outcome).toEqual({ ok: false, reason: 'not_found' });
+    expect(result.current.trips.map(t => t.id)).toEqual(['trip-a']);
+    expect(result.current.currentTripId).toBe('trip-a');
+  });
+
+  it('renameTrip fails closed on a 404 instead of throwing uncaught (TWM-109)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-a' }, { id: 'trip-b' }] }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+
+    let outcome;
+    await act(async () => { outcome = await result.current.renameTrip('trip-b', 'Goa'); });
+
+    expect(outcome).toEqual({ ok: false, reason: 'not_found' });
+    expect(result.current.trips.map(t => t.id)).toEqual(['trip-a']);
+  });
+
+  it('clears `trips` instead of leaving it stale when a refresh fails', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-a' }] }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} }))
+      .mockRejectedValueOnce(new TypeError('Network request failed'));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    expect(result.current.trips).toHaveLength(1);
+
+    await act(async () => { await result.current.retryTripLoad(); });
+
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('error'));
+    expect(result.current.trips).toEqual([]);
+  });
 });

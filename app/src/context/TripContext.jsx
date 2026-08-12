@@ -93,6 +93,9 @@ export function TripProvider({ children }) {
     } catch (error) {
       setTripLoadStatus('error');
       setTripLoadError(error instanceof TripApiError ? error : new TripApiError('Trip persistence is unavailable.'));
+      // A failed refresh must not leave `trips` looking current — fail
+      // closed (empty list) rather than silently rendering stale trips.
+      setTrips([]);
       throw error;
     }
   }
@@ -162,11 +165,26 @@ export function TripProvider({ children }) {
     });
   }
 
+  // Drops a trip that turned out to be gone (404 — deleted, or belongs to a
+  // different guest session) from the locally held list, and clears it as
+  // current if it was. TWM-109: fail closed instead of leaving a phantom card.
+  function dropUnavailableTrip(id) {
+    setTrips(prev => prev.filter(t => t.id !== id));
+    if (id === tripRecordRef.current?.id) {
+      setTripRecord(null);
+      setCommandSnapshot(null);
+    }
+  }
+
   // Renames any trip from `trips` (e.g. a My Trips card), not just the
-  // current one. Falls back to a fresh fetch on a stale-version conflict.
+  // current one. Returns { ok: true, record } on success, or
+  // { ok: false, reason: 'not_found' } for a 404 (TWM-109) instead of
+  // throwing uncaught — the caller renders a clean "unavailable" outcome.
+  // Falls back to a fresh fetch on a stale-version conflict (still rethrown,
+  // since that's a retryable edit conflict, not a gone trip).
   async function renameTrip(id, title) {
     const target = trips.find(t => t.id === id);
-    if (!target) return undefined;
+    if (!target) return { ok: false, reason: 'not_found' };
     return queueTripMutation(id, async () => {
       try {
         const saved = await renameTripApi(id, title, target.version);
@@ -175,8 +193,12 @@ export function TripProvider({ children }) {
           setTripRecord(saved);
           setCommandSnapshot(saved);
         }
-        return saved;
+        return { ok: true, record: saved };
       } catch (error) {
+        if (error instanceof TripApiError && error.status === 404) {
+          dropUnavailableTrip(id);
+          return { ok: false, reason: 'not_found' };
+        }
         if (error instanceof TripApiError && error.status === 409) {
           const latest = await getTrip(id);
           setTrips(prev => prev.map(t => (t.id === id ? latest : t)));
@@ -187,14 +209,24 @@ export function TripProvider({ children }) {
   }
 
   // Switches the current trip (e.g. opening a My Trips card) without
-  // mutating stage/active_agent — a plain read, never a command.
+  // mutating stage/active_agent — a plain read, never a command. Returns
+  // { ok: true, record } on success, or { ok: false, reason: 'not_found' }
+  // for a 404 (TWM-109) instead of throwing uncaught.
   async function openTrip(id) {
-    if (id === tripRecordRef.current?.id) return tripRecordRef.current;
-    const record = await getTrip(id);
-    setTripRecord(record);
-    setCommandSnapshot(record);
-    setTrips(prev => (prev.some(t => t.id === id) ? prev.map(t => (t.id === id ? record : t)) : [...prev, record]));
-    return record;
+    if (id === tripRecordRef.current?.id) return { ok: true, record: tripRecordRef.current };
+    try {
+      const record = await getTrip(id);
+      setTripRecord(record);
+      setCommandSnapshot(record);
+      setTrips(prev => (prev.some(t => t.id === id) ? prev.map(t => (t.id === id ? record : t)) : [...prev, record]));
+      return { ok: true, record };
+    } catch (error) {
+      if (error instanceof TripApiError && error.status === 404) {
+        dropUnavailableTrip(id);
+        return { ok: false, reason: 'not_found' };
+      }
+      throw error;
+    }
   }
 
   // The single browser mutation boundary (TWM-110): POST /api/trips/{id}/commands.
