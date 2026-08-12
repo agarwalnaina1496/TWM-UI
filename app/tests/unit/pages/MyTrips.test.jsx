@@ -50,11 +50,9 @@ describe('MyTrips (TWM-108)', () => {
   });
 
   it('renders stage-aware badge and CTA for a real trip', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord({
-        title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
-      })));
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
+    }));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     expect(await screen.findByText(/browsing as a guest/i)).toBeInTheDocument();
     expect(screen.getByText('Coorg')).toBeInTheDocument();
@@ -63,11 +61,11 @@ describe('MyTrips (TWM-108)', () => {
   });
 
   it('shows the Dashboard CTA for an itinerary-ready trip', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord({
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [tripRecord({
         title: 'Manali', trip_state: { stage: 'planned', trip_context: { origin: 'Delhi' }, itinerary_state: { status: 'ready' } },
-      })));
+      })],
+    }));
     renderMyTrips({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
     expect(await screen.findByText('Signed in as Traveler.')).toBeInTheDocument();
     expect(screen.getByText('Itinerary ready')).toBeInTheDocument();
@@ -80,15 +78,15 @@ describe('MyTrips (TWM-108)', () => {
     ['completed', 'done', 'Completed'],
   ])('filters to the %s section', async (filterKey, stage, badgeText) => {
     const itinerary = stage === 'planned' ? { itinerary_state: { status: 'ready' } } : {};
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }, { id: 'trip-2' }] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord({
-        id: 'trip-1', title: 'Matches filter', trip_state: { stage, trip_context: { origin: 'Delhi' }, ...itinerary },
-      })))
-      .mockResolvedValueOnce(jsonResponse(tripRecord({
-        id: 'trip-2', title: 'Recommended trip', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } },
-        updated_at: '2025-12-01T00:00:00.000Z',
-      })));
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [
+        tripRecord({ id: 'trip-1', title: 'Matches filter', trip_state: { stage, trip_context: { origin: 'Delhi' }, ...itinerary } }),
+        tripRecord({
+          id: 'trip-2', title: 'Recommended trip', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } },
+          updated_at: '2025-12-01T00:00:00.000Z',
+        }),
+      ],
+    }));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Matches filter');
 
@@ -101,10 +99,9 @@ describe('MyTrips (TWM-108)', () => {
 
   it('New Trip creates a real Backend trip and preserves the existing one', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord({
-        title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
-      })))
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
+      }))
       .mockResolvedValueOnce(jsonResponse(tripRecord({ id: 'trip-2', title: 'Untitled Trip' }), { status: 201 }));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Coorg');
@@ -116,10 +113,9 @@ describe('MyTrips (TWM-108)', () => {
 
   it('renames a trip through the Backend', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord({
-        title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
-      })))
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
+      }))
       .mockResolvedValueOnce(jsonResponse(tripRecord({ title: 'Coorg Weekend', version: 2 })));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Coorg');
@@ -137,14 +133,15 @@ describe('MyTrips (TWM-108)', () => {
 
   it('opening a trip that returns 404 shows an unavailable notice and drops the card (TWM-109)', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }, { id: 'trip-2' }] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord({
-        id: 'trip-1', title: 'Coorg', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
-      })))
-      .mockResolvedValueOnce(jsonResponse(tripRecord({
-        id: 'trip-2', title: 'Deleted elsewhere', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } },
-        updated_at: '2025-12-01T00:00:00.000Z',
-      })))
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [
+          tripRecord({ id: 'trip-1', title: 'Coorg', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } }),
+          tripRecord({
+            id: 'trip-2', title: 'Deleted elsewhere', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } },
+            updated_at: '2025-12-01T00:00:00.000Z',
+          }),
+        ],
+      }))
       .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Deleted elsewhere');
@@ -158,10 +155,9 @@ describe('MyTrips (TWM-108)', () => {
 
   it('renaming a trip that returns 404 shows an unavailable notice (TWM-109)', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord({
-        title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
-      })))
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
+      }))
       .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Coorg');

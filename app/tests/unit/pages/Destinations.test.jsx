@@ -56,9 +56,9 @@ function tripStateWithLatest(latest, extra = {}) {
 }
 
 function seedFetch(fetchMock, tripState) {
-  fetchMock
-    .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-    .mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Trip', version: 3, trip_state: tripState, ui_state: {} }));
+  fetchMock.mockResolvedValueOnce(jsonResponse({
+    trips: [{ id: 'trip-1', title: 'Trip', version: 3, trip_state: tripState, ui_state: {} }],
+  }));
 }
 
 function renderDestinations(initialEntries = ['/destinations?next=preview']) {
@@ -113,7 +113,7 @@ describe('Destinations (real Meridian integration)', () => {
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
     expect(screen.getByText('Multi-stop circuit')).toBeInTheDocument();
     expect(screen.getByText('₹32,000–₹45,000')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2); // list + get only, no continue command
+    expect(fetchMock).toHaveBeenCalledTimes(1); // list only, no continue command
   });
 
   it('shows the exact persisted budget/origin/traveler recap, not a generic bucketed label', async () => {
@@ -192,7 +192,7 @@ describe('Destinations (real Meridian integration)', () => {
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('What is your budget?')).toBeInTheDocument());
-    expect(fetchMock).toHaveBeenCalledTimes(2); // no continue command sent while awaiting a clarification
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no continue command sent while awaiting a clarification
 
     fireEvent.change(screen.getByPlaceholderText('Your answer…'), { target: { value: 'INR 1,00,000 total' } });
     fireEvent.click(screen.getByLabelText('Send'));
@@ -322,12 +322,12 @@ describe('Destinations (real Meridian integration)', () => {
   });
 
   it('restores the expanded card from Backend-persisted ui_state after a refresh', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-      .mockResolvedValueOnce(jsonResponse({
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [{
         id: 'trip-1', title: 'Trip', version: 3, trip_state: tripStateWithLatest(successOutcome()),
         ui_state: { destinationsOpenId: 'gwalior-orchha-khajuraho-panna' },
-      }));
+      }],
+    }));
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());

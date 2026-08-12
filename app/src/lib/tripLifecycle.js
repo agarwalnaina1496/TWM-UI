@@ -23,6 +23,39 @@ export function isCompletedTrip(tripState) {
   return tripState?.stage === 'done';
 }
 
+// Verbatim, top-level trip_context fields worth showing as a quick recap
+// (Destinations' pre-recommendation pills, My Trips cards). Never bucketed
+// into a generic label — an exact persisted value or nothing, so
+// "₹1,00,000 total for both" never degrades to "Flexible budget".
+// trip_context is free-form (Scout extracts whatever field names fit the
+// conversation — see TWM_Docs/TRIP_STATE.md), so this list is a best-effort
+// set of the field names Scout commonly uses, not a guaranteed schema.
+const RECAP_FIELDS = [
+  ['origin', value => `From ${value}`],
+  ['budget', value => String(value)],
+  ['duration_days', value => `${value} day${value === 1 ? '' : 's'}`],
+  ['travelers', value => `${value} traveler${value === 1 ? '' : 's'}`],
+  ['travel_window', value => String(value)],
+  ['month', value => String(value)],
+  ['dates', value => String(value)],
+];
+
+export function contextRecapPills(tripContext) {
+  return RECAP_FIELDS
+    .map(([key, format]) => {
+      const value = tripContext?.[key];
+      return value === undefined || value === null || value === '' ? null : format(value);
+    })
+    .filter(Boolean);
+}
+
+// The traveler's confirmed destination, once one exists — UI-owned
+// (trip_context.selected_option), not a Meridian recommendation guess.
+export function contextDestination(tripContext) {
+  const name = tripContext?.selected_option?.name;
+  return typeof name === 'string' && name.trim() ? name : null;
+}
+
 const STAGE_BADGES = {
   new: { cls: 'b-new', text: 'New' },
   matching: { cls: 'b-chat', text: 'In conversation' },

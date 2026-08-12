@@ -244,7 +244,7 @@ export function TripProvider({ children }) {
   // The single browser mutation boundary (TWM-110): POST /api/trips/{id}/commands.
   // Every entry path (Advice/Discover/Known Destination) and every follow-up
   // traveler message goes through here — React never sends canonical TripState.
-  async function sendTripCommand(command, { message, optionId, destination, refinement, logisticsConfirmation, idempotencyKey } = {}) {
+  async function sendTripCommand(command, { message, optionId, destination, tripContext, refinement, logisticsConfirmation, idempotencyKey } = {}) {
     const record = await ensureTrip();
     return queueTripMutation(record.id, async () => {
       const current = tripRecordRef.current || record;
@@ -256,6 +256,7 @@ export function TripProvider({ children }) {
       if (message !== undefined) payload.message = message;
       if (optionId !== undefined) payload.option_id = optionId;
       if (destination !== undefined) payload.destination = destination;
+      if (tripContext !== undefined) payload.trip_context = tripContext;
       if (refinement !== undefined) payload.refinement = refinement;
       if (logisticsConfirmation !== undefined) payload.logistics_confirmation = logisticsConfirmation;
       try {

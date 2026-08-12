@@ -17,7 +17,7 @@ export default function ScoutChat() {
   const [error, setError] = useState(null);
   const initialized = useRef(false);
   const lastCommand = useRef(null);
-  // The very first turn is a typed advice_entry (Scout entry, no rediscovery);
+  // The very first turn is a typed scout_entry (Scout entry, no rediscovery);
   // once a specialist owns the trip, follow-ups are plain traveler_message.
   const entered = useRef(false);
 
@@ -34,7 +34,7 @@ export default function ScoutChat() {
     setBusy(true);
     setError(null);
     try {
-      const command = entered.current ? 'traveler_message' : 'advice_entry';
+      const command = entered.current ? 'traveler_message' : 'scout_entry';
       const response = await sendTripCommand(command, { message: text, idempotencyKey });
       entered.current = true;
       say('assistant', response.message);

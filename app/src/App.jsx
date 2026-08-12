@@ -9,7 +9,7 @@ import Login from './pages/Login.jsx';
 import RequestQuote from './pages/RequestQuote.jsx';
 import Itinerary from './pages/Itinerary.jsx';
 import MyTrips from './pages/MyTrips.jsx';
-import JourneyEntry from './pages/JourneyEntry.jsx';
+import PlanTrip from './pages/PlanTrip.jsx';
 import TripDashboard from './pages/TripDashboard.jsx';
 
 export default function App() {
@@ -20,7 +20,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Landing />} />
         <Route path="/scout-chat" element={<ScoutChat />} />
-        <Route path="/journey-entry" element={<JourneyEntry />} />
+        <Route path="/plan-trip" element={<PlanTrip />} />
         <Route path="/destinations" element={<Destinations />} />
         <Route path="/trip-preview" element={<TripPreview />} />
         <Route path="/logistics" element={<Logistics />} />

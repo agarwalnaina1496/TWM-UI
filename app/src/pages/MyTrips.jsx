@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
-import { isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta } from '../lib/tripLifecycle.js';
+import {
+  isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, contextRecapPills, contextDestination,
+} from '../lib/tripLifecycle.js';
 import '../styles/my-trips.css';
 
 // TWM-140: once dismissed for this browsing session, don't re-offer the
@@ -23,6 +25,15 @@ const FILTERS = [
   { key: 'upcoming', label: 'Upcoming' },
   { key: 'completed', label: 'Completed' },
 ];
+
+// updated_at is set on every mutation, but a never-touched-since-creation
+// trip can still have it null — fall back to created_at rather than show nothing.
+function formatTripTimestamp(t) {
+  const raw = t.updated_at || t.created_at;
+  if (!raw) return null;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
 
 export default function MyTrips() {
   const { trips, auth, startNewTrip, openTrip, renameTrip } = useTrip();
@@ -165,6 +176,9 @@ export default function MyTrips() {
             shown.map(t => {
               const badge = stageBadge(t.trip_state);
               const cta = stageCta(t.trip_state);
+              const destination = contextDestination(t.trip_state?.trip_context);
+              const recapPills = contextRecapPills(t.trip_state?.trip_context);
+              const timestamp = formatTripTimestamp(t);
               return (
                 <div className="trip-card" key={t.id}>
                   <div>
@@ -188,9 +202,16 @@ export default function MyTrips() {
                         </button>
                       </div>
                     )}
+                    {destination && <div className="trip-card-destination">{destination}</div>}
                     <div className="meta">
                       <span className="badge">{badge.text}</span>
+                      {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
                     </div>
+                    {recapPills.length > 0 && (
+                      <div className="trip-card-recap">
+                        {recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
+                      </div>
+                    )}
                   </div>
                   <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => handleOpen(t)}>
                     {cta.label} →

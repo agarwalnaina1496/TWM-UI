@@ -49,7 +49,7 @@ describe('App guest-first routing (TWM-140)', () => {
     expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
   });
 
-  describe('Discover entry against real trip commands', () => {
+  describe('Plan a trip: discover path (destination not known)', () => {
     let fetchMock;
 
     beforeEach(() => {
@@ -61,58 +61,45 @@ describe('App guest-first routing (TWM-140)', () => {
       vi.restoreAllMocks();
     });
 
-    it('shows a hardcoded welcome with no Backend call until the traveler sends their first message, then fires discover_entry', async () => {
+    it('collects trip_context on the form with no Backend call, then fires discover_entry once on submit', async () => {
       const user = userEvent.setup();
       fetchMock
         // TripContext boot: list (empty, no trip yet) — the trip itself is
-        // created lazily below, by the traveler's first sent message.
+        // created lazily below, by the form's single submit call.
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
         .mockResolvedValueOnce(jsonResponse(tripRecord()))
-        // discover_entry: Meridian needs clarification, no Scout call
         .mockResolvedValueOnce(jsonResponse({
-          message: 'What is your rough budget?',
-          agent_meta: null,
+          message: null, agent_meta: null,
           trip: tripRecord({
             version: 2,
-            trip_state: { stage: 'matching', active_agent: 'meridian', matcher_state: { conversation_context: { awaiting: 'budget' } } },
+            trip_state: {
+              stage: 'matching', active_agent: 'meridian', trip_context: { origin: 'Delhi' },
+              matcher_state: { conversation_context: { last_meridian_message: 'What is your rough budget?', awaiting: 'budget' } },
+            },
           }),
-        }))
-        // traveler_message follow-up: Meridian recommends
-        .mockResolvedValueOnce(jsonResponse({
-          message: 'Here are a few options.',
-          agent_meta: null,
-          trip: tripRecord({ version: 3, trip_state: { stage: 'recommended', active_agent: null } }),
         }));
 
-      renderApp(['/journey-entry?intent=discover_destination']);
-
-      expect(await screen.findByText(/tell me what matters to you/i)).toBeInTheDocument();
+      renderApp(['/plan-trip']);
+      await user.type(screen.getByPlaceholderText('e.g. Delhi'), 'Delhi');
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1)); // boot list only — no trip yet, no command sent
 
-      await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'Somewhere relaxing{Enter}');
+      await user.click(screen.getByText('Not yet'));
+      await user.click(screen.getByText('Continue →'));
 
       expect(await screen.findByText('What is your rough budget?')).toBeInTheDocument();
-      expect(fetchMock.mock.calls[2][0]).toBe('/api/trips/trip-1/commands');
-      expect(JSON.parse(fetchMock.mock.calls[2][1].body).command).toBe('discover_entry');
-
-      await user.click(screen.getByRole('button', { name: '₹1,00,000 total for both' }));
-
-      expect(await screen.findByRole('button', { name: 'See destinations →' })).toBeInTheDocument();
-      expect(JSON.parse(fetchMock.mock.calls[3][1].body).command).toBe('traveler_message');
+      const commandCall = fetchMock.mock.calls.find(call => call[0] === '/api/trips/trip-1/commands');
+      const body = JSON.parse(commandCall[1].body);
+      expect(body.command).toBe('discover_entry');
+      expect(body.trip_context).toEqual({ origin: 'Delhi' });
     });
   });
 
-  it('uses the full-height chat shell for advice and known-destination entry', () => {
-    const advice = renderApp(['/scout-chat?entry=advice']);
+  it('uses the full-height chat shell for advice entry', () => {
+    renderApp(['/scout-chat?entry=advice']);
     expect(screen.getByText('Scout is here to help with your trip.').closest('.chat-screen')).toBeInTheDocument();
-    advice.unmount();
-
-    renderApp(['/journey-entry?intent=known_destination']);
-    expect(screen.getByText('Scout is here to help plan your destination.').closest('.chat-screen')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('e.g. Coorg, Karnataka')).toBeInTheDocument();
   });
 
-  describe('Advice entry against real trip commands', () => {
+  describe('Scout entry (own words) against real trip commands', () => {
     let fetchMock;
 
     beforeEach(() => {
@@ -124,7 +111,7 @@ describe('App guest-first routing (TWM-140)', () => {
       vi.restoreAllMocks();
     });
 
-    it('sends the first turn as advice_entry, then plain traveler_message on follow-ups', async () => {
+    it('sends the first turn as scout_entry, then plain traveler_message on follow-ups', async () => {
       const user = userEvent.setup();
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
@@ -144,7 +131,7 @@ describe('App guest-first routing (TWM-140)', () => {
       await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), 'Plan my Coorg trip{Enter}');
 
       expect(await screen.findByText('Where will you be travelling from?')).toBeInTheDocument();
-      expect(JSON.parse(fetchMock.mock.calls[2][1].body).command).toBe('advice_entry');
+      expect(JSON.parse(fetchMock.mock.calls[2][1].body).command).toBe('scout_entry');
 
       await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), 'Delhi{Enter}');
 
@@ -153,7 +140,7 @@ describe('App guest-first routing (TWM-140)', () => {
     });
   });
 
-  describe('Known Destination entry against real trip commands', () => {
+  describe('Plan a trip: known-destination path', () => {
     let fetchMock;
 
     beforeEach(() => {
@@ -165,7 +152,7 @@ describe('App guest-first routing (TWM-140)', () => {
       vi.restoreAllMocks();
     });
 
-    it('sends known_destination_entry with the typed destination and invokes Guide', async () => {
+    it('fires known_destination_entry with the typed destination and collected trip_context, invoking Guide', async () => {
       const user = userEvent.setup();
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
@@ -173,15 +160,28 @@ describe('App guest-first routing (TWM-140)', () => {
         .mockResolvedValueOnce(jsonResponse({
           message: 'Here are the places.',
           agent_meta: null,
-          trip: tripRecord({ version: 2, trip_state: { stage: 'planning', active_agent: 'guide', trip_context: { destination: 'Coorg' } } }),
+          trip: tripRecord({
+            version: 2,
+            trip_state: {
+              stage: 'planning', active_agent: 'guide', trip_context: { destination: 'Coorg', origin: 'Delhi' },
+              planner_state: { guide_session: { revision: 1, state: {
+                phase: 'DAY_PLAN_DRAFT', destinations: ['Coorg'], duration_days: null, start_date: null,
+                places: [], day_plan: [], preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
+              } } },
+            },
+          }),
         }));
 
-      renderApp(['/journey-entry?intent=known_destination']);
-      await user.type(screen.getByPlaceholderText('e.g. Coorg, Karnataka'), 'Coorg{Enter}');
+      renderApp(['/plan-trip']);
+      await user.type(screen.getByPlaceholderText('e.g. Delhi'), 'Delhi');
+      await user.click(screen.getByText('Yes, I know'));
+      await user.type(screen.getByPlaceholderText('e.g. Coorg, Karnataka'), 'Coorg');
+      await user.click(screen.getByText('Continue →'));
 
-      expect(await screen.findByText('Here are the places.')).toBeInTheDocument();
-      expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ command: 'known_destination_entry', destination: 'Coorg' });
-      expect(await screen.findByRole('button', { name: 'Continue to planning →' })).toBeInTheDocument();
+      expect(await screen.findByText('Guide Plan Builder')).toBeInTheDocument();
+      const commandCall = fetchMock.mock.calls.find(call => call[0] === '/api/trips/trip-1/commands');
+      const body = JSON.parse(commandCall[1].body);
+      expect(body).toMatchObject({ command: 'known_destination_entry', destination: 'Coorg', trip_context: { origin: 'Delhi' } });
     });
   });
 });
