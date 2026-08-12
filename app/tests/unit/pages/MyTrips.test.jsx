@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import MyTrips from '../../../src/pages/MyTrips.jsx';
@@ -140,6 +140,48 @@ describe('MyTrips (TWM-108)', () => {
       method: 'PATCH',
       body: JSON.stringify({ expected_version: 1, title: 'Coorg Weekend' }),
     })));
+  });
+
+  it('opening a trip that returns 404 shows an unavailable notice and drops the card (TWM-109)', async () => {
+    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }, { id: 'trip-2' }] }))
+      .mockResolvedValueOnce(jsonResponse(tripRecord({
+        id: 'trip-1', title: 'Coorg', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
+      })))
+      .mockResolvedValueOnce(jsonResponse(tripRecord({
+        id: 'trip-2', title: 'Deleted elsewhere', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } },
+        updated_at: '2025-12-01T00:00:00.000Z',
+      })))
+      .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+    renderMyTrips();
+    await screen.findByText('Deleted elsewhere');
+
+    await userEvent.click(within(screen.getByText('Deleted elsewhere').closest('.trip-card')).getByRole('button', { name: /review recommendations/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This trip is no longer available.');
+    expect(screen.queryByText('Deleted elsewhere')).not.toBeInTheDocument();
+    expect(screen.getByText('Coorg')).toBeInTheDocument();
+  });
+
+  it('renaming a trip that returns 404 shows an unavailable notice (TWM-109)', async () => {
+    seedState({ auth: { loggedIn: false, isGuest: true, name: 'Guest', email: '' } });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
+      .mockResolvedValueOnce(jsonResponse(tripRecord({
+        title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
+      })))
+      .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+    renderMyTrips();
+    await screen.findByText('Coorg');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    const input = screen.getByDisplayValue('Coorg');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Coorg Weekend{Enter}');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This trip is no longer available.');
+    expect(screen.queryByText('Coorg')).not.toBeInTheDocument();
   });
 
   it('shows an explanatory locked section for account-only history instead of redirecting (TWM-140)', async () => {
