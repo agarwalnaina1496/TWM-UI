@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
+import { newIdempotencyKey } from '../lib/tripApi.js';
 import '../styles/chat.css';
 
 let nextMessageId = 1;
+
+const DISCOVER_WELCOME = "I'm Scout. Tell me what matters to you — vibe, budget, timing, anything — and I'll narrow down destinations that fit.";
 
 export default function JourneyEntry() {
   const navigate = useNavigate();
@@ -19,41 +22,34 @@ export default function JourneyEntry() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const initialized = useRef(false);
-  // discover_entry establishes Meridian ownership on entry; every message
-  // after that is a plain traveler_message to the specialist already owning the trip.
+  // discover_entry establishes Meridian ownership on the traveler's first
+  // message; every message after that is a plain traveler_message to the
+  // specialist already owning the trip. No Backend command — and so no trip
+  // creation — happens before that first send.
   const entered = useRef(false);
+  const lastCommand = useRef(null);
 
-  async function enterDiscover() {
-    setBusy(true);
-    setError(null);
-    try {
-      const response = await sendTripCommand('discover_entry');
-      entered.current = true;
-      setResult(response);
-      if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
-    } catch (commandError) {
-      setError(commandError.message || 'Something went wrong.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  // Hardcoded per-intent greeting shown immediately, with no Backend call —
+  // Meridian only gets involved once the traveler actually sends something.
   useEffect(() => {
     if (!isDiscover || initialized.current) return;
     initialized.current = true;
-    enterDiscover();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: DISCOVER_WELCOME }]);
   }, [isDiscover]);
 
   async function sendDiscover(reply = input) {
     const value = (typeof reply === 'string' ? reply : reply.value).trim();
     if (!value || busy) return;
+    const idempotencyKey = lastCommand.current?.message === value ? lastCommand.current.idempotencyKey : newIdempotencyKey();
+    lastCommand.current = { message: value, idempotencyKey };
     setInput('');
     setBusy(true);
     setError(null);
     setMessages(previous => [...previous, { id: nextMessageId++, role: 'user', text: value }]);
     try {
-      const response = await sendTripCommand('traveler_message', { message: value });
+      const command = entered.current ? 'traveler_message' : 'discover_entry';
+      const response = await sendTripCommand(command, { message: value, idempotencyKey });
+      entered.current = true;
       setResult(response);
       if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
     } catch (commandError) {
@@ -129,7 +125,7 @@ export default function JourneyEntry() {
           </div>
         </>
       )}
-      {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={isDiscover ? (entered.current ? () => sendDiscover() : enterDiscover) : submitDestination}>Try again</button></div>}
+      {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={isDiscover ? () => sendDiscover(lastCommand.current?.message ?? '') : submitDestination}>Try again</button></div>}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../../src/App.jsx';
@@ -61,11 +61,11 @@ describe('App guest-first routing (TWM-140)', () => {
       vi.restoreAllMocks();
     });
 
-    it('fires discover_entry on entry with no Scout call, then routes replies to Meridian only', async () => {
+    it('shows a hardcoded welcome with no Backend call until the traveler sends their first message, then fires discover_entry', async () => {
       const user = userEvent.setup();
       fetchMock
         // TripContext boot: list (empty, no trip yet) — the trip itself is
-        // created lazily below, by the first command (discover_entry).
+        // created lazily below, by the traveler's first sent message.
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
         .mockResolvedValueOnce(jsonResponse(tripRecord()))
         // discover_entry: Meridian needs clarification, no Scout call
@@ -85,6 +85,11 @@ describe('App guest-first routing (TWM-140)', () => {
         }));
 
       renderApp(['/journey-entry?intent=discover_destination']);
+
+      expect(await screen.findByText(/tell me what matters to you/i)).toBeInTheDocument();
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1)); // boot list only — no trip yet, no command sent
+
+      await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'Somewhere relaxing{Enter}');
 
       expect(await screen.findByText('What is your rough budget?')).toBeInTheDocument();
       expect(fetchMock.mock.calls[2][0]).toBe('/api/trips/trip-1/commands');
