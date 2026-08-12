@@ -1,12 +1,12 @@
 // Shared helpers for seeding TripContext's localStorage-backed state in e2e tests.
 export const STORAGE_KEY = 'twm_prototype_state_v1';
 
-export async function seedState(page, { trip = {}, auth, savedTrips = [] }) {
+export async function seedState(page, { trip = {}, auth }) {
   // Land on an in-app page first so localStorage is set on the app's own origin/path.
   await page.goto('login');
   await page.evaluate(
     ({ key, value }) => window.localStorage.setItem(key, JSON.stringify(value)),
-    { key: STORAGE_KEY, value: { trip, auth, savedTrips } }
+    { key: STORAGE_KEY, value: { trip, auth } }
   );
 }
 
@@ -16,10 +16,10 @@ export async function seedState(page, { trip = {}, auth, savedTrips = [] }) {
 // don't require a live Backend/agent deployment.
 const TRIP_ID = 'e2e-trip-1';
 
-function tripRecord({ version = 1, trip_state = {} } = {}) {
+function tripRecord({ id = TRIP_ID, version = 1, trip_state = {}, title = 'Untitled Trip', updated_at = '2026-01-01T00:00:00.000Z' } = {}) {
   return {
-    id: TRIP_ID, title: 'Untitled Trip', product_mode: 'self_led', version,
-    trip_state, ui_state: {}, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
+    id, title, product_mode: 'self_led', version,
+    trip_state, ui_state: {}, created_at: '2026-01-01T00:00:00.000Z', updated_at,
   };
 }
 
@@ -36,23 +36,40 @@ function commandResponse(message, trip) {
 // (single) serve a persisted trip record instead of the default "no trips yet"
 // behavior — needed for refresh/resume specs, since TripContext always re-fetches
 // from the Backend on mount rather than trusting cached localStorage state.
-export async function mockTripCommandFlow(page, steps, { initialTrip } = {}) {
+//
+// `initialTrips` (TWM-108), when given instead, seeds the list with several
+// distinct trip records — for adaptive-landing/My Trips specs. GET-list, GET
+// single-by-id, and rename PATCH all resolve against the full seeded set; the
+// scripted `steps` (commands) still apply to whichever trip id they're sent to.
+export async function mockTripCommandFlow(page, steps, { initialTrip, initialTrips } = {}) {
   let pending = [...steps];
-  let current = initialTrip ?? null;
+  const seeded = initialTrips ?? (initialTrip ? [initialTrip] : []);
+  const records = new Map(seeded.map(record => [record.id, record]));
+  let current = seeded[0] ?? null;
   await page.route('**/api/trips**', async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     const method = request.method();
 
     if (method === 'GET' && /\/api\/trips\/?$/.test(pathname)) {
-      return route.fulfill({ json: { trips: current ? [current] : [] } });
+      const list = [...records.values()].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+      return route.fulfill({ json: { trips: list } });
     }
-    if (method === 'GET' && current && pathname.endsWith(`/${current.id}`)) {
-      return route.fulfill({ json: current });
+    const singleMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)$/);
+    if (singleMatch && records.has(singleMatch[1])) {
+      return route.fulfill({ json: records.get(singleMatch[1]) });
     }
     if (method === 'POST' && /\/api\/trips\/?$/.test(pathname)) {
-      current = tripRecord();
+      current = tripRecord({ id: seeded.length ? `${TRIP_ID}-${records.size + 1}` : undefined });
+      records.set(current.id, current);
       return route.fulfill({ status: 201, json: current });
+    }
+    const renameMatch = method === 'PATCH' && pathname.match(/\/api\/trips\/([^/]+)$/);
+    if (renameMatch && records.has(renameMatch[1])) {
+      const body = request.postDataJSON();
+      const updated = { ...records.get(renameMatch[1]), title: body.title, version: body.expected_version + 1 };
+      records.set(renameMatch[1], updated);
+      return route.fulfill({ json: updated });
     }
     if (method === 'POST' && pathname.endsWith('/commands')) {
       const body = request.postDataJSON();
@@ -62,6 +79,7 @@ export async function mockTripCommandFlow(page, steps, { initialTrip } = {}) {
         throw new Error(`Expected command "${step.command}" but got "${body.command}".`);
       }
       current = step.response.trip;
+      records.set(current.id, current);
       return route.fulfill({ json: step.response });
     }
     return route.continue();
