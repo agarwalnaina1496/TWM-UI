@@ -52,10 +52,13 @@ export function normalizeTripRecord(record) {
   return { ...record, trip_state, ui_state: isPlainObject(record.ui_state) ? record.ui_state : {} };
 }
 
+// The list response now carries each trip's trip_state directly (Backend
+// already had it in hand from the same row — see TripSummary), so this is a
+// single request: no more per-trip GET /api/trips/{id} follow-ups just to
+// render My Trips cards.
 export async function listTrips() {
   const list = await request();
-  const records = await Promise.all((list.trips || []).map(summary => request(`/${summary.id}`)));
-  return records.map(normalizeTripRecord).sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+  return (list.trips || []).map(normalizeTripRecord).sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 }
 
 export async function createTrip({ title = 'Untitled Trip', product_mode = 'self_led' } = {}) {

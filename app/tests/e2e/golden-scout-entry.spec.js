@@ -9,7 +9,7 @@ const HANDOFF = 'I’ll look for a comfortable 14-day trip within budget.';
 test('exact natural-language journey preserves nuance and hands off after two quick replies', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
-      command: 'advice_entry',
+      command: 'scout_entry',
       response: commandResponse(ASK_ORIGIN, tripRecord({
         version: 2,
         trip_state: {
@@ -50,9 +50,18 @@ test('exact natural-language journey preserves nuance and hands off after two qu
   await expect(page.getByText(ASK_BUDGET)).toBeVisible();
   await page.getByRole('button', { name: '₹1,00,000 total for both', exact: true }).click();
   await expect(page.getByText(HANDOFF)).toBeVisible();
-  await expect(page.getByRole('button', { name: /Continue to destination discovery/ })).toBeVisible();
+  // Meridian owns the trip and isn't awaiting a clarification answer, so
+  // it's ready to produce recommendations — the button surfaces now,
+  // rather than the instant handoff happens (which would invite leaving
+  // this chat window mid-clarification, before Meridian even asked anything).
+  await expect(page.getByRole('button', { name: 'See destinations →' })).toBeVisible();
 
-  const state = await page.evaluate(() => JSON.parse(localStorage.getItem('twm_prototype_state_v1')));
-  expect(state.commandSnapshot.trip_state.trip_context.original_traveler_request).toBe(GOLDEN_QUERY);
-  expect(state.commandSnapshot.trip_state.active_agent).toBe('meridian');
+  // TripContext no longer mirrors state to localStorage — read the Backend's
+  // own record of the trip (via the mocked /api/trips list, fetched through
+  // the page itself so it hits the page.route mock — page.request would
+  // bypass that routing) instead of a client-side cache, confirming context
+  // survived the two-turn handoff.
+  const { trips } = await page.evaluate(() => fetch('/api/trips', { credentials: 'include' }).then(r => r.json()));
+  expect(trips[0].trip_state.trip_context.original_traveler_request).toBe(GOLDEN_QUERY);
+  expect(trips[0].trip_state.active_agent).toBe('meridian');
 });

@@ -4,17 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Header from '../../../src/components/Header.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
-import { seedState } from '../testUtils.js';
+import { SeedAuth } from '../testUtils.js';
 
-function seedAuth(auth) {
-  seedState({ auth });
-}
-
-function renderHeader() {
+function renderHeader(auth) {
   return render(
     <MemoryRouter>
       <TripProvider>
-        <Header />
+        {auth ? <SeedAuth auth={auth}><Header /></SeedAuth> : <Header />}
       </TripProvider>
     </MemoryRouter>
   );
@@ -48,16 +44,14 @@ describe('Header', () => {
   });
 
   it('shows My Trips and Log in (no Log out) for an explicit anonymous/guest session', () => {
-    seedAuth({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    renderHeader();
+    renderHeader({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     expect(screen.getByText(/my trips/i)).toBeInTheDocument();
     expect(screen.getByText(/log in/i)).toBeInTheDocument();
     expect(screen.queryByText(/log out/i)).not.toBeInTheDocument();
   });
 
   it('shows both My Trips and Log out (no Log in) for a real logged-in session', () => {
-    seedAuth({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
-    renderHeader();
+    renderHeader({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
     expect(screen.getByText(/my trips/i)).toBeInTheDocument();
     expect(screen.getByText(/log out/i)).toBeInTheDocument();
     expect(screen.queryByText(/log in/i)).not.toBeInTheDocument();

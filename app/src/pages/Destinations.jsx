@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { safeMatcherOutcomeViewModel } from '../lib/recommendationViewModel.js';
+import { contextRecapPills } from '../lib/tripLifecycle.js';
 import '../styles/destinations.css';
 
 const OUTCOME_ICON = { MATCH: '✓', TRADEOFF: '⚠', MISMATCH: '✕' };
@@ -10,31 +11,6 @@ const BEEN_BEFORE_OPTIONS = [
   { id: 'would-go-back', icon: '🔁', label: 'Would go back' },
   { id: 'not-for-me', icon: '😐', label: 'Not for me' },
 ];
-
-// Verbatim, top-level trip_context fields shown before any recommendation
-// exists. Never bucketed into a generic label — an exact persisted value or
-// nothing, so "₹1,00,000 total for both" never degrades to "Flexible budget".
-// trip_context is free-form (Scout extracts whatever field names fit the
-// conversation), so this list is a best-effort set of the field names Scout
-// commonly uses, not a guaranteed schema.
-const RECAP_FIELDS = [
-  ['origin', value => `From ${value}`],
-  ['budget', value => String(value)],
-  ['duration_days', value => `${value} day${value === 1 ? '' : 's'}`],
-  ['travelers', value => `${value} traveler${value === 1 ? '' : 's'}`],
-  ['travel_window', value => String(value)],
-  ['month', value => String(value)],
-  ['dates', value => String(value)],
-];
-
-function contextRecapPills(tripContext) {
-  return RECAP_FIELDS
-    .map(([key, format]) => {
-      const value = tripContext?.[key];
-      return value === undefined || value === null || value === '' ? null : format(value);
-    })
-    .filter(Boolean);
-}
 
 function optionLabel(option) {
   return option.type === 'circuit' ? 'Multi-stop circuit' : 'Single destination';

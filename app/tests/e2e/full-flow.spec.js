@@ -112,9 +112,14 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
   await page.getByText('Continue without login').click();
   await expect(page).toHaveURL(/\/app\/?$/);
 
-  // GetStarted -> "Not sure yet" (discover) route: discover_entry fires immediately on entry
+  // GetStarted -> "Not sure yet" (discover) route: shows a hardcoded welcome
+  // with no Backend call, then discover_entry fires only once the traveler
+  // sends their first message.
   await page.getByText('Not sure yet').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
+  await expect(page.getByText(/tell me about the trip you have in mind/i)).toBeVisible();
+  await page.getByPlaceholder('Tell Scout about your trip…').fill('Somewhere relaxing');
+  await page.getByLabel('Send').click();
   await expect(page.getByText('And roughly what total budget would you like to stay within?')).toBeVisible();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
   await expect(page.getByRole('button', { name: 'See destinations →' })).toBeVisible();

@@ -9,3 +9,7 @@
 .filter-bar .fc{border:1px solid var(--border);background:var(--surface);color:var(--ts);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:600;cursor:pointer;}
 .filter-bar .fc.active{background:var(--accent);border-color:var(--accent);color:#fff;}
 .trip-card .name input{font:inherit;border:1px solid var(--border);border-radius:6px;padding:2px 6px;}
+.trip-card-destination{font-size:12.5px;color:var(--ts);margin-top:2px;}
+.trip-card-timestamp{color:var(--tm);margin-left:8px;}
+.trip-card-recap{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.trip-card-recap-pill{font-size:10.5px;font-weight:600;background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:3px 9px;color:var(--ts);}

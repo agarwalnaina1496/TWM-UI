@@ -35,14 +35,16 @@ describe('tripApi', () => {
     expect(record.id).toBe('trip-1');
   });
 
-  it('listTrips fetches the list then each trip by id, sorted by updated_at descending', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'a' }, { id: 'b' }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'a', trip_state: {}, ui_state: {}, updated_at: '2026-01-01T00:00:00.000Z' }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'b', trip_state: {}, ui_state: {}, updated_at: '2026-06-01T00:00:00.000Z' }));
+  it('listTrips fetches the list in a single request (trip_state travels with the summary), sorted by updated_at descending', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [
+        { id: 'a', trip_state: {}, updated_at: '2026-01-01T00:00:00.000Z' },
+        { id: 'b', trip_state: {}, updated_at: '2026-06-01T00:00:00.000Z' },
+      ],
+    }));
     const records = await listTrips();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('/api/trips', expect.objectContaining({ credentials: 'include' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/trips/a', expect.objectContaining({ credentials: 'include' }));
     expect(records.map(r => r.id)).toEqual(['b', 'a']);
   });
 

@@ -81,7 +81,7 @@ function ConfirmationForm({ dayOptions, fields, setFields, onSubmit, onCancel, p
 }
 
 export default function TripDashboard() {
-  const { commandSnapshot, sendTripCommand } = useTrip();
+  const { commandSnapshot, sendTripCommand, tripLoadStatus } = useTrip();
   const [params] = useSearchParams();
   const initialTab = TABS.some(t => t.name === params.get('tab')) ? params.get('tab') : 'Days';
   const [tab, setTab] = useState(initialTab);
@@ -102,8 +102,13 @@ export default function TripDashboard() {
   const [revisionError, setRevisionError] = useState(null);
 
   // Reopen never re-invokes Atlas: once ready, render the saved result and
-  // never call start_itinerary again for this trip.
+  // never call start_itinerary again for this trip. Must wait for the trip
+  // to finish loading — itineraryState reads as empty on the very first
+  // render (no client-side cache backs it anymore), and firing
+  // start_itinerary against that transient empty state would wrongly
+  // restart an already-ready itinerary.
   useEffect(() => {
+    if (tripLoadStatus !== 'ready') return;
     if (itineraryState?.status === 'ready') {
       setBootStatus('ready');
       return;
@@ -117,7 +122,7 @@ export default function TripDashboard() {
         setBootStatus('error');
         setBootError(error.message || 'Could not generate the detailed itinerary.');
       });
-  }, [itineraryState?.status, sendTripCommand]);
+  }, [tripLoadStatus, itineraryState?.status, sendTripCommand]);
 
   function openConfirmForm(type, dayNumber) {
     setConfirmType(type);

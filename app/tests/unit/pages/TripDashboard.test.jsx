@@ -6,9 +6,10 @@ import TripDashboard from '../../../src/pages/TripDashboard.jsx';
 
 let commandSnapshot;
 let sendTripCommand;
+let tripLoadStatus;
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus }),
 }));
 
 function generalReference() {
@@ -103,7 +104,7 @@ function renderDashboard() {
 }
 
 describe('Trip Dashboard (real Atlas contract)', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => { vi.clearAllMocks(); tripLoadStatus = 'ready'; });
 
   it('calls start_itinerary once when no saved result exists, then renders it', async () => {
     commandSnapshot = snapshotWith({});

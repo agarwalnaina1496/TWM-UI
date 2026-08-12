@@ -50,15 +50,16 @@ describe('TripContext auth state', () => {
     expect(result.current.auth).toEqual({ loggedIn: false, isGuest: true, name: 'Jane', email: 'jane@example.com' });
   });
 
-  it('persists trip and auth to localStorage and reloads them', () => {
+  it('keeps trip and auth in memory only — nothing survives a remount via localStorage', () => {
     const { result, unmount } = renderHook(() => useTrip(), { wrapper });
     act(() => result.current.login({ name: 'Traveler', email: 't@example.com' }));
     act(() => result.current.updateTrip({ destination: { type: 'single', name: 'Coorg', places: null } }));
+    expect(localStorage.length).toBe(0);
     unmount();
 
     const { result: reloaded } = renderHook(() => useTrip(), { wrapper });
-    expect(reloaded.current.auth.name).toBe('Traveler');
-    expect(reloaded.current.trip.destination).toEqual({ type: 'single', name: 'Coorg', places: null });
+    expect(reloaded.current.auth.name).toBe('Guest');
+    expect(reloaded.current.trip.destination).toBe(null);
   });
 
   it('preserves and clears a pending return route around a login action (TWM-140)', () => {
@@ -86,23 +87,38 @@ describe('TripContext Backend-authoritative trip record', () => {
   });
 
   it('reuses an existing trip on boot instead of creating a new one', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {}, updated_at: '2026-01-01T00:00:00.000Z' }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [{ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {}, updated_at: '2026-01-01T00:00:00.000Z' }],
+    }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
     expect(result.current.currentTripId).toBe('trip-1');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('creates a trip on boot when none exist yet', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-new', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }));
+  it('does not create a trip on boot when none exist yet — stays trip-less until the first message', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    expect(result.current.currentTripId).toBe(null);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates a trip lazily on the first sendTripCommand (e.g. the traveler\'s first message)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ trips: [] }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'trip-new', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({ trip: { id: 'trip-new', title: 'Untitled Trip', version: 2, trip_state: {}, ui_state: {} } }));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    expect(result.current.currentTripId).toBe(null);
+
+    await act(async () => { await result.current.sendTripCommand('scout_entry', { message: 'Plan my Coorg trip' }); });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/trips', expect.objectContaining({ method: 'POST' }));
     expect(result.current.currentTripId).toBe('trip-new');
   });
 
@@ -117,8 +133,7 @@ describe('TripContext Backend-authoritative trip record', () => {
 
   it('renameCurrentTrip PATCHes the Backend and updates currentTripId stays stable', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }] }))
       .mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Goa Getaway', version: 2, trip_state: {}, ui_state: {} }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
@@ -133,19 +148,19 @@ describe('TripContext Backend-authoritative trip record', () => {
     expect(result.current.currentTripId).toBe('trip-1');
   });
 
-  it('does not persist mock trip content (destination/places/days) to the Backend', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }));
+  it('does not persist mock trip content (destination/places/days) to the Backend or localStorage', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [{ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }],
+    }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
 
     act(() => result.current.updateTrip({ destination: { type: 'single', name: 'Coorg', places: null } }));
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const stored = JSON.parse(localStorage.getItem('twm_prototype_state_v1'));
-    expect(stored.trip.destination).toEqual({ type: 'single', name: 'Coorg', places: null });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.trip.destination).toEqual({ type: 'single', name: 'Coorg', places: null });
+    expect(localStorage.length).toBe(0);
   });
 });
 
@@ -164,9 +179,11 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
 
   it('keeps every listed trip in `trips` instead of discarding all but the first', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
-      trips: [{ id: 'trip-a' }, { id: 'trip-b' }],
-    })).mockResolvedValueOnce(jsonResponse({ id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {}, updated_at: '2026-01-02T00:00:00.000Z' }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {}, updated_at: '2026-01-01T00:00:00.000Z' }));
+      trips: [
+        { id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {}, updated_at: '2026-01-02T00:00:00.000Z' },
+        { id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {}, updated_at: '2026-01-01T00:00:00.000Z' },
+      ],
+    }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
@@ -177,8 +194,7 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
 
   it('startNewTrip creates a real separate Backend trip and preserves existing trips', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1' }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }] }))
       .mockResolvedValueOnce(jsonResponse({ id: 'trip-2', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }, { status: 201 }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
@@ -195,9 +211,12 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
 
   it('openTrip switches the current trip via a plain GET, never a command', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-a' }, { id: 'trip-b' }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-a', title: 'A', version: 1, trip_state: { stage: 'matched' }, ui_state: {} }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-b', title: 'B', version: 1, trip_state: { stage: 'planning' }, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [
+          { id: 'trip-a', title: 'A', version: 1, trip_state: { stage: 'matched' }, ui_state: {} },
+          { id: 'trip-b', title: 'B', version: 1, trip_state: { stage: 'planning' }, ui_state: {} },
+        ],
+      }))
       .mockResolvedValueOnce(jsonResponse({ id: 'trip-b', title: 'B', version: 1, trip_state: { stage: 'planning' }, ui_state: {} }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
@@ -212,9 +231,12 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
 
   it('renameTrip renames a non-current trip without switching currentTripId', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-a' }, { id: 'trip-b' }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [
+          { id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} },
+          { id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {} },
+        ],
+      }))
       .mockResolvedValueOnce(jsonResponse({ id: 'trip-b', title: 'Goa', version: 2, trip_state: {}, ui_state: {} }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
@@ -232,9 +254,12 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
 
   it('openTrip fails closed on a 404 instead of throwing uncaught (TWM-109)', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-a' }, { id: 'trip-b' }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [
+          { id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} },
+          { id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {} },
+        ],
+      }))
       .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
@@ -250,9 +275,12 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
 
   it('renameTrip fails closed on a 404 instead of throwing uncaught (TWM-109)', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-a' }, { id: 'trip-b' }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [
+          { id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} },
+          { id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {} },
+        ],
+      }))
       .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
@@ -267,8 +295,7 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
 
   it('clears `trips` instead of leaving it stale when a refresh fails', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-a' }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} }))
+      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} }] }))
       .mockRejectedValueOnce(new TypeError('Network request failed'));
 
     const { result } = renderHook(() => useTrip(), { wrapper });

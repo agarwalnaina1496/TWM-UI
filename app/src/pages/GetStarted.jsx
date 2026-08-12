@@ -16,7 +16,6 @@ export default function GetStarted() {
   function handleQuickRoute(kind) {
     if (kind === 'decided') navigate(`/journey-entry?intent=${ENTRY_INTENTS.KNOWN_DESTINATION}`);
     else if (kind === 'discover') navigate(`/journey-entry?intent=${ENTRY_INTENTS.DISCOVER}`);
-    else if (kind === 'ask') navigate('/scout-chat?entry=advice');
   }
 
   return (
@@ -24,7 +23,7 @@ export default function GetStarted() {
       <div className="entry-hero">
         <span className="eyebrow">✦ Scout &middot; your travel companion</span>
         <h1>Where are we <em>headed</em>?</h1>
-        <p className="lede">Choose a direct path, or tell Scout the whole trip in your own words. Scout preserves what matters and hands the trip to the right specialist.</p>
+        <p className="lede">Choose a direct path, or tell Scout the whole trip in your own words.</p>
 
         <div className="route-buttons">
           <div className="route-btn" onClick={() => handleQuickRoute('decided')}>
@@ -37,21 +36,16 @@ export default function GetStarted() {
             <div className="rb-t">Not sure yet</div>
             <div className="rb-s">Help me find a destination</div>
           </div>
-          <div className="route-btn" onClick={() => handleQuickRoute('ask')}>
-            <div className="rb-icon">💬</div>
-            <div className="rb-t">Just have a question</div>
-            <div className="rb-s">Ask Scout directly</div>
-          </div>
         </div>
 
-        <div className="or-divider">or tell Scout in your own words</div>
+        <div className="or-divider">or just tell Scout</div>
 
         <div className="ask-box">
           <input
             id="askInput"
             type="text"
             className="ask-input"
-            placeholder='e.g. "Plan my Coorg trip" or "Not sure where to go this Diwali"…'
+            placeholder='e.g. "Plan my Coorg trip" or "What&apos;s the best time to visit Ladakh?"…'
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') route(); }}

@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
-import { isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta } from '../lib/tripLifecycle.js';
+import {
+  isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, contextRecapPills, contextDestination,
+} from '../lib/tripLifecycle.js';
 import '../styles/my-trips.css';
 
 // TWM-140: once dismissed for this browsing session, don't re-offer the
@@ -23,6 +25,15 @@ const FILTERS = [
   { key: 'upcoming', label: 'Upcoming' },
   { key: 'completed', label: 'Completed' },
 ];
+
+// updated_at is set on every mutation, but a never-touched-since-creation
+// trip can still have it null — fall back to created_at rather than show nothing.
+function formatTripTimestamp(t) {
+  const raw = t.updated_at || t.created_at;
+  if (!raw) return null;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
 
 export default function MyTrips() {
   const { trips, auth, startNewTrip, openTrip, renameTrip } = useTrip();
@@ -110,17 +121,14 @@ export default function MyTrips() {
       {auth.loggedIn ? (
         <p className="lede">Signed in as {auth.name}.</p>
       ) : (
-        <p className="lede">
-          You're browsing as a guest — trips here are saved for this session.{' '}
-          <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span>
-        </p>
+        <p className="lede">You're browsing as a guest — trips here are saved for this session.</p>
       )}
 
       {!auth.loggedIn && (
         <div className="account-history-locked">
           <p>Trip history from other devices or a previous account isn't available as a guest.</p>
           {!syncDismissed && (
-            <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to see synced trip history</span>
+            <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span>
           )}
         </div>
       )}
@@ -138,7 +146,12 @@ export default function MyTrips() {
       {visibleTrips.length === 0 ? (
         <div className="empty-trips">
           <p>Nothing saved yet.</p>
-          <span className="btn btn-primary" style={{ marginTop: 12, display: 'inline-flex' }} onClick={handleNewTrip}>Start a trip →</span>
+          {/* No trip exists yet here, so this must not eagerly create one via
+              startNewTrip (unlike "+ New trip" above, a deliberate action
+              against an existing list) — it just sends the traveler to
+              GetStarted, where the Backend trip is created lazily on their
+              first message. */}
+          <Link className="btn btn-primary" style={{ marginTop: 12, display: 'inline-flex' }} to="/">Start a trip →</Link>
         </div>
       ) : (
         <>
@@ -163,6 +176,9 @@ export default function MyTrips() {
             shown.map(t => {
               const badge = stageBadge(t.trip_state);
               const cta = stageCta(t.trip_state);
+              const destination = contextDestination(t.trip_state?.trip_context);
+              const recapPills = contextRecapPills(t.trip_state?.trip_context);
+              const timestamp = formatTripTimestamp(t);
               return (
                 <div className="trip-card" key={t.id}>
                   <div>
@@ -186,9 +202,16 @@ export default function MyTrips() {
                         </button>
                       </div>
                     )}
+                    {destination && <div className="trip-card-destination">{destination}</div>}
                     <div className="meta">
                       <span className="badge">{badge.text}</span>
+                      {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
                     </div>
+                    {recapPills.length > 0 && (
+                      <div className="trip-card-recap">
+                        {recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
+                      </div>
+                    )}
                   </div>
                   <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => handleOpen(t)}>
                     {cta.label} →

@@ -9,7 +9,7 @@ import '../styles/preview.css';
 
 export default function TripPreview() {
   const navigate = useNavigate();
-  const { commandSnapshot, sendTripCommand } = useTrip();
+  const { commandSnapshot, sendTripCommand, tripLoadStatus } = useTrip();
 
   const tripState = commandSnapshot?.trip_state;
   const plannerState = tripState?.planner_state;
@@ -36,7 +36,13 @@ export default function TripPreview() {
   // Bootstraps the real Guide session: START, then a silent APPROVE_PLACES so
   // the single-screen Plan Builder has a day plan to show immediately — the
   // traveler never sees the Backend's two-phase places/day approval split.
+  // Must wait for the Backend-authoritative trip to finish loading first —
+  // commandSnapshot/guideState read as empty on the very first render (no
+  // client-side cache backs them anymore), and firing start_planning against
+  // that transient empty state would wrongly restart an already-in-progress
+  // Guide session.
   useEffect(() => {
+    if (tripLoadStatus !== 'ready') return;
     if (frozenPlan || bootStarted.current) return;
     if (guideState?.phase === 'DAY_PLAN_DRAFT' || guideState?.phase === 'NEEDS_CLARIFICATION') {
       setBootStatus('ready');
@@ -59,7 +65,7 @@ export default function TripPreview() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frozenPlan, guideState?.phase]);
+  }, [tripLoadStatus, frozenPlan, guideState?.phase]);
 
   async function sendEdit(text) {
     setPending(true);

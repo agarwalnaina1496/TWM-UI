@@ -8,7 +8,7 @@ import { commandResponse, mockTripCommandFlow, readyItineraryState, tripRecord }
 test('advice journey reaches destination match, Choose Plan and Self-Led Dashboard', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
-      command: 'advice_entry',
+      command: 'scout_entry',
       response: commandResponse('Where will you be travelling from?', tripRecord({
         version: 2,
         trip_state: { stage: 'new', active_agent: 'scout', matcher_state: { conversation_context: { awaiting: 'origin' } } },
@@ -124,7 +124,7 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
   await page.getByLabel('Send').click();
   await page.getByRole('button', { name: 'Delhi' }).click();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
-  await page.getByRole('button', { name: /Continue to destination discovery/ }).click();
+  await page.getByRole('button', { name: 'See destinations →' }).click();
 
   await expect(page).toHaveURL(/\/app\/destinations/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
