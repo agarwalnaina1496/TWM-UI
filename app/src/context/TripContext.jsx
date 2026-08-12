@@ -55,7 +55,6 @@ export function TripProvider({ children }) {
   const stored = loadStored();
   const [trip, setTrip] = useState({ ...DEFAULT_TRIP, ...stored?.trip });
   const [auth, setAuth] = useState(stored?.auth ?? DEFAULT_AUTH);
-  const [savedTrips, setSavedTrips] = useState(stored?.savedTrips ?? []);
   const [commandSnapshot, setCommandSnapshot] = useState(stored?.commandSnapshot ?? null);
   // In-app route to return to after an explicit login action (TWM-140
   // contextual auth invitation). Only ever set from internal route strings
@@ -66,6 +65,10 @@ export function TripProvider({ children }) {
   // Backend-authoritative trip record (id/title/version + guest session cookie).
   // Does not carry the mock trip content above — see TWM-102/TWM-110 split.
   const [tripRecord, setTripRecord] = useState(null);
+  // All of the guest's Backend-owned trip records (TWM-108) — used by the
+  // adaptive landing resolver and My Trips. tripRecord/commandSnapshot above
+  // remain the single "current" trip that pages read/mutate.
+  const [trips, setTrips] = useState([]);
   const [tripLoadStatus, setTripLoadStatus] = useState('idle'); // idle | loading | ready | error
   const [tripLoadError, setTripLoadError] = useState(null);
   const ensureTripPromise = useRef(null);
@@ -78,6 +81,7 @@ export function TripProvider({ children }) {
     try {
       const records = await listTrips();
       const record = records[0] ?? await createTrip();
+      setTrips(records.length ? records : [record]);
       setTripRecord(record);
       // The Backend-fetched record is the freshest truth for this trip's
       // state, so it must also become the readable commandSnapshot — pages
@@ -158,6 +162,41 @@ export function TripProvider({ children }) {
     });
   }
 
+  // Renames any trip from `trips` (e.g. a My Trips card), not just the
+  // current one. Falls back to a fresh fetch on a stale-version conflict.
+  async function renameTrip(id, title) {
+    const target = trips.find(t => t.id === id);
+    if (!target) return undefined;
+    return queueTripMutation(id, async () => {
+      try {
+        const saved = await renameTripApi(id, title, target.version);
+        setTrips(prev => prev.map(t => (t.id === id ? saved : t)));
+        if (id === tripRecordRef.current?.id) {
+          setTripRecord(saved);
+          setCommandSnapshot(saved);
+        }
+        return saved;
+      } catch (error) {
+        if (error instanceof TripApiError && error.status === 409) {
+          const latest = await getTrip(id);
+          setTrips(prev => prev.map(t => (t.id === id ? latest : t)));
+        }
+        throw error;
+      }
+    });
+  }
+
+  // Switches the current trip (e.g. opening a My Trips card) without
+  // mutating stage/active_agent — a plain read, never a command.
+  async function openTrip(id) {
+    if (id === tripRecordRef.current?.id) return tripRecordRef.current;
+    const record = await getTrip(id);
+    setTripRecord(record);
+    setCommandSnapshot(record);
+    setTrips(prev => (prev.some(t => t.id === id) ? prev.map(t => (t.id === id ? record : t)) : [...prev, record]));
+    return record;
+  }
+
   // The single browser mutation boundary (TWM-110): POST /api/trips/{id}/commands.
   // Every entry path (Advice/Discover/Known Destination) and every follow-up
   // traveler message goes through here — React never sends canonical TripState.
@@ -192,33 +231,26 @@ export function TripProvider({ children }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ trip, auth, savedTrips, commandSnapshot }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ trip, auth, commandSnapshot }));
     } catch {
       // Storage unavailable (private browsing, quota, etc.) — prototype state just won't survive a reload.
     }
-  }, [trip, auth, savedTrips, commandSnapshot]);
-
-  // My Trips is auto-derived from the current trip — no manual "save" step needed.
-  useEffect(() => {
-    if (!trip.destination) return;
-    setSavedTrips(prev => {
-      const idx = prev.findIndex(t => t.destination?.name === trip.destination.name);
-      const entry = { ...trip, savedAt: new Date().toISOString() };
-      if (idx !== -1 && JSON.stringify(prev[idx]) === JSON.stringify({ ...entry, savedAt: prev[idx].savedAt })) return prev;
-      if (idx === -1) return [...prev, entry];
-      const copy = [...prev];
-      copy[idx] = entry;
-      return copy;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trip]);
+  }, [trip, auth, commandSnapshot]);
 
   function updateTrip(patch) {
     setTrip(prev => ({ ...prev, ...patch }));
   }
 
-  function startNewTrip() {
+  // Starts a genuinely separate Backend-owned journey (TWM-108) — previously
+  // this only reset the local mock content object and left the Backend
+  // record untouched, so "+ New Trip" was a no-op against saved trips.
+  async function startNewTrip() {
+    const created = await createTrip();
+    setTrips(prev => [created, ...prev]);
+    setTripRecord(created);
+    setCommandSnapshot(created);
     setTrip(DEFAULT_TRIP);
+    return created;
   }
 
   function login({ name, email }) {
@@ -245,8 +277,9 @@ export function TripProvider({ children }) {
     <TripContext.Provider value={{
       trip, updateTrip, startNewTrip, auth, hasAccess, login, continueWithoutLogin, logout, setContact,
       pendingReturnTo, setPendingReturnTo,
-      savedTrips, commandSnapshot, sendTripCommand,
+      commandSnapshot, sendTripCommand,
       currentTripId: tripRecord?.id ?? null, tripLoadStatus, tripLoadError, retryTripLoad, renameCurrentTrip,
+      trips, openTrip, renameTrip,
       uiState: tripRecord?.ui_state ?? {}, updateUiState,
     }}>
       {children}

@@ -1,6 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import Header from './components/Header.jsx';
-import GetStarted from './pages/GetStarted.jsx';
+import Landing from './pages/Landing.jsx';
 import ScoutChat from './pages/ScoutChat.jsx';
 import Destinations from './pages/Destinations.jsx';
 import TripPreview from './pages/TripPreview.jsx';
@@ -18,7 +18,7 @@ export default function App() {
       <Header />
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/" element={<GetStarted />} />
+        <Route path="/" element={<Landing />} />
         <Route path="/scout-chat" element={<ScoutChat />} />
         <Route path="/journey-entry" element={<JourneyEntry />} />
         <Route path="/destinations" element={<Destinations />} />

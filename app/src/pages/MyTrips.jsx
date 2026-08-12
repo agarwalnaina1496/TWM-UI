@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
+import { isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta } from '../lib/tripLifecycle.js';
 import '../styles/my-trips.css';
 
 // TWM-140: once dismissed for this browsing session, don't re-offer the
@@ -16,15 +17,65 @@ function readSyncDismissed() {
   }
 }
 
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
+  { key: 'upcoming', label: 'Upcoming' },
+  { key: 'completed', label: 'Completed' },
+];
+
 export default function MyTrips() {
-  const { savedTrips, auth, startNewTrip } = useTrip();
+  const { trips, auth, startNewTrip, openTrip, renameTrip } = useTrip();
   const navigate = useNavigate();
   const [syncInviteOpen, setSyncInviteOpen] = useState(false);
   const [syncDismissed, setSyncDismissed] = useState(readSyncDismissed);
+  const [filter, setFilter] = useState('all');
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [busyId, setBusyId] = useState(null);
 
-  function handleNewTrip() {
-    startNewTrip();
+  // Fresh, no-progress trips (e.g. the record TripContext auto-creates)
+  // aren't real trips from the traveler's point of view — TWM-108 keeps
+  // them out of My Trips entirely, same as the landing resolver.
+  const visibleTrips = trips.filter(t => !isTripEmpty(t.trip_state));
+  const completedTrips = visibleTrips.filter(t => isCompletedTrip(t.trip_state));
+  const upcomingTrips = visibleTrips.filter(t => isItineraryReady(t.trip_state) && !isCompletedTrip(t.trip_state));
+  const activeTrips = visibleTrips.filter(t => !isItineraryReady(t.trip_state) && !isCompletedTrip(t.trip_state));
+
+  const groups = { all: visibleTrips, active: activeTrips, upcoming: upcomingTrips, completed: completedTrips };
+  const counts = { all: visibleTrips.length, active: activeTrips.length, upcoming: upcomingTrips.length, completed: completedTrips.length };
+  const shown = groups[filter] ?? visibleTrips;
+
+  async function handleNewTrip() {
+    await startNewTrip();
     navigate('/');
+  }
+
+  async function handleOpen(t) {
+    if (busyId) return;
+    setBusyId(t.id);
+    try {
+      await openTrip(t.id);
+      navigate(stageCta(t.trip_state).to);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function startRename(t) {
+    setRenamingId(t.id);
+    setRenameValue(t.title || '');
+  }
+
+  async function commitRename(id) {
+    const title = renameValue.trim();
+    setRenamingId(null);
+    if (!title) return;
+    try {
+      await renameTrip(id, title);
+    } catch {
+      // Rename failures leave the prior title in place — no local state to roll back.
+    }
   }
 
   function handleSyncDismiss() {
@@ -40,7 +91,7 @@ export default function MyTrips() {
     <div className="wrap">
       <div className="my-trips-header">
         <h1>Your <em>trips</em></h1>
-        {savedTrips.length > 0 && (
+        {visibleTrips.length > 0 && (
           <span className="btn btn-primary" onClick={handleNewTrip}>+ New trip</span>
         )}
       </div>
@@ -70,21 +121,69 @@ export default function MyTrips() {
         onContinueWithoutLogin={handleSyncDismiss}
       />
 
-      {savedTrips.length === 0 ? (
+      {visibleTrips.length === 0 ? (
         <div className="empty-trips">
           <p>Nothing saved yet.</p>
-          <Link className="btn btn-primary" to="/" style={{ marginTop: 12, display: 'inline-flex' }}>Start a trip →</Link>
+          <span className="btn btn-primary" style={{ marginTop: 12, display: 'inline-flex' }} onClick={handleNewTrip}>Start a trip →</span>
         </div>
       ) : (
-        savedTrips.map(t => (
-          <div className="trip-card" key={t.destination?.name}>
-            <div>
-              <div className="name">{t.destination?.name || 'Untitled trip'}</div>
-              <div className="meta">{t.days.length} days · {t.plan === 'twm-led' ? 'TWM-Led' : t.plan === 'self-led' ? 'Self-Led' : 'Planning'}{t.paid ? ' · Itinerary ready' : ''}</div>
-            </div>
-            {t.paid ? <Link className="btn btn-ghost" to="/itinerary">View →</Link> : <Link className="btn btn-ghost" to="/trip-preview">Continue →</Link>}
+        <>
+          <div className="filter-bar" role="tablist" aria-label="Filter trips">
+            {FILTERS.map(f => (
+              <button
+                key={f.key}
+                type="button"
+                role="tab"
+                aria-selected={filter === f.key}
+                className={`fc${filter === f.key ? ' active' : ''}`}
+                onClick={() => setFilter(f.key)}
+              >
+                {f.label}{counts[f.key] ? ` (${counts[f.key]})` : ''}
+              </button>
+            ))}
           </div>
-        ))
+
+          {shown.length === 0 ? (
+            <div className="empty-trips"><p>No trips here yet.</p></div>
+          ) : (
+            shown.map(t => {
+              const badge = stageBadge(t.trip_state);
+              const cta = stageCta(t.trip_state);
+              return (
+                <div className="trip-card" key={t.id}>
+                  <div>
+                    {renamingId === t.id ? (
+                      <input
+                        className="name"
+                        autoFocus
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        onBlur={() => commitRename(t.id)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                      />
+                    ) : (
+                      <div className="name">
+                        {t.title || 'Untitled trip'}{' '}
+                        <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => startRename(t)}>
+                          Rename
+                        </button>
+                      </div>
+                    )}
+                    <div className="meta">
+                      <span className="badge">{badge.text}</span>
+                    </div>
+                  </div>
+                  <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => handleOpen(t)}>
+                    {cta.label} →
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </>
       )}
     </div>
   );
