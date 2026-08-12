@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
+import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
 import '../styles/chat.css';
 
 let nextMessageId = 1;
@@ -87,6 +88,7 @@ export default function JourneyEntry() {
 
   const awaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
   const quickReplies = (QUICK_REPLIES[awaiting] || []).map(value => ({ label: value, value }));
+  const thinkingMessage = useThinkingMessage(busy);
 
   return (
     <div className="chat-page chat-screen">
@@ -104,7 +106,7 @@ export default function JourneyEntry() {
                 <div className={`chat-bub chat-bub-${message.role}`} style={{ whiteSpace: 'pre-wrap' }}>{message.text}</div>
               </div>
             ))}
-            {busy && <div className="think" role="status">Scout is thinking…</div>}
+            {busy && <div className="think" role="status">{thinkingMessage}</div>}
             {!busy && quickReplies.length > 0 && (
               <div className="chat-chip-row" aria-label="Suggested traveler replies">
                 {quickReplies.map(reply => <button type="button" className="chip chat-chip-long" key={reply.value} onClick={() => sendDiscover(reply)}>{reply.label}</button>)}

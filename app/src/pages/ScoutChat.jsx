@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
+import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
 import '../styles/chat.css';
 
 let nextId = 1;
@@ -65,6 +66,7 @@ export default function ScoutChat() {
   const stage = commandSnapshot?.trip_state?.stage;
   const awaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
   const quickReplies = QUICK_REPLIES[awaiting] || [];
+  const thinkingMessage = useThinkingMessage(busy);
   return (
     <div className="chat-page chat-screen">
       <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
@@ -78,7 +80,7 @@ export default function ScoutChat() {
             <div className={`chat-bub chat-bub-${message.role}`} style={{ whiteSpace: 'pre-wrap' }}>{message.text}</div>
           </div>
         ))}
-        {busy && <div className="think" role="status">Scout is thinking…</div>}
+        {busy && <div className="think" role="status">{thinkingMessage}</div>}
         {!busy && quickReplies.length > 0 && (
           <div className="chat-chip-row" aria-label={`Suggested ${awaiting} replies`}>
             {quickReplies.map(reply => <button type="button" className="chip" key={reply} onClick={() => runAdvice(reply)}>{reply}</button>)}
