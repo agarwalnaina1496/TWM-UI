@@ -108,7 +108,7 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
   await expect(page.getByText(ASK_BUDGET)).toBeVisible();
   await page.getByRole('button', { name: '₹1,00,000 total for both', exact: true }).click();
   await expect(page.getByText(HANDOFF)).toBeVisible();
-  await page.getByRole('button', { name: /Continue to destination discovery/ }).click();
+  await page.getByRole('button', { name: 'See destinations →' }).click();
 
   await expect(page).toHaveURL(/\/app\/destinations/);
   await expect(page.getByText('A few that fit well')).toBeVisible();

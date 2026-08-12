@@ -62,6 +62,7 @@ export default function ScoutChat() {
   }
 
   const activeAgent = commandSnapshot?.trip_state?.active_agent;
+  const stage = commandSnapshot?.trip_state?.stage;
   const awaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
   const quickReplies = QUICK_REPLIES[awaiting] || [];
   return (
@@ -84,7 +85,9 @@ export default function ScoutChat() {
           </div>
         )}
         {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={() => runAdvice(lastCommand.current?.message ?? '', { showUser: false })}>Try again</button></div>}
-        {activeAgent === 'meridian' && <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>Continue to destination discovery →</button>}
+        {((activeAgent === 'meridian' && !awaiting) || stage === 'recommended') && (
+          <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>See destinations →</button>
+        )}
         {activeAgent === 'guide' && <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue to planning →</button>}
       </div>
 

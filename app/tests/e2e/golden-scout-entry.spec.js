@@ -50,7 +50,11 @@ test('exact natural-language journey preserves nuance and hands off after two qu
   await expect(page.getByText(ASK_BUDGET)).toBeVisible();
   await page.getByRole('button', { name: '₹1,00,000 total for both', exact: true }).click();
   await expect(page.getByText(HANDOFF)).toBeVisible();
-  await expect(page.getByRole('button', { name: /Continue to destination discovery/ })).toBeVisible();
+  // Meridian owns the trip and isn't awaiting a clarification answer, so
+  // it's ready to produce recommendations — the button surfaces now,
+  // rather than the instant handoff happens (which would invite leaving
+  // this chat window mid-clarification, before Meridian even asked anything).
+  await expect(page.getByRole('button', { name: 'See destinations →' })).toBeVisible();
 
   // TripContext no longer mirrors state to localStorage — read the Backend's
   // own record of the trip (via the mocked /api/trips list, fetched through
