@@ -1,3 +1,9 @@
+export const ENTRY_INTENTS = Object.freeze({
+  ADVICE: 'advice',
+  DISCOVER: 'discover_destination',
+  KNOWN_DESTINATION: 'known_destination',
+});
+
 export const GOLDEN_SCENARIO_ID = 'self_led_mp_year_end_couple_v1';
 export const GOLDEN_QUERY = `**Planning a 2-week end-of-year trip in India with my spouse — need destinations with mild weather (not too hot, not too cold)!**
 

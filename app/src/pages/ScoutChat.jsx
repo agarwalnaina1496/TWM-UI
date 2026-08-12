@@ -48,7 +48,7 @@ export default function ScoutChat() {
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-    say('assistant', "I'm Scout. Tell me the travel question or concern you want advice on.");
+    say('assistant', "Hey there! I'm Scout. Tell me about the trip you have in mind — a question, a rough idea, or the whole plan — and I'll take it from there.");
     const message = params.get('msg')?.trim();
     if (message) runAdvice(message);
     // eslint-disable-next-line react-hooks/exhaustive-deps

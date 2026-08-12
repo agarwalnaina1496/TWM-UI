@@ -19,10 +19,7 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
       command: 'discover_entry',
       response: commandResponse('And roughly what total budget would you like to stay within?', tripRecord({
         version: 2,
-        trip_state: {
-          stage: 'matching', active_agent: 'meridian',
-          matcher_state: { conversation_context: { last_meridian_message: 'And roughly what total budget would you like to stay within?', awaiting: 'budget' } },
-        },
+        trip_state: { stage: 'matching', active_agent: 'meridian', matcher_state: { conversation_context: { awaiting: 'budget' } } },
       })),
     },
     {
@@ -115,20 +112,21 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
   await page.getByText('Continue without login').click();
   await expect(page).toHaveURL(/\/app\/?$/);
 
-  // GetStarted -> "Plan a trip" form: collects trip_context deterministically
-  // (no Backend call), then fires discover_entry once on submit and lands
-  // straight on Destinations.
-  await page.getByText('Plan a trip').click();
-  await expect(page).toHaveURL(/\/app\/plan-trip/);
-  await page.getByText('Not yet').click();
-  await page.getByText('Continue →').click();
-
-  // Destinations: Meridian's clarification (from discover_entry) answered
-  // directly here, then real recommendations via the continue command.
-  await expect(page).toHaveURL(/\/app\/destinations/);
-  await expect(page.getByText('And roughly what total budget would you like to stay within?')).toBeVisible();
-  await page.getByPlaceholder('Your answer…').fill('₹1,00,000 total for both');
+  // GetStarted -> "Not sure yet" (discover) route: shows a hardcoded welcome
+  // with no Backend call, then discover_entry fires only once the traveler
+  // sends their first message.
+  await page.getByText('Not sure yet').click();
+  await expect(page).toHaveURL(/\/app\/journey-entry/);
+  await expect(page.getByText(/tell me about the trip you have in mind/i)).toBeVisible();
+  await page.getByPlaceholder('Tell Scout about your trip…').fill('Somewhere relaxing');
   await page.getByLabel('Send').click();
+  await expect(page.getByText('And roughly what total budget would you like to stay within?')).toBeVisible();
+  await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
+  await expect(page.getByRole('button', { name: 'See destinations →' })).toBeVisible();
+  await page.getByText('See destinations →').click();
+
+  // Destinations (real Meridian recommendations via the continue command)
+  await expect(page).toHaveURL(/\/app\/destinations/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
   await page.getByText('Plan this trip →').first().click();
 
