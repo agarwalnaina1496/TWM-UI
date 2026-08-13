@@ -13,12 +13,31 @@ function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// Matches the Backend's own upper bound on a single agent invocation
+// (~185s n8n timeout) plus headroom, so a hung upstream call surfaces as a
+// rejected request instead of leaving the UI (and queueTripMutation's
+// per-trip chain) stuck indefinitely.
+const REQUEST_TIMEOUT_MS = 200_000;
+
 async function request(path = '', options = {}) {
-  const response = await fetch(`${TRIPS_PATH}${path}`, {
-    credentials: 'include',
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(`${TRIPS_PATH}${path}`, {
+      credentials: 'include',
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+      signal: controller.signal,
+    });
+  } catch (fetchError) {
+    if (fetchError.name === 'AbortError') {
+      throw new TripApiError('The request timed out. Please try again.', { status: 0 });
+    }
+    throw new TripApiError(fetchError.message || 'Trip persistence request failed.', { status: 0 });
+  } finally {
+    clearTimeout(timeout);
+  }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new TripApiError(payload?.detail?.message || payload?.detail || 'Trip persistence request failed.', {

@@ -21,7 +21,7 @@ export default function Header() {
   return (
     <header>
       <div className="header-inner">
-        <Link className="brand" to="/">Travel<em>WithMe</em></Link>
+        <Link className="brand" to="/" state={{ skipResume: true }}>Travel<em>WithMe</em></Link>
         <div className="header-nav-group">
           <Link className="my-trips-link" to="/my-trips">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

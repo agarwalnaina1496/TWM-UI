@@ -223,20 +223,21 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
     expect(result.current.currentTripId).toBe('trip-a');
   });
 
-  it('startNewTrip creates a real separate Backend trip and preserves existing trips', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-2', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }, { status: 201 }));
+  it('startNewTrip clears the current trip locally without creating a Backend record yet', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [{ id: 'trip-1', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }] }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
     act(() => result.current.updateTrip({ destination: { type: 'single', name: 'Coorg', places: null } }));
 
-    await act(async () => { await result.current.startNewTrip(); });
+    const callsBefore = fetchMock.mock.calls.length;
+    act(() => { result.current.startNewTrip(); });
 
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips', expect.objectContaining({ method: 'POST' }));
-    expect(result.current.currentTripId).toBe('trip-2');
-    expect(result.current.trips.map(t => t.id).sort()).toEqual(['trip-1', 'trip-2']);
+    // No POST yet — the Backend record is created lazily by the traveler's
+    // first message on the new journey, same as every other entry point.
+    expect(fetchMock.mock.calls.length).toBe(callsBefore);
+    expect(result.current.currentTripId).toBe(null);
+    expect(result.current.trips.map(t => t.id)).toEqual(['trip-1']);
     expect(result.current.trip.destination).toBe(null);
   });
 
