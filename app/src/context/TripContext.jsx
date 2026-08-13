@@ -62,6 +62,17 @@ export function TripProvider({ children }) {
   const tripRecordRef = useRef(null);
   useEffect(() => { tripRecordRef.current = tripRecord; }, [tripRecord]);
 
+  // Updates tripRecordRef synchronously alongside the React state update —
+  // a plain setTripRecord() only lands in tripRecordRef via the effect
+  // above, which runs after render. A command that fires immediately after
+  // another resolves (e.g. Guide's silent approve_places auto-advance) can
+  // then read a stale ref and send an outdated expected_version, causing a
+  // spurious 409 even though nothing actually raced on the Backend.
+  function updateTripRecord(next) {
+    tripRecordRef.current = next;
+    setTripRecord(next);
+  }
+
   // Lists the guest's existing Backend trips only — never creates one. A
   // Backend trip record must not exist until the traveler's first message
   // (see ensureTrip below), so a guest with zero trips stays that way here.
@@ -72,7 +83,7 @@ export function TripProvider({ children }) {
       const records = await listTrips();
       const record = records[0] ?? null;
       setTrips(records);
-      setTripRecord(record);
+      updateTripRecord(record);
       // The Backend-fetched record is the freshest truth for this trip's
       // state, so it must also become the readable commandSnapshot — pages
       // (e.g. Destinations) that resume mid-flow read commandSnapshot only,
@@ -128,7 +139,7 @@ export function TripProvider({ children }) {
         if (tripRecordRef.current) return tripRecordRef.current;
         const created = await createTrip();
         setTrips(prev => [created, ...prev]);
-        setTripRecord(created);
+        updateTripRecord(created);
         setCommandSnapshot(created);
         return created;
       })().finally(() => {
@@ -148,12 +159,12 @@ export function TripProvider({ children }) {
       const nextUiState = { ...current.ui_state, ...patch };
       try {
         const saved = await saveUiStateApi(current.id, nextUiState, current.version);
-        setTripRecord(saved);
+        updateTripRecord(saved);
         return saved;
       } catch (error) {
         if (error instanceof TripApiError && error.status === 409) {
           const latest = await getTrip(current.id);
-          setTripRecord(latest);
+          updateTripRecord(latest);
         }
         throw error;
       }
@@ -165,12 +176,12 @@ export function TripProvider({ children }) {
     return queueTripMutation(record.id, async () => {
       try {
         const saved = await renameTripApi(record.id, title, record.version);
-        setTripRecord(saved);
+        updateTripRecord(saved);
         return saved;
       } catch (error) {
         if (error instanceof TripApiError && error.status === 409) {
           const latest = await getTrip(record.id);
-          setTripRecord(latest);
+          updateTripRecord(latest);
         }
         throw error;
       }
@@ -183,7 +194,7 @@ export function TripProvider({ children }) {
   function dropUnavailableTrip(id) {
     setTrips(prev => prev.filter(t => t.id !== id));
     if (id === tripRecordRef.current?.id) {
-      setTripRecord(null);
+      updateTripRecord(null);
       setCommandSnapshot(null);
     }
   }
@@ -202,7 +213,7 @@ export function TripProvider({ children }) {
         const saved = await renameTripApi(id, title, target.version);
         setTrips(prev => prev.map(t => (t.id === id ? saved : t)));
         if (id === tripRecordRef.current?.id) {
-          setTripRecord(saved);
+          updateTripRecord(saved);
           setCommandSnapshot(saved);
         }
         return { ok: true, record: saved };
@@ -228,7 +239,7 @@ export function TripProvider({ children }) {
     if (id === tripRecordRef.current?.id) return { ok: true, record: tripRecordRef.current };
     try {
       const record = await getTrip(id);
-      setTripRecord(record);
+      updateTripRecord(record);
       setCommandSnapshot(record);
       setTrips(prev => (prev.some(t => t.id === id) ? prev.map(t => (t.id === id ? record : t)) : [...prev, record]));
       return { ok: true, record };
@@ -265,13 +276,20 @@ export function TripProvider({ children }) {
         // touched (TWM-154) — merge onto the last-known record instead of
         // replacing it wholesale, so an untouched branch (e.g. planner_state
         // after a confirm_logistics call) doesn't disappear client-side.
-        setTripRecord(prev => mergeCommandTripRecord(prev, response.trip));
+        // Merging against tripRecordRef.current (not the React `prev` from a
+        // setState updater) and writing through updateTripRecord keeps the
+        // ref itself current in this same tick — otherwise a follow-up
+        // command fired immediately after this one resolves (e.g. Guide's
+        // silent approve_places auto-advance) reads a stale ref and sends a
+        // stale expected_version, causing a spurious 409.
+        const merged = mergeCommandTripRecord(tripRecordRef.current, response.trip);
+        updateTripRecord(merged);
         setCommandSnapshot(prev => mergeCommandTripRecord(prev, response.trip));
         return response;
       } catch (error) {
         if (error instanceof TripApiError && error.status === 409) {
           const latest = await getTrip(current.id);
-          setTripRecord(latest);
+          updateTripRecord(latest);
         }
         throw error;
       }
@@ -290,7 +308,7 @@ export function TripProvider({ children }) {
   // ensureTrip() creates the fresh Backend record lazily on the traveler's
   // first message on the new journey — same as every other entry point.
   function startNewTrip() {
-    setTripRecord(null);
+    updateTripRecord(null);
     setCommandSnapshot(null);
     setTrip(DEFAULT_TRIP);
   }
