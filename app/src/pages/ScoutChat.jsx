@@ -4,6 +4,7 @@ import { useTrip } from '../context/TripContext.jsx';
 import { QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
+import { useGuidePlanning } from '../hooks/useGuidePlanning.js';
 import '../styles/chat.css';
 
 let nextId = 1;
@@ -16,6 +17,7 @@ export default function ScoutChat() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const { maybeAdvancePlaces, generateItinerary, generating } = useGuidePlanning(sendTripCommand, navigate);
   const initialized = useRef(false);
   const lastCommand = useRef(null);
   // The very first turn is a typed scout_entry (Scout entry, no rediscovery);
@@ -39,6 +41,11 @@ export default function ScoutChat() {
       const response = await sendTripCommand(command, { message: text, idempotencyKey });
       entered.current = true;
       say('assistant', response.message);
+      const guideState = response.trip.trip_state.planner_state?.guide_session?.state;
+      if (guideState) {
+        const advanced = await maybeAdvancePlaces(guideState);
+        if (advanced?.message) say('assistant', advanced.message);
+      }
     } catch (commandError) {
       setError(commandError.message || 'Something went wrong.');
     } finally {
@@ -66,6 +73,7 @@ export default function ScoutChat() {
   const stage = commandSnapshot?.trip_state?.stage;
   const awaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
   const quickReplies = QUICK_REPLIES[awaiting] || [];
+  const guideDayPlanReady = commandSnapshot?.trip_state?.planner_state?.guide_session?.state?.phase === 'DAY_PLAN_DRAFT';
   const thinkingMessage = useThinkingMessage(busy);
   return (
     <div className="chat-page chat-screen">
@@ -90,7 +98,9 @@ export default function ScoutChat() {
         {((activeAgent === 'meridian' && !awaiting) || stage === 'recommended') && (
           <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>See destinations →</button>
         )}
-        {activeAgent === 'guide' && <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue to planning →</button>}
+        {activeAgent === 'guide' && guideDayPlanReady && (
+          <button type="button" className="btn btn-primary" disabled={generating} onClick={generateItinerary}>Generate detailed itinerary →</button>
+        )}
       </div>
 
       <div className="chat-input-bar">

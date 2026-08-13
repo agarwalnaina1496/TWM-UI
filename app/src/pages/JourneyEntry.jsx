@@ -4,6 +4,7 @@ import { useTrip } from '../context/TripContext.jsx';
 import { ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
+import { useGuidePlanning } from '../hooks/useGuidePlanning.js';
 import { trackEvent } from '../lib/analytics.js';
 import '../styles/chat.css';
 
@@ -25,9 +26,9 @@ export default function JourneyEntry() {
   const [destination, setDestination] = useState('');
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
-  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const { maybeAdvancePlaces, generateItinerary, generating } = useGuidePlanning(sendTripCommand, navigate);
   const initialized = useRef(false);
   // discover_entry establishes Meridian ownership on the traveler's first
   // message; every message after that is a plain traveler_message to the
@@ -39,14 +40,15 @@ export default function JourneyEntry() {
   const lastCommand = useRef(null);
 
   // Hardcoded per-intent greeting shown immediately, with no Backend call —
-  // Meridian only gets involved once the traveler actually sends something.
+  // the owning specialist only gets involved once the traveler actually
+  // sends something.
   useEffect(() => {
-    if (!isDiscover || initialized.current) return;
+    if (initialized.current) return;
     initialized.current = true;
     setMessages(previous => [
       ...previous,
-      { id: nextMessageId++, role: 'assistant', text: DISCOVER_WELCOME },
-      { id: nextMessageId++, role: 'assistant', text: DISCOVER_ORIGIN_PROMPT },
+      { id: nextMessageId++, role: 'assistant', text: isDiscover ? DISCOVER_WELCOME : KNOWN_DESTINATION_WELCOME },
+      { id: nextMessageId++, role: 'assistant', text: isDiscover ? DISCOVER_ORIGIN_PROMPT : KNOWN_DESTINATION_PROMPT },
     ]);
   }, [isDiscover]);
 
@@ -74,7 +76,6 @@ export default function JourneyEntry() {
       const response = await sendTripCommand(command, { message: value, idempotencyKey });
       entered.current = true;
       if (isFirstSend) trackEvent('discovery_started', { entry_method: 'journey_entry' });
-      setResult(response);
       if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
     } catch (commandError) {
       setError(commandError.message || 'Something went wrong.');
@@ -83,15 +84,32 @@ export default function JourneyEntry() {
     }
   }
 
+  // Continues Guide's pre-itinerary conversation entirely in chat: the first
+  // send starts the trip via known_destination_entry, every send after that
+  // (preferences, duration, clarification answers) is a plain
+  // traveler_message. Once Guide's places are settled with nothing left to
+  // clarify, silently advance to a day plan so "Generate detailed itinerary"
+  // can appear without a separate Plan Builder screen.
   async function submitDestination() {
     const value = destination.trim();
     if (!value || busy) return;
+    const isFirstSend = !entered.current;
+    setDestination('');
     setBusy(true);
     setError(null);
+    setMessages(previous => [...previous, { id: nextMessageId++, role: 'user', text: value }]);
     try {
-      const response = await sendTripCommand('known_destination_entry', { destination: value });
-      trackEvent('destination_provided', { destination_source: 'user_input' });
-      setResult(response);
+      const response = entered.current
+        ? await sendTripCommand('traveler_message', { message: value })
+        : await sendTripCommand('known_destination_entry', { destination: value });
+      entered.current = true;
+      if (isFirstSend) trackEvent('destination_provided', { destination_source: 'user_input' });
+      if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
+      const guideState = response.trip.trip_state.planner_state?.guide_session?.state;
+      if (guideState) {
+        const advanced = await maybeAdvancePlaces(guideState);
+        if (advanced?.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: advanced.message }]);
+      }
     } catch (commandError) {
       setError(commandError.message || 'Something went wrong.');
     } finally {
@@ -101,6 +119,7 @@ export default function JourneyEntry() {
 
   const awaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
   const quickReplies = (QUICK_REPLIES[awaiting] || []).map(value => ({ label: value, value }));
+  const guideDayPlanReady = commandSnapshot?.trip_state?.planner_state?.guide_session?.state?.phase === 'DAY_PLAN_DRAFT';
   const thinkingMessage = useThinkingMessage(busy);
 
   return (
@@ -138,18 +157,19 @@ export default function JourneyEntry() {
         <>
           <p className="lede">Tell us where you are going. We’ll take you straight to planning—no matching needed.</p>
           <div className="chat-log" aria-live="polite">
-            <div className="chat-row chat-row-assistant">
-              <div className="chat-bub chat-bub-assistant">{KNOWN_DESTINATION_WELCOME}</div>
-            </div>
-            <div className="chat-row chat-row-assistant">
-              <div className="chat-bub chat-bub-assistant">{KNOWN_DESTINATION_PROMPT}</div>
-            </div>
-            {result && <div className="chat-row chat-row-assistant"><div className="chat-bub chat-bub-assistant">{result.message}</div></div>}
-            {result?.trip?.trip_state?.active_agent === 'guide' && <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue to planning →</button>}
+            {messages.map(message => (
+              <div key={message.id} className={`chat-row chat-row-${message.role}`}>
+                <div className={`chat-bub chat-bub-${message.role}`} style={{ whiteSpace: 'pre-wrap' }}>{message.text}</div>
+              </div>
+            ))}
+            {busy && <div className="think" role="status">{thinkingMessage}</div>}
+            {!busy && guideDayPlanReady && (
+              <button type="button" className="btn btn-primary" disabled={generating} onClick={generateItinerary}>Generate detailed itinerary →</button>
+            )}
           </div>
           <div className="chat-input-bar">
             <input className="chat-input" aria-label="Destination" placeholder="e.g. Coorg, Karnataka" value={destination} onChange={event => setDestination(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') submitDestination(); }} />
-            <button type="button" className="chat-send" onClick={submitDestination} aria-label="Start planning">→</button>
+            <button type="button" className="chat-send" onClick={submitDestination} disabled={busy} aria-label="Start planning">→</button>
           </div>
         </>
       )}

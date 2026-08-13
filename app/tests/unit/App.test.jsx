@@ -173,15 +173,24 @@ describe('App guest-first routing (TWM-140)', () => {
         .mockResolvedValueOnce(jsonResponse({
           message: 'Here are the places.',
           agent_meta: null,
-          trip: tripRecord({ version: 2, trip_state: { stage: 'planning', active_agent: 'guide', trip_context: { destination: 'Coorg' } } }),
+          trip: tripRecord({
+            version: 2,
+            trip_state: {
+              stage: 'planning',
+              active_agent: 'guide',
+              trip_context: { destination: 'Coorg' },
+              planner_state: { guide_session: { state: { phase: 'DAY_PLAN_DRAFT', destinations: ['Coorg'], duration_days: 3, day_plan: [] } } },
+            },
+          }),
         }));
 
       renderApp(['/journey-entry?intent=known_destination']);
       await user.type(screen.getByPlaceholderText('e.g. Coorg, Karnataka'), 'Coorg{Enter}');
 
       expect(await screen.findByText('Here are the places.')).toBeInTheDocument();
+      expect(screen.getByText('Coorg', { selector: '.chat-bub-user' })).toBeInTheDocument();
       expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ command: 'known_destination_entry', destination: 'Coorg' });
-      expect(await screen.findByRole('button', { name: 'Continue to planning →' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Generate detailed itinerary →' })).toBeInTheDocument();
     });
   });
 });
