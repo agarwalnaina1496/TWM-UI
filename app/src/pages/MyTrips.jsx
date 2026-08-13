@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
 import {
@@ -60,7 +60,7 @@ export default function MyTrips() {
 
   function handleNewTrip() {
     startNewTrip();
-    navigate('/');
+    navigate('/', { state: { skipResume: true } });
   }
 
   // TWM-109: opening a trip that turned out to be gone (deleted, or a stale
@@ -121,15 +121,13 @@ export default function MyTrips() {
       {auth.loggedIn ? (
         <p className="lede">Signed in as {auth.name}.</p>
       ) : (
-        <p className="lede">You're browsing as a guest — trips here are saved for this session.</p>
-      )}
-
-      {!auth.loggedIn && (
         <div className="account-history-locked">
-          <p>Trip history from other devices or a previous account isn't available as a guest.</p>
-          {!syncDismissed && (
-            <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span>
-          )}
+          <p>
+            You're browsing as a guest.
+            {!syncDismissed && (
+              <> <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span></>
+            )}
+          </p>
         </div>
       )}
 
@@ -145,13 +143,9 @@ export default function MyTrips() {
 
       {visibleTrips.length === 0 ? (
         <div className="empty-trips">
-          <p>Nothing saved yet.</p>
-          {/* No trip exists yet here, so this must not eagerly create one via
-              startNewTrip (unlike "+ New trip" above, a deliberate action
-              against an existing list) — it just sends the traveler to
-              GetStarted, where the Backend trip is created lazily on their
-              first message. */}
-          <Link className="btn btn-primary" style={{ marginTop: 12, display: 'inline-flex' }} to="/">Start a trip →</Link>
+          <p className="empty-trips-title">No trips yet</p>
+          <p>Start planning your next adventure.</p>
+          <span className="btn btn-primary" style={{ marginTop: 12, display: 'inline-flex' }} onClick={handleNewTrip}>+ New trip</span>
         </div>
       ) : (
         <>

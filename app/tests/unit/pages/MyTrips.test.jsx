@@ -45,8 +45,8 @@ describe('MyTrips (TWM-108)', () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    expect(await screen.findByText('Nothing saved yet.')).toBeInTheDocument();
-    expect(screen.queryByText('+ New trip')).not.toBeInTheDocument();
+    expect(await screen.findByText('No trips yet')).toBeInTheDocument();
+    expect(screen.getByText('+ New trip')).toBeInTheDocument();
   });
 
   it('renders stage-aware badge and CTA for a real trip', async () => {
@@ -176,7 +176,7 @@ describe('MyTrips (TWM-108)', () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    expect(await screen.findByText(/trip history from other devices or a previous account/i)).toBeInTheDocument();
+    expect(await screen.findByText('Log in to sync across devices')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -184,15 +184,15 @@ describe('MyTrips (TWM-108)', () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderMyTrips({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
-    await screen.findByText('Nothing saved yet.');
-    expect(screen.queryByText(/trip history from other devices/i)).not.toBeInTheDocument();
+    await screen.findByText('No trips yet');
+    expect(screen.queryByText('Log in to sync across devices')).not.toBeInTheDocument();
   });
 
   it('opens the contextual sync invitation only after an explicit click, never automatically', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    await screen.findByText('Nothing saved yet.');
+    await screen.findByText('No trips yet');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await userEvent.click(screen.getByText('Log in to sync across devices'));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -203,7 +203,7 @@ describe('MyTrips (TWM-108)', () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    await screen.findByText('Nothing saved yet.');
+    await screen.findByText('No trips yet');
     await userEvent.click(screen.getByText('Log in to sync across devices'));
     await userEvent.click(screen.getByRole('button', { name: 'Continue without login' }));
     expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
