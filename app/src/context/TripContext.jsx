@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
-  createTrip, getTrip, listTrips, newIdempotencyKey, queueTripMutation,
+  createTrip, getTrip, listTrips, mergeCommandTripRecord, newIdempotencyKey, queueTripMutation,
   renameTrip as renameTripApi, saveUiState as saveUiStateApi, sendTripCommand as sendTripCommandApi, TripApiError,
 } from '../lib/tripApi.js';
 
@@ -261,8 +261,12 @@ export function TripProvider({ children }) {
       if (logisticsConfirmation !== undefined) payload.logistics_confirmation = logisticsConfirmation;
       try {
         const response = await sendTripCommandApi(current.id, payload);
-        setTripRecord(response.trip);
-        setCommandSnapshot(response.trip);
+        // A command response only carries the trip_state branches this turn
+        // touched (TWM-154) — merge onto the last-known record instead of
+        // replacing it wholesale, so an untouched branch (e.g. planner_state
+        // after a confirm_logistics call) doesn't disappear client-side.
+        setTripRecord(prev => mergeCommandTripRecord(prev, response.trip));
+        setCommandSnapshot(prev => mergeCommandTripRecord(prev, response.trip));
         return response;
       } catch (error) {
         if (error instanceof TripApiError && error.status === 409) {

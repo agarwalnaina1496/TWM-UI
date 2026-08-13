@@ -38,7 +38,7 @@ export function defaultTripState(tripId) {
     stage: 'new',
     active_agent: 'scout',
     trip_context: {},
-    advisor_state: { conversation_context: { last_advisor_message: null }, artifacts: [] },
+    advisor_state: { conversation_context: { last_advisor_message: null } },
     matcher_state: { conversation_context: { last_meridian_message: null, awaiting: null }, recommendations: [], rejected_options: [] },
     planner_state: null,
   };
@@ -50,6 +50,27 @@ export function normalizeTripRecord(record) {
     : defaultTripState(record.id);
   if (!trip_state.trip_id) trip_state.trip_id = record.id;
   return { ...record, trip_state, ui_state: isPlainObject(record.ui_state) ? record.ui_state : {} };
+}
+
+// A POST /commands response now carries only the trip_state branches that
+// turn actually touched (TWM-154, Backend-owned trimming) — matcher_state /
+// planner_state / itinerary_state / logistics_state are simply absent when
+// unchanged. The rest of trip_state (stage/active_agent/trip_context) is
+// always present. Carry forward each branch's last-known value from the
+// previous record instead of letting it go missing client-side, so a page
+// reading e.g. planner_state after an unrelated command still sees it.
+const COMMAND_RESPONSE_BRANCHES = ['matcher_state', 'planner_state', 'itinerary_state', 'logistics_state'];
+
+export function mergeCommandTripRecord(previous, incoming) {
+  const normalized = normalizeTripRecord(incoming);
+  if (!previous || previous.id !== normalized.id) return normalized;
+  const trip_state = { ...normalized.trip_state };
+  for (const branch of COMMAND_RESPONSE_BRANCHES) {
+    if (!(branch in trip_state) && previous.trip_state?.[branch] !== undefined) {
+      trip_state[branch] = previous.trip_state[branch];
+    }
+  }
+  return { ...normalized, trip_state };
 }
 
 // The list response now carries each trip's trip_state directly (Backend
