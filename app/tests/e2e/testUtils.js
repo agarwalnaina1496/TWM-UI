@@ -35,12 +35,18 @@ function commandResponse(message, trip) {
 // not from trip_state — set it once via the option, or update it from a
 // scripted step whose command produced a new round (continue/traveler_message
 // /discover_entry/more_like_this), 404 otherwise.
-export async function mockTripCommandFlow(page, steps, { initialTrip, initialTrips, initialRecommendation = null } = {}) {
+//
+// `initialItineraryVersions` / a step's `itineraryVersions` field (TWM-155):
+// archived itinerary revisions are served from
+// GET /api/trips/{id}/itinerary-versions, not from trip_state — defaults to
+// an empty list so any spec reaching the Dashboard doesn't need to opt in.
+export async function mockTripCommandFlow(page, steps, { initialTrip, initialTrips, initialRecommendation = null, initialItineraryVersions = [] } = {}) {
   let pending = [...steps];
   const seeded = initialTrips ?? (initialTrip ? [initialTrip] : []);
   const records = new Map(seeded.map(record => [record.id, record]));
   let current = seeded[0] ?? null;
   let latestRecommendation = initialRecommendation;
+  let itineraryVersions = initialItineraryVersions;
   await page.route('**/api/trips**', async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -54,6 +60,10 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
     if (recoMatch) {
       if (!latestRecommendation) return route.fulfill({ status: 404, json: { detail: 'No recommendations yet.' } });
       return route.fulfill({ json: latestRecommendation });
+    }
+    const itineraryVersionsMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)\/itinerary-versions$/);
+    if (itineraryVersionsMatch) {
+      return route.fulfill({ json: { versions: itineraryVersions } });
     }
     const singleMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)$/);
     if (singleMatch && records.has(singleMatch[1])) {
@@ -81,6 +91,7 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
       current = step.response.trip;
       records.set(current.id, current);
       if (step.recommendation !== undefined) latestRecommendation = step.recommendation;
+      if (step.itineraryVersions !== undefined) itineraryVersions = step.itineraryVersions;
       return route.fulfill({ json: step.response });
     }
     return route.continue();
@@ -120,12 +131,13 @@ function atlasResult({ title = 'Abbey Falls Getaway', destination = 'Coorg', pri
 }
 
 // TWM-138: itinerary_state.result nests under current_version alongside
-// history/proposed_revision, not the flat TWM-96 shape.
+// proposed_revision, not the flat TWM-96 shape. Accepted-revision history
+// (TWM-155) lives in its own table now, served via `itineraryVersions`/
+// `initialItineraryVersions` on mockTripCommandFlow, not on this object.
 function readyItineraryState(options) {
   return {
     status: 'ready',
     current_version: { version: 1, source_guide_revision: 3, result: atlasResult(options) },
-    history: [],
     proposed_revision: null,
   };
 }

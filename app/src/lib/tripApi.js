@@ -100,6 +100,15 @@ export async function getRecommendations(id) {
   return request(`/${id}/recommendations`);
 }
 
+// TWM-155: accepted itinerary revisions archive to their own table — the
+// full historical AtlasFinalItinerary result is never sent to the browser,
+// only version/source_guide_revision/day-titles for the "Prior versions"
+// list. Returns [] (via `versions`) when none have been accepted yet.
+export async function getItineraryVersions(id) {
+  const response = await request(`/${id}/itinerary-versions`);
+  return response.versions || [];
+}
+
 export async function renameTrip(id, title, expectedVersion) {
   const saved = await request(`/${id}`, {
     method: 'PATCH',
