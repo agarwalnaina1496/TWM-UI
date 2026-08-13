@@ -178,8 +178,11 @@ describe('App guest-first routing (TWM-140)', () => {
             trip_state: {
               stage: 'planning',
               active_agent: 'guide',
-              trip_context: { destination: 'Coorg' },
-              planner_state: { guide_session: { state: { phase: 'DAY_PLAN_DRAFT', destinations: ['Coorg'], duration_days: 3, day_plan: [] } } },
+              trip_context: { destinations: ['Coorg'], duration_days: 3 },
+              planner_state: {
+                places: ['Coorg Palace'],
+                day_plan: [{ day_number: 1, date: null, places: ['Coorg Palace'], pace: 'balanced', buffer_note: null }],
+              },
             },
           }),
         }));

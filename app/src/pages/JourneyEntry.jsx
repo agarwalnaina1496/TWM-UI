@@ -90,8 +90,8 @@ export default function JourneyEntry() {
   // traveler_message. Once Guide's places are settled with nothing left to
   // clarify, silently advance to a day plan so "Generate detailed itinerary"
   // can appear without a separate Plan Builder screen.
-  async function submitDestination() {
-    const value = destination.trim();
+  async function submitDestination(override) {
+    const value = (override ?? destination).trim();
     if (!value || busy) return;
     const isFirstSend = !entered.current;
     setDestination('');
@@ -105,9 +105,9 @@ export default function JourneyEntry() {
       entered.current = true;
       if (isFirstSend) trackEvent('destination_provided', { destination_source: 'user_input' });
       if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
-      const guideState = response.trip.trip_state.planner_state?.guide_session?.state;
-      if (guideState) {
-        const advanced = await maybeAdvancePlaces(guideState);
+      const plannerState = response.trip.trip_state.planner_state;
+      if (plannerState) {
+        const advanced = await maybeAdvancePlaces(plannerState);
         if (advanced?.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: advanced.message }]);
       }
     } catch (commandError) {
@@ -119,7 +119,9 @@ export default function JourneyEntry() {
 
   const awaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
   const quickReplies = (QUICK_REPLIES[awaiting] || []).map(value => ({ label: value, value }));
-  const guideDayPlanReady = commandSnapshot?.trip_state?.planner_state?.guide_session?.state?.phase === 'DAY_PLAN_DRAFT';
+  const guideAwaiting = commandSnapshot?.trip_state?.planner_state?.conversation_context?.awaiting;
+  const guideQuickReplies = QUICK_REPLIES[guideAwaiting] || [];
+  const guideDayPlanReady = (commandSnapshot?.trip_state?.planner_state?.day_plan?.length || 0) > 0;
   const thinkingMessage = useThinkingMessage(busy);
 
   return (
@@ -163,17 +165,22 @@ export default function JourneyEntry() {
               </div>
             ))}
             {busy && <div className="think" role="status">{thinkingMessage}</div>}
+            {!busy && guideQuickReplies.length > 0 && (
+              <div className="chat-chip-row" aria-label="Suggested traveler replies">
+                {guideQuickReplies.map(reply => <button type="button" className="chip chat-chip-long" key={reply} onClick={() => submitDestination(reply)}>{reply}</button>)}
+              </div>
+            )}
             {!busy && guideDayPlanReady && (
               <button type="button" className="btn btn-primary" disabled={generating} onClick={generateItinerary}>Generate detailed itinerary →</button>
             )}
           </div>
           <div className="chat-input-bar">
             <input className="chat-input" aria-label="Destination" placeholder="e.g. Coorg, Karnataka" value={destination} onChange={event => setDestination(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') submitDestination(); }} />
-            <button type="button" className="chat-send" onClick={submitDestination} disabled={busy} aria-label="Start planning">→</button>
+            <button type="button" className="chat-send" onClick={() => submitDestination()} disabled={busy} aria-label="Start planning">→</button>
           </div>
         </>
       )}
-      {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={isDiscover ? () => sendDiscover(lastCommand.current?.message ?? '') : submitDestination}>Try again</button></div>}
+      {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={isDiscover ? () => sendDiscover(lastCommand.current?.message ?? '') : () => submitDestination()}>Try again</button></div>}
     </div>
   );
 }

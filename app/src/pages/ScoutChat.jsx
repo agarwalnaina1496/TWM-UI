@@ -41,9 +41,9 @@ export default function ScoutChat() {
       const response = await sendTripCommand(command, { message: text, idempotencyKey });
       entered.current = true;
       say('assistant', response.message);
-      const guideState = response.trip.trip_state.planner_state?.guide_session?.state;
-      if (guideState) {
-        const advanced = await maybeAdvancePlaces(guideState);
+      const plannerState = response.trip.trip_state.planner_state;
+      if (plannerState) {
+        const advanced = await maybeAdvancePlaces(plannerState);
         if (advanced?.message) say('assistant', advanced.message);
       }
     } catch (commandError) {
@@ -71,9 +71,11 @@ export default function ScoutChat() {
 
   const activeAgent = commandSnapshot?.trip_state?.active_agent;
   const stage = commandSnapshot?.trip_state?.stage;
-  const awaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
+  const matcherAwaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
+  const guideAwaiting = commandSnapshot?.trip_state?.planner_state?.conversation_context?.awaiting;
+  const awaiting = activeAgent === 'guide' ? guideAwaiting : matcherAwaiting;
   const quickReplies = QUICK_REPLIES[awaiting] || [];
-  const guideDayPlanReady = commandSnapshot?.trip_state?.planner_state?.guide_session?.state?.phase === 'DAY_PLAN_DRAFT';
+  const guideDayPlanReady = (commandSnapshot?.trip_state?.planner_state?.day_plan?.length || 0) > 0;
   const thinkingMessage = useThinkingMessage(busy);
   return (
     <div className="chat-page chat-screen">
