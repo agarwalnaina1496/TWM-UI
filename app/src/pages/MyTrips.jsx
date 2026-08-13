@@ -58,8 +58,8 @@ export default function MyTrips() {
   const counts = { all: visibleTrips.length, active: activeTrips.length, upcoming: upcomingTrips.length, completed: completedTrips.length };
   const shown = groups[filter] ?? visibleTrips;
 
-  async function handleNewTrip() {
-    await startNewTrip();
+  function handleNewTrip() {
+    startNewTrip();
     navigate('/');
   }
 

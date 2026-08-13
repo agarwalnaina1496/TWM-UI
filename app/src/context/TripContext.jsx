@@ -284,14 +284,15 @@ export function TripProvider({ children }) {
 
   // Starts a genuinely separate Backend-owned journey (TWM-108) — previously
   // this only reset the local mock content object and left the Backend
-  // record untouched, so "+ New Trip" was a no-op against saved trips.
-  async function startNewTrip() {
-    const created = await createTrip();
-    setTrips(prev => [created, ...prev]);
-    setTripRecord(created);
-    setCommandSnapshot(created);
+  // record untouched, so "+ New Trip" pointed straight back at the trip the
+  // traveler was just looking at. Fixed that without going back to eagerly
+  // POSTing on click: this only clears the local "current trip" pointer, so
+  // ensureTrip() creates the fresh Backend record lazily on the traveler's
+  // first message on the new journey — same as every other entry point.
+  function startNewTrip() {
+    setTripRecord(null);
+    setCommandSnapshot(null);
     setTrip(DEFAULT_TRIP);
-    return created;
   }
 
   function login({ name, email }) {

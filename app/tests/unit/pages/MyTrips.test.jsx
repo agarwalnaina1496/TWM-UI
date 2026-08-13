@@ -97,18 +97,19 @@ describe('MyTrips (TWM-108)', () => {
     expect(screen.getByText(badgeText)).toBeInTheDocument();
   });
 
-  it('New Trip creates a real Backend trip and preserves the existing one', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({
-        trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
-      }))
-      .mockResolvedValueOnce(jsonResponse(tripRecord({ id: 'trip-2', title: 'Untitled Trip' }), { status: 201 }));
+  it('New Trip clears the current trip locally without creating a Backend record yet', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
+    }));
     renderMyTrips({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Coorg');
 
+    const callsBefore = fetchMock.mock.calls.length;
     await userEvent.click(screen.getByText('+ New trip'));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips', expect.objectContaining({ method: 'POST' })));
+    // No POST — the Backend trip is created lazily by the traveler's first
+    // message on the new journey, not by clicking "+ New trip" itself.
+    expect(fetchMock.mock.calls.length).toBe(callsBefore);
   });
 
   it('renames a trip through the Backend', async () => {
