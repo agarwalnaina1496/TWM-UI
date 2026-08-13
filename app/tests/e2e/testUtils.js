@@ -29,11 +29,18 @@ function commandResponse(message, trip) {
 // distinct trip records — for adaptive-landing/My Trips specs. GET-list, GET
 // single-by-id, and rename PATCH all resolve against the full seeded set; the
 // scripted `steps` (commands) still apply to whichever trip id they're sent to.
-export async function mockTripCommandFlow(page, steps, { initialTrip, initialTrips } = {}) {
+//
+// `initialRecommendation` / a step's `recommendation` field (TWM-153): the
+// latest matcher round is served from GET /api/trips/{id}/recommendations,
+// not from trip_state — set it once via the option, or update it from a
+// scripted step whose command produced a new round (continue/traveler_message
+// /discover_entry/more_like_this), 404 otherwise.
+export async function mockTripCommandFlow(page, steps, { initialTrip, initialTrips, initialRecommendation = null } = {}) {
   let pending = [...steps];
   const seeded = initialTrips ?? (initialTrip ? [initialTrip] : []);
   const records = new Map(seeded.map(record => [record.id, record]));
   let current = seeded[0] ?? null;
+  let latestRecommendation = initialRecommendation;
   await page.route('**/api/trips**', async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -42,6 +49,11 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
     if (method === 'GET' && /\/api\/trips\/?$/.test(pathname)) {
       const list = [...records.values()].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
       return route.fulfill({ json: { trips: list } });
+    }
+    const recoMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)\/recommendations$/);
+    if (recoMatch) {
+      if (!latestRecommendation) return route.fulfill({ status: 404, json: { detail: 'No recommendations yet.' } });
+      return route.fulfill({ json: latestRecommendation });
     }
     const singleMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)$/);
     if (singleMatch && records.has(singleMatch[1])) {
@@ -68,6 +80,7 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
       }
       current = step.response.trip;
       records.set(current.id, current);
+      if (step.recommendation !== undefined) latestRecommendation = step.recommendation;
       return route.fulfill({ json: step.response });
     }
     return route.continue();

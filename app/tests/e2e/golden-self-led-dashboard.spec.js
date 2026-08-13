@@ -4,7 +4,7 @@ import { commandResponse, mockTripCommandFlow, readyItineraryState, tripRecord }
 
 // TWM-104 wired Destinations.jsx to real trip commands: it now sends a
 // `continue` command on entry when no recommendation is saved yet, and reads
-// the result from the real matcher_state.recommendations entry.
+// the result from GET /api/trips/{id}/recommendations (TWM-153).
 test('advice journey reaches destination match, Choose Plan and Self-Led Dashboard', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
@@ -25,7 +25,7 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
       command: 'traveler_message',
       response: commandResponse('I’ll look for a comfortable 14-day trip within budget.', tripRecord({
         version: 4,
-        trip_state: { stage: 'matching', active_agent: 'meridian' },
+        trip_state: { stage: 'matching', active_agent: 'meridian', matcher_state: { conversation_context: { awaiting: null } } },
       })),
     },
     {
@@ -34,20 +34,18 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
         version: 5,
         trip_state: {
           stage: 'recommended', active_agent: null,
-          matcher_state: {
-            conversation_context: { awaiting: null },
-            recommendations: [{
-              status: 'SUCCESS', message: 'Coorg is a comfortable fit within budget.', trip_type: 'single',
-              traveler_criteria: [{ id: 'budget', label: '₹1,00,000 total for both', requirement_type: 'HARD', source_context_paths: ['budget'] }],
-              options: [{
-                rank: 1, type: 'single', name: 'Coorg', destination_id: 'coorg', summary: 'A comfortable fit within budget.',
-                evaluations: [{ criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Fits within budget.', details: [{ type: 'bullets', items: ['Estimated total stays within budget.'] }] }],
-                other_considerations: [],
-              }],
-            }],
-          },
+          matcher_state: { conversation_context: { awaiting: null } },
         },
       })),
+      recommendation: {
+        status: 'SUCCESS', message: 'Coorg is a comfortable fit within budget.', trip_type: 'single',
+        traveler_criteria: [{ id: 'budget', label: '₹1,00,000 total for both', requirement_type: 'HARD', source_context_paths: ['budget'] }],
+        options: [{
+          rank: 1, type: 'single', name: 'Coorg', destination_id: 'coorg', summary: 'A comfortable fit within budget.',
+          evaluations: [{ criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Fits within budget.', details: [{ type: 'bullets', items: ['Estimated total stays within budget.'] }] }],
+          other_considerations: [],
+        }],
+      },
     },
     {
       command: 'select_destination',

@@ -44,6 +44,7 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
         trip_state: {
           stage: 'matching', active_agent: 'meridian',
           trip_context: { original_traveler_request: GOLDEN_QUERY, origin: 'Delhi', budget: '₹1,00,000 total for both', duration_days: 14 },
+          matcher_state: { conversation_context: { awaiting: null } },
         },
       })),
     },
@@ -54,9 +55,10 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
         trip_state: {
           stage: 'recommended', active_agent: null,
           trip_context: { original_traveler_request: GOLDEN_QUERY, origin: 'Delhi', budget: '₹1,00,000 total for both', duration_days: 14 },
-          matcher_state: { conversation_context: { awaiting: null }, recommendations: [fixture] },
+          matcher_state: { conversation_context: { awaiting: null } },
         },
       })),
+      recommendation: fixture,
     },
     {
       command: 'select_destination',

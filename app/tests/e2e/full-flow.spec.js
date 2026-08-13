@@ -26,21 +26,22 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
       command: 'traveler_message',
       response: commandResponse('Great, here are a few options.', tripRecord({
         version: 3,
-        trip_state: { stage: 'recommended', active_agent: null },
+        trip_state: { stage: 'recommended', active_agent: null, matcher_state: { conversation_context: { awaiting: null } } },
       })),
     },
     {
       command: 'continue',
       response: commandResponse(null, tripRecord({
         version: 4,
-        trip_state: { stage: 'recommended', active_agent: null, matcher_state: { conversation_context: { awaiting: null }, recommendations: [successOutcome()] } },
+        trip_state: { stage: 'recommended', active_agent: null, matcher_state: { conversation_context: { awaiting: null } } },
       })),
+      recommendation: successOutcome(),
     },
     {
       command: 'select_destination',
       response: commandResponse('Coorg is confirmed.', tripRecord({
         version: 5,
-        trip_state: { stage: 'matched', active_agent: null, matcher_state: { conversation_context: { awaiting: null }, recommendations: [successOutcome()] } },
+        trip_state: { stage: 'matched', active_agent: null, matcher_state: { conversation_context: { awaiting: null } } },
       })),
     },
     {

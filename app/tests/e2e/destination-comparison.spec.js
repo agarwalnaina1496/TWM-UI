@@ -32,19 +32,19 @@ function successOutcome(overrides = {}) {
   };
 }
 
-function recommendedTripState(latest, extra = {}) {
+function recommendedTripState(extra = {}) {
   return {
     stage: 'recommended', active_agent: null,
     trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2 },
-    matcher_state: { conversation_context: { last_meridian_message: null, awaiting: null }, recommendations: [latest] },
+    matcher_state: { conversation_context: { last_meridian_message: null, awaiting: null } },
     ...extra,
   };
 }
 
 test('loads real recommendations via the continue command, shows a disclosed trade-off, and plans the trip through select_destination', async ({ page }) => {
   await mockTripCommandFlow(page, [
-    { command: 'continue', response: commandResponse(null, tripRecord({ version: 2, trip_state: recommendedTripState(successOutcome()) })) },
-    { command: 'select_destination', response: commandResponse('Madhya Pradesh Heritage and Nature is confirmed.', tripRecord({ version: 3, trip_state: recommendedTripState(successOutcome()) })) },
+    { command: 'continue', response: commandResponse(null, tripRecord({ version: 2, trip_state: recommendedTripState() })), recommendation: successOutcome() },
+    { command: 'select_destination', response: commandResponse('Madhya Pradesh Heritage and Nature is confirmed.', tripRecord({ version: 3, trip_state: recommendedTripState() })) },
     // TWM-106: landing on the Plan Builder immediately bootstraps a real
     // Guide session — scripted so the route mock doesn't reject it.
     {
@@ -98,13 +98,14 @@ test('loads real recommendations via the continue command, shows a disclosed tra
 
 test('More like this refreshes recommendations through the real command without committing selection', async ({ page }) => {
   await mockTripCommandFlow(page, [
-    { command: 'continue', response: commandResponse(null, tripRecord({ version: 2, trip_state: recommendedTripState(successOutcome()) })) },
+    { command: 'continue', response: commandResponse(null, tripRecord({ version: 2, trip_state: recommendedTripState() })), recommendation: successOutcome() },
     {
       command: 'more_like_this',
       response: commandResponse(
         'Refreshed around Madhya Pradesh Heritage and Nature, while keeping your existing preferences.',
-        tripRecord({ version: 3, trip_state: recommendedTripState(successOutcome({ message: 'Refreshed around Madhya Pradesh Heritage and Nature, while keeping your existing preferences.' })) })
+        tripRecord({ version: 3, trip_state: recommendedTripState() })
       ),
+      recommendation: successOutcome({ message: 'Refreshed around Madhya Pradesh Heritage and Nature, while keeping your existing preferences.' }),
     },
   ]);
 
