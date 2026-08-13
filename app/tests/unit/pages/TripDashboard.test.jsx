@@ -85,6 +85,7 @@ function readyItineraryState({ version = 1, history = [], proposedRevision = nul
 
 function snapshotWith(itineraryState, { anchors = [] } = {}) {
   return {
+    id: 'trip-1',
     version: 1,
     trip_state: { trip_context: {}, itinerary_state: itineraryState, logistics_state: { anchors } },
   };
@@ -103,8 +104,18 @@ function renderDashboard() {
   return render(<MemoryRouter><TripDashboard /></MemoryRouter>);
 }
 
+function jsonResponse(body, { status = 200 } = {}) {
+  return { ok: status >= 200 && status < 300, status, json: async () => body };
+}
+
 describe('Trip Dashboard (real Atlas contract)', () => {
-  beforeEach(() => { vi.clearAllMocks(); tripLoadStatus = 'ready'; });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tripLoadStatus = 'ready';
+    // Prior versions are fetched lazily via GET /trips/{id}/itinerary-versions
+    // (TWM-155) — default to empty; individual tests override as needed.
+    global.fetch = vi.fn(async () => jsonResponse({ versions: [] }));
+  });
 
   it('calls start_itinerary once when no saved result exists, then renders it', async () => {
     commandSnapshot = snapshotWith({});
@@ -247,14 +258,14 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.getByText('Riverside stay')).toBeInTheDocument();
   });
 
-  it('renders prior versions as a read-only disclosure', () => {
-    commandSnapshot = snapshotWith(readyItineraryState({
-      version: 2,
-      history: [{ version: 1, source_guide_revision: 3, result: atlasResult() }],
-    }));
+  it('renders prior versions as a read-only disclosure', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState({ version: 2 }));
     sendTripCommand = vi.fn();
+    global.fetch = vi.fn(async () => jsonResponse({
+      versions: [{ version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z', days: [{ day_number: 1, title: 'Arrival and ghats' }, { day_number: 2, title: 'Ram Jhula' }] }],
+    }));
     renderDashboard();
-    expect(screen.getByText('Prior versions (1)')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Prior versions (1)')).toBeInTheDocument());
   });
 
   it('Map tab renders a text-only, deduped route order with no coordinates', async () => {

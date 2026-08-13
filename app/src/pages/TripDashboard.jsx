@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
+import { getItineraryVersions } from '../lib/tripApi.js';
 import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, routeLocations, timelineIcon } from '../lib/atlasView.js';
 import '../styles/dashboard.css';
 
@@ -101,6 +102,20 @@ export default function TripDashboard() {
   const [revisionPending, setRevisionPending] = useState(false);
   const [revisionError, setRevisionError] = useState(null);
 
+  // Accepted-revision history is fetched lazily (TWM-155) — it no longer
+  // rides along on trip_state, since only this "Prior versions" list needs it.
+  const tripId = commandSnapshot?.id;
+  const [priorVersions, setPriorVersions] = useState([]);
+  const refreshPriorVersions = useCallback(async (idOverride) => {
+    const id = idOverride ?? tripId;
+    if (!id) return;
+    try {
+      setPriorVersions(await getItineraryVersions(id));
+    } catch {
+      // Non-critical: the active itinerary still renders without this list.
+    }
+  }, [tripId]);
+
   // Reopen never re-invokes Atlas: once ready, render the saved result and
   // never call start_itinerary again for this trip. Must wait for the trip
   // to finish loading — itineraryState reads as empty on the very first
@@ -123,6 +138,12 @@ export default function TripDashboard() {
         setBootError(error.message || 'Could not generate the detailed itinerary.');
       });
   }, [tripLoadStatus, itineraryState?.status, sendTripCommand]);
+
+  useEffect(() => {
+    if (bootStatus !== 'ready') return;
+    refreshPriorVersions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootStatus, tripId]);
 
   function openConfirmForm(type, dayNumber) {
     setConfirmType(type);
@@ -157,7 +178,10 @@ export default function TripDashboard() {
     setRevisionPending(true);
     setRevisionError(null);
     try {
-      await sendTripCommand(command);
+      const response = await sendTripCommand(command);
+      // accept_itinerary_revision archives the outgoing version (TWM-155);
+      // keep_current_itinerary archives nothing, so this is a harmless no-op.
+      if (command === 'accept_itinerary_revision') await refreshPriorVersions(response.trip?.id);
     } catch (error) {
       setRevisionError(error.message || 'Could not update the itinerary.');
     } finally {
@@ -196,7 +220,6 @@ export default function TripDashboard() {
   const costMax = Math.max(...allCosts, 1);
   const locations = routeLocations(days);
   const proposedRevision = itineraryState.proposed_revision;
-  const history = itineraryState.history || [];
 
   return (
     <main className="wrap dashboard">
@@ -210,13 +233,13 @@ export default function TripDashboard() {
       />
       <p className="version-note">Itinerary version {currentVersion.version}.</p>
 
-      {history.length > 0 && (
+      {priorVersions.length > 0 && (
         <details className="prior-versions">
-          <summary>Prior versions ({history.length})</summary>
-          {history.map(entry => (
+          <summary>Prior versions ({priorVersions.length})</summary>
+          {priorVersions.map(entry => (
             <details className="prior-version-entry" key={entry.version}>
               <summary>Version {entry.version}</summary>
-              <ul>{entry.result.final_itinerary.days.map(day => <li key={day.day_number}>Day {day.day_number}: {day.title}</li>)}</ul>
+              <ul>{entry.days.map(day => <li key={day.day_number}>Day {day.day_number}: {day.title}</li>)}</ul>
             </details>
           ))}
         </details>
