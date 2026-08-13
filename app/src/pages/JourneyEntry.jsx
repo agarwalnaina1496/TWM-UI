@@ -4,6 +4,7 @@ import { useTrip } from '../context/TripContext.jsx';
 import { ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
+import { trackEvent } from '../lib/analytics.js';
 import '../styles/chat.css';
 
 let nextMessageId = 1;
@@ -49,11 +50,21 @@ export default function JourneyEntry() {
     ]);
   }, [isDiscover]);
 
+  // planning_started fires once, right as the known-destination journey
+  // actually begins (mounting this screen with that intent) — this path has
+  // no separate "first message" gate the way Discover does.
+  useEffect(() => {
+    if (isDiscover) return;
+    trackEvent('planning_started', { planning_entry: 'known_destination' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function sendDiscover(reply = input) {
     const value = (typeof reply === 'string' ? reply : reply.value).trim();
     if (!value || busy) return;
     const idempotencyKey = lastCommand.current?.message === value ? lastCommand.current.idempotencyKey : newIdempotencyKey();
     lastCommand.current = { message: value, idempotencyKey };
+    const isFirstSend = !entered.current;
     setInput('');
     setBusy(true);
     setError(null);
@@ -62,6 +73,7 @@ export default function JourneyEntry() {
       const command = entered.current ? 'traveler_message' : 'discover_entry';
       const response = await sendTripCommand(command, { message: value, idempotencyKey });
       entered.current = true;
+      if (isFirstSend) trackEvent('discovery_started', { entry_method: 'journey_entry' });
       setResult(response);
       if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
     } catch (commandError) {
@@ -78,6 +90,7 @@ export default function JourneyEntry() {
     setError(null);
     try {
       const response = await sendTripCommand('known_destination_entry', { destination: value });
+      trackEvent('destination_provided', { destination_source: 'user_input' });
       setResult(response);
     } catch (commandError) {
       setError(commandError.message || 'Something went wrong.');

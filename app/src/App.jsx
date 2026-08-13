@@ -1,4 +1,5 @@
-import { Routes, Route } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import Landing from './pages/Landing.jsx';
 import ScoutChat from './pages/ScoutChat.jsx';
@@ -11,8 +12,22 @@ import Itinerary from './pages/Itinerary.jsx';
 import MyTrips from './pages/MyTrips.jsx';
 import JourneyEntry from './pages/JourneyEntry.jsx';
 import TripDashboard from './pages/TripDashboard.jsx';
+import { trackEvent } from './lib/analytics.js';
 
 export default function App() {
+  const location = useLocation();
+  const trackedVisit = useRef(false);
+
+  // Top-of-funnel: fires once per app load, not per route change — SPA
+  // navigation afterward is represented by TWM's own milestone events, not
+  // a page_view per route (see analytics.js).
+  useEffect(() => {
+    if (trackedVisit.current) return;
+    trackedVisit.current = true;
+    trackEvent('website_visit', { page_path: location.pathname });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
       <Header />
