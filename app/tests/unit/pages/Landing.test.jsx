@@ -52,7 +52,7 @@ describe('Landing (TWM-108 adaptive `/` resolver)', () => {
     ],
     [
       'one itinerary-ready trip opens the Dashboard',
-      [tripRecord({ trip_state: { stage: 'planned', itinerary_state: { status: 'ready', current_version: { result: { final_itinerary: { trip_summary: { title: 'Coorg Getaway', destinations: ['Coorg'], duration_days: 1, travelers: 2, date_range: null, overview: '', route_rationale: '' }, travel_options: [], stay_options: [], days: [{ day_number: 1, date: null, title: 'Arrival', primary_location: 'Coorg', summary: '', timeline: [], seasonal_guidance: '', permit_or_ticket_guidance: '', backup_plan: null }], budget_summary: { currency: 'INR', lines: [], total_low: 0, total_high: 0, budget_fit: '' }, practical_notes: [], sources: [], assumptions: [] }, unresolved: [], agent_meta: { agent: 'atlas', prompt_version: '1.0.0' } } }, history: [], proposed_revision: null }, logistics_state: {} } })],
+      [tripRecord({ trip_state: { stage: 'planned', itinerary_state: { status: 'ready', current_version: { result: { final_itinerary: { trip_summary: { title: 'Coorg Getaway', destinations: ['Coorg'], duration_days: 1, travelers: 2, date_range: null, overview: '', route_rationale: '' }, days: [{ day_number: 1, date: null, title: 'Arrival', primary_location: 'Coorg', summary: '', timeline: [], seasonal_guidance: '', permit_or_ticket_guidance: '', backup_plan: null }], budget_summary: { currency: 'INR', lines: [], total_low: 0, total_high: 0, budget_fit: '' }, practical_notes: [], sources: [], assumptions: [] }, unresolved: [], agent_meta: { agent: 'atlas', prompt_version: '1.0.0' } } }, history: [], proposed_revision: null }, logistics_state: {} } })],
       /coorg getaway/i,
     ],
     [
