@@ -5,6 +5,7 @@ import {
   buildAddPlaceMessage, buildRemovePlaceMessage, buildSetPaceMessage, buildSetStartDateMessage,
   planBuilderSummary, UNDO_MESSAGE,
 } from '../lib/guidePlanAdapter.js';
+import { trackEvent, trackFailure } from '../lib/analytics.js';
 import '../styles/preview.css';
 
 export default function TripPreview() {
@@ -24,6 +25,10 @@ export default function TripPreview() {
   const [newPlaceByDay, setNewPlaceByDay] = useState({});
   const [freeText, setFreeText] = useState('');
   const bootStarted = useRef(false);
+  const trackedPlanBuilderView = useRef(false);
+  // Best-effort distinction for planning_entry — a selected recommendation
+  // means Discover led here; otherwise it's a known-destination entry.
+  const planningEntry = tripState?.trip_context?.selected_option ? 'discovered_destination' : 'known_destination';
 
   // Already frozen (e.g. the traveler navigated back after approving) — Guide
   // never reruns, so skip straight to the dashboard. TripDashboard.jsx owns
@@ -60,12 +65,20 @@ export default function TripPreview() {
         if (state.phase === 'PLACES_DRAFT') await sendTripCommand('approve_places');
         setBootStatus('ready');
       } catch (error) {
+        trackFailure('plan_builder', error);
         setBootStatus('error');
         setBootError(error.message || 'Could not start planning.');
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripLoadStatus, frozenPlan, guideState?.phase]);
+
+  useEffect(() => {
+    if (trackedPlanBuilderView.current || bootStatus !== 'ready' || !guideState) return;
+    trackedPlanBuilderView.current = true;
+    trackEvent('plan_builder_viewed', { planning_entry: planningEntry });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootStatus, guideState]);
 
   async function sendEdit(text) {
     setPending(true);
@@ -85,8 +98,9 @@ export default function TripPreview() {
   function generate() {
     setPending(true);
     setMessage('');
+    trackEvent('itinerary_generation_started', { generation_trigger: 'plan_builder' });
     sendTripCommand('approve_plan')
-      .catch(error => setMessage(error.message || 'Could not generate the detailed itinerary.'))
+      .catch(error => { trackFailure('itinerary_generation', error); setMessage(error.message || 'Could not generate the detailed itinerary.'); })
       .finally(() => setPending(false));
     // Freezing navigates via the frozenPlan effect above once commandSnapshot updates.
   }

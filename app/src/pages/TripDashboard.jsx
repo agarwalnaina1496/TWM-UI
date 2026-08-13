@@ -4,6 +4,7 @@ import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
 import { getItineraryVersions } from '../lib/tripApi.js';
 import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, routeLocations, timelineIcon } from '../lib/atlasView.js';
+import { trackEvent, trackFailure } from '../lib/analytics.js';
 import '../styles/dashboard.css';
 
 const TABS = [
@@ -132,12 +133,30 @@ export default function TripDashboard() {
     bootStarted.current = true;
     setBootStatus('booting');
     sendTripCommand('start_itinerary')
-      .then(() => setBootStatus('ready'))
+      .then(response => {
+        // A touched-branches command response (TWM-154) includes itinerary_state
+        // only when this call actually generated it — apply_atlas's idempotent
+        // no-op path (already ready backend-side) leaves it untouched, so this
+        // distinguishes a real generation from a harmless re-request.
+        if (response.trip?.trip_state?.itinerary_state) {
+          trackEvent('itinerary_generated', { generation_type: 'atlas' });
+        }
+        setBootStatus('ready');
+      })
       .catch(error => {
+        trackFailure('itinerary_generation', error);
         setBootStatus('error');
         setBootError(error.message || 'Could not generate the detailed itinerary.');
       });
   }, [tripLoadStatus, itineraryState?.status, sendTripCommand]);
+
+  const trackedDashboardEntry = useRef(false);
+  useEffect(() => {
+    if (trackedDashboardEntry.current || bootStatus !== 'ready' || itineraryState?.status !== 'ready') return;
+    trackedDashboardEntry.current = true;
+    trackEvent('itinerary_viewed', { view_source: 'dashboard' });
+    trackEvent('dashboard_entered', { entry_source: 'itinerary' });
+  }, [bootStatus, itineraryState?.status]);
 
   useEffect(() => {
     if (bootStatus !== 'ready') return;
@@ -358,7 +377,7 @@ export default function TripDashboard() {
           <div className="booking-choice-opt">
             <strong>Still need to arrange it?</strong>
             <p>Browse real options and pick one.</p>
-            <Link className="btn btn-primary" to="/logistics?tab=Transport">Arrange bookings →</Link>
+            <Link className="btn btn-primary" to="/logistics?tab=Transport" onClick={() => trackEvent('booking_intent', { booking_type: 'browse_options' })}>Arrange bookings →</Link>
           </div>
         </div>
       </section>}
@@ -393,7 +412,7 @@ export default function TripDashboard() {
           <div className="booking-choice-opt">
             <strong>Still need to arrange it?</strong>
             <p>Browse real options and pick one.</p>
-            <Link className="btn btn-primary" to="/logistics?tab=Stays">Arrange bookings →</Link>
+            <Link className="btn btn-primary" to="/logistics?tab=Stays" onClick={() => trackEvent('booking_intent', { booking_type: 'browse_options' })}>Arrange bookings →</Link>
           </div>
         </div>
       </section>}
@@ -425,7 +444,7 @@ export default function TripDashboard() {
         </section>
         <section className="booking-help-box">
           <div><h3>Want us to help book this trip?</h3><p>Our team can handle flights, stays, and every reservation end-to-end, so you don't have to.</p></div>
-          <button type="button" className="btn btn-amber" onClick={() => alert('This would start a TravelWithMe-led booking request.')}>Get booking help →</button>
+          <button type="button" className="btn btn-amber" onClick={() => { trackEvent('booking_intent', { booking_type: 'concierge_request' }); alert('This would start a TravelWithMe-led booking request.'); }}>Get booking help →</button>
         </section>
       </section>}
     </main>

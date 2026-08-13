@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
+import { trackEvent } from '../lib/analytics.js';
 import '../styles/entry.css';
 
 export default function GetStarted() {
@@ -10,12 +11,21 @@ export default function GetStarted() {
   function route(text) {
     const value = (text ?? input).trim();
     if (!value) return;
+    // The free-text ask box is the current "Advice" entry path — no
+    // dedicated Advice button exists in this UX.
+    trackEvent('intent_selected', { intent: 'advice' });
+    trackEvent('free_text_request_submitted', { entry_point: 'homepage' });
     navigate(`/scout-chat?entry=advice&msg=${encodeURIComponent(value)}`);
   }
 
   function handleQuickRoute(kind) {
-    if (kind === 'decided') navigate(`/journey-entry?intent=${ENTRY_INTENTS.KNOWN_DESTINATION}`);
-    else if (kind === 'discover') navigate(`/journey-entry?intent=${ENTRY_INTENTS.DISCOVER}`);
+    if (kind === 'decided') {
+      trackEvent('intent_selected', { intent: 'plan' });
+      navigate(`/journey-entry?intent=${ENTRY_INTENTS.KNOWN_DESTINATION}`);
+    } else if (kind === 'discover') {
+      trackEvent('intent_selected', { intent: 'discover' });
+      navigate(`/journey-entry?intent=${ENTRY_INTENTS.DISCOVER}`);
+    }
   }
 
   return (

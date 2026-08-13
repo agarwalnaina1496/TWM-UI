@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTrip } from '../context/TripContext.jsx';
+import { trackEvent } from '../lib/analytics.js';
 import '../styles/auth.css';
 
 const BUDGET_LABELS = {
@@ -23,6 +24,7 @@ export default function RequestQuote() {
 
   function submit() {
     setContact({ name: name.trim() || 'Traveler', email: email.trim() });
+    trackEvent('booking_intent', { booking_type: 'quote_request' });
     setSent(true);
   }
 

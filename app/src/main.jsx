@@ -4,6 +4,9 @@ import { BrowserRouter } from 'react-router-dom';
 import './styles/tokens.css';
 import App from './App.jsx';
 import { TripProvider } from './context/TripContext.jsx';
+import { initAnalytics } from './lib/analytics.js';
+
+initAnalytics();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -4,6 +4,7 @@ import { useTrip } from '../context/TripContext.jsx';
 import { getRecommendations, TripApiError } from '../lib/tripApi.js';
 import { safeMatcherOutcomeViewModel } from '../lib/recommendationViewModel.js';
 import { contextRecapPills } from '../lib/tripLifecycle.js';
+import { trackEvent, trackFailure } from '../lib/analytics.js';
 import '../styles/destinations.css';
 
 const OUTCOME_ICON = { MATCH: '✓', TRADEOFF: '⚠', MISMATCH: '✕' };
@@ -146,7 +147,12 @@ export default function Destinations() {
   // rather than always trusting the `tripId` closure — ensureTrip() can
   // lazily create the trip mid-command, so the tripId captured when a
   // handler was defined can be stale by the time its promise resolves.
-  const refreshLatest = useCallback(async (idOverride) => {
+  //
+  // `fromCommand` (TWM-149): only a refetch triggered right after a matcher
+  // command succeeded represents Meridian actually producing a new round —
+  // the passive mount-time fetch below just loads whatever round already
+  // existed, so it must not re-fire recommendations_generated.
+  const refreshLatest = useCallback(async (idOverride, { fromCommand = false } = {}) => {
     const id = idOverride ?? tripId;
     if (!id) {
       setLatest(null);
@@ -157,6 +163,9 @@ export default function Destinations() {
     setRecoError(null);
     try {
       const round = await getRecommendations(id);
+      if (fromCommand && round?.options?.length) {
+        trackEvent('recommendations_generated', { recommendation_count: round.options.length });
+      }
       setLatest(round);
       setRecoStatus('ready');
       return round;
@@ -183,8 +192,8 @@ export default function Destinations() {
     setTriggering(true);
     setTriggerError(null);
     return sendTripCommand('continue')
-      .then(response => refreshLatest(response.trip?.id))
-      .catch(commandError => setTriggerError(commandError.message || 'Something went wrong.'))
+      .then(response => refreshLatest(response.trip?.id, { fromCommand: true }))
+      .catch(commandError => { trackFailure('discovery', commandError); setTriggerError(commandError.message || 'Something went wrong.'); })
       .finally(() => setTriggering(false));
   }
 
@@ -213,6 +222,18 @@ export default function Destinations() {
     [latest]
   );
 
+  // recommendations_viewed fires once per distinct round the traveler is
+  // actually shown (freshly generated or resumed from a saved session) —
+  // separate from recommendations_generated so backend success can be told
+  // apart from the round actually rendering.
+  const viewedVersion = useRef(null);
+  useEffect(() => {
+    if (outcome?.kind !== 'options' || !outcome.data || !latest?.version) return;
+    if (viewedVersion.current === latest.version) return;
+    viewedVersion.current = latest.version;
+    trackEvent('recommendations_viewed', { recommendation_count: outcome.data.options.length });
+  }, [outcome, latest?.version]);
+
   const pills = contextRecapPills(tripState?.trip_context);
   const selectedOption = tripState?.trip_context?.selected_option ?? null;
 
@@ -231,6 +252,7 @@ export default function Destinations() {
     setPlanningId(option.key);
     try {
       await sendTripCommand('select_destination', { optionId: option.key });
+      trackEvent('destination_selected', { selection_source: 'plan_this_trip' });
       // Display-only field read by Itinerary/Logistics/RequestQuote; TWM-106
       // moved the Plan Builder itself onto Backend-persisted trip_context.
       updateTrip({ destination: { type: option.type, name: option.name } });
@@ -249,7 +271,7 @@ export default function Destinations() {
       const response = await sendTripCommand('more_like_this', {
         refinement: { type: 'MORE_LIKE_THIS', reference: { type: option.type, id: option.key } },
       });
-      await refreshLatest(response.trip?.id);
+      await refreshLatest(response.trip?.id, { fromCommand: true });
       setOpenId(null);
       updateUiState({ destinationsOpenId: null }).catch(() => {});
     } catch (commandError) {
@@ -267,7 +289,7 @@ export default function Destinations() {
     setTriggering(true);
     try {
       const response = await sendTripCommand('traveler_message', { message: value });
-      await refreshLatest(response.trip?.id);
+      await refreshLatest(response.trip?.id, { fromCommand: true });
     } catch (commandError) {
       setTriggerError(commandError.message || 'Something went wrong.');
     } finally {
@@ -419,7 +441,7 @@ export default function Destinations() {
                     ? <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue planning →</button>
                     : nextMode === 'preview'
                       ? <button type="button" className="btn btn-primary" onClick={() => planThis(d)} disabled={planningId === d.key}>Plan this trip →</button>
-                      : <Link className="btn btn-primary" to="/trip-preview" onClick={() => { sendTripCommand('select_destination', { optionId: d.key }).catch(() => {}); updateTrip({ destination: { type: d.type, name: d.name } }); }}>Want to plan this? →</Link>}
+                      : <Link className="btn btn-primary" to="/trip-preview" onClick={() => { sendTripCommand('select_destination', { optionId: d.key }).catch(() => {}); trackEvent('destination_selected', { selection_source: 'want_to_plan_this' }); updateTrip({ destination: { type: d.type, name: d.name } }); }}>Want to plan this? →</Link>}
                 </div>
                 <div className="been-before">
                   <span className="been-before-label">Been here before? <em>tell us how it was</em></span>
