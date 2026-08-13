@@ -22,10 +22,15 @@ Vibe: Open to a mix — some culture/sightseeing, some relaxation, maybe a bit o
 We're a couple in our early 40s, fairly easygoing travelers who enjoy a good balance of exploring and relaxing.`;
 
 export const QUICK_REPLIES = Object.freeze({
+  // Meridian's matcher_state.conversation_context.awaiting is free text;
+  // these are its common slugs.
   origin: ['Delhi'],
   budget: ['₹1,00,000 total for both'],
-  // Guide's planner_state.conversation_context.awaiting slug — same
-  // quick-reply mechanism Meridian's matcher_state.conversation_context
-  // .awaiting already uses.
+  // Guide's planner_state.conversation_context.awaiting is a fixed five-slug
+  // enum (duration, origin_city, num_travelers, travel_dates, budget) — same
+  // quick-reply mechanism as Meridian's awaiting, but on Guide's exact slugs.
   duration: ['3 days', '5 days', '7 days'],
+  origin_city: ['Delhi'],
+  num_travelers: ['2', '4', 'Just me'],
+  travel_dates: ['Not sure yet', 'Sometime next month', 'Flexible'],
 });
