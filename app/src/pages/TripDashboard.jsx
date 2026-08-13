@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
 import { getItineraryVersions } from '../lib/tripApi.js';
-import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, routeLocations, timelineIcon } from '../lib/atlasView.js';
+import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, dayRangeLabel, routeStops, timelineIcon } from '../lib/atlasView.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import '../styles/dashboard.css';
 
@@ -237,7 +237,7 @@ export default function TripDashboard() {
   const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });
   const costMin = Math.min(...allCosts, 0);
   const costMax = Math.max(...allCosts, 1);
-  const locations = routeLocations(days);
+  const stops = routeStops(days);
   const proposedRevision = itineraryState.proposed_revision;
 
   return (
@@ -255,7 +255,6 @@ export default function TripDashboard() {
           <button className="btn btn-ghost" type="button" onClick={() => alert('Sharing is not available yet.')}>🔗 Share</button>
         </>}
       />
-      <p className="version-note">Itinerary version {currentVersion.version}.</p>
 
       {priorVersions.length > 0 && (
         <details className="prior-versions">
@@ -370,11 +369,6 @@ export default function TripDashboard() {
                 </ul>
               </div>
             </div>
-            {confirmType === 'activity' ? (
-              <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
-            ) : (
-              <button type="button" className="btn btn-ghost" onClick={() => openConfirmForm('activity', selectedDay.day_number)}>Confirm something for this day</button>
-            )}
           </article>
         </div>
       </section>}
@@ -429,9 +423,19 @@ export default function TripDashboard() {
 
       {tab === 'Map' && <section>
         <div className="tab-intro"><div><h2>🗺️ Route order</h2><p>Live coordinates aren't available yet — here's the order of the trip.</p></div></div>
-        <ol className="route-order-list" aria-label="Route order">
-          {locations.map((location, index) => <li key={`${index}-${location}`}>{location}</li>)}
-        </ol>
+        <div className="route-map" aria-label="Route order">
+          {stops.map((stop, index) => (
+            <div className="route-node-wrap" key={`${index}-${stop.location}`}>
+              <div className="route-node">
+                <span className="route-marker">{index + 1}</span>
+                <div><strong>{stop.location}</strong><small>{dayRangeLabel(stop.dayNumbers)}</small></div>
+              </div>
+              {index < stops.length - 1 && (
+                <div className="route-connector"><span className="route-line" /></div>
+              )}
+            </div>
+          ))}
+        </div>
       </section>}
 
       {tab === 'Budget breakdown' && <section>

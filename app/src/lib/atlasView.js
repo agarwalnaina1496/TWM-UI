@@ -27,17 +27,25 @@ export function dayCostRange(day) {
   );
 }
 
-// Ordered, deduped (consecutive) list of primary locations across all days —
-// the real Atlas contract has no coordinates, so the Map tab shows route
-// order only, not a visual map.
-export function routeLocations(days) {
-  const locations = [];
+// Ordered, deduped (consecutive) list of route stops across all days, each
+// carrying the day numbers spent there — the real Atlas contract has no
+// coordinates, so the Map tab shows route order only, not a visual map.
+export function routeStops(days) {
+  const stops = [];
   for (const day of days || []) {
-    if (locations[locations.length - 1] !== day.primary_location) {
-      locations.push(day.primary_location);
+    const last = stops[stops.length - 1];
+    if (last && last.location === day.primary_location) {
+      last.dayNumbers.push(day.day_number);
+    } else {
+      stops.push({ location: day.primary_location, dayNumbers: [day.day_number] });
     }
   }
-  return locations;
+  return stops;
+}
+
+export function dayRangeLabel(dayNumbers) {
+  if (dayNumbers.length === 1) return `Day ${dayNumbers[0]}`;
+  return `Day ${dayNumbers[0]}–${dayNumbers[dayNumbers.length - 1]}`;
 }
 
 // Confirmed logistics anchors (application-owned, twm/schemas/logistics.py)

@@ -122,7 +122,6 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     sendTripCommand = vi.fn();
     renderDashboard();
     expect(screen.getByText('Rishikesh Getaway')).toBeInTheDocument();
-    expect(screen.getByText('Itinerary version 1.')).toBeInTheDocument();
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
@@ -200,7 +199,6 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     await user.click(screen.getByRole('button', { name: 'Accept changes' }));
     expect(sendTripCommand).toHaveBeenCalledWith('accept_itinerary_revision');
     await waitFor(() => expect(screen.queryByText(/This affects Day 1/)).not.toBeInTheDocument());
-    expect(screen.getByText('Itinerary version 2.')).toBeInTheDocument();
   });
 
   it('keep current discards the proposal without changing the version', async () => {
@@ -218,7 +216,6 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     await user.click(screen.getByRole('button', { name: 'Keep current' }));
     expect(sendTripCommand).toHaveBeenCalledWith('keep_current_itinerary');
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Accept changes' })).not.toBeInTheDocument());
-    expect(screen.getByText('Itinerary version 1.')).toBeInTheDocument();
   });
 
   it('shows an inline error and preserves the banner when accept fails', async () => {
@@ -253,15 +250,16 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     await waitFor(() => expect(screen.getByText('Prior versions (1)')).toBeInTheDocument());
   });
 
-  it('Map tab renders a text-only, deduped route order with no coordinates', async () => {
+  it('Map tab renders a deduped route order with day ranges and no coordinates', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
     renderDashboard();
     await user.click(screen.getByRole('button', { name: /Map/ }));
-    const items = screen.getByRole('list', { name: 'Route order' }).querySelectorAll('li');
-    expect(items).toHaveLength(1); // both days are Rishikesh — consecutive dedupe
-    expect(items[0]).toHaveTextContent('Rishikesh');
+    const stops = document.querySelectorAll('.route-node'); // both days are Rishikesh — consecutive dedupe
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toHaveTextContent('Rishikesh');
+    expect(stops[0]).toHaveTextContent('Day 1–2');
   });
 
   it('Budget breakdown renders real budget_summary totals', async () => {
