@@ -34,7 +34,10 @@ test('exact natural-language journey preserves nuance and hands off after two qu
       command: 'traveler_message',
       response: commandResponse(HANDOFF, tripRecord({
         version: 4,
-        trip_state: { stage: 'matching', active_agent: 'meridian', trip_context: { original_traveler_request: GOLDEN_QUERY } },
+        trip_state: {
+          stage: 'matching', active_agent: 'meridian', trip_context: { original_traveler_request: GOLDEN_QUERY },
+          matcher_state: { conversation_context: { awaiting: null } },
+        },
       })),
     },
   ]);

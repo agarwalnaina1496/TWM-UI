@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
+import { getRecommendations, TripApiError } from '../lib/tripApi.js';
 import { safeMatcherOutcomeViewModel } from '../lib/recommendationViewModel.js';
 import { contextRecapPills } from '../lib/tripLifecycle.js';
 import '../styles/destinations.css';
@@ -131,28 +132,72 @@ export default function Destinations() {
   const restoredOpenId = useRef(false);
 
   const tripState = commandSnapshot?.trip_state;
-  const recommendations = tripState?.matcher_state?.recommendations || [];
-  const latest = recommendations.length ? recommendations[recommendations.length - 1] : null;
+  const tripId = commandSnapshot?.id;
   const awaiting = tripState?.matcher_state?.conversation_context?.awaiting;
   const lastMeridianMessage = tripState?.matcher_state?.conversation_context?.last_meridian_message;
+
+  // The latest matcher round is fetched lazily (TWM-153) — it no longer
+  // rides along on trip_state, since only this page ever needs it.
+  const [latest, setLatest] = useState(null);
+  const [recoStatus, setRecoStatus] = useState('idle'); // idle | loading | ready | error
+  const [recoError, setRecoError] = useState(null);
+
+  // Accepts an explicit id (from a just-created trip's own command response)
+  // rather than always trusting the `tripId` closure — ensureTrip() can
+  // lazily create the trip mid-command, so the tripId captured when a
+  // handler was defined can be stale by the time its promise resolves.
+  const refreshLatest = useCallback(async (idOverride) => {
+    const id = idOverride ?? tripId;
+    if (!id) {
+      setLatest(null);
+      setRecoStatus('ready');
+      return null;
+    }
+    setRecoStatus('loading');
+    setRecoError(null);
+    try {
+      const round = await getRecommendations(id);
+      setLatest(round);
+      setRecoStatus('ready');
+      return round;
+    } catch (error) {
+      if (error instanceof TripApiError && error.status === 404) {
+        setLatest(null);
+        setRecoStatus('ready');
+        return null;
+      }
+      setRecoStatus('error');
+      setRecoError(error instanceof TripApiError ? error.message : 'Could not load recommendations.');
+      return null;
+    }
+  }, [tripId]);
+
+  useEffect(() => {
+    if (tripLoadStatus !== 'ready') return;
+    refreshLatest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripLoadStatus, tripId]);
 
   function triggerContinue() {
     triggered.current = true;
     setTriggering(true);
     setTriggerError(null);
     return sendTripCommand('continue')
+      .then(response => refreshLatest(response.trip?.id))
       .catch(commandError => setTriggerError(commandError.message || 'Something went wrong.'))
       .finally(() => setTriggering(false));
   }
 
   // Trigger matching once per mount if this trip has never reached Meridian,
-  // or resume an in-flight clarification round without re-asking.
+  // or resume an in-flight clarification round without re-asking. Waits for
+  // the lazy recommendations fetch to settle first — otherwise a fresh trip
+  // (no round yet) and a trip whose round just hasn't loaded look identical.
   useEffect(() => {
-    if (triggered.current || tripLoadStatus !== 'ready') return;
+    if (triggered.current || tripLoadStatus !== 'ready' || recoStatus !== 'ready') return;
     if (latest || awaiting) return;
     triggerContinue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripLoadStatus, latest, awaiting]);
+  }, [tripLoadStatus, recoStatus, latest, awaiting]);
 
   // Restores which card was expanded before a refresh, once, without
   // clobbering a toggle the traveler makes afterward.
@@ -201,9 +246,10 @@ export default function Destinations() {
     setMoreLikeThisId(option.key);
     setPlanError(null);
     try {
-      await sendTripCommand('more_like_this', {
+      const response = await sendTripCommand('more_like_this', {
         refinement: { type: 'MORE_LIKE_THIS', reference: { type: option.type, id: option.key } },
       });
+      await refreshLatest(response.trip?.id);
       setOpenId(null);
       updateUiState({ destinationsOpenId: null }).catch(() => {});
     } catch (commandError) {
@@ -220,7 +266,8 @@ export default function Destinations() {
     setTriggerError(null);
     setTriggering(true);
     try {
-      await sendTripCommand('traveler_message', { message: value });
+      const response = await sendTripCommand('traveler_message', { message: value });
+      await refreshLatest(response.trip?.id);
     } catch (commandError) {
       setTriggerError(commandError.message || 'Something went wrong.');
     } finally {
@@ -228,8 +275,10 @@ export default function Destinations() {
     }
   }
 
-  const thinking = tripLoadStatus === 'loading' || triggering || (tripLoadStatus === 'ready' && !latest && !awaiting && !triggerError);
+  const thinking = tripLoadStatus === 'loading' || recoStatus === 'loading' || triggering
+    || (tripLoadStatus === 'ready' && recoStatus === 'ready' && !latest && !awaiting && !triggerError);
   const showTripLoadError = tripLoadStatus === 'error';
+  const showRecoError = !showTripLoadError && recoStatus === 'error';
 
   return (
     <div className="wrap">
@@ -246,11 +295,19 @@ export default function Destinations() {
         </div>
       )}
 
-      {!showTripLoadError && thinking && (
+      {showRecoError && (
+        <div className="price-evidence state-unsafe" role="alert">
+          <strong>Recommendations unavailable</strong>
+          <span>{recoError}</span>
+          <button type="button" className="btn btn-ghost" onClick={refreshLatest}>Try again</button>
+        </div>
+      )}
+
+      {!showTripLoadError && !showRecoError && thinking && (
         <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Matching destinations to your answers…</div>
       )}
 
-      {!showTripLoadError && !thinking && triggerError && (
+      {!showTripLoadError && !showRecoError && !thinking && triggerError && (
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Recommendations unavailable</strong>
           <span>{triggerError}</span>
@@ -258,7 +315,7 @@ export default function Destinations() {
         </div>
       )}
 
-      {!showTripLoadError && !thinking && !triggerError && awaiting && !latest && (
+      {!showTripLoadError && !showRecoError && !thinking && !triggerError && awaiting && !latest && (
         <div className="chat-log" aria-live="polite">
           <div className="chat-row chat-row-assistant"><div className="chat-bub chat-bub-assistant" style={{ whiteSpace: 'pre-wrap' }}>{lastMeridianMessage}</div></div>
           <div className="chat-input-bar">
@@ -268,7 +325,7 @@ export default function Destinations() {
         </div>
       )}
 
-      {!showTripLoadError && !thinking && !triggerError && outcome?.kind === 'failure' && (
+      {!showTripLoadError && !showRecoError && !thinking && !triggerError && outcome?.kind === 'failure' && (
         <div className="price-evidence state-unsafe" role="alert">
           <strong>{outcome.data.message}</strong>
           {outcome.data.constraintAdjustmentSuggestions.length > 0 && (
@@ -283,14 +340,14 @@ export default function Destinations() {
         </div>
       )}
 
-      {!showTripLoadError && !thinking && !triggerError && outcome?.kind === 'options' && outcome.error && (
+      {!showTripLoadError && !showRecoError && !thinking && !triggerError && outcome?.kind === 'options' && outcome.error && (
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Recommendations unavailable</strong>
           <span>We could not validate the recommendation response safely. Please try again.</span>
         </div>
       )}
 
-      {!showTripLoadError && !thinking && !triggerError && outcome?.kind === 'options' && outcome.data && (
+      {!showTripLoadError && !showRecoError && !thinking && !triggerError && outcome?.kind === 'options' && outcome.data && (
         <div>
           <h2 className="section-title">A few that fit well</h2>
           <p className="lede recommendation-summary">{outcome.data.message}</p>

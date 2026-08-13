@@ -39,7 +39,7 @@ export function defaultTripState(tripId) {
     active_agent: 'scout',
     trip_context: {},
     advisor_state: { conversation_context: { last_advisor_message: null } },
-    matcher_state: { conversation_context: { last_meridian_message: null, awaiting: null }, recommendations: [], rejected_options: [] },
+    matcher_state: { conversation_context: { last_meridian_message: null, awaiting: null }, rejected_options: [] },
     planner_state: null,
   };
 }
@@ -89,6 +89,15 @@ export async function createTrip({ title = 'Untitled Trip', product_mode = 'self
 
 export async function getTrip(id) {
   return normalizeTripRecord(await request(`/${id}`));
+}
+
+// TWM-153: matcher recommendations live in their own table now, lazy-loaded
+// by whichever page needs the current round (Destinations) instead of
+// riding along on every trip GET/command response. Throws TripApiError with
+// status 404 when the trip has no matcher round yet — callers treat that as
+// "not matched yet", not a real error.
+export async function getRecommendations(id) {
+  return request(`/${id}/recommendations`);
 }
 
 export async function renameTrip(id, title, expectedVersion) {

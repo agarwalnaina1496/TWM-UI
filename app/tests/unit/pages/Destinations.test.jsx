@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Destinations from '../../../src/pages/Destinations.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
@@ -39,26 +39,51 @@ function successOutcome(overrides = {}) {
   };
 }
 
-function tripStateWithLatest(latest, extra = {}) {
+// trip_state no longer carries recommendations (TWM-153) — this is the
+// small, always-inline slice (conversation_context + core fields).
+function tripState(extra = {}) {
   return {
     stage: 'recommended',
     active_agent: null,
     trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2 },
-    advisor_state: { conversation_context: { last_advisor_message: null }, artifacts: [] },
-    matcher_state: {
-      conversation_context: { last_meridian_message: null, awaiting: null },
-      recommendations: latest ? [latest] : [],
-      rejected_options: [],
-    },
+    advisor_state: { conversation_context: { last_advisor_message: null } },
+    matcher_state: { conversation_context: { last_meridian_message: null, awaiting: null } },
     planner_state: null,
     ...extra,
   };
 }
 
-function seedFetch(fetchMock, tripState) {
-  fetchMock.mockResolvedValueOnce(jsonResponse({
-    trips: [{ id: 'trip-1', title: 'Trip', version: 3, trip_state: tripState, ui_state: {} }],
-  }));
+// URL-routing fetch mock: GET list/get/recommendations are served from
+// mutable `server` state; POST commands and PATCH ui-state are served from
+// a per-test queue of handlers (pushed via server.queueCommand), since their
+// response shape is genuinely test-specific.
+function createServer({ tripState: initialTripState = tripState(), version = 3, uiState = {}, recommendation = null } = {}) {
+  const server = { tripState: initialTripState, version, uiState, recommendation, queue: [] };
+  server.queueCommand = handler => server.queue.push(handler);
+  return server;
+}
+
+function createFetchMock(server) {
+  return vi.fn(async (url, options = {}) => {
+    const method = options.method || 'GET';
+    if (url === '/api/trips' && method === 'GET') {
+      return jsonResponse({ trips: [{ id: 'trip-1', title: 'Trip', version: server.version, trip_state: server.tripState, ui_state: server.uiState }] });
+    }
+    if (url === '/api/trips/trip-1' && method === 'GET') {
+      return jsonResponse({ id: 'trip-1', title: 'Trip', version: server.version, trip_state: server.tripState, ui_state: server.uiState });
+    }
+    if (url === '/api/trips/trip-1/recommendations' && method === 'GET') {
+      return server.recommendation
+        ? jsonResponse(server.recommendation)
+        : jsonResponse({ detail: 'No recommendations yet.' }, { status: 404 });
+    }
+    if ((url === '/api/trips/trip-1/commands' && method === 'POST') || (url === '/api/trips/trip-1/ui-state' && method === 'PATCH')) {
+      const handler = server.queue.shift();
+      if (!handler) throw new Error(`Unexpected ${method} ${url} call with no queued handler: ${options.body}`);
+      return handler(options.body ? JSON.parse(options.body) : null);
+    }
+    throw new Error(`Unhandled fetch in test: ${method} ${url}`);
+  });
 }
 
 function renderDestinations(initialEntries = ['/destinations?next=preview']) {
@@ -76,8 +101,6 @@ describe('Destinations (real Meridian integration)', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    fetchMock = vi.fn();
-    global.fetch = fetchMock;
   });
 
   afterEach(() => {
@@ -85,39 +108,47 @@ describe('Destinations (real Meridian integration)', () => {
   });
 
   it('shows a thinking indicator while the trip loads', () => {
-    fetchMock.mockImplementation(() => new Promise(() => {}));
+    fetchMock = vi.fn(() => new Promise(() => {}));
+    global.fetch = fetchMock;
     renderDestinations();
     expect(screen.getByText(/Matching destinations to your answers/)).toBeInTheDocument();
   });
 
   it('sends the continue command when no recommendation exists yet, then renders the real result', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(null));
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      message: null, agent_meta: null,
-      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
-    }));
+    const server = createServer({ recommendation: null });
+    server.queueCommand(() => {
+      server.version = 4;
+      server.recommendation = successOutcome();
+      return jsonResponse({ message: null, agent_meta: null, trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} } });
+    });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
 
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
       method: 'POST',
       body: expect.stringContaining('"command":"continue"'),
     }));
   });
 
   it('renders a real SUCCESS result already saved on the trip without re-triggering matching', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
+    const server = createServer({ recommendation: successOutcome() });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
     expect(screen.getByText('Multi-stop circuit')).toBeInTheDocument();
     expect(screen.getByText('₹32,000–₹45,000')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1); // list only, no continue command
+    expect(fetchMock).toHaveBeenCalledTimes(2); // list + latest-recommendation fetch, no continue command
   });
 
   it('shows the exact persisted budget/origin/traveler recap, not a generic bucketed label', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
+    const server = createServer({ recommendation: successOutcome() });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
@@ -139,7 +170,9 @@ describe('Destinations (real Meridian integration)', () => {
         other_considerations: [],
       }],
     });
-    seedFetch(fetchMock, tripStateWithLatest(softFail));
+    const server = createServer({ recommendation: softFail });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Pondicherry')).toBeInTheDocument());
@@ -155,11 +188,14 @@ describe('Destinations (real Meridian integration)', () => {
       message: 'No option satisfies the stated hard requirements.',
       constraint_adjustment_suggestions: ['Consider raising the budget.'],
     };
-    seedFetch(fetchMock, tripStateWithLatest(hardFail));
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      message: 'Here is an option within the new budget.', agent_meta: null,
-      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
-    }));
+    const server = createServer({ recommendation: hardFail });
+    server.queueCommand(() => {
+      server.version = 4;
+      server.recommendation = successOutcome();
+      return jsonResponse({ message: 'Here is an option within the new budget.', agent_meta: null, trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} } });
+    });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
 
     renderDestinations();
 
@@ -169,42 +205,46 @@ describe('Destinations (real Meridian integration)', () => {
     fireEvent.change(screen.getByPlaceholderText('Adjust and try again…'), { target: { value: 'Raise the budget to 1.2L' } });
     fireEvent.click(screen.getByLabelText('Send'));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
       body: expect.stringContaining('"command":"traveler_message"'),
     })));
+    await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
   });
 
   it('renders a pending clarification question and submits the answer as a traveler_message', async () => {
-    const clarifying = tripStateWithLatest(null, {
-      stage: 'matching',
-      matcher_state: {
-        conversation_context: { last_meridian_message: 'What is your budget?', awaiting: 'budget' },
-        recommendations: [],
-        rejected_options: [],
-      },
+    const server = createServer({
+      recommendation: null,
+      tripState: tripState({
+        stage: 'matching',
+        matcher_state: { conversation_context: { last_meridian_message: 'What is your budget?', awaiting: 'budget' } },
+      }),
     });
-    seedFetch(fetchMock, clarifying);
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      message: null, agent_meta: null,
-      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
-    }));
+    server.queueCommand(() => {
+      server.version = 4;
+      server.recommendation = successOutcome();
+      return jsonResponse({ message: null, agent_meta: null, trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} } });
+    });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
 
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('What is your budget?')).toBeInTheDocument());
-    expect(fetchMock).toHaveBeenCalledTimes(1); // no continue command sent while awaiting a clarification
+    expect(fetchMock).toHaveBeenCalledTimes(2); // list + latest-recommendation fetch, no continue command sent while awaiting
 
     fireEvent.change(screen.getByPlaceholderText('Your answer…'), { target: { value: 'INR 1,00,000 total' } });
     fireEvent.click(screen.getByLabelText('Send'));
 
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
       body: expect.stringContaining('"command":"traveler_message"'),
     }));
   });
 
   it('fails closed on a malformed saved recommendation instead of partially rendering it', async () => {
-    seedFetch(fetchMock, tripStateWithLatest({ status: 'SUCCESS', message: 'x', traveler_criteria: [], options: [] }));
+    const server = createServer({ recommendation: { status: 'SUCCESS', message: 'x', traveler_criteria: [], options: [] } });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Recommendations unavailable')).toBeInTheDocument());
@@ -212,31 +252,38 @@ describe('Destinations (real Meridian integration)', () => {
   });
 
   it('Plan this trip persists selection through select_destination and navigates to Trip Preview', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
-    fetchMock.mockResolvedValueOnce(jsonResponse({
+    const server = createServer({ recommendation: successOutcome() });
+    server.queueCommand(() => jsonResponse({
       message: 'Madhya Pradesh Heritage and Nature is confirmed.', agent_meta: null,
-      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
+      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
     }));
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
 
     renderDestinations();
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Plan this trip →'));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
       body: expect.stringContaining('"command":"select_destination"'),
     })));
-    const lastCall = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
-    const body = JSON.parse(lastCall[1].body);
+    const commandCall = fetchMock.mock.calls.find(call => call[1]?.body?.includes('"command":"select_destination"'));
+    const body = JSON.parse(commandCall[1].body);
     expect(body.option_id).toBe('gwalior-orchha-khajuraho-panna');
   });
 
   it('More like this sends the structured reference without committing selection', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      message: 'Refreshed around Madhya Pradesh Heritage and Nature.', agent_meta: null,
-      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome({ message: 'Refreshed around Madhya Pradesh Heritage and Nature.' })), ui_state: {} },
-    }));
+    const server = createServer({ recommendation: successOutcome() });
+    server.queueCommand(() => {
+      server.recommendation = successOutcome({ message: 'Refreshed around Madhya Pradesh Heritage and Nature.' });
+      return jsonResponse({
+        message: 'Refreshed around Madhya Pradesh Heritage and Nature.', agent_meta: null,
+        trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
+      });
+    });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
 
     renderDestinations();
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
@@ -254,26 +301,31 @@ describe('Destinations (real Meridian integration)', () => {
   });
 
   it('shows a Want-to-plan-this link and still calls select_destination when entered discover-only', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
-    fetchMock.mockResolvedValueOnce(jsonResponse({
+    const server = createServer({ recommendation: successOutcome() });
+    server.queueCommand(() => jsonResponse({
       message: 'Confirmed.', agent_meta: null,
-      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
+      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
     }));
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
 
     renderDestinations(['/destinations?next=none']);
     await waitFor(() => expect(screen.getByText('Want to plan this? →')).toBeInTheDocument());
     expect(screen.queryByText('Plan this trip →')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Want to plan this? →'));
-    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
       body: expect.stringContaining('"command":"select_destination"'),
     })));
   });
 
   it('shows the exact persisted travel window instead of omitting it', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(successOutcome(), {
-      trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2, travel_window: 'Dec–Jan' },
-    }));
+    const server = createServer({
+      recommendation: successOutcome(),
+      tripState: tripState({ trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2, travel_window: 'Dec–Jan' } }),
+    });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
@@ -298,7 +350,9 @@ describe('Destinations (real Meridian integration)', () => {
         other_considerations: [],
       }],
     });
-    seedFetch(fetchMock, tripStateWithLatest(withAccessFact));
+    const server = createServer({ recommendation: withAccessFact });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
@@ -306,12 +360,17 @@ describe('Destinations (real Meridian integration)', () => {
   });
 
   it('shows a Selected badge and Continue-planning action for an option already chosen on the Backend', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(successOutcome(), {
-      trip_context: {
-        origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2,
-        selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
-      },
-    }));
+    const server = createServer({
+      recommendation: successOutcome(),
+      tripState: tripState({
+        trip_context: {
+          origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2,
+          selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
+        },
+      }),
+    });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
@@ -322,12 +381,9 @@ describe('Destinations (real Meridian integration)', () => {
   });
 
   it('restores the expanded card from Backend-persisted ui_state after a refresh', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      trips: [{
-        id: 'trip-1', title: 'Trip', version: 3, trip_state: tripStateWithLatest(successOutcome()),
-        ui_state: { destinationsOpenId: 'gwalior-orchha-khajuraho-panna' },
-      }],
-    }));
+    const server = createServer({ recommendation: successOutcome(), uiState: { destinationsOpenId: 'gwalior-orchha-khajuraho-panna' } });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
@@ -335,29 +391,35 @@ describe('Destinations (real Meridian integration)', () => {
   });
 
   it('persists the expanded card to Backend ui_state when the traveler toggles it', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()),
+    const server = createServer({ recommendation: successOutcome() });
+    server.queueCommand(() => jsonResponse({
+      id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState,
       ui_state: { destinationsOpenId: 'gwalior-orchha-khajuraho-panna' },
     }));
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
     renderDestinations();
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Why this one'));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/ui-state', expect.objectContaining({
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/ui-state', expect.objectContaining({
       method: 'PATCH',
       body: JSON.stringify({ expected_version: 3, ui_state: { destinationsOpenId: 'gwalior-orchha-khajuraho-panna' } }),
     })));
   });
 
   it('retries the same failed command when Try again is clicked after a transient failure', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(null));
-    fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      message: null, agent_meta: null,
-      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {} },
-    }));
+    const server = createServer({ recommendation: null });
+    const handler = () => {
+      server.version = 4;
+      server.recommendation = successOutcome();
+      return jsonResponse({ message: null, agent_meta: null, trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} } });
+    };
+    server.queueCommand(() => { throw new TypeError('Network request failed'); });
+    server.queueCommand(handler);
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
 
     renderDestinations();
 
@@ -368,11 +430,14 @@ describe('Destinations (real Meridian integration)', () => {
   });
 
   it('refetches the latest trip on a 409 version conflict from select_destination instead of corrupting local state', async () => {
-    seedFetch(fetchMock, tripStateWithLatest(successOutcome()));
-    fetchMock.mockResolvedValueOnce(jsonResponse({ detail: 'Trip has a newer version.', current_version: 4 }, { status: 409 }));
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      id: 'trip-1', title: 'Trip', version: 4, trip_state: tripStateWithLatest(successOutcome()), ui_state: {},
-    }));
+    const server = createServer({ recommendation: successOutcome() });
+    server.queueCommand(() => jsonResponse({ detail: 'Trip has a newer version.', current_version: 4 }, { status: 409 }));
+    server.queueCommand(() => {
+      server.version = 4;
+      return jsonResponse({ id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} });
+    });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
 
     renderDestinations();
     await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
@@ -380,7 +445,7 @@ describe('Destinations (real Meridian integration)', () => {
     fireEvent.click(screen.getByText('Plan this trip →'));
 
     await waitFor(() => expect(screen.getByText(/Trip has a newer version\./)).toBeInTheDocument());
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1', expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1', expect.anything());
   });
 
   it('renders adversarial-looking traveler-facing text as inert content, never as markup', async () => {
@@ -396,7 +461,9 @@ describe('Destinations (real Meridian integration)', () => {
         other_considerations: [],
       }],
     });
-    seedFetch(fetchMock, tripStateWithLatest(withAdversarialText));
+    const server = createServer({ recommendation: withAdversarialText });
+    fetchMock = createFetchMock(server);
+    global.fetch = fetchMock;
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText(/A quiet hill town\./)).toBeInTheDocument());
