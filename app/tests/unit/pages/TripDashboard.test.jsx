@@ -16,10 +16,6 @@ function generalReference() {
   return { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
 }
 
-function verifiedReference() {
-  return { status: 'VERIFIED', source_title: 'Official rail booking', source_url: 'https://example.com/rail' };
-}
-
 function atlasResult(overrides = {}) {
   return {
     final_itinerary: {
@@ -27,16 +23,6 @@ function atlasResult(overrides = {}) {
         title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, travelers: 2,
         date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.',
       },
-      travel_options: [{
-        from_place: 'Delhi', to_place: 'Rishikesh', mode: 'Bus', suggestion: 'Overnight Volvo.',
-        duration_guidance: 'About 7 hours.', estimated_cost_low: 600, estimated_cost_high: 900,
-        reference: verifiedReference(), booking_readiness: 'needs_advance_booking',
-      }],
-      stay_options: [{
-        location: 'Rishikesh', suggestion: 'Riverside guesthouse.', nights: 2, check_in_day: 1, check_out_day: 3,
-        why_it_fits: 'Central and budget-friendly.', estimated_cost_low: 1600, estimated_cost_high: 3000,
-        reference: generalReference(), booking_readiness: 'suggested',
-      }],
       days: [
         {
           day_number: 1, date: null, title: 'Arrival and ghats', primary_location: 'Rishikesh',
@@ -155,17 +141,16 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.getByText(/Check schedules closer to travel\./)).toBeInTheDocument();
   });
 
-  it('renders Transport with booking-readiness, a confirmed anchor, and the confirmation form', async () => {
+  it('renders Transport with only a confirmed anchor and the confirmation form — no guessed suggestions', async () => {
     commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor()] });
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
     renderDashboard();
     await user.click(screen.getByRole('button', { name: /Transport/ }));
-    expect(screen.getByText('Needs advance booking')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Official rail booking/ })).toHaveAttribute('href', 'https://example.com/rail');
     expect(screen.getByText('Delhi to Rishikesh arrival')).toBeInTheDocument();
     expect(screen.getByText('🔒 confirmed')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Arrange bookings/ })).toHaveAttribute('href', '/logistics?tab=Transport');
+    expect(screen.queryByText(/Atlas-suggested options/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Add a confirmation' }));
     expect(screen.getByRole('button', { name: 'Save confirmation' })).toBeDisabled();

@@ -349,18 +349,8 @@ export default function TripDashboard() {
       </section>}
 
       {tab === 'Transport' && <section>
-        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Atlas-suggested options — a view only, not a booking desk.</p></div></div>
+        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Confirmed bookings only — arrange yours when you're ready.</p></div></div>
         <AnchorList anchors={anchorsByType(anchors, 'transport')} />
-        {finalItinerary.travel_options.map((option, index) => <article className="dashboard-card" key={index}>
-          <div>
-            <BookingReadinessBadge status={option.booking_readiness} />
-            <h3>{option.from_place} → {option.to_place} · {option.mode}</h3>
-            <p>{option.suggestion}</p>
-            {option.duration_guidance && <p className="movement-guidance">{option.duration_guidance}</p>}
-            {moneyRange(option.estimated_cost_low, option.estimated_cost_high) && <span className="item-cost">{moneyRange(option.estimated_cost_low, option.estimated_cost_high)}</span>}
-            {option.reference.status === 'VERIFIED' && option.reference.source_url && <a className="source-link" href={option.reference.source_url} target="_blank" rel="noreferrer">{option.reference.source_title || 'Source'} ↗</a>}
-          </div>
-        </article>)}
         <div className="booking-choice">
           <div className="booking-choice-opt">
             {confirmType === 'transport' ? (
@@ -383,19 +373,8 @@ export default function TripDashboard() {
       </section>}
 
       {tab === 'Stays' && <section>
-        <div className="tab-intro"><div><h2>🏨 Stays</h2><p>Atlas-suggested options — a view only, not a booking desk.</p></div></div>
+        <div className="tab-intro"><div><h2>🏨 Stays</h2><p>Confirmed bookings only — arrange yours when you're ready.</p></div></div>
         <AnchorList anchors={anchorsByType(anchors, 'stay')} />
-        {finalItinerary.stay_options.map((option, index) => <article className="dashboard-card" key={index}>
-          <div>
-            <BookingReadinessBadge status={option.booking_readiness} />
-            <h3>🏨 {option.location} · {option.nights} nights</h3>
-            <p>Day {option.check_in_day} – Day {option.check_out_day}</p>
-            <p>{option.suggestion}</p>
-            <p>{option.why_it_fits}</p>
-            {moneyRange(option.estimated_cost_low, option.estimated_cost_high) && <span className="item-cost">{moneyRange(option.estimated_cost_low, option.estimated_cost_high)}</span>}
-            {option.reference.status === 'VERIFIED' && option.reference.source_url && <a className="source-link" href={option.reference.source_url} target="_blank" rel="noreferrer">{option.reference.source_title || 'Source'} ↗</a>}
-          </div>
-        </article>)}
         <div className="booking-choice">
           <div className="booking-choice-opt">
             {confirmType === 'stay' ? (

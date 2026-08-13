@@ -108,8 +108,6 @@ function atlasResult({ title = 'Abbey Falls Getaway', destination = 'Coorg', pri
         title, destinations: [destination], duration_days: 1, travelers: 2,
         date_range: null, overview: 'A relaxed one-day visit.', route_rationale: 'Everything is within one base.',
       },
-      travel_options: [],
-      stay_options: [],
       days: [{
         day_number: 1, date: null, title: 'Arrival and exploring', primary_location: primaryLocation,
         summary: 'An easy first day.',
