@@ -122,6 +122,37 @@ describe('TripContext Backend-authoritative trip record', () => {
     expect(result.current.currentTripId).toBe('trip-new');
   });
 
+  it('keeps an untouched trip_state branch after a command response omits it (TWM-154)', async () => {
+    // Backend now trims a command response to only the branches that turn
+    // touched — a scout-only reply carries no planner_state at all. The
+    // context must merge that onto the last-known record, not replace it.
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [{
+          id: 'trip-1', title: 'Untitled Trip', version: 1,
+          trip_state: { stage: 'planning', active_agent: 'scout', trip_context: {}, planner_state: { frozen_plan: { guide_revision: 3 } } },
+          ui_state: {}, updated_at: '2026-01-01T00:00:00.000Z',
+        }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        message: 'Got it.',
+        trip: {
+          id: 'trip-1', title: 'Untitled Trip', version: 2,
+          trip_state: { stage: 'planning', active_agent: 'scout', trip_context: {} },
+          ui_state: {},
+        },
+      }));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    expect(result.current.commandSnapshot.trip_state.planner_state).toEqual({ frozen_plan: { guide_revision: 3 } });
+
+    await act(async () => { await result.current.sendTripCommand('traveler_message', { message: 'hi' }); });
+
+    expect(result.current.commandSnapshot.version).toBe(2);
+    expect(result.current.commandSnapshot.trip_state.planner_state).toEqual({ frozen_plan: { guide_revision: 3 } });
+  });
+
   it('sets tripLoadStatus to error without throwing when the Backend is unreachable', async () => {
     fetchMock.mockRejectedValue(new TypeError('Network request failed'));
 
