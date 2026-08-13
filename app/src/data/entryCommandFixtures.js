@@ -21,11 +21,15 @@ Vibe: Open to a mix — some culture/sightseeing, some relaxation, maybe a bit o
 
 We're a couple in our early 40s, fairly easygoing travelers who enjoy a good balance of exploring and relaxing.`;
 
+// Keyed by the `conversation_context.awaiting` slug, shared by Meridian's
+// matcher_state.awaiting and Guide's fixed GuideAwaiting enum — both use the
+// exact trip_context key name per fact (origin_city, num_travelers,
+// duration_days, travel_dates, budget), so one entry per fact covers both
+// agents with no exceptions.
 export const QUICK_REPLIES = Object.freeze({
-  origin: ['Delhi'],
+  origin_city: ['Delhi', 'Mumbai', 'Bangalore', 'Chennai', 'Kolkata', 'Hyderabad'],
+  num_travelers: ['2', '4', 'Just me'],
+  duration_days: ['3 days', '5 days', '7 days'],
+  travel_dates: ['Not sure yet', 'Sometime next month', 'Flexible'],
   budget: ['₹1,00,000 total for both'],
-  // Guide's planner_state.conversation_context.awaiting slug — same
-  // quick-reply mechanism Meridian's matcher_state.conversation_context
-  // .awaiting already uses.
-  duration: ['3 days', '5 days', '7 days'],
 });

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
 import { getItineraryVersions } from '../lib/tripApi.js';
-import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, routeLocations, timelineIcon } from '../lib/atlasView.js';
+import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, dayRangeLabel, routeStops, timelineIcon } from '../lib/atlasView.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import '../styles/dashboard.css';
 
@@ -237,7 +237,7 @@ export default function TripDashboard() {
   const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });
   const costMin = Math.min(...allCosts, 0);
   const costMax = Math.max(...allCosts, 1);
-  const locations = routeLocations(days);
+  const stops = routeStops(days);
   const proposedRevision = itineraryState.proposed_revision;
 
   return (
@@ -245,12 +245,16 @@ export default function TripDashboard() {
       <TripHero
         finalItinerary={finalItinerary}
         travelers={finalItinerary.trip_summary.travelers}
+        unresolvedCount={result.unresolved.length}
+        assumptionsCount={finalItinerary.assumptions.length}
+        confirmedCount={anchors.length}
+        onJumpToUnresolved={result.unresolved.length > 0 ? () => document.getElementById('assumptions-panel')?.scrollIntoView({ behavior: 'smooth' }) : undefined}
+        onJumpToAssumptions={finalItinerary.assumptions.length > 0 ? () => document.getElementById('assumptions-panel')?.scrollIntoView({ behavior: 'smooth' }) : undefined}
         actions={<>
           <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
           <button className="btn btn-ghost" type="button" onClick={() => alert('Sharing is not available yet.')}>🔗 Share</button>
         </>}
       />
-      <p className="version-note">Itinerary version {currentVersion.version}.</p>
 
       {priorVersions.length > 0 && (
         <details className="prior-versions">
@@ -265,13 +269,40 @@ export default function TripDashboard() {
       )}
 
       {(finalItinerary.assumptions.length > 0 || result.unresolved.length > 0) && (
-        <section className="assumptions-panel" aria-label="Assumptions and unresolved items">
+        <section id="assumptions-panel" className="assumptions-panel" aria-label="Assumptions and unresolved items">
           {finalItinerary.assumptions.length > 0 && (
-            <div><h3>Planning assumptions</h3><ul>{finalItinerary.assumptions.map((item, index) => <li key={index}><strong>{item.category}:</strong> {item.detail}</li>)}</ul></div>
+            <div>
+              <h3>Planning assumptions</h3>
+              <div className="status-card-list">
+                {finalItinerary.assumptions.map((item, index) => (
+                  <div className="status-card" key={index}>
+                    <span className="badge">{item.category}</span>
+                    <p>{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
           {result.unresolved.length > 0 && (
-            <div><h3>Unresolved</h3><ul>{result.unresolved.map((item, index) => <li key={index}><strong>{item.item}:</strong> {item.generic_guidance}</li>)}</ul></div>
+            <div>
+              <h3>Unresolved</h3>
+              <div className="status-card-list">
+                {result.unresolved.map((item, index) => (
+                  <div className="status-card" key={index}>
+                    <span className="badge badge-unresolved">{item.item}</span>
+                    <p>{item.generic_guidance}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
+        </section>
+      )}
+
+      {finalItinerary.practical_notes.length > 0 && (
+        <section aria-label="Practical notes" className="practical-notes">
+          <h3>Practical notes</h3>
+          {finalItinerary.practical_notes.map((note, index) => <article className="dashboard-card" key={index}><strong>{note.title}</strong><p>{note.detail}</p></article>)}
         </section>
       )}
 
@@ -306,17 +337,22 @@ export default function TripDashboard() {
             </header>
             <AnchorList anchors={anchorsForDay(anchors, selectedDay.day_number)} />
             <div className="atlas-timeline">
-              {selectedDay.timeline.map((item, index) => <div className="atlas-item" key={index}>
+              {selectedDay.timeline.map((item, index) => <details className="atlas-item" key={index}>
                 <span className="atlas-dot">{timelineIcon(item.kind)}</span>
                 <div>
-                  <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
-                  <strong>{item.title}</strong>
+                  <summary>
+                    <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
+                    <div className="item-summary-row">
+                      <strong>{item.title}</strong>
+                      {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
+                      <BookingReadinessBadge status={item.booking_readiness} />
+                      <span className="expand-hint">Details →</span>
+                    </div>
+                  </summary>
                   <p>{item.detail}</p>
                   {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
-                  <BookingReadinessBadge status={item.booking_readiness} />
-                  {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
                 </div>
-              </div>)}
+              </details>)}
             </div>
             <div className="atlas-day-footer">
               <div className="footer-budget">
@@ -333,18 +369,7 @@ export default function TripDashboard() {
                 </ul>
               </div>
             </div>
-            {confirmType === 'activity' ? (
-              <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
-            ) : (
-              <button type="button" className="btn btn-ghost" onClick={() => openConfirmForm('activity', selectedDay.day_number)}>Confirm something for this day</button>
-            )}
           </article>
-          {finalItinerary.practical_notes.length > 0 && (
-            <section aria-label="Practical notes" className="practical-notes">
-              <h3>Practical notes</h3>
-              {finalItinerary.practical_notes.map((note, index) => <article className="dashboard-card" key={index}><strong>{note.title}</strong><p>{note.detail}</p></article>)}
-            </section>
-          )}
         </div>
       </section>}
 
@@ -398,9 +423,19 @@ export default function TripDashboard() {
 
       {tab === 'Map' && <section>
         <div className="tab-intro"><div><h2>🗺️ Route order</h2><p>Live coordinates aren't available yet — here's the order of the trip.</p></div></div>
-        <ol className="route-order-list" aria-label="Route order">
-          {locations.map((location, index) => <li key={`${index}-${location}`}>{location}</li>)}
-        </ol>
+        <div className="route-map" aria-label="Route order">
+          {stops.map((stop, index) => (
+            <div className="route-node-wrap" key={`${index}-${stop.location}`}>
+              <div className="route-node">
+                <span className="route-marker">{index + 1}</span>
+                <div><strong>{stop.location}</strong><small>{dayRangeLabel(stop.dayNumbers)}</small></div>
+              </div>
+              {index < stops.length - 1 && (
+                <div className="route-connector"><span className="route-line" /></div>
+              )}
+            </div>
+          ))}
+        </div>
       </section>}
 
       {tab === 'Budget breakdown' && <section>

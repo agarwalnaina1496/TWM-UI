@@ -10,7 +10,7 @@ export function planBuilderSummary(guideState) {
   const placeCount = (guideState.places || []).length;
   return {
     destinations: guideState.destinations || [],
-    durationDays: guideState.duration_days ?? dayPlan.length,
+    durationDays: guideState.trip_duration ?? dayPlan.length,
     placeCount,
     dayCount: dayPlan.length,
   };
