@@ -7,7 +7,6 @@ import Destinations from './pages/Destinations.jsx';
 import TripPreview from './pages/TripPreview.jsx';
 import Logistics from './pages/Logistics.jsx';
 import RequestQuote from './pages/RequestQuote.jsx';
-import Itinerary from './pages/Itinerary.jsx';
 import DashboardHome from './pages/DashboardHome.jsx';
 import JourneyEntry from './pages/JourneyEntry.jsx';
 import TripDashboard from './pages/TripDashboard.jsx';
@@ -45,7 +44,6 @@ export default function App() {
         <Route path="/trip-preview" element={<TripPreview />} />
         <Route path="/logistics" element={<Logistics />} />
         <Route path="/request-quote" element={<RequestQuote />} />
-        <Route path="/itinerary" element={<Itinerary />} />
         <Route path="/dashboard" element={<TripDashboard />} />
         <Route path="/my-trips" element={<DashboardHome />} />
       </Routes>
