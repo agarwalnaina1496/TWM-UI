@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
@@ -38,6 +38,19 @@ export default function DashboardHome() {
   const [renameValue, setRenameValue] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [newTripMenuOpen, setNewTripMenuOpen] = useState(false);
+  const newTripMenuRef = useRef(null);
+
+  // Closes the "+ New trip" dropdown on an outside click — a plain toggle
+  // button would otherwise leave it open until another explicit choice.
+  useEffect(() => {
+    if (!newTripMenuOpen) return;
+    function onClickOutside(event) {
+      if (!newTripMenuRef.current?.contains(event.target)) setNewTripMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [newTripMenuOpen]);
 
   // Fresh, no-progress trips (e.g. the record TripContext auto-creates)
   // aren't real trips from the traveler's point of view — TWM-108/163 keep
@@ -57,12 +70,14 @@ export default function DashboardHome() {
   function handlePlanTrip() {
     trackEvent('intent_selected', { intent: 'plan' });
     startNewTrip();
+    setNewTripMenuOpen(false);
     navigate(`/journey-entry?intent=${ENTRY_INTENTS.KNOWN_DESTINATION}`);
   }
 
   function handleDiscover() {
     trackEvent('intent_selected', { intent: 'discover' });
     startNewTrip();
+    setNewTripMenuOpen(false);
     navigate(`/journey-entry?intent=${ENTRY_INTENTS.DISCOVER}`);
   }
 
@@ -107,7 +122,20 @@ export default function DashboardHome() {
   return (
     <div className="wrap">
       <div className="my-trips-header">
-        <h1>Your <em>trips</em></h1>
+        <div className="my-trips-header-left">
+          <h1>Your <em>trips</em></h1>
+          {visibleTrips.length > 0 && (
+            <div className="new-trip-menu" ref={newTripMenuRef}>
+              <button type="button" className="btn btn-ghost" onClick={() => setNewTripMenuOpen(open => !open)}>+ New trip</button>
+              {newTripMenuOpen && (
+                <div className="new-trip-menu-dropdown" role="menu">
+                  <button type="button" role="menuitem" onClick={handlePlanTrip}>📍 Plan a Trip</button>
+                  <button type="button" role="menuitem" onClick={handleDiscover}>🧭 Discover Destination</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         {auth.loggedIn ? (
           <span className="account-status">Signed in as {auth.name}</span>
         ) : (
