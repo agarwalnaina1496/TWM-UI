@@ -33,9 +33,9 @@ describe('App guest-first routing (TWM-140)', () => {
     localStorage.clear();
   });
 
-  it('enters the journey directly for a fresh anonymous visitor, never redirecting to Login', () => {
+  it('enters Dashboard-home directly for a fresh anonymous visitor, never redirecting to Login', () => {
     renderApp(['/']);
-    expect(screen.getByRole('heading', { name: /where are we headed/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /log in to/i })).not.toBeInTheDocument();
   });
 
