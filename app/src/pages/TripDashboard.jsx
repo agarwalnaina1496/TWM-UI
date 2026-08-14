@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
 import { getItinerary, getItineraryVersions } from '../lib/tripApi.js';
-import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, dayRangeLabel, routeStops, timelineIcon } from '../lib/atlasView.js';
+import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, dayRangeLabel, routeStops, timelineIcon, tripDatesLabel } from '../lib/atlasView.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import '../styles/dashboard.css';
 
@@ -376,8 +376,7 @@ export default function TripDashboard() {
 
       {tab === 'Overview' && <section aria-label="Trip overview">
         <div className="overview-stats">
-          <div className="stat-tile"><span className="stat-label">Days planned</span><strong>{days.length}</strong></div>
-          <div className="stat-tile"><span className="stat-label">Confirmed bookings</span><strong>{anchors.length}</strong></div>
+          <div className="stat-tile"><span className="stat-label">Days</span><strong>{tripDatesLabel(days, finalItinerary.trip_summary.date_range).value}</strong></div>
           <div className="stat-tile"><span className="stat-label">Estimated budget</span><strong>{moneyRange(finalItinerary.budget_summary.total_low, finalItinerary.budget_summary.total_high) || 'Not estimated'}</strong></div>
         </div>
 
