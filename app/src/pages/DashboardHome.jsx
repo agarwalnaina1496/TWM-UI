@@ -122,20 +122,7 @@ export default function DashboardHome() {
   return (
     <div className="wrap">
       <div className="my-trips-header">
-        <div className="my-trips-header-left">
-          <h1>Your <em>trips</em></h1>
-          {visibleTrips.length > 0 && (
-            <div className="new-trip-menu" ref={newTripMenuRef}>
-              <button type="button" className="btn btn-ghost" onClick={() => setNewTripMenuOpen(open => !open)}>+ New trip</button>
-              {newTripMenuOpen && (
-                <div className="new-trip-menu-dropdown" role="menu">
-                  <button type="button" role="menuitem" onClick={handlePlanTrip}>📍 Plan a Trip</button>
-                  <button type="button" role="menuitem" onClick={handleDiscover}>🧭 Discover Destination</button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <h1>Your <em>trips</em></h1>
         {auth.loggedIn ? (
           <span className="account-status">Signed in as {auth.name}</span>
         ) : (
@@ -174,19 +161,30 @@ export default function DashboardHome() {
         </div>
       ) : (
         <>
-          <div className="filter-bar" role="tablist" aria-label="Filter trips">
-            {FILTERS.map(f => (
-              <button
-                key={f.key}
-                type="button"
-                role="tab"
-                aria-selected={filter === f.key}
-                className={`fc${filter === f.key ? ' active' : ''}`}
-                onClick={() => setFilter(f.key)}
-              >
-                {f.label}{counts[f.key] ? ` (${counts[f.key]})` : ''}
-              </button>
-            ))}
+          <div className="filter-row">
+            <div className="filter-bar" role="tablist" aria-label="Filter trips">
+              {FILTERS.map(f => (
+                <button
+                  key={f.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === f.key}
+                  className={`fc${filter === f.key ? ' active' : ''}`}
+                  onClick={() => setFilter(f.key)}
+                >
+                  {f.label}{counts[f.key] ? ` (${counts[f.key]})` : ''}
+                </button>
+              ))}
+            </div>
+            <div className="new-trip-menu" ref={newTripMenuRef}>
+              <button type="button" className="btn btn-primary" onClick={() => setNewTripMenuOpen(open => !open)}>+ New trip</button>
+              {newTripMenuOpen && (
+                <div className="new-trip-menu-dropdown" role="menu">
+                  <button type="button" role="menuitem" onClick={handlePlanTrip}>📍 Plan a Trip</button>
+                  <button type="button" role="menuitem" onClick={handleDiscover}>🧭 Discover Destination</button>
+                </div>
+              )}
+            </div>
           </div>
 
           {shown.length === 0 ? (

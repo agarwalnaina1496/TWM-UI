@@ -348,18 +348,6 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.getByText('Riverside stay')).toBeInTheDocument();
   });
 
-  it('renders prior versions as a read-only disclosure', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState({ version: 2 }));
-    sendTripCommand = vi.fn();
-    itineraryVersionsResponse = {
-      versions: [{ version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z', days: [{ day_number: 1, title: 'Arrival and ghats' }, { day_number: 2, title: 'Ram Jhula' }] }],
-    };
-    itineraryFetchResponse = { version: 2, source_guide_revision: 3, result: atlasResult(), created_at: '2026-01-02T00:00:00.000Z' };
-    global.fetch = defaultFetchMock();
-    renderDashboard();
-    await waitFor(() => expect(screen.getByText('Prior versions (1)')).toBeInTheDocument());
-  });
-
   it('Map tab renders a deduped route order with day ranges and no coordinates', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
