@@ -190,6 +190,42 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(sendTripCommand).toHaveBeenCalledTimes(1);
   });
 
+  it('re-fetches the itinerary when tripId changes without unmounting, never showing the previous trip\'s result', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState());
+    sendTripCommand = vi.fn();
+    let itineraryFetchCount = 0;
+    global.fetch = vi.fn(async (url) => {
+      if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+      if (url.endsWith('/itinerary')) {
+        itineraryFetchCount += 1;
+        return jsonResponse(itineraryFetchResponse);
+      }
+      return jsonResponse({});
+    });
+    const { rerender } = renderDashboard();
+    await waitFor(() => expect(screen.getByText('Rishikesh Getaway')).toBeInTheDocument());
+    expect(itineraryFetchCount).toBe(1);
+
+    // Switch to a different, already-ready trip in place (no unmount) —
+    // e.g. a future in-app trip switcher.
+    commandSnapshot = {
+      id: 'trip-2', version: 1,
+      trip_state: { trip_context: {}, itinerary_state: readyItineraryState(), logistics_state: { anchors: [] } },
+    };
+    itineraryFetchResponse = {
+      version: 1, source_guide_revision: 4,
+      result: atlasResult({ final_itinerary: { trip_summary: { title: 'Goa Escape', destinations: ['Goa'], duration_days: 2, travelers: 2, date_range: null, overview: '', route_rationale: '' } } }),
+      created_at: '2026-01-02T00:00:00.000Z',
+    };
+    rerender(<MemoryRouter><TripDashboard /></MemoryRouter>);
+
+    // Never renders trip-1's itinerary under trip-2 while its fetch is in flight.
+    expect(screen.queryByText('Rishikesh Getaway')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Goa Escape')).toBeInTheDocument());
+    expect(itineraryFetchCount).toBe(2);
+    expect(sendTripCommand).not.toHaveBeenCalled();
+  });
+
   it('shows an error state when the itinerary fetch fails, without re-invoking start_itinerary', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();

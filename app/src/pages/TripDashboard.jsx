@@ -105,7 +105,13 @@ export default function TripDashboard() {
   const [itineraryStatus, setItineraryStatus] = useState('idle'); // idle | loading | ready | error
   const [itineraryResult, setItineraryResult] = useState(null);
   const [itineraryFetchError, setItineraryFetchError] = useState(null);
-  const itineraryFetchStarted = useRef(false);
+  // Tracks which trip the current/last fetch belongs to, not just whether
+  // one has started — otherwise switching trips without unmounting (e.g. a
+  // future in-app trip switcher) would keep itineraryFetchStarted.current
+  // stuck true from the previous trip, skip refetching, and render the
+  // previous trip's itinerary under the new one.
+  const [itineraryTripId, setItineraryTripId] = useState(null);
+  const itineraryFetchStarted = useRef(null); // tripId currently/last fetched, or null
 
   const [confirmType, setConfirmType] = useState(null); // 'transport' | 'stay' | 'activity' | null
   const [confirmFields, setConfirmFields] = useState(EMPTY_CONFIRM_FIELDS);
@@ -168,12 +174,13 @@ export default function TripDashboard() {
   // fires exactly once per Dashboard visit.
   useEffect(() => {
     if (bootStatus !== 'ready' || itineraryState?.status !== 'ready' || !tripId) return;
-    if (itineraryFetchStarted.current) return;
-    itineraryFetchStarted.current = true;
+    if (itineraryFetchStarted.current === tripId) return;
+    itineraryFetchStarted.current = tripId;
     setItineraryStatus('loading');
     getItinerary(tripId)
       .then(record => {
         setItineraryResult(record);
+        setItineraryTripId(tripId);
         setItineraryStatus('ready');
       })
       .catch(error => {
@@ -262,7 +269,7 @@ export default function TripDashboard() {
     );
   }
 
-  if (bootStatus !== 'ready' || itineraryState?.status !== 'ready' || itineraryStatus !== 'ready') {
+  if (bootStatus !== 'ready' || itineraryState?.status !== 'ready' || itineraryStatus !== 'ready' || itineraryTripId !== tripId) {
     return (
       <main className="wrap dashboard">
         <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Building your detailed itinerary…</div>
