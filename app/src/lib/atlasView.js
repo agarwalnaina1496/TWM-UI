@@ -7,6 +7,18 @@ export function timelineIcon(kind) {
   return TIMELINE_ICONS[kind] || '📍';
 }
 
+// Prefers real per-day dates when Atlas has them, falls back to the trip's
+// travel-window label (e.g. "October"), and only falls back to a plain day
+// count when neither is known yet. The label itself adapts too — "Travel
+// month" when all we have is a month/window, "Trip dates" otherwise.
+export function tripDatesLabel(days, dateRangeLabel) {
+  const first = days[0]?.date;
+  const last = days[days.length - 1]?.date;
+  if (first) return { label: 'Trip dates', value: first === last ? first : `${first} – ${last}` };
+  if (dateRangeLabel) return { label: 'Travel month', value: dateRangeLabel };
+  return { label: 'Trip dates', value: `${days.length} day${days.length === 1 ? '' : 's'}` };
+}
+
 const BOOKING_READINESS_LABEL = {
   suggested: 'Suggested',
   needs_advance_booking: 'Needs advance booking',

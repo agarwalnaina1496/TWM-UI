@@ -1,3 +1,5 @@
+import { tripDatesLabel } from '../lib/atlasView.js';
+
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
 export default function TripHero({
@@ -5,8 +7,8 @@ export default function TripHero({
   unresolvedCount = 0, assumptionsCount = 0, confirmedCount = 0,
   onJumpToUnresolved, onJumpToAssumptions,
 }) {
-  const { trip_summary: summary, budget_summary: budget } = finalItinerary;
-  const tripDatesLabel = summary.date_range || `Duration-only · Day 1–${summary.trip_duration}`;
+  const { trip_summary: summary, budget_summary: budget, days } = finalItinerary;
+  const dates = tripDatesLabel(days, summary.date_range);
   const partySize = travelers || summary.travelers || 2;
 
   return (
@@ -17,7 +19,7 @@ export default function TripHero({
       <div className="hero-stats">
         <div><strong>{summary.trip_duration}</strong><span>Days</span></div>
         <div><strong>{partySize}</strong><span>Travelers</span></div>
-        <div><strong>{tripDatesLabel}</strong><span>Trip dates</span></div>
+        <div><strong>{dates.value}</strong><span>{dates.label}</span></div>
         <div><strong>{money(budget.total_low)}–{money(budget.total_high)}</strong><span>Total for {partySize}</span></div>
       </div>
       <div className="hero-substats">

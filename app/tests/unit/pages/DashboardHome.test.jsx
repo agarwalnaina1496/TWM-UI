@@ -50,6 +50,27 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByText('Discover Destination')).toBeInTheDocument();
   });
 
+  it('shows a "+ New trip" menu when trips exist, with both entry actions', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
+    }));
+    renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    await screen.findByText('Coorg');
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText('+ New trip'));
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /plan a trip/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /discover destination/i })).toBeInTheDocument();
+  });
+
+  it('does not show the "+ New trip" menu on the empty state (it already offers both actions inline)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
+    renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    await screen.findByText('No trips yet');
+    expect(screen.queryByText('+ New trip')).not.toBeInTheDocument();
+  });
+
   it('renders stage-aware badge and CTA for a real trip', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
       trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
@@ -61,7 +82,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByRole('button', { name: /review recommendations/i })).toBeInTheDocument();
   });
 
-  it('shows the Dashboard CTA for an itinerary-ready trip', async () => {
+  it('shows the View trip CTA for an itinerary-ready trip', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
       trips: [tripRecord({
         title: 'Manali', trip_state: { stage: 'planned', trip_context: { origin: 'Delhi' }, itinerary_state: { status: 'ready' } },
@@ -70,7 +91,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     renderDashboardHome({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
     expect(await screen.findByText('Signed in as Traveler')).toBeInTheDocument();
     expect(screen.getByText('Itinerary ready')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /view trip/i })).toBeInTheDocument();
   });
 
   it.each([

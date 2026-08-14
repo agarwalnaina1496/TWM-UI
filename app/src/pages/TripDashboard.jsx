@@ -3,16 +3,21 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
 import { getItinerary, getItineraryVersions } from '../lib/tripApi.js';
-import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, dayRangeLabel, routeStops, timelineIcon } from '../lib/atlasView.js';
+import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, dayRangeLabel, routeStops, timelineIcon, tripDatesLabel } from '../lib/atlasView.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import '../styles/dashboard.css';
 
+// TWM-165: Overview (stat tiles + budget breakdown + next-up preview) and
+// Docs (placeholder — real document storage is a separate, later story) are
+// new; Days is renamed to Itinerary; Stays/Transport/Map/Support carry over
+// unchanged. The standalone Budget breakdown tab folds into Overview.
 const TABS = [
-  { name: 'Days', icon: '📅' },
-  { name: 'Transport', icon: '🚗' },
+  { name: 'Overview', icon: '📊' },
+  { name: 'Itinerary', icon: '📅' },
   { name: 'Stays', icon: '🏨' },
+  { name: 'Transport', icon: '🚗' },
   { name: 'Map', icon: '🗺️' },
-  { name: 'Budget breakdown', icon: '💰' },
+  { name: 'Docs', icon: '📁' },
   { name: 'Support', icon: '💬' },
 ];
 
@@ -85,7 +90,7 @@ function ConfirmationForm({ dayOptions, fields, setFields, onSubmit, onCancel, p
 export default function TripDashboard() {
   const { commandSnapshot, sendTripCommand, tripLoadStatus } = useTrip();
   const [params] = useSearchParams();
-  const initialTab = TABS.some(t => t.name === params.get('tab')) ? params.get('tab') : 'Days';
+  const initialTab = TABS.some(t => t.name === params.get('tab')) ? params.get('tab') : 'Overview';
   const [tab, setTab] = useState(initialTab);
   const [activeDay, setActiveDay] = useState(null);
 
@@ -369,7 +374,41 @@ export default function TripDashboard() {
 
       <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">{TABS.map(({ name, icon }) => <button type="button" aria-current={tab === name ? 'page' : undefined} className={tab === name ? 'active' : ''} key={name} onClick={() => setTab(name)}><span className="tab-icon">{icon}</span> {name}</button>)}</nav>
 
-      {tab === 'Days' && selectedDay && <section aria-label="Detailed days" className="dashboard-days-wrap">
+      {tab === 'Overview' && <section aria-label="Trip overview">
+        <div className="overview-stats">
+          <div className="stat-tile"><span className="stat-label">Days</span><strong>{tripDatesLabel(days, finalItinerary.trip_summary.date_range).value}</strong></div>
+          <div className="stat-tile"><span className="stat-label">Estimated budget</span><strong>{moneyRange(finalItinerary.budget_summary.total_low, finalItinerary.budget_summary.total_high) || 'Not estimated'}</strong></div>
+        </div>
+
+        <div className="tab-intro"><div><h2>💰 Estimated budget breakdown</h2><p>{finalItinerary.budget_summary.budget_fit}</p></div></div>
+        <div className="budget-summary-card">
+          {finalItinerary.budget_summary.lines.map((line, index) => <div className="budget-summary-row" key={index}><span>{line.category}</span><strong>{moneyRange(line.amount_low, line.amount_high)}</strong><p>{line.note}</p></div>)}
+          <div className="budget-summary-row total"><span>Estimated total</span><strong>{moneyRange(finalItinerary.budget_summary.total_low, finalItinerary.budget_summary.total_high)}</strong></div>
+        </div>
+        {finalItinerary.sources.length > 0 && (
+          <div className="sources-list"><h3>Sources</h3><ul>{finalItinerary.sources.map((source, index) => <li key={index}><a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a></li>)}</ul></div>
+        )}
+
+        <div className="tab-intro"><div><h2>📅 Up next</h2><p>Day {days[0].day_number} · {days[0].primary_location}</p></div></div>
+        <article className="dashboard-card">
+          <div>
+            <h3>{days[0].title}</h3>
+            <p>{days[0].summary}</p>
+          </div>
+          <button type="button" className="btn btn-ghost" onClick={() => { setActiveDay(days[0].day_number); setTab('Itinerary'); }}>View itinerary →</button>
+        </article>
+      </section>}
+
+      {tab === 'Docs' && <section aria-label="Trip documents">
+        <div className="tab-intro"><div><h2>📁 Documents</h2><p>Flight tickets, hotel confirmations, and other trip documents.</p></div></div>
+        <div className="docs-placeholder">
+          <span className="docs-placeholder-icon">📁</span>
+          <strong>Coming soon</strong>
+          <p>Upload and keep track of your trip documents here.</p>
+        </div>
+      </section>}
+
+      {tab === 'Itinerary' && selectedDay && <section aria-label="Detailed days" className="dashboard-days-wrap">
         <nav className="dashboard-day-nav" aria-label="Select a day">
           {days.map(day => <button type="button" key={day.day_number} className={`dashboard-day-pill${day.day_number === selectedDay.day_number ? ' active' : ''}`} aria-current={day.day_number === selectedDay.day_number ? 'page' : undefined} onClick={() => setActiveDay(day.day_number)}>
             <span className="pill-num">{day.day_number}</span>
@@ -485,17 +524,6 @@ export default function TripDashboard() {
             </div>
           ))}
         </div>
-      </section>}
-
-      {tab === 'Budget breakdown' && <section>
-        <div className="tab-intro"><div><h2>💰 Estimated budget breakdown</h2><p>{finalItinerary.budget_summary.budget_fit}</p></div></div>
-        <div className="budget-summary-card">
-          {finalItinerary.budget_summary.lines.map((line, index) => <div className="budget-summary-row" key={index}><span>{line.category}</span><strong>{moneyRange(line.amount_low, line.amount_high)}</strong><p>{line.note}</p></div>)}
-          <div className="budget-summary-row total"><span>Estimated total</span><strong>{moneyRange(finalItinerary.budget_summary.total_low, finalItinerary.budget_summary.total_high)}</strong></div>
-        </div>
-        {finalItinerary.sources.length > 0 && (
-          <div className="sources-list"><h3>Sources</h3><ul>{finalItinerary.sources.map((source, index) => <li key={index}><a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a></li>)}</ul></div>
-        )}
       </section>}
 
       {tab === 'Support' && <section>
