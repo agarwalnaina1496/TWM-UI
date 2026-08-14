@@ -79,9 +79,8 @@ describe('Header', () => {
     expect(screen.getByText('Login screen')).toBeInTheDocument();
   });
 
-  it('shows Home, Plan a Trip, and Discover Destination nav items', () => {
+  it('shows Plan a Trip and Discover Destination nav items', () => {
     renderHeader();
-    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument();
     expect(screen.getByText('Plan a Trip')).toBeInTheDocument();
     expect(screen.getByText('Discover Destination')).toBeInTheDocument();
   });

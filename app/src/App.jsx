@@ -34,7 +34,12 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<DashboardHome />} />
         <Route path="/scout-chat" element={<ScoutChat />} />
-        <Route path="/journey-entry" element={<JourneyEntry />} />
+        {/* keyed by search: switching intent (Plan a Trip <-> Discover
+            Destination) while already on this route must fully remount —
+            JourneyEntry's message history and entry-guard refs are only
+            reset on mount, so without a key change React Router keeps the
+            same instance and the screen silently shows stale intent state. */}
+        <Route path="/journey-entry" element={<JourneyEntry key={location.search} />} />
         <Route path="/destinations" element={<Destinations />} />
         <Route path="/trip-preview" element={<TripPreview />} />
         <Route path="/logistics" element={<Logistics />} />

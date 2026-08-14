@@ -9,18 +9,6 @@ import {
 } from '../lib/tripLifecycle.js';
 import '../styles/dashboard-home.css';
 
-// TWM-140: once dismissed for this browsing session, don't re-offer the
-// sync invitation on every Dashboard-home visit.
-const SYNC_DISMISSED_KEY = 'twm_sync_invite_dismissed';
-
-function readSyncDismissed() {
-  try {
-    return sessionStorage.getItem(SYNC_DISMISSED_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'active', label: 'Active' },
@@ -45,7 +33,6 @@ export default function DashboardHome() {
   const { trips, auth, startNewTrip, openTrip, renameTrip } = useTrip();
   const navigate = useNavigate();
   const [syncInviteOpen, setSyncInviteOpen] = useState(false);
-  const [syncDismissed, setSyncDismissed] = useState(readSyncDismissed);
   const [filter, setFilter] = useState('all');
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
@@ -117,15 +104,6 @@ export default function DashboardHome() {
     }
   }
 
-  function handleSyncDismiss() {
-    try {
-      sessionStorage.setItem(SYNC_DISMISSED_KEY, '1');
-    } catch {
-      // sessionStorage unavailable — worst case the invite can be reopened this session.
-    }
-    setSyncDismissed(true);
-  }
-
   return (
     <div className="wrap">
       <div className="my-trips-header">
@@ -136,10 +114,7 @@ export default function DashboardHome() {
       ) : (
         <div className="account-history-locked">
           <p>
-            You're browsing as a guest.
-            {!syncDismissed && (
-              <> <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span></>
-            )}
+            You're browsing as a guest. <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span>
           </p>
         </div>
       )}
@@ -149,7 +124,6 @@ export default function DashboardHome() {
         onClose={() => setSyncInviteOpen(false)}
         benefit="Log in to sync this trip across devices"
         guestNote="Your current trip stays available on this device either way."
-        onContinueWithoutLogin={handleSyncDismiss}
       />
 
       {notice && <div className="price-evidence state-unsafe" role="alert">{notice}</div>}
@@ -159,8 +133,16 @@ export default function DashboardHome() {
           <p className="empty-trips-title">No trips yet</p>
           <p>Start planning your next adventure — pick one below.</p>
           <div className="empty-trips-actions">
-            <span className="btn btn-primary" onClick={handlePlanTrip}>Plan a Trip</span>
-            <span className="btn btn-ghost" onClick={handleDiscover}>Discover Destination</span>
+            <div className="entry-card" onClick={handlePlanTrip}>
+              <div className="entry-card-icon">📍</div>
+              <div className="entry-card-t">Plan a Trip</div>
+              <div className="entry-card-s">Already know your destination.</div>
+            </div>
+            <div className="entry-card" onClick={handleDiscover}>
+              <div className="entry-card-icon">🧭</div>
+              <div className="entry-card-t">Discover Destination</div>
+              <div className="entry-card-s">Get suggestions based on your vibe.</div>
+            </div>
           </div>
         </div>
       ) : (

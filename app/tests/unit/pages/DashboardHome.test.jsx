@@ -198,7 +198,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByText('Log in to sync this trip across devices')).toBeInTheDocument();
   });
 
-  it('choosing Continue without login on the invitation keeps the traveler on My Trips and stops re-offering the locked-history prompt this session', async () => {
+  it('choosing Continue without login closes the modal but keeps the invitation visible for next time', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
@@ -206,6 +206,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     await userEvent.click(screen.getByText('Log in to sync across devices'));
     await userEvent.click(screen.getByRole('button', { name: 'Continue without login' }));
     expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
-    expect(screen.queryByText('Log in to sync across devices')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('Log in to sync across devices')).toBeInTheDocument();
   });
 });

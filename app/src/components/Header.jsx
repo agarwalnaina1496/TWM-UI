@@ -1,4 +1,4 @@
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { trackEvent } from '../lib/analytics.js';
@@ -44,7 +44,6 @@ export default function Header() {
       <div className="header-inner">
         <Link className="brand" to="/">Travel<em>WithMe</em></Link>
         <nav className="header-nav-tabs" aria-label="Primary">
-          <NavLink to="/" end className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}>Home</NavLink>
           <span className="nav-tab" onClick={handlePlanTrip}>Plan a Trip</span>
           <span className="nav-tab" onClick={handleDiscover}>Discover Destination</span>
         </nav>
