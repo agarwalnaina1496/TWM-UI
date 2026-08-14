@@ -8,29 +8,29 @@
 .insight-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:0 0 24px}
 .insight-card{background:var(--accent-bg);border-radius:12px;padding:12px 14px}
 .insight-badge{display:inline-block;font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px}
-.insight-card p{margin:0;font-size:13px;line-height:1.45;color:var(--ts)}
+.insight-card p{margin:0;font-size:13.5px;line-height:1.5;color:var(--ts)}
 .insight-card-unresolved{background:#fff1c8}
 .insight-badge-unresolved{color:#745900}
 
-.hero-substats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
-.hero-substat{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--bg);text-align:left;cursor:pointer;font:inherit}
-.hero-substat strong{font-size:16px;font-family:'Fraunces',serif;color:var(--tp)}
-.hero-substat span{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--tm)}
-.hero-substat.warn strong{color:#a5720a}
-.hero-substat.ok strong{color:#226b34}
-@media(max-width:700px){.hero-substats{grid-template-columns:1fr}}
+/* ===== Trip notes disclosure (assumptions/unresolved/practical notes) ===== */
+.trip-notes-disclosure{margin:24px 0 0;border:1px solid var(--border);border-radius:16px;padding:4px 20px}
+.trip-notes-disclosure summary{list-style:none;cursor:pointer;padding:14px 0;font-size:13.5px;font-weight:700;color:var(--tp)}
+.trip-notes-disclosure summary::-webkit-details-marker{display:none}
+.trip-notes-disclosure summary::before{content:'▸';display:inline-block;margin-right:8px;color:var(--tm);transition:transform .15s ease}
+.trip-notes-disclosure[open] summary::before{transform:rotate(90deg)}
+.trip-notes-disclosure[open] summary{border-bottom:1px solid var(--border);margin-bottom:14px}
+.trip-notes-disclosure > .tab-intro:first-of-type{margin-top:0}
+.trip-notes-disclosure > *:last-child{margin-bottom:0}
+.trip-notes-disclosure .insight-grid:last-child{margin-bottom:14px}
+.trip-notes-list{list-style:none;margin:0 0 14px;padding:0}
+.trip-notes-list li{font-size:13.5px;line-height:1.6;color:var(--ts);padding:9px 0;border-bottom:1px solid var(--border)}
+.trip-notes-list li:last-child{border-bottom:0}
+.trip-notes-list li strong{color:var(--tp);font-weight:600}
 
-.budget-chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-.budget-chip{border:1px solid var(--border);background:var(--bg);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;color:var(--ts)}
-.budget-chip strong{color:var(--tp);font-weight:700}
 
-.atlas-item summary{cursor:pointer;list-style:none}
-.atlas-item summary::-webkit-details-marker{display:none}
-.atlas-item summary::marker{content:""}
-.atlas-item summary time{display:inline-block}
 .atlas-item .item-summary-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.atlas-item .expand-hint{font-size:11px;color:var(--tm);font-weight:700}
-.atlas-item[open] .expand-hint{display:none}
+.item-cost{font-size:12.5px;font-weight:700;color:var(--accent)}
+.movement-guidance{font-style:italic;color:var(--tm)!important;font-size:12.5px!important}
 
 /* ===== Hero ===== */
 .dashboard-hero{background:transparent;border:0;border-radius:20px;padding:26px 0;margin-top:6px}
@@ -60,23 +60,22 @@
 @media(max-width:700px){.booking-help-box{flex-direction:column;align-items:flex-start}.btn-amber{width:100%}}
 
 /* ===== Overview stat tiles ===== */
-.overview-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:12px 0 20px}
-.stat-tile{background:var(--accent-bg);border-radius:14px;padding:16px 18px}
-.stat-tile .stat-label{display:block;font-size:12px;color:var(--ts);margin-bottom:6px}
-.stat-tile strong{font-family:'Fraunces',serif;font-size:22px;color:var(--tp)}
 
 /* ===== Docs placeholder ===== */
 .docs-placeholder{text-align:center;padding:50px 20px;color:var(--tm);border:1px dashed var(--border);border-radius:16px;margin-top:12px}
 .docs-placeholder-icon{font-size:26px;display:block;margin-bottom:10px}
-.docs-placeholder strong{display:block;font-family:'Fraunces',serif;font-size:16px;color:var(--tp);margin-bottom:4px}
+.docs-placeholder strong{display:block;font-family:'Fraunces',serif;font-size:17px;font-weight:600;color:var(--tp);margin-bottom:4px}
 
 /* ===== Budget summary ===== */
-.budget-summary-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:8px 24px;margin-top:8px}
-.budget-summary-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);font-size:14.5px;font-weight:600}
+.budget-summary-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:4px 24px;margin-top:8px}
+.budget-summary-row{display:grid;grid-template-columns:180px 130px 1fr;column-gap:18px;align-items:baseline;padding:16px 0;border-bottom:1px solid var(--border);font-size:14.5px;font-weight:600}
 .budget-summary-row:last-child{border-bottom:0}
-.budget-summary-row strong{font-family:'IBM Plex Mono','Fraunces',monospace;font-weight:700}
-.budget-summary-row.total{border-top:2px solid var(--tp);border-bottom:0;margin-top:4px}
+.budget-summary-row span{align-self:start}
+.budget-summary-row strong{font-family:'IBM Plex Mono','Fraunces',monospace;font-weight:700;white-space:nowrap}
+.budget-summary-row p{grid-column:3;margin:0;font-size:13.5px;font-weight:400;color:var(--ts);line-height:1.5}
+.budget-summary-row.total{grid-template-columns:1fr auto;border-top:2px solid var(--tp);border-bottom:0;margin-top:4px}
 .budget-summary-row.total span,.budget-summary-row.total strong{color:var(--accent);font-size:17px;font-weight:800}
+@media(max-width:640px){.budget-summary-row{grid-template-columns:1fr;row-gap:4px}.budget-summary-row p{grid-column:1}}
 
 /* ===== Route map (vertical) ===== */
 .route-map{display:flex;flex-direction:column;align-items:flex-start;background:linear-gradient(135deg,var(--sage-bg),var(--accent-bg));border:1px solid var(--border);border-radius:20px;padding:28px 30px}
@@ -97,16 +96,17 @@
 .atlas-day h2{font-family:'Fraunces',serif;font-size:26px;font-weight:600;letter-spacing:-0.01em;margin:6px 0 4px}
 .atlas-day-route{margin:0;font-size:13.5px;color:var(--ts)}
 
-.atlas-timeline{position:relative;padding:20px 26px 6px}
+.atlas-timeline{position:relative;padding:20px 26px 20px}
 .atlas-timeline::before{content:"";position:absolute;left:47px;top:8px;bottom:8px;width:2px;background:repeating-linear-gradient(180deg,var(--border) 0 6px,transparent 6px 11px)}
-.atlas-item{position:relative;display:grid;grid-template-columns:40px 1fr;gap:14px;padding:12px 0 20px;align-items:start}
-.atlas-item:last-child{padding-bottom:8px}
+.atlas-item{position:relative;display:grid;grid-template-columns:40px 1fr;gap:14px;padding:0 0 14px;align-items:start}
+.atlas-item:last-child{padding-bottom:0}
 .atlas-dot{position:relative;z-index:1;width:40px;height:40px;display:grid;place-items:center;background:var(--accent-bg);border:2px solid var(--surface);border-radius:50%;font-size:17px;box-shadow:0 0 0 1px var(--border)}
 .atlas-item.flex-locked .atlas-dot,.atlas-item.flex-anchor .atlas-dot{background:var(--accent);box-shadow:0 0 0 1px var(--accent)}
-.atlas-item time{display:block;font-weight:700;font-size:11.5px;color:var(--tm);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
-.atlas-item>div{min-width:0}
+.atlas-item time{display:block;font-weight:700;font-size:11px;color:var(--tm);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.atlas-item>div{min-width:0;background:var(--bg);border-radius:14px;padding:14px 16px;transition:box-shadow .15s ease}
+.atlas-item>div:hover{box-shadow:0 2px 10px rgba(33,28,22,0.06)}
 .atlas-item strong{font-size:15.5px;font-weight:700;color:var(--tp)}
-.atlas-item p{color:var(--ts);margin:4px 0;font-size:13.5px;line-height:1.5}
+.atlas-item p{color:var(--ts);margin:6px 0 0;font-size:13.5px;line-height:1.55}
 .atlas-item.flex-locked strong,.atlas-item.flex-anchor strong{color:var(--accent)}
 
 .badge{display:inline-block;margin-top:8px;font-size:11px;font-weight:700;border-radius:999px;padding:4px 10px;background:var(--bg);color:var(--ts)}
@@ -128,7 +128,7 @@
 .budget-panel .budget-total{border-top:1px solid var(--border);font-size:18px;margin-top:7px;padding-top:14px}
 .preview-footer,.tab-intro,.dashboard-card,.revision-review>div{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .tab-intro p,.dashboard-card p{color:var(--ts)}
-.tab-intro h2{font-family:'Fraunces',serif;font-size:22px;margin:0 0 4px}
+.tab-intro h2{font-family:'Fraunces',serif;font-size:22px;font-weight:600;margin:0 0 4px}
 
 /* ===== Tabs ===== */
 .dashboard-tabs{display:flex;gap:6px;overflow:auto;border-bottom:1px solid var(--border);margin:20px 0}
@@ -142,7 +142,7 @@
 /* ===== Cards (Transport/Stays) ===== */
 .dashboard-card{border:1px solid var(--border);background:var(--surface);border-radius:16px;padding:18px 20px;margin:12px 0;transition:box-shadow .15s ease,transform .15s ease}
 .dashboard-card:hover{box-shadow:0 4px 16px rgba(33,28,22,0.06);transform:translateY(-1px)}
-.dashboard-card h3{font-family:'Fraunces',serif;font-size:17px;margin:8px 0 4px}
+.dashboard-card h3{font-family:'Fraunces',serif;font-size:17px;font-weight:600;margin:8px 0 4px}
 .price-tag{color:var(--accent)}
 .confirmation-chip{display:inline-block;margin-top:8px;font-size:12.5px;font-weight:700;color:#226b34;background:#dbf4df;border-radius:999px;padding:5px 12px}
 

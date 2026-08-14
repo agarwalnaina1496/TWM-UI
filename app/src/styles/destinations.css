@@ -8,7 +8,7 @@
 .dest-name{font-family:'Fraunces',serif;font-size:23px;font-weight:700;margin:6px 0 4px;letter-spacing:-0.01em;}
 .dest-tag{font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:12px;}
 .why-list{margin:0 0 14px;padding:0;list-style:none;}
-.why-list li{font-size:13px;color:var(--ts);padding:4px 0 4px 18px;position:relative;line-height:1.4;}
+.why-list li{font-size:13.5px;color:var(--ts);padding:4px 0 4px 18px;position:relative;line-height:1.5;}
 .why-list li::before{content:'✓';position:absolute;left:0;color:var(--sage);font-weight:700;}
 
 .dest-summary{font-size:13.5px;color:var(--ts);margin:0 0 14px;line-height:1.5;}

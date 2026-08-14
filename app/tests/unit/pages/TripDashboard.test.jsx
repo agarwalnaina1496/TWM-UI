@@ -402,7 +402,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     global.fetch = defaultFetchMock();
     sendTripCommand = vi.fn();
     renderDashboard();
-    await waitFor(() => expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText((_, el) => el.tagName === 'LI' && el.textContent.includes('<img src=x onerror=alert(1)>'))).toBeInTheDocument());
     expect(document.querySelector('img')).toBeNull();
   });
 });

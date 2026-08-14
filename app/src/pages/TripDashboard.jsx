@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
 import { getItinerary } from '../lib/tripApi.js';
-import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, dayRangeLabel, routeStops, timelineIcon, tripDatesLabel } from '../lib/atlasView.js';
+import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, dayRangeLabel, routeStops, timelineIcon } from '../lib/atlasView.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import '../styles/dashboard.css';
 
@@ -192,15 +192,6 @@ export default function TripDashboard() {
     trackEvent('dashboard_entered', { entry_source: 'itinerary' });
   }, [itineraryStatus]);
 
-  // Assumptions/unresolved now live inside the Overview tab (TWM-165) rather
-  // than as their own always-visible section, so the hero's "jump to" links
-  // must switch tabs first — the target element doesn't exist in the DOM
-  // until Overview actually renders.
-  function jumpToOverview(anchorId) {
-    setTab('Overview');
-    requestAnimationFrame(() => document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth' }));
-  }
-
   function openConfirmForm(type, dayNumber) {
     setConfirmType(type);
     setConfirmFields({ ...EMPTY_CONFIRM_FIELDS, dayNumber: dayNumber ? String(dayNumber) : '' });
@@ -289,11 +280,6 @@ export default function TripDashboard() {
       <TripHero
         finalItinerary={finalItinerary}
         travelers={finalItinerary.trip_summary.travelers}
-        unresolvedCount={result.unresolved.length}
-        assumptionsCount={finalItinerary.assumptions.length}
-        confirmedCount={anchors.length}
-        onJumpToUnresolved={result.unresolved.length > 0 ? () => jumpToOverview('assumptions-panel') : undefined}
-        onJumpToAssumptions={finalItinerary.assumptions.length > 0 ? () => jumpToOverview('assumptions-panel') : undefined}
         actions={<>
           <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
           <button className="btn btn-ghost" type="button" onClick={() => alert('Sharing is not available yet.')}>🔗 Share</button>
@@ -315,10 +301,14 @@ export default function TripDashboard() {
       <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">{TABS.map(({ name, icon }) => <button type="button" aria-current={tab === name ? 'page' : undefined} className={tab === name ? 'active' : ''} key={name} onClick={() => setTab(name)}><span className="tab-icon">{icon}</span> {name}</button>)}</nav>
 
       {tab === 'Overview' && <section aria-label="Trip overview">
-        <div className="overview-stats">
-          <div className="stat-tile"><span className="stat-label">Days</span><strong>{tripDatesLabel(days, finalItinerary.trip_summary.date_range).value}</strong></div>
-          <div className="stat-tile"><span className="stat-label">Estimated budget</span><strong>{moneyRange(finalItinerary.budget_summary.total_low, finalItinerary.budget_summary.total_high) || 'Not estimated'}</strong></div>
-        </div>
+        <div className="tab-intro"><div><h2>📅 Up next</h2><p>Day {days[0].day_number} · {days[0].primary_location}</p></div></div>
+        <article className="dashboard-card">
+          <div>
+            <h3>{days[0].title}</h3>
+            <p>{days[0].summary}</p>
+          </div>
+          <button type="button" className="btn btn-ghost" onClick={() => { setActiveDay(days[0].day_number); setTab('Itinerary'); }}>View itinerary →</button>
+        </article>
 
         <div className="tab-intro"><div><h2>💰 Estimated budget breakdown</h2><p>{finalItinerary.budget_summary.budget_fit}</p></div></div>
         <div className="budget-summary-card">
@@ -329,21 +319,10 @@ export default function TripDashboard() {
           <div className="sources-list"><h3>Sources</h3><ul>{finalItinerary.sources.map((source, index) => <li key={index}><a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a></li>)}</ul></div>
         )}
 
-        {(finalItinerary.assumptions.length > 0 || result.unresolved.length > 0) && (
-          <div id="assumptions-panel">
-            {finalItinerary.assumptions.length > 0 && (
-              <>
-                <div className="tab-intro"><div><h2>📝 Planning assumptions</h2><p>What we assumed to build this plan.</p></div></div>
-                <div className="insight-grid">
-                  {finalItinerary.assumptions.map((item, index) => (
-                    <div className="insight-card" key={index}>
-                      <span className="insight-badge">{humanize(item.category)}</span>
-                      <p>{item.detail}</p>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
+        {(finalItinerary.assumptions.length > 0 || result.unresolved.length > 0 || finalItinerary.practical_notes.length > 0) && (
+          <details className="trip-notes-disclosure">
+            <summary>Trip notes — assumptions, open items, and good-to-knows</summary>
+
             {result.unresolved.length > 0 && (
               <>
                 <div className="tab-intro"><div><h2>❓ Unresolved</h2><p>Worth checking closer to your travel dates.</p></div></div>
@@ -357,31 +336,19 @@ export default function TripDashboard() {
                 </div>
               </>
             )}
-          </div>
-        )}
 
-        {finalItinerary.practical_notes.length > 0 && (
-          <>
-            <div className="tab-intro"><div><h2>🎒 Practical notes</h2><p>Good to know before you go.</p></div></div>
-            <div className="insight-grid">
-              {finalItinerary.practical_notes.map((note, index) => (
-                <div className="insight-card" key={index}>
-                  <span className="insight-badge">{note.title}</span>
-                  <p>{note.detail}</p>
-                </div>
-              ))}
-            </div>
-          </>
+            {(finalItinerary.assumptions.length > 0 || finalItinerary.practical_notes.length > 0) && (
+              <ul className="trip-notes-list">
+                {finalItinerary.assumptions.map((item, index) => (
+                  <li key={`a${index}`}><strong>{humanize(item.category)}</strong> — {item.detail}</li>
+                ))}
+                {finalItinerary.practical_notes.map((note, index) => (
+                  <li key={`p${index}`}><strong>{note.title}</strong> — {note.detail}</li>
+                ))}
+              </ul>
+            )}
+          </details>
         )}
-
-        <div className="tab-intro"><div><h2>📅 Up next</h2><p>Day {days[0].day_number} · {days[0].primary_location}</p></div></div>
-        <article className="dashboard-card">
-          <div>
-            <h3>{days[0].title}</h3>
-            <p>{days[0].summary}</p>
-          </div>
-          <button type="button" className="btn btn-ghost" onClick={() => { setActiveDay(days[0].day_number); setTab('Itinerary'); }}>View itinerary →</button>
-        </article>
       </section>}
 
       {tab === 'Docs' && <section aria-label="Trip documents">
@@ -410,22 +377,19 @@ export default function TripDashboard() {
             </header>
             <AnchorList anchors={anchorsForDay(anchors, selectedDay.day_number)} />
             <div className="atlas-timeline">
-              {selectedDay.timeline.map((item, index) => <details className="atlas-item" key={index}>
+              {selectedDay.timeline.map((item, index) => <div className="atlas-item" key={index}>
                 <span className="atlas-dot">{timelineIcon(item.kind)}</span>
                 <div>
-                  <summary>
-                    <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
-                    <div className="item-summary-row">
-                      <strong>{item.title}</strong>
-                      {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
-                      <BookingReadinessBadge status={item.booking_readiness} />
-                      <span className="expand-hint">Details →</span>
-                    </div>
-                  </summary>
+                  <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
+                  <div className="item-summary-row">
+                    <strong>{item.title}</strong>
+                    {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
+                    <BookingReadinessBadge status={item.booking_readiness} />
+                  </div>
                   <p>{item.detail}</p>
                   {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
                 </div>
-              </details>)}
+              </div>)}
             </div>
             <div className="atlas-day-footer">
               <div className="footer-budget">
