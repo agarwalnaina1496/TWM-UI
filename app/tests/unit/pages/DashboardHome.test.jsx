@@ -68,7 +68,7 @@ describe('DashboardHome (TWM-108/163)', () => {
       })],
     }));
     renderDashboardHome({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
-    expect(await screen.findByText('Signed in as Traveler.')).toBeInTheDocument();
+    expect(await screen.findByText('Signed in as Traveler')).toBeInTheDocument();
     expect(screen.getByText('Itinerary ready')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /open dashboard/i })).toBeInTheDocument();
   });

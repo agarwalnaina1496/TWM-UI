@@ -108,16 +108,15 @@ export default function DashboardHome() {
     <div className="wrap">
       <div className="my-trips-header">
         <h1>Your <em>trips</em></h1>
+        {auth.loggedIn ? (
+          <span className="account-status">Signed in as {auth.name}</span>
+        ) : (
+          <span className="account-status">
+            You're browsing as a guest.<br />
+            <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span>
+          </span>
+        )}
       </div>
-      {auth.loggedIn ? (
-        <p className="lede">Signed in as {auth.name}.</p>
-      ) : (
-        <div className="account-history-locked">
-          <p>
-            You're browsing as a guest. <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span>
-          </p>
-        </div>
-      )}
 
       <ContextualAuthModal
         open={syncInviteOpen}
@@ -131,7 +130,7 @@ export default function DashboardHome() {
       {visibleTrips.length === 0 ? (
         <div className="empty-trips">
           <p className="empty-trips-title">No trips yet</p>
-          <p>Start planning your next adventure — pick one below.</p>
+          <p>Start planning your next adventure.</p>
           <div className="empty-trips-actions">
             <div className="entry-card" onClick={handlePlanTrip}>
               <div className="entry-card-icon">📍</div>
