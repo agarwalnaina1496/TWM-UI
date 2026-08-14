@@ -7,6 +7,10 @@
   --sage:#5B6E5A; --sage-bg:#EAEFE6;
   --blue:#3E5C76; --blue-bg:#E7EDF3;
   --radius:14px;
+  /* Type scale (TWM-165): new/touched CSS should reach for these instead of
+     hardcoding another near-duplicate px value — that drift is how the app
+     ended up with 6+ font-sizes all doing "secondary body text" duty. */
+  --fs-eyebrow:11px; --fs-body-sm:13.5px; --fs-card-title:17px;
 }
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--tp);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
