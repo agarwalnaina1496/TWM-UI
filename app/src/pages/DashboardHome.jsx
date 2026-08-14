@@ -2,22 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
+import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
+import { trackEvent } from '../lib/analytics.js';
 import {
   isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, contextRecapPills, contextDestination,
 } from '../lib/tripLifecycle.js';
 import '../styles/dashboard-home.css';
-
-// TWM-140: once dismissed for this browsing session, don't re-offer the
-// sync invitation on every Dashboard-home visit.
-const SYNC_DISMISSED_KEY = 'twm_sync_invite_dismissed';
-
-function readSyncDismissed() {
-  try {
-    return sessionStorage.getItem(SYNC_DISMISSED_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -43,7 +33,6 @@ export default function DashboardHome() {
   const { trips, auth, startNewTrip, openTrip, renameTrip } = useTrip();
   const navigate = useNavigate();
   const [syncInviteOpen, setSyncInviteOpen] = useState(false);
-  const [syncDismissed, setSyncDismissed] = useState(readSyncDismissed);
   const [filter, setFilter] = useState('all');
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
@@ -62,9 +51,19 @@ export default function DashboardHome() {
   const counts = { all: visibleTrips.length, active: activeTrips.length, upcoming: upcomingTrips.length, completed: completedTrips.length };
   const shown = groups[filter] ?? visibleTrips;
 
-  function handleNewTrip() {
+  // Mirrors the header nav's "Plan a Trip" / "Discover Destination" actions
+  // (TWM-164) — the empty state offers the same two entry paths inline
+  // rather than a separate "+ New trip" button.
+  function handlePlanTrip() {
+    trackEvent('intent_selected', { intent: 'plan' });
     startNewTrip();
-    navigate('/new-trip');
+    navigate(`/journey-entry?intent=${ENTRY_INTENTS.KNOWN_DESTINATION}`);
+  }
+
+  function handleDiscover() {
+    trackEvent('intent_selected', { intent: 'discover' });
+    startNewTrip();
+    navigate(`/journey-entry?intent=${ENTRY_INTENTS.DISCOVER}`);
   }
 
   // TWM-109: opening a trip that turned out to be gone (deleted, or a stale
@@ -105,42 +104,25 @@ export default function DashboardHome() {
     }
   }
 
-  function handleSyncDismiss() {
-    try {
-      sessionStorage.setItem(SYNC_DISMISSED_KEY, '1');
-    } catch {
-      // sessionStorage unavailable — worst case the invite can be reopened this session.
-    }
-    setSyncDismissed(true);
-  }
-
   return (
     <div className="wrap">
       <div className="my-trips-header">
         <h1>Your <em>trips</em></h1>
-        {visibleTrips.length > 0 && (
-          <span className="btn btn-primary" onClick={handleNewTrip}>+ New trip</span>
+        {auth.loggedIn ? (
+          <span className="account-status">Signed in as {auth.name}</span>
+        ) : (
+          <span className="account-status">
+            You're browsing as a guest.<br />
+            <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span>
+          </span>
         )}
       </div>
-      {auth.loggedIn ? (
-        <p className="lede">Signed in as {auth.name}.</p>
-      ) : (
-        <div className="account-history-locked">
-          <p>
-            You're browsing as a guest.
-            {!syncDismissed && (
-              <> <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span></>
-            )}
-          </p>
-        </div>
-      )}
 
       <ContextualAuthModal
         open={syncInviteOpen}
         onClose={() => setSyncInviteOpen(false)}
         benefit="Log in to sync this trip across devices"
         guestNote="Your current trip stays available on this device either way."
-        onContinueWithoutLogin={handleSyncDismiss}
       />
 
       {notice && <div className="price-evidence state-unsafe" role="alert">{notice}</div>}
@@ -149,7 +131,18 @@ export default function DashboardHome() {
         <div className="empty-trips">
           <p className="empty-trips-title">No trips yet</p>
           <p>Start planning your next adventure.</p>
-          <span className="btn btn-primary" style={{ marginTop: 12, display: 'inline-flex' }} onClick={handleNewTrip}>+ New trip</span>
+          <div className="empty-trips-actions">
+            <div className="entry-card" onClick={handlePlanTrip}>
+              <div className="entry-card-icon">📍</div>
+              <div className="entry-card-t">Plan a Trip</div>
+              <div className="entry-card-s">Already know your destination.</div>
+            </div>
+            <div className="entry-card" onClick={handleDiscover}>
+              <div className="entry-card-icon">🧭</div>
+              <div className="entry-card-t">Discover Destination</div>
+              <div className="entry-card-s">Get suggestions based on your vibe.</div>
+            </div>
+          </div>
         </div>
       ) : (
         <>

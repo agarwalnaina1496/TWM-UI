@@ -1,34 +1,23 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import ContextualAuthModal from '../../../src/components/ContextualAuthModal.jsx';
-import { TripProvider, useTrip } from '../../../src/context/TripContext.jsx';
-
-function Sentinel() {
-  const { pendingReturnTo } = useTrip();
-  return <div>Login screen, return to: {pendingReturnTo}</div>;
-}
+import LoginModal from '../../../src/components/LoginModal.jsx';
+import { TripProvider } from '../../../src/context/TripContext.jsx';
 
 function Harness({ initialOpen = true, onContinueWithoutLogin }) {
   return (
-    <MemoryRouter initialEntries={['/my-trips']}>
+    <MemoryRouter>
       <TripProvider>
-        <Routes>
-          <Route
-            path="/my-trips"
-            element={
-              <ContextualAuthModal
-                open={initialOpen}
-                onClose={() => {}}
-                benefit="Log in to sync this trip across devices"
-                guestNote="Your current trip stays available on this device either way."
-                onContinueWithoutLogin={onContinueWithoutLogin}
-              />
-            }
-          />
-          <Route path="/login" element={<Sentinel />} />
-        </Routes>
+        <ContextualAuthModal
+          open={initialOpen}
+          onClose={() => {}}
+          benefit="Log in to sync this trip across devices"
+          guestNote="Your current trip stays available on this device either way."
+          onContinueWithoutLogin={onContinueWithoutLogin}
+        />
+        <LoginModal />
       </TripProvider>
     </MemoryRouter>
   );
@@ -54,10 +43,10 @@ describe('ContextualAuthModal', () => {
     expect(screen.getByRole('button', { name: 'Continue without login' })).toBeInTheDocument();
   });
 
-  it('opens Login and preserves the originating route only after Log in and sync is chosen', async () => {
+  it('"Log in and sync" closes this modal and opens the login overlay in its place', async () => {
     render(<Harness />);
     await userEvent.click(screen.getByRole('button', { name: 'Log in and sync' }));
-    expect(screen.getByText('Login screen, return to: /my-trips')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /log in to continue/i })).toBeInTheDocument();
   });
 
   it('Continue without login stays on the originating screen and calls the dismiss callback', async () => {
@@ -65,7 +54,7 @@ describe('ContextualAuthModal', () => {
     render(<Harness onContinueWithoutLogin={onContinueWithoutLogin} />);
     await userEvent.click(screen.getByRole('button', { name: 'Continue without login' }));
     expect(onContinueWithoutLogin).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText(/Login screen/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /log in to continue/i })).not.toBeInTheDocument();
   });
 
   it('focuses the first action button on open for keyboard accessibility', () => {

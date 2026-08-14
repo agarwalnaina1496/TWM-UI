@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import '../styles/contextual-auth-modal.css';
 
@@ -9,14 +8,12 @@ import '../styles/contextual-auth-modal.css';
 // explicitly chosen; dismiss/"Continue without login" keeps the traveler on
 // the originating screen with their anonymous trip state intact.
 export default function ContextualAuthModal({ open, onClose, benefit, guestNote, onContinueWithoutLogin }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { setPendingReturnTo } = useTrip();
+  const { openLoginModal } = useTrip();
   const dialogRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
-    dialogRef.current?.querySelector('button')?.focus();
+    dialogRef.current?.querySelector('.auth-invite-actions button')?.focus();
     function onKeyDown(e) {
       if (e.key === 'Escape') onClose();
     }
@@ -27,8 +24,8 @@ export default function ContextualAuthModal({ open, onClose, benefit, guestNote,
   if (!open) return null;
 
   function handleLoginAndSync() {
-    setPendingReturnTo(location.pathname);
-    navigate('/login');
+    onClose();
+    openLoginModal();
   }
 
   function handleContinueWithoutLogin() {
@@ -46,6 +43,7 @@ export default function ContextualAuthModal({ open, onClose, benefit, guestNote,
         ref={dialogRef}
         onClick={e => e.stopPropagation()}
       >
+        <button type="button" className="modal-close" aria-label="Close" onClick={onClose}>×</button>
         <h2 id="auth-invite-title">{benefit}</h2>
         {guestNote && <p className="auth-invite-note">{guestNote}</p>}
         <div className="auth-invite-actions">

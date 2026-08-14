@@ -46,7 +46,8 @@ describe('DashboardHome (TWM-108/163)', () => {
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     expect(await screen.findByText('No trips yet')).toBeInTheDocument();
-    expect(screen.getByText('+ New trip')).toBeInTheDocument();
+    expect(screen.getByText('Plan a Trip')).toBeInTheDocument();
+    expect(screen.getByText('Discover Destination')).toBeInTheDocument();
   });
 
   it('renders stage-aware badge and CTA for a real trip', async () => {
@@ -67,7 +68,7 @@ describe('DashboardHome (TWM-108/163)', () => {
       })],
     }));
     renderDashboardHome({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
-    expect(await screen.findByText('Signed in as Traveler.')).toBeInTheDocument();
+    expect(await screen.findByText('Signed in as Traveler')).toBeInTheDocument();
     expect(screen.getByText('Itinerary ready')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /open dashboard/i })).toBeInTheDocument();
   });
@@ -97,18 +98,16 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByText(badgeText)).toBeInTheDocument();
   });
 
-  it('New Trip clears the current trip locally and navigates to the entry screen', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
-    }));
+  it('empty-state "Plan a Trip" clears the current trip locally without creating a Backend record yet', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    await screen.findByText('Coorg');
+    await screen.findByText('No trips yet');
 
     const callsBefore = fetchMock.mock.calls.length;
-    await userEvent.click(screen.getByText('+ New trip'));
+    await userEvent.click(screen.getByText('Plan a Trip'));
 
     // No POST — the Backend trip is created lazily by the traveler's first
-    // message on the new journey, not by clicking "+ New trip" itself.
+    // message on the new journey, not by clicking "Plan a Trip" itself.
     expect(fetchMock.mock.calls.length).toBe(callsBefore);
   });
 
@@ -199,7 +198,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByText('Log in to sync this trip across devices')).toBeInTheDocument();
   });
 
-  it('choosing Continue without login on the invitation keeps the traveler on My Trips and stops re-offering the locked-history prompt this session', async () => {
+  it('choosing Continue without login closes the modal but keeps the invitation visible for next time', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
@@ -207,6 +206,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     await userEvent.click(screen.getByText('Log in to sync across devices'));
     await userEvent.click(screen.getByRole('button', { name: 'Continue without login' }));
     expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
-    expect(screen.queryByText('Log in to sync across devices')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('Log in to sync across devices')).toBeInTheDocument();
   });
 });

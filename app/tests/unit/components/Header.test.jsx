@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useSearchParams } from 'react-router-dom';
 import Header from '../../../src/components/Header.jsx';
+import LoginModal from '../../../src/components/LoginModal.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
 import { SeedAuth } from '../testUtils.js';
 
@@ -16,18 +17,34 @@ function renderHeader(auth) {
   );
 }
 
-function renderHeaderWithLoginRoute(initialEntries) {
+function renderHeaderWithLoginModal(initialEntries) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <TripProvider>
         <Header />
+        <LoginModal />
+      </TripProvider>
+    </MemoryRouter>
+  );
+}
+
+function renderHeaderWithJourneyRoute() {
+  return render(
+    <MemoryRouter initialEntries={['/']}>
+      <TripProvider>
+        <Header />
         <Routes>
-          <Route path="/login" element={<div>Login screen</div>} />
-          <Route path="/my-trips" element={<div>My trips screen</div>} />
+          <Route path="/" element={<div>Dashboard-home screen</div>} />
+          <Route path="/journey-entry" element={<JourneyEntryProbe />} />
         </Routes>
       </TripProvider>
     </MemoryRouter>
   );
+}
+
+function JourneyEntryProbe() {
+  const [params] = useSearchParams();
+  return <div>Journey entry screen (intent={params.get('intent')})</div>;
 }
 
 describe('Header', () => {
@@ -54,9 +71,27 @@ describe('Header', () => {
     expect(screen.queryByText(/log in/i)).not.toBeInTheDocument();
   });
 
-  it('explicit Header Log in opens Login directly, since it is deliberate traveler intent', async () => {
-    renderHeaderWithLoginRoute(['/my-trips']);
+  it('explicit Header Log in opens the login overlay directly, since it is deliberate traveler intent', async () => {
+    renderHeaderWithLoginModal(['/my-trips']);
     await userEvent.click(screen.getByText(/log in/i));
-    expect(screen.getByText('Login screen')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /log in to continue/i })).toBeInTheDocument();
+  });
+
+  it('shows Plan a Trip and Discover Destination nav items', () => {
+    renderHeader();
+    expect(screen.getByText('Plan a Trip')).toBeInTheDocument();
+    expect(screen.getByText('Discover Destination')).toBeInTheDocument();
+  });
+
+  it('"Plan a Trip" routes to journey-entry with the known_destination intent', async () => {
+    renderHeaderWithJourneyRoute();
+    await userEvent.click(screen.getByText('Plan a Trip'));
+    expect(screen.getByText('Journey entry screen (intent=known_destination)')).toBeInTheDocument();
+  });
+
+  it('"Discover Destination" routes to journey-entry with the discover intent', async () => {
+    renderHeaderWithJourneyRoute();
+    await userEvent.click(screen.getByText('Discover Destination'));
+    expect(screen.getByText('Journey entry screen (intent=discover_destination)')).toBeInTheDocument();
   });
 });
