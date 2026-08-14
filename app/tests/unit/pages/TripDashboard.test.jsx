@@ -342,6 +342,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
     await readyDashboard();
+    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
     expect(screen.queryByText('Riverside stay')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Day 2/ }));
     expect(screen.getByText('Riverside stay')).toBeInTheDocument();
@@ -371,14 +372,14 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(stops[0]).toHaveTextContent('Day 1–2');
   });
 
-  it('Budget breakdown renders real budget_summary totals', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState());
+  it('Overview renders real budget_summary totals and stat tiles', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor()] });
     sendTripCommand = vi.fn();
-    const user = userEvent.setup();
     await readyDashboard();
-    await user.click(screen.getByRole('button', { name: /Budget breakdown/ }));
     expect(screen.getByText('Within a typical budget.')).toBeInTheDocument();
     expect(screen.getAllByText(/₹1,600–₹3,000/).length).toBeGreaterThan(0);
+    expect(screen.getByText('Days planned')).toBeInTheDocument();
+    expect(screen.getByText('Confirmed bookings')).toBeInTheDocument();
   });
 
   it('renders unsafe text as inert content, never as markup', async () => {
