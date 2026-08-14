@@ -62,13 +62,13 @@ describe('TripContext auth state', () => {
     expect(reloaded.current.trip.destination).toBe(null);
   });
 
-  it('preserves and clears a pending return route around a login action (TWM-140)', () => {
+  it('opens and closes the login overlay (TWM-140/164)', () => {
     const { result } = renderHook(() => useTrip(), { wrapper });
-    expect(result.current.pendingReturnTo).toBe(null);
-    act(() => result.current.setPendingReturnTo('/my-trips'));
-    expect(result.current.pendingReturnTo).toBe('/my-trips');
-    act(() => result.current.setPendingReturnTo(null));
-    expect(result.current.pendingReturnTo).toBe(null);
+    expect(result.current.loginModalOpen).toBe(false);
+    act(() => result.current.openLoginModal());
+    expect(result.current.loginModalOpen).toBe(true);
+    act(() => result.current.closeLoginModal());
+    expect(result.current.loginModalOpen).toBe(false);
   });
 
 });

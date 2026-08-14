@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { trackEvent } from '../lib/analytics.js';
@@ -12,19 +12,17 @@ import { trackEvent } from '../lib/analytics.js';
 // while an existing trip is current must not silently mutate it.
 export default function Header() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { auth, logout, setPendingReturnTo, startNewTrip } = useTrip();
+  const { auth, logout, openLoginModal, startNewTrip } = useTrip();
 
   function handleLogout() {
     logout();
-    navigate('/login');
   }
 
   // Explicit Header "Log in" is deliberate traveler intent, so it may open
-  // Login directly (TWM-140) — unlike contextual invitations elsewhere.
+  // the login overlay directly (TWM-140) — unlike contextual invitations
+  // elsewhere.
   function handleLogin() {
-    setPendingReturnTo(location.pathname);
-    navigate('/login');
+    openLoginModal();
   }
 
   function handlePlanTrip() {

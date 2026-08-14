@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header.jsx';
+import LoginModal, { LoginRouteRedirect } from './components/LoginModal.jsx';
 import ScoutChat from './pages/ScoutChat.jsx';
 import Destinations from './pages/Destinations.jsx';
 import TripPreview from './pages/TripPreview.jsx';
 import Logistics from './pages/Logistics.jsx';
-import Login from './pages/Login.jsx';
 import RequestQuote from './pages/RequestQuote.jsx';
 import Itinerary from './pages/Itinerary.jsx';
 import DashboardHome from './pages/DashboardHome.jsx';
@@ -30,8 +30,9 @@ export default function App() {
   return (
     <>
       <Header />
+      <LoginModal />
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<LoginRouteRedirect />} />
         <Route path="/" element={<DashboardHome />} />
         <Route path="/scout-chat" element={<ScoutChat />} />
         {/* keyed by search: switching intent (Plan a Trip <-> Discover

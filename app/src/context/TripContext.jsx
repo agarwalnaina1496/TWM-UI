@@ -42,11 +42,12 @@ export function TripProvider({ children }) {
   const [trip, setTrip] = useState(DEFAULT_TRIP);
   const [auth, setAuth] = useState(DEFAULT_AUTH);
   const [commandSnapshot, setCommandSnapshot] = useState(null);
-  // In-app route to return to after an explicit login action (TWM-140
-  // contextual auth invitation). Only ever set from internal route strings
-  // (useLocation().pathname) — never from external input — so it can't be
-  // used as an open redirect.
-  const [pendingReturnTo, setPendingReturnTo] = useState(null);
+  // Login is a global overlay (TWM-164), not a routed page — any screen can
+  // open it via openLoginModal() and the traveler stays exactly where they
+  // were once it closes, so no "return to" route tracking is needed.
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const openLoginModal = () => setLoginModalOpen(true);
+  const closeLoginModal = () => setLoginModalOpen(false);
 
   // Backend-authoritative trip record (id/title/version + guest session cookie).
   // Does not carry the mock trip content above — see TWM-102/TWM-110 split.
@@ -336,7 +337,7 @@ export function TripProvider({ children }) {
   return (
     <TripContext.Provider value={{
       trip, updateTrip, startNewTrip, auth, hasAccess, login, continueWithoutLogin, logout, setContact,
-      pendingReturnTo, setPendingReturnTo,
+      loginModalOpen, openLoginModal, closeLoginModal,
       commandSnapshot, sendTripCommand,
       currentTripId: tripRecord?.id ?? null, tripLoadStatus, tripLoadError, retryTripLoad, renameCurrentTrip,
       trips, openTrip, renameTrip,

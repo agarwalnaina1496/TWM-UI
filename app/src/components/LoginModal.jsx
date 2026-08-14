@@ -1,26 +1,52 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import '../styles/auth.css';
 import '../styles/details.css';
+import '../styles/contextual-auth-modal.css';
 
-export default function Login() {
-  const navigate = useNavigate();
-  const { trip, login, continueWithoutLogin } = useTrip();
+// Deep-link support for `/login` (bookmarks, old links, tests seeding auth
+// state directly): opens the overlay, then redirects to `/` — there's no
+// standalone login page anymore, just the overlay on top of wherever the
+// traveler lands.
+export function LoginRouteRedirect() {
+  const { openLoginModal } = useTrip();
+  useEffect(() => { openLoginModal(); }, [openLoginModal]);
+  return <Navigate to="/" replace />;
+}
+
+// Login as a global overlay (TWM-164), not a routed `/login` page — opened
+// from anywhere via useTrip().openLoginModal() and closes back onto exactly
+// the screen the traveler was already on.
+export default function LoginModal() {
+  const { trip, login, continueWithoutLogin, loginModalOpen, closeLoginModal } = useTrip();
   const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [resetSent, setResetSent] = useState(false);
+  const dialogRef = useRef(null);
+
+  useEffect(() => {
+    if (!loginModalOpen) return;
+    dialogRef.current?.querySelector('input')?.focus();
+    function onKeyDown(e) {
+      if (e.key === 'Escape') closeLoginModal();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [loginModalOpen, closeLoginModal]);
+
+  if (!loginModalOpen) return null;
 
   function continueNext() {
     login({ name: name.trim() || 'Traveler', email: email.trim() });
-    navigate('/');
+    closeLoginModal();
   }
 
   function handleContinueWithoutLogin() {
     continueWithoutLogin();
-    navigate('/');
+    closeLoginModal();
   }
 
   function switchMode(next) {
@@ -32,13 +58,21 @@ export default function Login() {
   const heading = mode === 'signup' ? 'Sign up to' : mode === 'forgot' ? 'Reset your' : 'Log in to';
 
   return (
-    <div className="wrap">
-      <h1>{heading} <em>{mode === 'forgot' ? 'password' : 'continue'}</em></h1>
-      {mode !== 'forgot' && trip.plan === 'twm-led' && (
-        <p className="lede">We'll need a way to reach you, since a real person coordinates TWM-Led trips.</p>
-      )}
+    <div className="auth-invite-backdrop" onClick={closeLoginModal}>
+      <div
+        className="auth-invite-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="login-modal-title"
+        ref={dialogRef}
+        onClick={e => e.stopPropagation()}
+      >
+        <button type="button" className="modal-close" aria-label="Close" onClick={closeLoginModal}>×</button>
+        <h1 id="login-modal-title">{heading} <em>{mode === 'forgot' ? 'password' : 'continue'}</em></h1>
+        {mode !== 'forgot' && trip.plan === 'twm-led' && (
+          <p className="lede">We'll need a way to reach you, since a real person coordinates TWM-Led trips.</p>
+        )}
 
-      <div className="auth-card">
         {mode === 'forgot' ? (
           resetSent ? (
             <>

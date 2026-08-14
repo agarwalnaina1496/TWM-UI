@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useSearchParams } from 'react-router-dom';
 import Header from '../../../src/components/Header.jsx';
+import LoginModal from '../../../src/components/LoginModal.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
 import { SeedAuth } from '../testUtils.js';
 
@@ -16,15 +17,12 @@ function renderHeader(auth) {
   );
 }
 
-function renderHeaderWithLoginRoute(initialEntries) {
+function renderHeaderWithLoginModal(initialEntries) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <TripProvider>
         <Header />
-        <Routes>
-          <Route path="/login" element={<div>Login screen</div>} />
-          <Route path="/my-trips" element={<div>My trips screen</div>} />
-        </Routes>
+        <LoginModal />
       </TripProvider>
     </MemoryRouter>
   );
@@ -73,10 +71,10 @@ describe('Header', () => {
     expect(screen.queryByText(/log in/i)).not.toBeInTheDocument();
   });
 
-  it('explicit Header Log in opens Login directly, since it is deliberate traveler intent', async () => {
-    renderHeaderWithLoginRoute(['/my-trips']);
+  it('explicit Header Log in opens the login overlay directly, since it is deliberate traveler intent', async () => {
+    renderHeaderWithLoginModal(['/my-trips']);
     await userEvent.click(screen.getByText(/log in/i));
-    expect(screen.getByText('Login screen')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /log in to continue/i })).toBeInTheDocument();
   });
 
   it('shows Plan a Trip and Discover Destination nav items', () => {
