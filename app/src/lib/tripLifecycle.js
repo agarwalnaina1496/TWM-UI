@@ -82,18 +82,21 @@ const STAGE_CTA = {
   recommended: { label: 'Review recommendations', to: '/destinations' },
   matched: { label: 'Review recommendations', to: '/destinations' },
   planning: { label: 'Resume planning', to: '/trip-preview' },
-  planned: { label: 'Open Dashboard', to: '/dashboard' },
-  booked: { label: 'Open Dashboard', to: '/dashboard' },
-  done: { label: 'View Dashboard', to: '/dashboard' },
+  planned: { label: 'View trip', to: '/dashboard' },
+  booked: { label: 'View trip', to: '/dashboard' },
+  done: { label: 'View trip', to: '/dashboard' },
 };
 
-// Stage-aware CTA for a My Trips card / the landing resolver's single-trip
-// resume path. Itinerary-ready always wins regardless of stage label, since
-// the Dashboard (TWM-107/97) is the real target once Atlas has produced a
-// version — matching the story's required Dashboard CTA.
+// Stage-aware CTA for a Dashboard-home card / the landing resolver's
+// single-trip resume path. Itinerary-ready always wins regardless of stage
+// label, since the per-trip Dashboard (TWM-107/97) is the real target once
+// Atlas has produced a version — matching the story's required Dashboard CTA.
+// Labeled "View trip", not "Open/View Dashboard" (TWM-165) — the traveler is
+// already on Dashboard-home when they see this, so naming the destination
+// after the page they're leaving reads as confusing self-reference.
 export function stageCta(tripState) {
   const stage = tripState?.stage ?? 'new';
-  if (isItineraryReady(tripState)) return { label: stage === 'done' ? 'View Dashboard' : 'Open Dashboard', to: '/dashboard' };
+  if (isItineraryReady(tripState)) return { label: 'View trip', to: '/dashboard' };
   if (stage === 'new' && hasTripContext(tripState)) return { label: 'Resume chat', to: '/scout-chat' };
   return STAGE_CTA[stage] || STAGE_CTA.new;
 }

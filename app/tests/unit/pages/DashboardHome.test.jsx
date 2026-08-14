@@ -61,7 +61,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByRole('button', { name: /review recommendations/i })).toBeInTheDocument();
   });
 
-  it('shows the Dashboard CTA for an itinerary-ready trip', async () => {
+  it('shows the View trip CTA for an itinerary-ready trip', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
       trips: [tripRecord({
         title: 'Manali', trip_state: { stage: 'planned', trip_context: { origin: 'Delhi' }, itinerary_state: { status: 'ready' } },
@@ -70,7 +70,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     renderDashboardHome({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
     expect(await screen.findByText('Signed in as Traveler')).toBeInTheDocument();
     expect(screen.getByText('Itinerary ready')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /view trip/i })).toBeInTheDocument();
   });
 
   it.each([
