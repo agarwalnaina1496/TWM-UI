@@ -12,18 +12,18 @@
 
 .resume-banner{background:var(--accent-bg);border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin:-6px auto 24px;max-width:520px;display:flex;flex-direction:column;gap:10px;align-items:center;font-size:13px;color:var(--ts);}
 
-.route-buttons{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:30px;}
-.route-btn{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:16px 12px;cursor:pointer;text-align:center;transition:all .15s ease;}
+.route-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:30px;}
+.route-btn{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:18px 14px;cursor:pointer;text-align:center;transition:all .15s ease;}
 .route-btn:hover{border-color:var(--accent);transform:translateY(-2px);}
-.route-btn .rb-icon{font-size:20px;margin-bottom:8px;}
-.route-btn .rb-t{font-size:12.5px;font-weight:700;}
-.route-btn .rb-s{font-size:10.5px;color:var(--tm);margin-top:2px;}
-@media (max-width:520px){ .route-buttons{grid-template-columns:1fr;} }
+.route-btn .rb-icon{font-size:22px;margin-bottom:10px;}
+.route-btn .rb-t{font-size:13px;font-weight:700;}
+.route-btn .rb-s{font-size:11px;color:var(--tm);margin-top:4px;}
+@media (max-width:640px){ .route-buttons{grid-template-columns:1fr;} }
 
 .or-divider{text-align:center;color:var(--tm);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;margin:22px 0 14px;display:flex;align-items:center;gap:10px;}
 .or-divider::before,.or-divider::after{content:'';flex:1;height:1px;background:var(--border);}
 
-.ask-box{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:8px 8px 8px 20px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(28,22,16,0.06);}
+.ask-box{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:8px 8px 8px 20px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(28,22,16,0.06);margin-top:22px;}
 .ask-input{flex:1;border:none;background:transparent;font-family:'Inter',sans-serif;font-size:14.5px;padding:12px 0;color:var(--tp);}
 .ask-input:focus{outline:none;}
 .ask-send{flex:none;width:42px;height:42px;border-radius:50%;background:var(--tp);border:none;color:#F5EFE6;cursor:pointer;display:flex;align-items:center;justify-content:center;}

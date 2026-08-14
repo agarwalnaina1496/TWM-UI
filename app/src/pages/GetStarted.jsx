@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { trackEvent } from '../lib/analytics.js';
@@ -7,6 +7,7 @@ import '../styles/entry.css';
 export default function GetStarted() {
   const navigate = useNavigate();
   const [input, setInput] = useState('');
+  const askInputRef = useRef(null);
 
   function route(text) {
     const value = (text ?? input).trim();
@@ -25,6 +26,8 @@ export default function GetStarted() {
     } else if (kind === 'discover') {
       trackEvent('intent_selected', { intent: 'discover' });
       navigate(`/journey-entry?intent=${ENTRY_INTENTS.DISCOVER}`);
+    } else if (kind === 'advice') {
+      askInputRef.current?.focus();
     }
   }
 
@@ -32,27 +35,31 @@ export default function GetStarted() {
     <div className="wrap">
       <div className="entry-hero">
         <span className="eyebrow">✦ Scout &middot; your travel companion</span>
-        <h1>Where are we <em>headed</em>?</h1>
-        <p className="lede">Choose a direct path, or tell Scout the whole trip in your own words.</p>
+        <h1>Where to <em>next</em>?</h1>
+        <p className="lede">Pick how you'd like to start.</p>
 
         <div className="route-buttons">
           <div className="route-btn" onClick={() => handleQuickRoute('decided')}>
             <div className="rb-icon">📍</div>
-            <div className="rb-t">I know where I'm going</div>
-            <div className="rb-s">Straight to planning</div>
+            <div className="rb-t">I know my destination</div>
+            <div className="rb-s">Jump straight into planning.</div>
           </div>
           <div className="route-btn" onClick={() => handleQuickRoute('discover')}>
             <div className="rb-icon">🧭</div>
-            <div className="rb-t">Not sure yet</div>
-            <div className="rb-s">Help me find a destination</div>
+            <div className="rb-t">Help me decide</div>
+            <div className="rb-s">Get suggestions based on your vibe.</div>
+          </div>
+          <div className="route-btn" onClick={() => handleQuickRoute('advice')}>
+            <div className="rb-icon">💬</div>
+            <div className="rb-t">Just tell me</div>
+            <div className="rb-s">Type what's on your mind.</div>
           </div>
         </div>
-
-        <div className="or-divider">or just tell Scout</div>
 
         <div className="ask-box">
           <input
             id="askInput"
+            ref={askInputRef}
             type="text"
             className="ask-input"
             placeholder='e.g. "Plan my Coorg trip" or "What&apos;s the best time to visit Ladakh?"…'

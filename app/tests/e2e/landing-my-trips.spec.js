@@ -78,7 +78,7 @@ test('+ New Trip navigates to the dedicated entry screen and preserves the exist
   await page.getByText('+ New trip').click();
 
   await expect(page).toHaveURL(/\/app\/new-trip/);
-  await expect(page.getByRole('heading', { name: /where are we headed/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /where to next/i })).toBeVisible();
 
   await page.goto('');
   await expect(page.getByText('Coorg weekend')).toBeVisible();

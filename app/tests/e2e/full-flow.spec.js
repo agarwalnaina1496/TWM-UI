@@ -118,10 +118,10 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
   await page.getByText('+ New trip').click();
   await expect(page).toHaveURL(/\/app\/new-trip/);
 
-  // GetStarted -> "Not sure yet" (discover) route: shows a hardcoded welcome
+  // GetStarted -> "Help me decide" (discover) route: shows a hardcoded welcome
   // with no Backend call, then discover_entry fires only once the traveler
   // sends their first message.
-  await page.getByText('Not sure yet').click();
+  await page.getByText('Help me decide').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
   await expect(page.getByText(/tell me about the trip you have in mind/i)).toBeVisible();
   await page.getByPlaceholder('Tell Scout about your trip…').fill('Somewhere relaxing');
