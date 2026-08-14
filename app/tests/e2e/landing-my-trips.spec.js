@@ -4,8 +4,9 @@ import { mockTripCommandFlow, tripRecord, readyItineraryState } from './testUtil
 // TWM-163: `/` always renders Dashboard-home directly, for any trip count
 // or stage (including zero trips, which shows Dashboard-home's own empty
 // state). No auto-resume or auto-open-Dashboard from landing anymore —
-// that only happens from an explicit trip-card click. GetStarted is reached
-// only via the dedicated `/new-trip` route (the "+ New trip" action).
+// that only happens from an explicit trip-card click. TWM-164: the
+// persistent header nav ("Plan a Trip" / "Discover Destination") is the
+// entry point into a journey — there's no intermediate GetStarted screen.
 
 test('zero trips lands on Dashboard-home with its own empty state', async ({ page }) => {
   await mockTripCommandFlow(page, []);
@@ -69,19 +70,27 @@ test('deep link to /my-trips renders the same Dashboard-home', async ({ page }) 
   await expect(page.getByRole('heading', { name: /your.*trips/i })).toBeVisible();
 });
 
-test('+ New Trip navigates to the dedicated entry screen and preserves the existing trip', async ({ page }) => {
+test('header "Plan a Trip" starts a separate Backend journey and preserves the existing trip', async ({ page }) => {
   const existing = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } });
   await mockTripCommandFlow(page, [], { initialTrips: [existing] });
 
   await page.goto('');
   await expect(page.getByText('Coorg weekend')).toBeVisible();
-  await page.getByText('+ New trip').click();
+  await page.getByText('Plan a Trip').click();
 
-  await expect(page).toHaveURL(/\/app\/new-trip/);
-  await expect(page.getByRole('heading', { name: /where to next/i })).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/journey-entry\?intent=known_destination/);
 
   await page.goto('');
   await expect(page.getByText('Coorg weekend')).toBeVisible();
+});
+
+test('Dashboard-home empty state offers the same two entry actions as the header', async ({ page }) => {
+  await mockTripCommandFlow(page, []);
+  await page.goto('');
+  await expect(page.getByText('No trips yet')).toBeVisible();
+
+  await page.getByText('Discover Destination', { exact: true }).first().click();
+  await expect(page).toHaveURL(/\/app\/journey-entry\?intent=discover_destination/);
 });
 
 test('renaming a trip persists through the Backend and survives a refresh', async ({ page }) => {

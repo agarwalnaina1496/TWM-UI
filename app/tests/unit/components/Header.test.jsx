@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useSearchParams } from 'react-router-dom';
 import Header from '../../../src/components/Header.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
 import { SeedAuth } from '../testUtils.js';
@@ -28,6 +28,25 @@ function renderHeaderWithLoginRoute(initialEntries) {
       </TripProvider>
     </MemoryRouter>
   );
+}
+
+function renderHeaderWithJourneyRoute() {
+  return render(
+    <MemoryRouter initialEntries={['/']}>
+      <TripProvider>
+        <Header />
+        <Routes>
+          <Route path="/" element={<div>Dashboard-home screen</div>} />
+          <Route path="/journey-entry" element={<JourneyEntryProbe />} />
+        </Routes>
+      </TripProvider>
+    </MemoryRouter>
+  );
+}
+
+function JourneyEntryProbe() {
+  const [params] = useSearchParams();
+  return <div>Journey entry screen (intent={params.get('intent')})</div>;
 }
 
 describe('Header', () => {
@@ -58,5 +77,24 @@ describe('Header', () => {
     renderHeaderWithLoginRoute(['/my-trips']);
     await userEvent.click(screen.getByText(/log in/i));
     expect(screen.getByText('Login screen')).toBeInTheDocument();
+  });
+
+  it('shows Home, Plan a Trip, and Discover Destination nav items', () => {
+    renderHeader();
+    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument();
+    expect(screen.getByText('Plan a Trip')).toBeInTheDocument();
+    expect(screen.getByText('Discover Destination')).toBeInTheDocument();
+  });
+
+  it('"Plan a Trip" routes to journey-entry with the known_destination intent', async () => {
+    renderHeaderWithJourneyRoute();
+    await userEvent.click(screen.getByText('Plan a Trip'));
+    expect(screen.getByText('Journey entry screen (intent=known_destination)')).toBeInTheDocument();
+  });
+
+  it('"Discover Destination" routes to journey-entry with the discover intent', async () => {
+    renderHeaderWithJourneyRoute();
+    await userEvent.click(screen.getByText('Discover Destination'));
+    expect(screen.getByText('Journey entry screen (intent=discover_destination)')).toBeInTheDocument();
   });
 });

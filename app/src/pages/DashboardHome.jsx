@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
+import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
+import { trackEvent } from '../lib/analytics.js';
 import {
   isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, contextRecapPills, contextDestination,
 } from '../lib/tripLifecycle.js';
@@ -62,9 +64,19 @@ export default function DashboardHome() {
   const counts = { all: visibleTrips.length, active: activeTrips.length, upcoming: upcomingTrips.length, completed: completedTrips.length };
   const shown = groups[filter] ?? visibleTrips;
 
-  function handleNewTrip() {
+  // Mirrors the header nav's "Plan a Trip" / "Discover Destination" actions
+  // (TWM-164) — the empty state offers the same two entry paths inline
+  // rather than a separate "+ New trip" button.
+  function handlePlanTrip() {
+    trackEvent('intent_selected', { intent: 'plan' });
     startNewTrip();
-    navigate('/new-trip');
+    navigate(`/journey-entry?intent=${ENTRY_INTENTS.KNOWN_DESTINATION}`);
+  }
+
+  function handleDiscover() {
+    trackEvent('intent_selected', { intent: 'discover' });
+    startNewTrip();
+    navigate(`/journey-entry?intent=${ENTRY_INTENTS.DISCOVER}`);
   }
 
   // TWM-109: opening a trip that turned out to be gone (deleted, or a stale
@@ -118,9 +130,6 @@ export default function DashboardHome() {
     <div className="wrap">
       <div className="my-trips-header">
         <h1>Your <em>trips</em></h1>
-        {visibleTrips.length > 0 && (
-          <span className="btn btn-primary" onClick={handleNewTrip}>+ New trip</span>
-        )}
       </div>
       {auth.loggedIn ? (
         <p className="lede">Signed in as {auth.name}.</p>
@@ -148,8 +157,11 @@ export default function DashboardHome() {
       {visibleTrips.length === 0 ? (
         <div className="empty-trips">
           <p className="empty-trips-title">No trips yet</p>
-          <p>Start planning your next adventure.</p>
-          <span className="btn btn-primary" style={{ marginTop: 12, display: 'inline-flex' }} onClick={handleNewTrip}>+ New trip</span>
+          <p>Start planning your next adventure — pick one below.</p>
+          <div className="empty-trips-actions">
+            <span className="btn btn-primary" onClick={handlePlanTrip}>Plan a Trip</span>
+            <span className="btn btn-ghost" onClick={handleDiscover}>Discover Destination</span>
+          </div>
         </div>
       ) : (
         <>

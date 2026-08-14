@@ -13,7 +13,7 @@ function successOutcome() {
   };
 }
 
-test('full flow: GetStarted through Dashboard', async ({ page }) => {
+test('full flow: header nav entry through Dashboard', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
       command: 'discover_entry',
@@ -113,15 +113,12 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
   await page.getByText('Continue without login').click();
   await expect(page).toHaveURL(/\/app\/?$/);
 
-  // Root shows Dashboard-home's empty state (zero trips); "+ New trip"
-  // is the only way to reach GetStarted, at the dedicated /new-trip route.
-  await page.getByText('+ New trip').click();
-  await expect(page).toHaveURL(/\/app\/new-trip/);
-
-  // GetStarted -> "Help me decide" (discover) route: shows a hardcoded welcome
+  // Root shows Dashboard-home's empty state (zero trips); the persistent
+  // header nav (TWM-164) is the entry point into a journey, no intermediate
+  // GetStarted screen. "Discover Destination" -> shows a hardcoded welcome
   // with no Backend call, then discover_entry fires only once the traveler
   // sends their first message.
-  await page.getByText('Help me decide').click();
+  await page.getByText('Discover Destination').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
   await expect(page.getByText(/tell me about the trip you have in mind/i)).toBeVisible();
   await page.getByPlaceholder('Tell Scout about your trip…').fill('Somewhere relaxing');

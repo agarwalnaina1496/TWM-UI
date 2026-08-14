@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header.jsx';
-import GetStarted from './pages/GetStarted.jsx';
 import ScoutChat from './pages/ScoutChat.jsx';
 import Destinations from './pages/Destinations.jsx';
 import TripPreview from './pages/TripPreview.jsx';
@@ -34,7 +33,6 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<DashboardHome />} />
-        <Route path="/new-trip" element={<GetStarted />} />
         <Route path="/scout-chat" element={<ScoutChat />} />
         <Route path="/journey-entry" element={<JourneyEntry />} />
         <Route path="/destinations" element={<Destinations />} />

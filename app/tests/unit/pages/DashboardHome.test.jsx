@@ -46,7 +46,8 @@ describe('DashboardHome (TWM-108/163)', () => {
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     expect(await screen.findByText('No trips yet')).toBeInTheDocument();
-    expect(screen.getByText('+ New trip')).toBeInTheDocument();
+    expect(screen.getByText('Plan a Trip')).toBeInTheDocument();
+    expect(screen.getByText('Discover Destination')).toBeInTheDocument();
   });
 
   it('renders stage-aware badge and CTA for a real trip', async () => {
@@ -97,18 +98,16 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByText(badgeText)).toBeInTheDocument();
   });
 
-  it('New Trip clears the current trip locally and navigates to the entry screen', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
-    }));
+  it('empty-state "Plan a Trip" clears the current trip locally without creating a Backend record yet', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    await screen.findByText('Coorg');
+    await screen.findByText('No trips yet');
 
     const callsBefore = fetchMock.mock.calls.length;
-    await userEvent.click(screen.getByText('+ New trip'));
+    await userEvent.click(screen.getByText('Plan a Trip'));
 
     // No POST — the Backend trip is created lazily by the traveler's first
-    // message on the new journey, not by clicking "+ New trip" itself.
+    // message on the new journey, not by clicking "Plan a Trip" itself.
     expect(fetchMock.mock.calls.length).toBe(callsBefore);
   });
 
