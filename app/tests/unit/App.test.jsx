@@ -165,23 +165,24 @@ describe('App guest-first routing (TWM-140)', () => {
       vi.restoreAllMocks();
     });
 
-    it('sends known_destination_entry with the typed destination and invokes Guide', async () => {
+    it('sends known_destination_entry and, once Guide generates places and a day plan together, lands on the unified Plan Builder — never /dashboard', async () => {
       const user = userEvent.setup();
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
         .mockResolvedValueOnce(jsonResponse(tripRecord()))
         .mockResolvedValueOnce(jsonResponse({
-          message: 'Here are the places.',
+          message: "Anything else you'd like to add? Any other preferences?",
           agent_meta: null,
           trip: tripRecord({
             version: 2,
             trip_state: {
               stage: 'planning',
               active_agent: 'guide',
-              trip_context: { destinations: ['Coorg'], duration_days: 3 },
+              trip_context: { destinations: ['Coorg'], trip_duration: 3 },
               planner_state: {
-                places: ['Coorg Palace'],
-                day_plan: [{ day_number: 1, date: null, places: ['Coorg Palace'], pace: 'balanced', buffer_note: null }],
+                conversation_context: { awaiting: 'anything_else' },
+                places: [],
+                day_plan: [],
               },
             },
           }),
@@ -190,10 +191,33 @@ describe('App guest-first routing (TWM-140)', () => {
       renderApp(['/journey-entry?intent=known_destination']);
       await user.type(screen.getByPlaceholderText('e.g. Coorg, Karnataka'), 'Coorg{Enter}');
 
-      expect(await screen.findByText('Here are the places.')).toBeInTheDocument();
+      expect(await screen.findByText("Anything else you'd like to add? Any other preferences?")).toBeInTheDocument();
       expect(screen.getByText('Coorg', { selector: '.chat-bub-user' })).toBeInTheDocument();
       expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ command: 'known_destination_entry', destination: 'Coorg' });
-      expect(await screen.findByRole('button', { name: 'Generate detailed itinerary →' })).toBeInTheDocument();
+
+      fetchMock.mockResolvedValueOnce(jsonResponse({
+        message: 'Here is your plan.',
+        agent_meta: null,
+        trip: tripRecord({
+          version: 3,
+          trip_state: {
+            stage: 'planning',
+            active_agent: 'guide',
+            trip_context: { destinations: ['Coorg'], trip_duration: 1 },
+            planner_state: {
+              conversation_context: { awaiting: null },
+              places: ['Coorg Palace'],
+              day_plan: [{ day_number: 1, date: null, places: ['Coorg Palace'], pace: 'balanced', buffer_note: null }],
+            },
+          },
+        }),
+      }));
+      await user.type(screen.getByPlaceholderText('e.g. Coorg, Karnataka'), "Nothing else{Enter}");
+
+      // The unified Plan Builder (TripPreview), not the chat, now shows the
+      // generated plan — the known-destination path never lands on /dashboard.
+      expect(await screen.findByText('Coorg Palace')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Finalize my trip/ })).toBeInTheDocument();
     });
   });
 });

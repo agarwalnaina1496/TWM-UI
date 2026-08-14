@@ -32,4 +32,6 @@ export const QUICK_REPLIES = Object.freeze({
   duration_days: ['3 days', '5 days', '7 days'],
   travel_dates: ['Not sure yet', 'Sometime next month', 'Flexible'],
   budget: ['₹1,00,000 total for both'],
+  // Guide's sixth gating question, asked after the five fixed facts above.
+  anything_else: ["Nothing else, let's plan"],
 });

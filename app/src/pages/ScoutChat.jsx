@@ -4,7 +4,7 @@ import { useTrip } from '../context/TripContext.jsx';
 import { QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
-import { useGuidePlanning } from '../hooks/useGuidePlanning.js';
+import { planReady } from '../hooks/useGuidePlanning.js';
 import '../styles/chat.css';
 
 let nextId = 1;
@@ -17,7 +17,6 @@ export default function ScoutChat() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const { maybeAdvancePlaces, generateItinerary, generating } = useGuidePlanning(sendTripCommand, navigate);
   const initialized = useRef(false);
   const lastCommand = useRef(null);
   // The very first turn is a typed scout_entry (Scout entry, no rediscovery);
@@ -40,12 +39,15 @@ export default function ScoutChat() {
       const command = entered.current ? 'traveler_message' : 'scout_entry';
       const response = await sendTripCommand(command, { message: text, idempotencyKey });
       entered.current = true;
-      say('assistant', response.message);
       const plannerState = response.trip.trip_state.planner_state;
-      if (plannerState) {
-        const advanced = await maybeAdvancePlaces(plannerState);
-        if (advanced?.message) say('assistant', advanced.message);
+      if (planReady(plannerState)) {
+        // Guide generated the complete plan in this turn — go straight to
+        // the unified Plan Builder instead of showing the message here,
+        // this component unmounts on navigate. Same handoff as JourneyEntry.
+        navigate('/trip-preview', { state: { guideMessage: response.message } });
+        return;
       }
+      say('assistant', response.message);
     } catch (commandError) {
       setError(commandError.message || 'Something went wrong.');
     } finally {
@@ -75,7 +77,6 @@ export default function ScoutChat() {
   const guideAwaiting = commandSnapshot?.trip_state?.planner_state?.conversation_context?.awaiting;
   const awaiting = activeAgent === 'guide' ? guideAwaiting : matcherAwaiting;
   const quickReplies = QUICK_REPLIES[awaiting] || [];
-  const guideDayPlanReady = (commandSnapshot?.trip_state?.planner_state?.day_plan?.length || 0) > 0;
   const thinkingMessage = useThinkingMessage(busy);
   return (
     <div className="chat-page chat-screen">
@@ -99,9 +100,6 @@ export default function ScoutChat() {
         {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={() => runAdvice(lastCommand.current?.message ?? '', { showUser: false })}>Try again</button></div>}
         {((activeAgent === 'meridian' && !awaiting) || stage === 'recommended') && (
           <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>See destinations →</button>
-        )}
-        {activeAgent === 'guide' && guideDayPlanReady && (
-          <button type="button" className="btn btn-primary" disabled={generating} onClick={generateItinerary}>Generate detailed itinerary →</button>
         )}
       </div>
 
