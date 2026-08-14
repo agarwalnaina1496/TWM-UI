@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import {
   buildRemovePlaceMessage, buildReplacePlaceMessage, buildSetPaceMessage, planBuilderSummary,
@@ -9,6 +9,30 @@ import '../styles/preview.css';
 
 const PACE_OPTIONS = ['relaxed', 'balanced', 'packed'];
 
+// Shared by the gating-question screen and the chat drawer — both are a
+// plain free-text message to Guide, just with a different placeholder and
+// destination for the trimmed value.
+function FreeTextComposer({ value, onChange, onSubmit, placeholder, pending }) {
+  function submit() {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onSubmit(trimmed);
+  }
+  return (
+    <>
+      <input
+        aria-label="Message Guide"
+        value={value}
+        disabled={pending}
+        placeholder={placeholder}
+        onChange={event => onChange(event.target.value)}
+        onKeyDown={event => { if (event.key === 'Enter') submit(); }}
+      />
+      <button type="button" className="btn btn-primary" disabled={pending || !value.trim()} onClick={submit}>Send</button>
+    </>
+  );
+}
+
 // The single unified Plan Builder screen for both entry paths (known
 // destination and discover). Guide generates places and the day plan
 // together in one step — there is no separate approve-places screen at any
@@ -16,6 +40,7 @@ const PACE_OPTIONS = ['relaxed', 'balanced', 'packed'];
 // known-destination path used to bypass it entirely and land on /dashboard).
 export default function TripPreview() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { commandSnapshot, sendTripCommand, tripLoadStatus } = useTrip();
 
   const tripState = commandSnapshot?.trip_state;
@@ -34,7 +59,11 @@ export default function TripPreview() {
   const [bootStatus, setBootStatus] = useState('idle'); // idle | booting | ready | error
   const [bootError, setBootError] = useState(null);
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState('');
+  // A Guide message carried over from the chat turn that completed the plan
+  // (JourneyEntry/ScoutChat navigate here with it in location.state, since
+  // this component mounting fresh would otherwise lose it) — falls back to
+  // '' so the local per-edit message below can still own this state.
+  const [message, setMessage] = useState(location.state?.guideMessage || '');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [freeText, setFreeText] = useState('');
   const [replacingPlace, setReplacingPlace] = useState(null);
@@ -70,7 +99,8 @@ export default function TripPreview() {
     setBootStatus('booting');
     (async () => {
       try {
-        await sendTripCommand('start_planning');
+        const response = await sendTripCommand('start_planning');
+        if (response.message) setMessage(response.message);
         setBootStatus('ready');
       } catch (error) {
         trackFailure('plan_builder', error);
@@ -102,10 +132,6 @@ export default function TripPreview() {
     } finally {
       setPending(false);
     }
-  }
-
-  function sendGatingAnswer(text) {
-    return sendEdit(text);
   }
 
   function generate() {
@@ -148,31 +174,13 @@ export default function TripPreview() {
         <p className="lede">{message || (awaiting ? 'Guide needs a bit more before it can propose a plan.' : 'Setting up your plan…')}</p>
         {message && <div className="revision-message" role="status">{message}</div>}
         <div className="builder-controls" aria-label="Answer Guide">
-          <input
-            aria-label="Message Guide"
+          <FreeTextComposer
             value={freeText}
-            disabled={pending}
+            onChange={setFreeText}
+            pending={pending}
             placeholder="Your answer…"
-            onChange={event => setFreeText(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && freeText.trim()) {
-                const value = freeText.trim();
-                setFreeText('');
-                sendGatingAnswer(value);
-              }
-            }}
+            onSubmit={value => { setFreeText(''); sendEdit(value); }}
           />
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={pending || !freeText.trim()}
-            onClick={() => {
-              const value = freeText.trim();
-              if (!value) return;
-              setFreeText('');
-              sendGatingAnswer(value);
-            }}
-          >Send</button>
         </div>
       </main>
     );
@@ -213,9 +221,11 @@ export default function TripPreview() {
             </header>
             {dayEntry.buffer_note && <p className="buffer-note">{dayEntry.buffer_note}</p>}
             <ul className="plan-list">
-              {dayEntry.places.map(place => (
-                <li className="item-row" key={`${dayEntry.day_number}-${place}`}>
-                  {replacingPlace === place ? (
+              {dayEntry.places.map(place => {
+                const rowKey = `${dayEntry.day_number}-${place}`;
+                return (
+                <li className="item-row" key={rowKey}>
+                  {replacingPlace === rowKey ? (
                     <span className="replace-row">
                       <input
                         aria-label={`Replace ${place} with`}
@@ -246,13 +256,14 @@ export default function TripPreview() {
                     <>
                       <span>{place}</span>
                       <span className="item-actions">
-                        <button type="button" disabled={pending} aria-label={`Replace ${place}`} onClick={() => { setReplacingPlace(place); setReplacement(''); }}>Replace</button>
+                        <button type="button" disabled={pending} aria-label={`Replace ${place}`} onClick={() => { setReplacingPlace(rowKey); setReplacement(''); }}>Replace</button>
                         <button type="button" disabled={pending} aria-label={`Remove ${place}`} onClick={() => sendEdit(buildRemovePlaceMessage(place), 'remove')}>Remove</button>
                       </span>
                     </>
                   )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </article>
         ))}
@@ -265,30 +276,13 @@ export default function TripPreview() {
       </div>
       {drawerOpen && (
         <section className="chat-drawer" aria-label="Chat with Guide">
-          <input
-            aria-label="Message Guide"
+          <FreeTextComposer
             value={freeText}
-            disabled={pending}
+            onChange={setFreeText}
+            pending={pending}
             placeholder="Tell Guide what to change…"
-            onChange={event => setFreeText(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && freeText.trim()) {
-                sendEdit(freeText.trim(), 'chat');
-                setFreeText('');
-              }
-            }}
+            onSubmit={value => { setFreeText(''); sendEdit(value, 'chat'); }}
           />
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={pending || !freeText.trim()}
-            onClick={() => {
-              const value = freeText.trim();
-              if (!value) return;
-              sendEdit(value, 'chat');
-              setFreeText('');
-            }}
-          >Send</button>
         </section>
       )}
 

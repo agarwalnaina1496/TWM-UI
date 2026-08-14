@@ -137,4 +137,48 @@ describe('TripPreview real Guide Plan Builder', () => {
     expect(sendTripCommand).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith('/dashboard', { replace: true });
   });
+
+  it('shows Guide\'s message carried over via navigation state from the chat turn that completed the plan', () => {
+    commandSnapshot = snapshotWith(readyPlannerState());
+    sendTripCommand = vi.fn();
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/trip-preview', state: { guideMessage: 'Here is your three-day plan.' } }]}>
+        <TripPreview />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Here is your three-day plan.')).toBeInTheDocument();
+  });
+
+  it('shows Guide\'s actual gating question from the start_planning response, not generic filler text', async () => {
+    commandSnapshot = snapshotWith(null);
+    sendTripCommand = vi.fn(async () => {
+      commandSnapshot = snapshotWith({ conversation_context: { awaiting: 'origin_city' }, places: [], day_plan: [], revision: 1 });
+      return { message: 'Where will you be travelling from?', agent_meta: null, trip: commandSnapshot };
+    });
+    render(<MemoryRouter><TripPreview /></MemoryRouter>);
+    expect(await screen.findAllByText('Where will you be travelling from?')).toHaveLength(2);
+  });
+
+  it('scopes the Replace-in-progress row to a single day, not every day sharing the same place name', async () => {
+    commandSnapshot = snapshotWith(readyPlannerState({
+      places: ['Lunch', 'Lunch'],
+      day_plan: [
+        { day_number: 1, date: null, places: ['Lunch'], pace: 'relaxed', buffer_note: null },
+        { day_number: 2, date: null, places: ['Lunch'], pace: 'balanced', buffer_note: null },
+      ],
+    }));
+    sendTripCommand = vi.fn();
+    const user = userEvent.setup();
+    render(<MemoryRouter><TripPreview /></MemoryRouter>);
+    const day1Actions = screen.getByRole('group', { name: 'Adjust Day 1 pace' });
+    const day1Row = day1Actions.closest('.day-card');
+    await user.click(within(day1Row).getByRole('button', { name: 'Replace Lunch' }));
+    // Day 1's row is now in edit mode...
+    expect(within(day1Row).getByRole('textbox', { name: 'Replace Lunch with' })).toBeInTheDocument();
+    // ...but Day 2's identically-named row must still show its plain Replace/Remove actions.
+    const day2Actions = screen.getByRole('group', { name: 'Adjust Day 2 pace' });
+    const day2Row = day2Actions.closest('.day-card');
+    expect(within(day2Row).getByRole('button', { name: 'Replace Lunch' })).toBeInTheDocument();
+    expect(within(day2Row).queryByRole('textbox', { name: 'Replace Lunch with' })).not.toBeInTheDocument();
+  });
 });

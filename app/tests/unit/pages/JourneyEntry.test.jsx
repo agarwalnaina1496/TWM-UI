@@ -53,7 +53,7 @@ describe('JourneyEntry known-destination chat', () => {
     const input = screen.getByRole('textbox', { name: 'Destination' });
     await user.type(input, "Nothing else, let's plan");
     await user.click(screen.getByRole('button', { name: 'Start planning' }));
-    expect(navigate).toHaveBeenCalledWith('/trip-preview');
+    expect(navigate).toHaveBeenCalledWith('/trip-preview', { state: { guideMessage: 'Here is your plan.' } });
     expect(navigate).not.toHaveBeenCalledWith('/dashboard');
   });
 });

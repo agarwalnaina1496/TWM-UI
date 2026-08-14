@@ -1,30 +1,11 @@
-import { useState } from 'react';
-
-// Guide now generates places and the day plan together in a single step —
-// there is no places-only intermediate state to silently advance through.
-// This hook owns the one remaining deterministic step: freezing the plan
-// and generating the detailed itinerary.
-export function useGuidePlanning(sendTripCommand, navigate) {
-  const [generating, setGenerating] = useState(false);
-
-  // True once Guide has produced a complete plan (places + day plan
-  // together) — the traveler should land on the unified Plan Builder.
-  function planReady(plannerState) {
-    const hasPlaces = (plannerState?.places?.length || 0) > 0;
-    const hasDayPlan = (plannerState?.day_plan?.length || 0) > 0;
-    return hasPlaces && hasDayPlan;
-  }
-
-  async function generateItinerary() {
-    setGenerating(true);
-    try {
-      const response = await sendTripCommand('approve_plan');
-      if (response.trip.trip_state.planner_state?.frozen_plan) navigate('/dashboard');
-      return response;
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  return { planReady, generateItinerary, generating };
+// Guide generates places and the day plan together in a single step — once
+// that's happened, the traveler should land on the unified Plan Builder
+// (TripPreview.jsx), which owns freezing the plan and generating the
+// detailed itinerary itself. day_plan is only ever produced alongside
+// places in the same single-step turn, so its presence alone is the ready
+// signal — must match TripPreview.jsx's own planReady check exactly (a
+// subsequent edit can legitimately empty a day's places without
+// un-generating the plan, so checking places here too would disagree).
+export function planReady(plannerState) {
+  return (plannerState?.day_plan?.length || 0) > 0;
 }

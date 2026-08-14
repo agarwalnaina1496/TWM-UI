@@ -4,7 +4,7 @@ import { useTrip } from '../context/TripContext.jsx';
 import { ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
-import { useGuidePlanning } from '../hooks/useGuidePlanning.js';
+import { planReady } from '../hooks/useGuidePlanning.js';
 import { trackEvent } from '../lib/analytics.js';
 import '../styles/chat.css';
 
@@ -28,7 +28,6 @@ export default function JourneyEntry() {
   const [messages, setMessages] = useState([]);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const { planReady } = useGuidePlanning(sendTripCommand, navigate);
   const initialized = useRef(false);
   // discover_entry establishes Meridian ownership on the traveler's first
   // message; every message after that is a plain traveler_message to the
@@ -107,7 +106,10 @@ export default function JourneyEntry() {
       if (isFirstSend) trackEvent('destination_provided', { destination_source: 'user_input' });
       const plannerState = response.trip.trip_state.planner_state;
       if (planReady(plannerState)) {
-        navigate('/trip-preview');
+        // Carry Guide's completion message forward — this component
+        // unmounts on navigate, so it can't append it to the (now-gone)
+        // chat log itself; TripPreview reads it from location.state.
+        navigate('/trip-preview', { state: { guideMessage: response.message } });
         return;
       }
       if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
