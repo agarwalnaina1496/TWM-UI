@@ -76,8 +76,8 @@ export default function LoginModal() {
         {mode === 'forgot' ? (
           resetSent ? (
             <>
-              <p style={{ fontSize: 13, color: 'var(--tm)', textAlign: 'center' }}>If an account exists for <b>{email || 'that email'}</b>, a reset link would be sent.</p>
-              <span className="btn btn-primary btn-full" onClick={() => switchMode('login')} style={{ marginTop: 14 }}>Back to log in</span>
+              <p className="auth-reset-note">If an account exists for <b>{email || 'that email'}</b>, a reset link would be sent.</p>
+              <span className="btn btn-primary btn-full auth-modal-cta" onClick={() => switchMode('login')}>Back to log in</span>
             </>
           ) : (
             <>
@@ -106,7 +106,7 @@ export default function LoginModal() {
               <input className="field-input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
             </div>
             {mode === 'login' && (
-              <p className="auth-switch" style={{ textAlign: 'right', marginTop: -6 }}><span onClick={() => switchMode('forgot')}>Forgot password?</span></p>
+              <p className="auth-switch auth-switch-right"><span onClick={() => switchMode('forgot')}>Forgot password?</span></p>
             )}
             <span className="btn btn-primary btn-full" onClick={continueNext}>{mode === 'signup' ? 'Sign up →' : 'Continue →'}</span>
             <p className="auth-switch">

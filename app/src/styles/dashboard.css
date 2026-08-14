@@ -1,15 +1,16 @@
 .atlas-preview,.dashboard{padding-bottom:70px}
 .readiness-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center;background:var(--accent-bg);border:1px solid var(--accent-bg-strong);border-radius:14px;padding:14px 18px;margin:18px 0;color:var(--ts);font-size:14px}
 .readiness-row span{background:var(--bg);border-radius:999px;padding:8px 12px}
-.assumptions-panel,.budget-panel,.revision-review{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;margin:18px 0}
-.assumptions-panel h3{font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px}
-.assumptions-panel>div+div{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
-.status-card-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
-.status-card{border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:12px 14px}
-.status-card .badge{margin-top:0;margin-bottom:6px}
-.status-card p{margin:0;font-size:13px;line-height:1.45;color:var(--ts)}
-.badge-unresolved{background:#fff1c8;color:#745900}
+.budget-panel,.revision-review{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;margin:18px 0}
 .chip-row{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ===== Overview insight cards (assumptions/unresolved/practical notes) ===== */
+.insight-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:0 0 24px}
+.insight-card{background:var(--accent-bg);border-radius:12px;padding:12px 14px}
+.insight-badge{display:inline-block;font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px}
+.insight-card p{margin:0;font-size:13px;line-height:1.45;color:var(--ts)}
+.insight-card-unresolved{background:#fff1c8}
+.insight-badge-unresolved{color:#745900}
 
 .hero-substats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
 .hero-substat{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--bg);text-align:left;cursor:pointer;font:inherit}

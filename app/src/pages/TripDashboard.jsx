@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
-import { getItinerary, getItineraryVersions } from '../lib/tripApi.js';
+import { getItinerary } from '../lib/tripApi.js';
 import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, dayRangeLabel, routeStops, timelineIcon, tripDatesLabel } from '../lib/atlasView.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import '../styles/dashboard.css';
@@ -23,6 +23,8 @@ const TABS = [
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 const moneyRange = (low, high) => (low == null || high == null ? null : `${money(low)}–${money(high)}`);
+// Atlas categories arrive as raw snake_case (e.g. "arrival_departure_window") — humanize for display.
+const humanize = value => value.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
 
 const EMPTY_CONFIRM_FIELDS = { label: '', detail: '', dayNumber: '', reference: '', notes: '' };
 
@@ -126,19 +128,7 @@ export default function TripDashboard() {
   const [revisionPending, setRevisionPending] = useState(false);
   const [revisionError, setRevisionError] = useState(null);
 
-  // Accepted-revision history is fetched lazily (TWM-155) — it no longer
-  // rides along on trip_state, since only this "Prior versions" list needs it.
   const tripId = commandSnapshot?.id;
-  const [priorVersions, setPriorVersions] = useState([]);
-  const refreshPriorVersions = useCallback(async (idOverride) => {
-    const id = idOverride ?? tripId;
-    if (!id) return;
-    try {
-      setPriorVersions(await getItineraryVersions(id));
-    } catch {
-      // Non-critical: the active itinerary still renders without this list.
-    }
-  }, [tripId]);
 
   // Reopen never re-invokes Atlas: once ready, render the saved result and
   // never call start_itinerary again for this trip. Must wait for the trip
@@ -202,11 +192,14 @@ export default function TripDashboard() {
     trackEvent('dashboard_entered', { entry_source: 'itinerary' });
   }, [itineraryStatus]);
 
-  useEffect(() => {
-    if (bootStatus !== 'ready') return;
-    refreshPriorVersions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootStatus, tripId]);
+  // Assumptions/unresolved now live inside the Overview tab (TWM-165) rather
+  // than as their own always-visible section, so the hero's "jump to" links
+  // must switch tabs first — the target element doesn't exist in the DOM
+  // until Overview actually renders.
+  function jumpToOverview(anchorId) {
+    setTab('Overview');
+    requestAnimationFrame(() => document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth' }));
+  }
 
   function openConfirmForm(type, dayNumber) {
     setConfirmType(type);
@@ -241,10 +234,7 @@ export default function TripDashboard() {
     setRevisionPending(true);
     setRevisionError(null);
     try {
-      const response = await sendTripCommand(command);
-      // accept_itinerary_revision archives the outgoing version (TWM-155);
-      // keep_current_itinerary archives nothing, so this is a harmless no-op.
-      if (command === 'accept_itinerary_revision') await refreshPriorVersions(response.trip?.id);
+      await sendTripCommand(command);
     } catch (error) {
       setRevisionError(error.message || 'Could not update the itinerary.');
     } finally {
@@ -302,63 +292,13 @@ export default function TripDashboard() {
         unresolvedCount={result.unresolved.length}
         assumptionsCount={finalItinerary.assumptions.length}
         confirmedCount={anchors.length}
-        onJumpToUnresolved={result.unresolved.length > 0 ? () => document.getElementById('assumptions-panel')?.scrollIntoView({ behavior: 'smooth' }) : undefined}
-        onJumpToAssumptions={finalItinerary.assumptions.length > 0 ? () => document.getElementById('assumptions-panel')?.scrollIntoView({ behavior: 'smooth' }) : undefined}
+        onJumpToUnresolved={result.unresolved.length > 0 ? () => jumpToOverview('assumptions-panel') : undefined}
+        onJumpToAssumptions={finalItinerary.assumptions.length > 0 ? () => jumpToOverview('assumptions-panel') : undefined}
         actions={<>
           <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
           <button className="btn btn-ghost" type="button" onClick={() => alert('Sharing is not available yet.')}>🔗 Share</button>
         </>}
       />
-
-      {priorVersions.length > 0 && (
-        <details className="prior-versions">
-          <summary>Prior versions ({priorVersions.length})</summary>
-          {priorVersions.map(entry => (
-            <details className="prior-version-entry" key={entry.version}>
-              <summary>Version {entry.version}</summary>
-              <ul>{entry.days.map(day => <li key={day.day_number}>Day {day.day_number}: {day.title}</li>)}</ul>
-            </details>
-          ))}
-        </details>
-      )}
-
-      {(finalItinerary.assumptions.length > 0 || result.unresolved.length > 0) && (
-        <section id="assumptions-panel" className="assumptions-panel" aria-label="Assumptions and unresolved items">
-          {finalItinerary.assumptions.length > 0 && (
-            <div>
-              <h3>Planning assumptions</h3>
-              <div className="status-card-list">
-                {finalItinerary.assumptions.map((item, index) => (
-                  <div className="status-card" key={index}>
-                    <span className="badge">{item.category}</span>
-                    <p>{item.detail}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {result.unresolved.length > 0 && (
-            <div>
-              <h3>Unresolved</h3>
-              <div className="status-card-list">
-                {result.unresolved.map((item, index) => (
-                  <div className="status-card" key={index}>
-                    <span className="badge badge-unresolved">{item.item}</span>
-                    <p>{item.generic_guidance}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-
-      {finalItinerary.practical_notes.length > 0 && (
-        <section aria-label="Practical notes" className="practical-notes">
-          <h3>Practical notes</h3>
-          {finalItinerary.practical_notes.map((note, index) => <article className="dashboard-card" key={index}><strong>{note.title}</strong><p>{note.detail}</p></article>)}
-        </section>
-      )}
 
       {proposedRevision && (
         <section className="revision-review" aria-label="Proposed itinerary revision">
@@ -387,6 +327,51 @@ export default function TripDashboard() {
         </div>
         {finalItinerary.sources.length > 0 && (
           <div className="sources-list"><h3>Sources</h3><ul>{finalItinerary.sources.map((source, index) => <li key={index}><a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a></li>)}</ul></div>
+        )}
+
+        {(finalItinerary.assumptions.length > 0 || result.unresolved.length > 0) && (
+          <div id="assumptions-panel">
+            {finalItinerary.assumptions.length > 0 && (
+              <>
+                <div className="tab-intro"><div><h2>📝 Planning assumptions</h2><p>What we assumed to build this plan.</p></div></div>
+                <div className="insight-grid">
+                  {finalItinerary.assumptions.map((item, index) => (
+                    <div className="insight-card" key={index}>
+                      <span className="insight-badge">{humanize(item.category)}</span>
+                      <p>{item.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {result.unresolved.length > 0 && (
+              <>
+                <div className="tab-intro"><div><h2>❓ Unresolved</h2><p>Worth checking closer to your travel dates.</p></div></div>
+                <div className="insight-grid">
+                  {result.unresolved.map((item, index) => (
+                    <div className="insight-card insight-card-unresolved" key={index}>
+                      <span className="insight-badge insight-badge-unresolved">{item.item}</span>
+                      <p>{item.generic_guidance}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {finalItinerary.practical_notes.length > 0 && (
+          <>
+            <div className="tab-intro"><div><h2>🎒 Practical notes</h2><p>Good to know before you go.</p></div></div>
+            <div className="insight-grid">
+              {finalItinerary.practical_notes.map((note, index) => (
+                <div className="insight-card" key={index}>
+                  <span className="insight-badge">{note.title}</span>
+                  <p>{note.detail}</p>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         <div className="tab-intro"><div><h2>📅 Up next</h2><p>Day {days[0].day_number} · {days[0].primary_location}</p></div></div>
