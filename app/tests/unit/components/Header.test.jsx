@@ -35,24 +35,21 @@ describe('Header', () => {
     localStorage.clear();
   });
 
-  it('shows My Trips and an explicit Log in for a fresh anonymous visitor', () => {
+  it('shows the brand link (home) and an explicit Log in for a fresh anonymous visitor', () => {
     renderHeader();
     expect(screen.getByRole('link', { name: /travelwithme/i })).toHaveAttribute('href', '/');
-    expect(screen.getByText(/my trips/i)).toBeInTheDocument();
     expect(screen.getByText(/log in/i)).toBeInTheDocument();
     expect(screen.queryByText(/log out/i)).not.toBeInTheDocument();
   });
 
-  it('shows My Trips and Log in (no Log out) for an explicit anonymous/guest session', () => {
+  it('shows Log in (no Log out) for an explicit anonymous/guest session', () => {
     renderHeader({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    expect(screen.getByText(/my trips/i)).toBeInTheDocument();
     expect(screen.getByText(/log in/i)).toBeInTheDocument();
     expect(screen.queryByText(/log out/i)).not.toBeInTheDocument();
   });
 
-  it('shows both My Trips and Log out (no Log in) for a real logged-in session', () => {
+  it('shows Log out (no Log in) for a real logged-in session', () => {
     renderHeader({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
-    expect(screen.getByText(/my trips/i)).toBeInTheDocument();
     expect(screen.getByText(/log out/i)).toBeInTheDocument();
     expect(screen.queryByText(/log in/i)).not.toBeInTheDocument();
   });

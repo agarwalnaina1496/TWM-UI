@@ -5,10 +5,10 @@ import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
 import {
   isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, contextRecapPills, contextDestination,
 } from '../lib/tripLifecycle.js';
-import '../styles/my-trips.css';
+import '../styles/dashboard-home.css';
 
 // TWM-140: once dismissed for this browsing session, don't re-offer the
-// sync invitation on every My Trips visit.
+// sync invitation on every Dashboard-home visit.
 const SYNC_DISMISSED_KEY = 'twm_sync_invite_dismissed';
 
 function readSyncDismissed() {
@@ -35,7 +35,11 @@ function formatTripTimestamp(t) {
   return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export default function MyTrips() {
+// Dashboard-as-home (TWM-163): the product's home surface once a traveler
+// has any trips, mounted directly at both `/` and `/my-trips`. Distinct from
+// TripDashboard.jsx, the per-trip itinerary/booking view a card here links
+// into — naming kept separate so the two are never confused.
+export default function DashboardHome() {
   const { trips, auth, startNewTrip, openTrip, renameTrip } = useTrip();
   const navigate = useNavigate();
   const [syncInviteOpen, setSyncInviteOpen] = useState(false);
@@ -47,8 +51,8 @@ export default function MyTrips() {
   const [notice, setNotice] = useState(null);
 
   // Fresh, no-progress trips (e.g. the record TripContext auto-creates)
-  // aren't real trips from the traveler's point of view — TWM-108 keeps
-  // them out of My Trips entirely, same as the landing resolver.
+  // aren't real trips from the traveler's point of view — TWM-108/163 keep
+  // them out of Dashboard-home entirely.
   const visibleTrips = trips.filter(t => !isTripEmpty(t.trip_state));
   const completedTrips = visibleTrips.filter(t => isCompletedTrip(t.trip_state));
   const upcomingTrips = visibleTrips.filter(t => isItineraryReady(t.trip_state) && !isCompletedTrip(t.trip_state));
@@ -60,7 +64,7 @@ export default function MyTrips() {
 
   function handleNewTrip() {
     startNewTrip();
-    navigate('/', { state: { skipResume: true } });
+    navigate('/new-trip');
   }
 
   // TWM-109: opening a trip that turned out to be gone (deleted, or a stale

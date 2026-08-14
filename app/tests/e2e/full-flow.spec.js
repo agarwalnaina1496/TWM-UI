@@ -113,6 +113,11 @@ test('full flow: GetStarted through Dashboard', async ({ page }) => {
   await page.getByText('Continue without login').click();
   await expect(page).toHaveURL(/\/app\/?$/);
 
+  // Root shows Dashboard-home's empty state (zero trips); "+ New trip"
+  // is the only way to reach GetStarted, at the dedicated /new-trip route.
+  await page.getByText('+ New trip').click();
+  await expect(page).toHaveURL(/\/app\/new-trip/);
+
   // GetStarted -> "Not sure yet" (discover) route: shows a hardcoded welcome
   // with no Backend call, then discover_entry fires only once the traveler
   // sends their first message.

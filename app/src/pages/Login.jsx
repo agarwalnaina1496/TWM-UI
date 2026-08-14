@@ -15,12 +15,12 @@ export default function Login() {
 
   function continueNext() {
     login({ name: name.trim() || 'Traveler', email: email.trim() });
-    navigate('/', { state: { skipResume: true } });
+    navigate('/');
   }
 
   function handleContinueWithoutLogin() {
     continueWithoutLogin();
-    navigate('/', { state: { skipResume: true } });
+    navigate('/');
   }
 
   function switchMode(next) {
