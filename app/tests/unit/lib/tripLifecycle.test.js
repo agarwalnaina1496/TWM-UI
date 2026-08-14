@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, resolveLandingRoute } from '../../../src/lib/tripLifecycle.js';
+import { isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, hasMeaningfulTrip } from '../../../src/lib/tripLifecycle.js';
 
 function state(overrides = {}) {
   return { stage: 'new', trip_context: {}, ...overrides };
@@ -59,47 +59,26 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
   });
 });
 
-describe('resolveLandingRoute (TWM-108 adaptive landing resolver)', () => {
+describe('hasMeaningfulTrip (TWM-163 Dashboard-as-home resolver)', () => {
   it.each([
-    ['zero trips -> GetStarted', [], null, '/'],
-    ['one fresh/empty current trip -> GetStarted', [{ id: 't1', trip_state: state() }], 't1', '/'],
+    ['zero trips -> false', [], false],
+    ['one fresh/empty trip -> false', [{ id: 't1', trip_state: state() }], false],
+    ['one incomplete trip -> true', [{ id: 't1', trip_state: state({ stage: 'matching' }) }], true],
     [
-      'one incomplete trip -> resume route',
-      [{ id: 't1', trip_state: state({ stage: 'matching' }) }],
-      't1',
-      '/scout-chat',
-    ],
-    [
-      'one itinerary-ready trip -> Dashboard',
+      'one itinerary-ready trip -> true',
       [{ id: 't1', trip_state: state({ stage: 'planned', itinerary_state: { status: 'ready' } }) }],
-      't1',
-      '/dashboard',
+      true,
     ],
+    ['one completed trip -> true', [{ id: 't1', trip_state: state({ stage: 'done' }) }], true],
     [
-      'one completed trip only -> My Trips',
-      [{ id: 't1', trip_state: state({ stage: 'done' }) }],
-      't1',
-      '/my-trips',
-    ],
-    [
-      'multiple meaningful trips -> My Trips',
-      [
-        { id: 't1', trip_state: state({ stage: 'matching' }) },
-        { id: 't2', trip_state: state({ stage: 'planned', itinerary_state: { status: 'ready' } }) },
-      ],
-      't1',
-      '/my-trips',
-    ],
-    [
-      '+ New Trip (fresh current) always wins over other meaningful trips -> GetStarted',
+      'a fresh trip alongside a real one -> true',
       [
         { id: 'fresh', trip_state: state() },
         { id: 'old', trip_state: state({ stage: 'planned', itinerary_state: { status: 'ready' } }) },
       ],
-      'fresh',
-      '/',
+      true,
     ],
-  ])('%s', (_label, trips, currentTripId, expected) => {
-    expect(resolveLandingRoute({ trips, currentTripId })).toBe(expected);
+  ])('%s', (_label, trips, expected) => {
+    expect(hasMeaningfulTrip(trips)).toBe(expected);
   });
 });

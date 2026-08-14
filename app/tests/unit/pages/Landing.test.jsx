@@ -26,7 +26,7 @@ function renderLanding() {
   );
 }
 
-describe('Landing (TWM-108 adaptive `/` resolver)', () => {
+describe('Landing (TWM-163 Dashboard-as-home resolver)', () => {
   let fetchMock;
 
   beforeEach(() => {
@@ -41,22 +41,22 @@ describe('Landing (TWM-108 adaptive `/` resolver)', () => {
 
   it.each([
     [
-      'zero trips',
+      'zero trips shows GetStarted',
       [],
       /where are we headed/i,
     ],
     [
-      'one incomplete (matching) trip resumes to Scout chat',
+      'one incomplete (matching) trip shows Dashboard-home, not an auto-resume',
       [tripRecord({ trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } })],
-      /tell scout/i,
+      /your.*trips/i,
     ],
     [
-      'one itinerary-ready trip opens the Dashboard',
-      [tripRecord({ trip_state: { stage: 'planned', itinerary_state: { status: 'ready', current_version: { result: { final_itinerary: { trip_summary: { title: 'Coorg Getaway', destinations: ['Coorg'], duration_days: 1, travelers: 2, date_range: null, overview: '', route_rationale: '' }, days: [{ day_number: 1, date: null, title: 'Arrival', primary_location: 'Coorg', summary: '', timeline: [], seasonal_guidance: '', permit_or_ticket_guidance: '', backup_plan: null }], budget_summary: { currency: 'INR', lines: [], total_low: 0, total_high: 0, budget_fit: '' }, practical_notes: [], sources: [], assumptions: [] }, unresolved: [], agent_meta: { agent: 'atlas', prompt_version: '1.0.0' } } }, history: [], proposed_revision: null }, logistics_state: {} } })],
-      /coorg getaway/i,
+      'one itinerary-ready trip shows Dashboard-home, not an auto-open Dashboard',
+      [tripRecord({ trip_state: { stage: 'planned', trip_context: { origin: 'Delhi' }, itinerary_state: { status: 'ready' } } })],
+      /your.*trips/i,
     ],
     [
-      'multiple trips go to My Trips',
+      'multiple trips show Dashboard-home',
       [
         tripRecord({ id: 'trip-1', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } }),
         tripRecord({ id: 'trip-2', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } }, updated_at: '2025-12-01T00:00:00.000Z' }),
@@ -64,26 +64,13 @@ describe('Landing (TWM-108 adaptive `/` resolver)', () => {
       /your.*trips/i,
     ],
     [
-      'only a completed trip goes to My Trips',
+      'only a completed trip shows Dashboard-home',
       [tripRecord({ trip_state: { stage: 'done', trip_context: { origin: 'Delhi' } } })],
       /your.*trips/i,
     ],
   ])('%s', async (_label, trips, expectedHeading) => {
-    // The itinerary-ready case redirects straight to the Dashboard, which
-    // now fetches the itinerary body lazily via GET /trips/{id}/itinerary
-    // (TWM-159/160) instead of reading it off the list response — serve
-    // that (and the itinerary-versions call) alongside the trips list.
     fetchMock.mockImplementation(async (path) => {
       if (path === '/api/trips') return jsonResponse({ trips });
-      if (path.endsWith('/itinerary-versions')) return jsonResponse({ versions: [] });
-      if (path.endsWith('/itinerary')) {
-        const currentVersion = trips.find(t => t.trip_state?.itinerary_state?.current_version)?.trip_state.itinerary_state.current_version;
-        if (!currentVersion) return jsonResponse({ detail: 'No itinerary yet.' }, { status: 404 });
-        return jsonResponse({
-          version: currentVersion.version ?? 1, source_guide_revision: currentVersion.source_guide_revision ?? 1,
-          result: currentVersion.result, created_at: '2026-01-01T00:00:00.000Z',
-        });
-      }
       return jsonResponse({});
     });
 
@@ -92,7 +79,24 @@ describe('Landing (TWM-108 adaptive `/` resolver)', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: expectedHeading })).toBeInTheDocument());
   });
 
-  it('deep link (/my-trips) bypasses the resolver even with a single resumable trip', async () => {
+  it('skipResume state always lands on GetStarted, even with existing trip history', async () => {
+    fetchMock.mockImplementation(async (path) => {
+      if (path === '/api/trips') return jsonResponse({ trips: [tripRecord({ trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } })] });
+      return jsonResponse({});
+    });
+
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/', state: { skipResume: true } }]}>
+        <TripProvider>
+          <App />
+        </TripProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: /where are we headed/i })).toBeInTheDocument());
+  });
+
+  it('deep link (/my-trips) renders Dashboard-home directly', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [tripRecord({ trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } })] }));
 
@@ -104,6 +108,6 @@ describe('Landing (TWM-108 adaptive `/` resolver)', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('heading', { name: /your.*trips/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /your.*trips/i })).toBeInTheDocument();
   });
 });

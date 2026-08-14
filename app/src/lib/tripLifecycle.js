@@ -98,18 +98,11 @@ export function stageCta(tripState) {
   return STAGE_CTA[stage] || STAGE_CTA.new;
 }
 
-// Adaptive `/` resolver (TWM-108): zero trips -> GetStarted; one incomplete
-// -> resume; one itinerary-ready/upcoming -> Dashboard; multiple, or only
-// completed, -> My Trips. `currentTripId` anchors the decision so "+ New
-// Trip" (which makes a fresh empty trip current) always lands back on
-// GetStarted instead of being redirected by other, older trips.
-export function resolveLandingRoute({ trips = [], currentTripId } = {}) {
-  const current = trips.find(t => t.id === currentTripId) ?? trips[0] ?? null;
-  if (!current || isTripEmpty(current.trip_state)) return '/';
-
-  const meaningful = trips.filter(t => !isTripEmpty(t.trip_state));
-  if (meaningful.length > 1) return '/my-trips';
-  if (isCompletedTrip(current.trip_state)) return '/my-trips';
-  if (isItineraryReady(current.trip_state)) return '/dashboard';
-  return stageCta(current.trip_state).to;
+// Dashboard-as-home `/` resolver (TWM-163): the traveler lands on the
+// Dashboard-home surface directly whenever they have any meaningful trip
+// history, regardless of stage — Dashboard is the product's home, not a
+// reward reached only after a journey completes. Per-trip navigation (resume
+// vs. per-trip Dashboard) happens from a trip card via stageCta, not here.
+export function hasMeaningfulTrip(trips = []) {
+  return trips.some(t => !isTripEmpty(t.trip_state));
 }
