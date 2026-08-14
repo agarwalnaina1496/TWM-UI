@@ -69,7 +69,23 @@ describe('Landing (TWM-108 adaptive `/` resolver)', () => {
       /your.*trips/i,
     ],
   ])('%s', async (_label, trips, expectedHeading) => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips }));
+    // The itinerary-ready case redirects straight to the Dashboard, which
+    // now fetches the itinerary body lazily via GET /trips/{id}/itinerary
+    // (TWM-159/160) instead of reading it off the list response — serve
+    // that (and the itinerary-versions call) alongside the trips list.
+    fetchMock.mockImplementation(async (path) => {
+      if (path === '/api/trips') return jsonResponse({ trips });
+      if (path.endsWith('/itinerary-versions')) return jsonResponse({ versions: [] });
+      if (path.endsWith('/itinerary')) {
+        const currentVersion = trips.find(t => t.trip_state?.itinerary_state?.current_version)?.trip_state.itinerary_state.current_version;
+        if (!currentVersion) return jsonResponse({ detail: 'No itinerary yet.' }, { status: 404 });
+        return jsonResponse({
+          version: currentVersion.version ?? 1, source_guide_revision: currentVersion.source_guide_revision ?? 1,
+          result: currentVersion.result, created_at: '2026-01-01T00:00:00.000Z',
+        });
+      }
+      return jsonResponse({});
+    });
 
     renderLanding();
 

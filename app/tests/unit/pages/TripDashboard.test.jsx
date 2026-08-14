@@ -60,10 +60,14 @@ function atlasResult(overrides = {}) {
   };
 }
 
+// TWM-159/160: the full Atlas result no longer arrives inline on
+// commandSnapshot — only the pointer (status/current_version.version) does.
+// The body itself comes from a lazily-fetched GET /trips/{id}/itinerary,
+// mocked below via `itineraryFetchResponse`.
 function readyItineraryState({ version = 1, history = [], proposedRevision = null } = {}) {
   return {
     status: 'ready',
-    current_version: { version, source_guide_revision: 3, result: atlasResult() },
+    current_version: { version, source_guide_revision: 3 },
     history,
     proposed_revision: proposedRevision,
   };
@@ -90,8 +94,28 @@ function renderDashboard() {
   return render(<MemoryRouter><TripDashboard /></MemoryRouter>);
 }
 
+// Renders and waits for the itinerary fetch to resolve so tab interactions
+// have real content to click into (mirrors production: tabs only render
+// once itineraryStatus === 'ready').
+async function readyDashboard() {
+  const view = renderDashboard();
+  await waitFor(() => expect(screen.getByText('Rishikesh Getaway')).toBeInTheDocument());
+  return view;
+}
+
 function jsonResponse(body, { status = 200 } = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
+}
+
+let itineraryVersionsResponse;
+let itineraryFetchResponse;
+
+function defaultFetchMock() {
+  return vi.fn(async (url) => {
+    if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+    if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+    return jsonResponse({});
+  });
 }
 
 describe('Trip Dashboard (real Atlas contract)', () => {
@@ -100,7 +124,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     tripLoadStatus = 'ready';
     // Prior versions are fetched lazily via GET /trips/{id}/itinerary-versions
     // (TWM-155) — default to empty; individual tests override as needed.
-    global.fetch = vi.fn(async () => jsonResponse({ versions: [] }));
+    itineraryVersionsResponse = { versions: [] };
+    // The active itinerary body is fetched lazily via GET /trips/{id}/itinerary
+    // (TWM-159/160) — default to a ready single-version result.
+    itineraryFetchResponse = { version: 1, source_guide_revision: 3, result: atlasResult(), created_at: '2026-01-01T00:00:00.000Z' };
+    global.fetch = defaultFetchMock();
   });
 
   it('calls start_itinerary once when no saved result exists, then renders it', async () => {
@@ -117,11 +145,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(sendTripCommand).toHaveBeenCalledWith('start_itinerary');
   });
 
-  it('reopen never re-invokes Atlas when a result is already saved', () => {
+  it('reopen never re-invokes Atlas when a result is already saved', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     renderDashboard();
-    expect(screen.getByText('Rishikesh Getaway')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Rishikesh Getaway')).toBeInTheDocument());
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
@@ -132,11 +160,54 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('The travel assistant returned an invalid response.'));
   });
 
-  it('renders assumptions and unresolved items safely', () => {
+  it('shows a loading state, then does not re-fire start_itinerary while the itinerary fetch is in flight', async () => {
+    commandSnapshot = snapshotWith({});
+    let resolveItinerary;
+    const pendingItinerary = new Promise(resolve => { resolveItinerary = resolve; });
+    global.fetch = vi.fn(async (url) => {
+      if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+      if (url.endsWith('/itinerary')) return pendingItinerary.then(() => jsonResponse(itineraryFetchResponse));
+      return jsonResponse({});
+    });
+    sendTripCommand = vi.fn(async command => {
+      if (command === 'start_itinerary') {
+        commandSnapshot = snapshotWith(readyItineraryState());
+      }
+      return { message: null, agent_meta: null, trip: commandSnapshot };
+    });
+    renderDashboard();
+
+    // start_itinerary has resolved (commandSnapshot is now itinerary-ready)
+    // but the lazy body fetch is still pending — the loader must stay up,
+    // and the boot guard must not mistake that for "not ready yet" and
+    // re-invoke start_itinerary.
+    await waitFor(() => expect(sendTripCommand).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Building your detailed itinerary/)).toBeInTheDocument();
+    expect(sendTripCommand).toHaveBeenCalledTimes(1);
+
+    resolveItinerary();
+    await waitFor(() => expect(screen.getByText('Rishikesh Getaway')).toBeInTheDocument());
+    expect(sendTripCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an error state when the itinerary fetch fails, without re-invoking start_itinerary', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState());
+    sendTripCommand = vi.fn();
+    global.fetch = vi.fn(async (url) => {
+      if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+      if (url.endsWith('/itinerary')) return jsonResponse({ detail: 'No itinerary yet.' }, { status: 404 });
+      return jsonResponse({});
+    });
+    renderDashboard();
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('No itinerary yet.'));
+    expect(sendTripCommand).not.toHaveBeenCalled();
+  });
+
+  it('renders assumptions and unresolved items safely', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     renderDashboard();
-    expect(screen.getByText(/Assumed a start date since none was confirmed\./)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Assumed a start date since none was confirmed\./)).toBeInTheDocument());
     expect(screen.getByText(/Check schedules closer to travel\./)).toBeInTheDocument();
   });
 
@@ -144,7 +215,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor()] });
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
-    renderDashboard();
+    await readyDashboard();
     await user.click(screen.getByRole('button', { name: /Transport/ }));
     expect(screen.getByText('Delhi to Rishikesh arrival')).toBeInTheDocument();
     expect(screen.getByText('🔒 confirmed')).toBeInTheDocument();
@@ -165,7 +236,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       return { message: null, agent_meta: null, trip: commandSnapshot };
     });
     const user = userEvent.setup();
-    renderDashboard();
+    await readyDashboard();
     await user.click(screen.getByRole('button', { name: /Transport/ }));
     await user.click(screen.getByRole('button', { name: 'Add a confirmation' }));
     await user.type(screen.getByLabelText("What's confirmed?"), 'Delhi to Rishikesh train');
@@ -193,7 +264,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       return { message: null, agent_meta: null, trip: commandSnapshot };
     });
     const user = userEvent.setup();
-    renderDashboard();
+    await readyDashboard();
     expect(screen.getByText(/This affects Day 1/)).toBeInTheDocument();
     expect(screen.getByText('Day 1: updated for confirmed arrival')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Accept changes' }));
@@ -212,7 +283,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       return { message: null, agent_meta: null, trip: commandSnapshot };
     });
     const user = userEvent.setup();
-    renderDashboard();
+    await readyDashboard();
     await user.click(screen.getByRole('button', { name: 'Keep current' }));
     expect(sendTripCommand).toHaveBeenCalledWith('keep_current_itinerary');
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Accept changes' })).not.toBeInTheDocument());
@@ -224,7 +295,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     }));
     sendTripCommand = vi.fn().mockRejectedValue(new Error('Trip has a newer version.'));
     const user = userEvent.setup();
-    renderDashboard();
+    await readyDashboard();
     await user.click(screen.getByRole('button', { name: 'Accept changes' }));
     await waitFor(() => expect(screen.getByText('Trip has a newer version.')).toBeInTheDocument());
     expect(screen.getByText(/This affects Day 1/)).toBeInTheDocument();
@@ -234,7 +305,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor({ day_number: 2, label: 'Riverside stay' })] });
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
-    renderDashboard();
+    await readyDashboard();
     expect(screen.queryByText('Riverside stay')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Day 2/ }));
     expect(screen.getByText('Riverside stay')).toBeInTheDocument();
@@ -243,9 +314,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   it('renders prior versions as a read-only disclosure', async () => {
     commandSnapshot = snapshotWith(readyItineraryState({ version: 2 }));
     sendTripCommand = vi.fn();
-    global.fetch = vi.fn(async () => jsonResponse({
+    itineraryVersionsResponse = {
       versions: [{ version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z', days: [{ day_number: 1, title: 'Arrival and ghats' }, { day_number: 2, title: 'Ram Jhula' }] }],
-    }));
+    };
+    itineraryFetchResponse = { version: 2, source_guide_revision: 3, result: atlasResult(), created_at: '2026-01-02T00:00:00.000Z' };
+    global.fetch = defaultFetchMock();
     renderDashboard();
     await waitFor(() => expect(screen.getByText('Prior versions (1)')).toBeInTheDocument());
   });
@@ -254,7 +327,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
-    renderDashboard();
+    await readyDashboard();
     await user.click(screen.getByRole('button', { name: /Map/ }));
     const stops = document.querySelectorAll('.route-node'); // both days are Rishikesh — consecutive dedupe
     expect(stops).toHaveLength(1);
@@ -266,21 +339,22 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
-    renderDashboard();
+    await readyDashboard();
     await user.click(screen.getByRole('button', { name: /Budget breakdown/ }));
     expect(screen.getByText('Within a typical budget.')).toBeInTheDocument();
     expect(screen.getAllByText(/₹1,600–₹3,000/).length).toBeGreaterThan(0);
   });
 
-  it('renders unsafe text as inert content, never as markup', () => {
-    commandSnapshot = snapshotWith({
-      status: 'ready',
-      current_version: { version: 1, source_guide_revision: 3, result: atlasResult({ final_itinerary: { assumptions: [{ category: 'other', detail: '<img src=x onerror=alert(1)>' }] } }) },
-      history: [], proposed_revision: null,
-    });
+  it('renders unsafe text as inert content, never as markup', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState());
+    itineraryFetchResponse = {
+      version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+      result: atlasResult({ final_itinerary: { assumptions: [{ category: 'other', detail: '<img src=x onerror=alert(1)>' }] } }),
+    };
+    global.fetch = defaultFetchMock();
     sendTripCommand = vi.fn();
     renderDashboard();
-    expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument());
     expect(document.querySelector('img')).toBeNull();
   });
 });

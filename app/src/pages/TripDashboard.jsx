@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
-import { getItineraryVersions } from '../lib/tripApi.js';
+import { getItinerary, getItineraryVersions } from '../lib/tripApi.js';
 import { anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange, dayRangeLabel, routeStops, timelineIcon } from '../lib/atlasView.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import '../styles/dashboard.css';
@@ -95,6 +95,18 @@ export default function TripDashboard() {
   const [bootError, setBootError] = useState(null);
   const bootStarted = useRef(false);
 
+  // The active itinerary's full result is fetched lazily (TWM-159/160) — it
+  // no longer arrives inline on commandSnapshot. This is a separate signal
+  // from bootStatus/itineraryState?.status on purpose: the boot guard above
+  // must decide whether to (re-)invoke start_itinerary from commandSnapshot
+  // alone, never from whether this fetch has resolved, or a slow fetch could
+  // race the guard into wrongly re-firing start_itinerary against transient
+  // empty state.
+  const [itineraryStatus, setItineraryStatus] = useState('idle'); // idle | loading | ready | error
+  const [itineraryResult, setItineraryResult] = useState(null);
+  const [itineraryFetchError, setItineraryFetchError] = useState(null);
+  const itineraryFetchStarted = useRef(false);
+
   const [confirmType, setConfirmType] = useState(null); // 'transport' | 'stay' | 'activity' | null
   const [confirmFields, setConfirmFields] = useState(EMPTY_CONFIRM_FIELDS);
   const [confirmPending, setConfirmPending] = useState(false);
@@ -150,13 +162,33 @@ export default function TripDashboard() {
       });
   }, [tripLoadStatus, itineraryState?.status, sendTripCommand]);
 
+  // Fetches the itinerary body only once the boot guard above has confirmed
+  // (via commandSnapshot, not this fetch) that a ready itinerary exists
+  // backend-side. itineraryFetchStarted mirrors bootStarted's guard so this
+  // fires exactly once per Dashboard visit.
+  useEffect(() => {
+    if (bootStatus !== 'ready' || itineraryState?.status !== 'ready' || !tripId) return;
+    if (itineraryFetchStarted.current) return;
+    itineraryFetchStarted.current = true;
+    setItineraryStatus('loading');
+    getItinerary(tripId)
+      .then(record => {
+        setItineraryResult(record);
+        setItineraryStatus('ready');
+      })
+      .catch(error => {
+        setItineraryStatus('error');
+        setItineraryFetchError(error.message || 'Could not load the detailed itinerary.');
+      });
+  }, [bootStatus, itineraryState?.status, tripId]);
+
   const trackedDashboardEntry = useRef(false);
   useEffect(() => {
-    if (trackedDashboardEntry.current || bootStatus !== 'ready' || itineraryState?.status !== 'ready') return;
+    if (trackedDashboardEntry.current || itineraryStatus !== 'ready') return;
     trackedDashboardEntry.current = true;
     trackEvent('itinerary_viewed', { view_source: 'dashboard' });
     trackEvent('dashboard_entered', { entry_source: 'itinerary' });
-  }, [bootStatus, itineraryState?.status]);
+  }, [itineraryStatus]);
 
   useEffect(() => {
     if (bootStatus !== 'ready') return;
@@ -219,7 +251,18 @@ export default function TripDashboard() {
     );
   }
 
-  if (bootStatus !== 'ready' || itineraryState?.status !== 'ready') {
+  if (itineraryStatus === 'error') {
+    return (
+      <main className="wrap dashboard">
+        <div className="price-evidence state-unsafe" role="alert">
+          <strong>Itinerary unavailable</strong>
+          <span>{itineraryFetchError}</span>
+        </div>
+      </main>
+    );
+  }
+
+  if (bootStatus !== 'ready' || itineraryState?.status !== 'ready' || itineraryStatus !== 'ready') {
     return (
       <main className="wrap dashboard">
         <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Building your detailed itinerary…</div>
@@ -227,8 +270,7 @@ export default function TripDashboard() {
     );
   }
 
-  const currentVersion = itineraryState.current_version;
-  const result = currentVersion.result;
+  const result = itineraryResult.result;
   const finalItinerary = result.final_itinerary;
   const days = finalItinerary.days;
   const dayNumbers = days.map(day => day.day_number);

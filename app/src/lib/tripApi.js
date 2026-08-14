@@ -128,6 +128,14 @@ export async function getItineraryVersions(id) {
   return response.versions || [];
 }
 
+// TWM-159/160: the active itinerary's full Atlas result now lives behind
+// its own endpoint — GET /trips/{id} no longer inlines it (only the
+// Dashboard needs it). Throws TripApiError with status 404 before any
+// itinerary has been generated yet.
+export async function getItinerary(id) {
+  return request(`/${id}/itinerary`);
+}
+
 export async function renameTrip(id, title, expectedVersion) {
   const saved = await request(`/${id}`, {
     method: 'PATCH',
