@@ -52,50 +52,37 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
       response: commandResponse('Coorg is confirmed.', tripRecord({ version: 6, trip_state: { stage: 'matched', active_agent: null } })),
     },
     {
+      // Single-step generation: start_planning returns the complete plan
+      // (places + day_plan together) once trip context is complete — no
+      // separate approve_places step.
       command: 'start_planning',
-      response: commandResponse('Here are the places I suggest.', tripRecord({
+      response: commandResponse('Here is your plan.', tripRecord({
         version: 7,
         trip_state: {
           stage: 'planning', active_agent: 'guide',
-          planner_state: { guide_session: { revision: 1, state: {
-            phase: 'PLACES_DRAFT', destinations: ['Coorg'], duration_days: null, start_date: null,
-            places: ['Abbey Falls'], day_plan: [], preferences: [], exclusions: [],
-            applied_changes: [], pending_clarification: null,
-          } } },
-        },
-      })),
-    },
-    {
-      command: 'approve_places',
-      response: commandResponse('Places approved; here is the day plan.', tripRecord({
-        version: 8,
-        trip_state: {
-          stage: 'planning', active_agent: 'guide',
-          planner_state: { guide_session: { revision: 2, state: {
-            phase: 'DAY_PLAN_DRAFT', destinations: ['Coorg'], duration_days: 1, start_date: null,
-            places: ['Abbey Falls'], day_plan: [{ day_number: 1, date: null, places: ['Abbey Falls'] }],
-            preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
-          } } },
+          trip_context: { destinations: ['Coorg'], trip_duration: 1 },
+          planner_state: {
+            conversation_context: { awaiting: null },
+            places: ['Abbey Falls'],
+            day_plan: [{ day_number: 1, date: null, places: ['Abbey Falls'], pace: 'relaxed', buffer_note: null }],
+            revision: 1,
+          },
         },
       })),
     },
     {
       command: 'approve_plan',
       response: commandResponse('Plan approved.', tripRecord({
-        version: 9,
+        version: 8,
         trip_state: {
           stage: 'planned', active_agent: null,
+          trip_context: { destinations: ['Coorg'], trip_duration: 1 },
           planner_state: {
-            guide_session: { revision: 3, state: {
-              phase: 'PLAN_APPROVED', destinations: ['Coorg'], duration_days: 1, start_date: null,
-              places: ['Abbey Falls'], day_plan: [{ day_number: 1, date: null, places: ['Abbey Falls'] }],
-              preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
-            } },
-            frozen_plan: { guide_revision: 3, guide_state: {
-              phase: 'PLAN_APPROVED', destinations: ['Coorg'], duration_days: 1, start_date: null,
-              places: ['Abbey Falls'], day_plan: [{ day_number: 1, date: null, places: ['Abbey Falls'] }],
-              preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
-            } },
+            conversation_context: { awaiting: null },
+            places: ['Abbey Falls'],
+            day_plan: [{ day_number: 1, date: null, places: ['Abbey Falls'], pace: 'relaxed', buffer_note: null }],
+            revision: 2,
+            frozen_plan: { guide_revision: 2, guide_state: {} },
           },
         },
       })),
@@ -103,12 +90,16 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
     {
       command: 'start_itinerary',
       response: commandResponse(null, tripRecord({
-        version: 10,
+        version: 9,
         trip_state: {
           stage: 'planned', active_agent: null,
+          trip_context: { destinations: ['Coorg'], trip_duration: 1 },
           planner_state: {
-            guide_session: { revision: 3, state: { phase: 'PLAN_APPROVED' } },
-            frozen_plan: { guide_revision: 3, guide_state: { phase: 'PLAN_APPROVED' } },
+            conversation_context: { awaiting: null },
+            places: ['Abbey Falls'],
+            day_plan: [{ day_number: 1, date: null, places: ['Abbey Falls'], pace: 'relaxed', buffer_note: null }],
+            revision: 2,
+            frozen_plan: { guide_revision: 2, guide_state: {} },
           },
           itinerary_state: readyItineraryState(),
         },
@@ -130,7 +121,7 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
 
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await expect(page.getByText('Abbey Falls')).toBeVisible();
-  await page.getByText('Generate detailed itinerary →').click();
+  await page.getByText('Finalize my trip →').click();
 
   // TWM-140: no Choose Plan interstitial — approve_plan navigates straight in.
   // TWM-97: the Dashboard itself triggers start_itinerary and renders the real result.

@@ -1,37 +1,26 @@
-// Maps the real Backend-owned Guide `guide_state` (from planner_state.guide_session)
-// into what TripPreview.jsx renders.
+// Maps the real Backend-owned Guide `planner_state` (places, day_plan,
+// conversation_context.awaiting, frozen_plan — flat, delta-merged, no
+// phase field) into what TripPreview.jsx renders.
 
-export function isPlanReadyForBuilder(phase) {
-  return phase === 'DAY_PLAN_DRAFT' || phase === 'NEEDS_CLARIFICATION';
-}
-
-export function planBuilderSummary(guideState) {
-  const dayPlan = guideState.day_plan || [];
-  const placeCount = (guideState.places || []).length;
+export function planBuilderSummary(tripContext, plannerState) {
+  const dayPlan = plannerState?.day_plan || [];
+  const placeCount = (plannerState?.places || []).length;
   return {
-    destinations: guideState.destinations || [],
-    durationDays: guideState.trip_duration ?? dayPlan.length,
+    destinations: tripContext?.destinations || [],
+    durationDays: tripContext?.trip_duration ?? dayPlan.length,
     placeCount,
     dayCount: dayPlan.length,
   };
 }
 
-export function buildRemovePlaceMessage(dayNumber, place) {
-  return `Remove "${place}" from Day ${dayNumber}.`;
+export function buildRemovePlaceMessage(place) {
+  return `Remove "${place}" from the plan.`;
 }
 
-export function buildAddPlaceMessage(dayNumber, place) {
-  return `Add "${place}" to Day ${dayNumber}.`;
+export function buildReplacePlaceMessage(place, replacement) {
+  return `Replace "${place}" with "${replacement}".`;
 }
 
-export function buildSetPaceMessage(pace) {
-  return `Update the trip pace to: ${pace}.`;
+export function buildSetPaceMessage(dayNumber, pace) {
+  return `Make Day ${dayNumber} ${pace}.`;
 }
-
-export function buildSetStartDateMessage(value) {
-  return value
-    ? `Set the trip start date to ${value}.`
-    : 'Remove the confirmed start date and keep the plan duration-only.';
-}
-
-export const UNDO_MESSAGE = 'Undo my last change and restore the previous version of the plan.';

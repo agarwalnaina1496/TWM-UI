@@ -66,9 +66,9 @@ export function TripProvider({ children }) {
   // Updates tripRecordRef synchronously alongside the React state update —
   // a plain setTripRecord() only lands in tripRecordRef via the effect
   // above, which runs after render. A command that fires immediately after
-  // another resolves (e.g. Guide's silent approve_places auto-advance) can
-  // then read a stale ref and send an outdated expected_version, causing a
-  // spurious 409 even though nothing actually raced on the Backend.
+  // another resolves can then read a stale ref and send an outdated
+  // expected_version, causing a spurious 409 even though nothing actually
+  // raced on the Backend.
   function updateTripRecord(next) {
     tripRecordRef.current = next;
     setTripRecord(next);
@@ -280,9 +280,8 @@ export function TripProvider({ children }) {
         // Merging against tripRecordRef.current (not the React `prev` from a
         // setState updater) and writing through updateTripRecord keeps the
         // ref itself current in this same tick — otherwise a follow-up
-        // command fired immediately after this one resolves (e.g. Guide's
-        // silent approve_places auto-advance) reads a stale ref and sends a
-        // stale expected_version, causing a spurious 409.
+        // command fired immediately after this one resolves reads a stale
+        // ref and sends a stale expected_version, causing a spurious 409.
         const merged = mergeCommandTripRecord(tripRecordRef.current, response.trip);
         updateTripRecord(merged);
         setCommandSnapshot(prev => mergeCommandTripRecord(prev, response.trip));

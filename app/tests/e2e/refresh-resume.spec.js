@@ -11,22 +11,25 @@ test('Plan Builder edit survives refresh via the real Guide trip-command state',
     version: 2,
     trip_state: {
       stage: 'planning', active_agent: 'guide',
-      trip_context: { original_traveler_request: 'exact golden request' },
-      planner_state: { guide_session: { revision: 2, state: {
-        phase: 'DAY_PLAN_DRAFT', destinations: ['Madhya Pradesh'], duration_days: 14, start_date: null,
-        places: ['Gwalior Fort'], day_plan: [{ day_number: 1, date: null, places: ['Gwalior Fort'] }],
-        preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
-      } } },
+      trip_context: { original_traveler_request: 'exact golden request', destinations: ['Madhya Pradesh'], trip_duration: 14 },
+      planner_state: {
+        conversation_context: { awaiting: null },
+        places: ['Gwalior Fort'],
+        day_plan: [{ day_number: 1, date: null, places: ['Gwalior Fort'], pace: 'relaxed', buffer_note: null }],
+        revision: 2,
+      },
     },
   });
   const afterRemoval = tripRecord({
     version: 3,
     trip_state: {
       ...initialTrip.trip_state,
-      planner_state: { guide_session: { revision: 3, state: {
-        ...initialTrip.trip_state.planner_state.guide_session.state,
-        places: [], day_plan: [{ day_number: 1, date: null, places: [] }],
-      } } },
+      planner_state: {
+        ...initialTrip.trip_state.planner_state,
+        places: [],
+        day_plan: [{ day_number: 1, date: null, places: [], pace: 'relaxed', buffer_note: null }],
+        revision: 3,
+      },
     },
   });
 
@@ -46,6 +49,6 @@ test('Plan Builder edit survives refresh via the real Guide trip-command state',
 
   await page.reload();
 
-  await expect(page.getByText('Duration-only · Day 1–14')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Madhya Pradesh/ })).toBeVisible();
   await expect(page.getByText('Gwalior Fort')).not.toBeVisible();
 });

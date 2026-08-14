@@ -48,30 +48,21 @@ test('loads real recommendations via the continue command, shows a disclosed tra
     // TWM-106: landing on the Plan Builder immediately bootstraps a real
     // Guide session — scripted so the route mock doesn't reject it.
     {
+      // Single-step generation: start_planning returns the complete plan
+      // (places + day_plan together) once trip context is complete — no
+      // separate approve_places step.
       command: 'start_planning',
-      response: commandResponse('Here are the places I suggest.', tripRecord({
+      response: commandResponse('Here is your plan.', tripRecord({
         version: 4,
         trip_state: {
           stage: 'planning', active_agent: 'guide',
-          planner_state: { guide_session: { revision: 1, state: {
-            phase: 'PLACES_DRAFT', destinations: ['Madhya Pradesh'], duration_days: null, start_date: null,
-            places: ['Gwalior Fort'], day_plan: [], preferences: [], exclusions: [],
-            applied_changes: [], pending_clarification: null,
-          } } },
-        },
-      })),
-    },
-    {
-      command: 'approve_places',
-      response: commandResponse('Places approved; here is the day plan.', tripRecord({
-        version: 5,
-        trip_state: {
-          stage: 'planning', active_agent: 'guide',
-          planner_state: { guide_session: { revision: 2, state: {
-            phase: 'DAY_PLAN_DRAFT', destinations: ['Madhya Pradesh'], duration_days: 1, start_date: null,
-            places: ['Gwalior Fort'], day_plan: [{ day_number: 1, date: null, places: ['Gwalior Fort'] }],
-            preferences: [], exclusions: [], applied_changes: [], pending_clarification: null,
-          } } },
+          trip_context: { destinations: ['Madhya Pradesh'], trip_duration: 1 },
+          planner_state: {
+            conversation_context: { awaiting: null },
+            places: ['Gwalior Fort'],
+            day_plan: [{ day_number: 1, date: null, places: ['Gwalior Fort'], pace: 'relaxed', buffer_note: null }],
+            revision: 1,
+          },
         },
       })),
     },

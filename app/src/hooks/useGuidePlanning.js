@@ -1,23 +1,18 @@
 import { useState } from 'react';
 
-// Once Guide owns the trip, the pre-itinerary conversation (places,
-// preferences, duration, clarifications) all happens in chat — this hook
-// owns the two deterministic steps that used to live on the separate Plan
-// Builder screen: silently advancing places -> a day plan once every
-// necessary input is known, and generating the detailed itinerary.
+// Guide now generates places and the day plan together in a single step —
+// there is no places-only intermediate state to silently advance through.
+// This hook owns the one remaining deterministic step: freezing the plan
+// and generating the detailed itinerary.
 export function useGuidePlanning(sendTripCommand, navigate) {
   const [generating, setGenerating] = useState(false);
 
-  // Call after any response where Guide owns the trip, passing
-  // trip_state.planner_state. Returns the approve_places response when it
-  // silently advanced the plan, otherwise null — callers append its message
-  // onto the chat log when present.
-  async function maybeAdvancePlaces(plannerState) {
+  // True once Guide has produced a complete plan (places + day plan
+  // together) — the traveler should land on the unified Plan Builder.
+  function planReady(plannerState) {
     const hasPlaces = (plannerState?.places?.length || 0) > 0;
     const hasDayPlan = (plannerState?.day_plan?.length || 0) > 0;
-    const awaiting = plannerState?.conversation_context?.awaiting;
-    if (!hasPlaces || hasDayPlan || awaiting) return null;
-    return sendTripCommand('approve_places');
+    return hasPlaces && hasDayPlan;
   }
 
   async function generateItinerary() {
@@ -31,5 +26,5 @@ export function useGuidePlanning(sendTripCommand, navigate) {
     }
   }
 
-  return { maybeAdvancePlaces, generateItinerary, generating };
+  return { planReady, generateItinerary, generating };
 }
