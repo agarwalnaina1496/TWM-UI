@@ -48,7 +48,7 @@ export default function GetStarted() {
           </div>
         </div>
 
-        <div className="or-divider">or just tell Scout</div>
+        <div className="or-divider">or just tell Scout in your own words</div>
 
         <div className="ask-box">
           <input
