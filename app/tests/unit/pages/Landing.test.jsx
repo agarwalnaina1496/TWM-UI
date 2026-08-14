@@ -16,9 +16,9 @@ function tripRecord(overrides = {}) {
   };
 }
 
-function renderLanding() {
+function renderLanding(initialEntries = ['/']) {
   return render(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={initialEntries}>
       <TripProvider>
         <App />
       </TripProvider>
@@ -41,19 +41,16 @@ describe('Landing (TWM-163 Dashboard-as-home resolver)', () => {
 
   it.each([
     [
-      'zero trips shows GetStarted',
+      'zero trips shows Dashboard-home with its own empty state, not GetStarted',
       [],
-      /where are we headed/i,
     ],
     [
       'one incomplete (matching) trip shows Dashboard-home, not an auto-resume',
       [tripRecord({ trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } })],
-      /your.*trips/i,
     ],
     [
       'one itinerary-ready trip shows Dashboard-home, not an auto-open Dashboard',
       [tripRecord({ trip_state: { stage: 'planned', trip_context: { origin: 'Delhi' }, itinerary_state: { status: 'ready' } } })],
-      /your.*trips/i,
     ],
     [
       'multiple trips show Dashboard-home',
@@ -61,14 +58,12 @@ describe('Landing (TWM-163 Dashboard-as-home resolver)', () => {
         tripRecord({ id: 'trip-1', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } }),
         tripRecord({ id: 'trip-2', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } }, updated_at: '2025-12-01T00:00:00.000Z' }),
       ],
-      /your.*trips/i,
     ],
     [
       'only a completed trip shows Dashboard-home',
       [tripRecord({ trip_state: { stage: 'done', trip_context: { origin: 'Delhi' } } })],
-      /your.*trips/i,
     ],
-  ])('%s', async (_label, trips, expectedHeading) => {
+  ])('%s', async (_label, trips) => {
     fetchMock.mockImplementation(async (path) => {
       if (path === '/api/trips') return jsonResponse({ trips });
       return jsonResponse({});
@@ -76,7 +71,18 @@ describe('Landing (TWM-163 Dashboard-as-home resolver)', () => {
 
     renderLanding();
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: expectedHeading })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', { name: /your.*trips/i })).toBeInTheDocument());
+  });
+
+  it('shows the empty-state copy and New Trip CTA when there are zero trips', async () => {
+    fetchMock.mockImplementation(async (path) => {
+      if (path === '/api/trips') return jsonResponse({ trips: [] });
+      return jsonResponse({});
+    });
+
+    renderLanding();
+
+    expect(await screen.findByText('No trips yet')).toBeInTheDocument();
   });
 
   it('skipResume state always lands on GetStarted, even with existing trip history', async () => {

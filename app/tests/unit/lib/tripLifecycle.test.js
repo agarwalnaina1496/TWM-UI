@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, hasMeaningfulTrip } from '../../../src/lib/tripLifecycle.js';
+import { isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta } from '../../../src/lib/tripLifecycle.js';
 
 function state(overrides = {}) {
   return { stage: 'new', trip_context: {}, ...overrides };
@@ -59,26 +59,3 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
   });
 });
 
-describe('hasMeaningfulTrip (TWM-163 Dashboard-as-home resolver)', () => {
-  it.each([
-    ['zero trips -> false', [], false],
-    ['one fresh/empty trip -> false', [{ id: 't1', trip_state: state() }], false],
-    ['one incomplete trip -> true', [{ id: 't1', trip_state: state({ stage: 'matching' }) }], true],
-    [
-      'one itinerary-ready trip -> true',
-      [{ id: 't1', trip_state: state({ stage: 'planned', itinerary_state: { status: 'ready' } }) }],
-      true,
-    ],
-    ['one completed trip -> true', [{ id: 't1', trip_state: state({ stage: 'done' }) }], true],
-    [
-      'a fresh trip alongside a real one -> true',
-      [
-        { id: 'fresh', trip_state: state() },
-        { id: 'old', trip_state: state({ stage: 'planned', itinerary_state: { status: 'ready' } }) },
-      ],
-      true,
-    ],
-  ])('%s', (_label, trips, expected) => {
-    expect(hasMeaningfulTrip(trips)).toBe(expected);
-  });
-});

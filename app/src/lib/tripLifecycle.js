@@ -97,12 +97,3 @@ export function stageCta(tripState) {
   if (stage === 'new' && hasTripContext(tripState)) return { label: 'Resume chat', to: '/scout-chat' };
   return STAGE_CTA[stage] || STAGE_CTA.new;
 }
-
-// Dashboard-as-home `/` resolver (TWM-163): the traveler lands on the
-// Dashboard-home surface directly whenever they have any meaningful trip
-// history, regardless of stage — Dashboard is the product's home, not a
-// reward reached only after a journey completes. Per-trip navigation (resume
-// vs. per-trip Dashboard) happens from a trip card via stageCta, not here.
-export function hasMeaningfulTrip(trips = []) {
-  return trips.some(t => !isTripEmpty(t.trip_state));
-}
