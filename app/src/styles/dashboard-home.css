@@ -5,10 +5,10 @@
 .new-trip-menu-dropdown button{text-align:left;background:transparent;border:none;padding:9px 10px;font-size:13px;font-weight:600;color:var(--tp);border-radius:8px;cursor:pointer;}
 .new-trip-menu-dropdown button:hover{background:var(--accent-bg);}
 .trip-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;}
-.trip-card .name{font-family:'Fraunces',serif;font-size:15.5px;font-weight:600;}
+.trip-card .name{font-family:var(--font-display);font-size:15.5px;font-weight:600;}
 .trip-card .meta{font-size:12px;color:var(--ts);margin-top:2px;}
 .empty-trips{text-align:center;padding:50px 20px;color:var(--tm);}
-.empty-trips-title{font-family:'Fraunces',serif;font-size:17px;font-weight:600;color:var(--tp);margin-bottom:2px;}
+.empty-trips-title{font-family:var(--font-display);font-size:17px;font-weight:600;color:var(--tp);margin-bottom:2px;}
 .empty-trips-actions{display:grid;grid-template-columns:repeat(2,minmax(160px,220px));gap:12px;justify-content:center;margin-top:20px;}
 @media (max-width:480px){ .empty-trips-actions{grid-template-columns:1fr;} }
 .entry-card{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:18px 14px;cursor:pointer;text-align:center;transition:all .15s ease;}
@@ -33,11 +33,11 @@
 
 .hero-trip .trip-card{border-color:var(--accent);box-shadow:0 8px 24px rgba(156,90,52,0.1);}
 
-.section-title{font-family:'Fraunces',serif;font-size:15px;font-weight:600;margin:22px 0 10px;}
+.section-title{font-family:var(--font-display);font-size:15px;font-weight:600;margin:22px 0 10px;}
 
 .explore-rail-row{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;}
 .explore-card{flex:0 0 220px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);padding:14px 16px;}
-.explore-card .name{font-family:'Fraunces',serif;font-size:14px;font-weight:600;margin-bottom:6px;}
+.explore-card .name{font-family:var(--font-display);font-size:14px;font-weight:600;margin-bottom:6px;}
 .explore-card .status-pill{margin-bottom:8px;}
 .explore-card-empty{font-size:12px;color:var(--tm);margin:0 0 10px;}
 .explore-card .btn{margin-top:10px;width:100%;}

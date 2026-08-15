@@ -166,6 +166,20 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(within(pastSection).queryByText('Still going')).not.toBeInTheDocument();
   });
 
+  // Regression: a traveler whose only trips are all completed must not see
+  // the "No trips here yet" empty-list fallback directly above their real
+  // past-trips section — the fallback must also check completedTrips.
+  it('does not show the empty-list fallback when the only trips are completed', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [tripRecord({ title: 'Old trip', trip_state: { stage: 'done', trip_context: { origin: 'Delhi' } } })],
+    }));
+    renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    await screen.findByText('Old trip');
+
+    expect(screen.queryByText('No trips here yet.')).not.toBeInTheDocument();
+    expect(document.querySelector('.past-trips')).toBeInTheDocument();
+  });
+
   // TWM-172: search is a client-side filter over the traveler's own trips
   // only — never a destination lookup (no extra fetch is issued).
   it('search filters to matching trips only, without issuing any lookup request', async () => {

@@ -328,7 +328,7 @@ export default function DashboardHome() {
 
               {listTrips.map(t => <TripCard key={t.id} t={t} />)}
 
-              {listTrips.length === 0 && !hero && discoverOnlyTrips.length === 0 && (
+              {listTrips.length === 0 && !hero && discoverOnlyTrips.length === 0 && completedTrips.length === 0 && (
                 <div className="empty-trips"><p>No trips here yet.</p></div>
               )}
 
