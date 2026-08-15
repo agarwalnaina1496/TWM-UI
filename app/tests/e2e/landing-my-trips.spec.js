@@ -94,7 +94,7 @@ test('Dashboard-home empty state offers the same two entry actions as the header
 });
 
 test('renaming a trip persists through the Backend and survives a refresh', async ({ page }) => {
-  const trip = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } });
+  const trip = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } });
   await mockTripCommandFlow(page, [], { initialTrips: [trip] });
 
   await page.goto('');
@@ -107,10 +107,10 @@ test('renaming a trip persists through the Backend and survives a refresh', asyn
   await expect(page.getByText('Coorg long weekend')).toBeVisible();
 });
 
-test('filters narrow Dashboard-home to the selected category', async ({ page }) => {
+test('search narrows Dashboard-home to matching trips only (TWM-172)', async ({ page }) => {
   const active = tripRecord({
     id: 'e2e-trip-1', title: 'Coorg weekend',
-    trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
+    trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
     updated_at: '2026-01-02T00:00:00.000Z',
   });
   const upcoming = tripRecord({
@@ -121,17 +121,27 @@ test('filters narrow Dashboard-home to the selected category', async ({ page }) 
   await mockTripCommandFlow(page, [], { initialTrips: [active, upcoming] });
   await page.goto('');
 
-  await page.getByRole('tab', { name: /^Upcoming/ }).click();
+  await page.getByLabel('Search your trips').fill('madhya');
   await expect(page.getByText('Madhya Pradesh circuit')).toBeVisible();
   await expect(page.getByText('Coorg weekend')).not.toBeVisible();
+});
 
-  await page.getByRole('tab', { name: /^Active/ }).click();
-  await expect(page.getByText('Coorg weekend')).toBeVisible();
-  await expect(page.getByText('Madhya Pradesh circuit')).not.toBeVisible();
+test('discover-only trips appear in the explore rail, not the main trips list (TWM-172)', async ({ page }) => {
+  const browsing = tripRecord({
+    id: 'e2e-trip-1', title: 'Just browsing',
+    trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
+  });
+  await mockTripCommandFlow(page, [], { initialTrips: [browsing] });
+  await page.goto('');
+
+  await expect(page.getByText('Continue exploring')).toBeVisible();
+  const railCard = page.locator('.explore-card', { hasText: 'Just browsing' });
+  await expect(railCard).toBeVisible();
+  await expect(page.locator('.trip-card', { hasText: 'Just browsing' })).toHaveCount(0);
 });
 
 test('trip card renders exactly one primary affordance ("Open trip →"), regardless of stage', async ({ page }) => {
-  const active = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } });
+  const active = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } });
   await mockTripCommandFlow(page, [], { initialTrips: [active] });
   await page.goto('');
   const card = page.locator('.trip-card', { hasText: 'Coorg weekend' });
