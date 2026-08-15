@@ -6,6 +6,7 @@ import { safeMatcherOutcomeViewModel, rollupSummary } from '../lib/recommendatio
 import { contextRecapPills } from '../lib/tripLifecycle.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
+import { isFixedFieldGap } from '../lib/planChat.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
@@ -240,6 +241,44 @@ function RefinementDrawer({ open, onToggle, value, onChange, onSubmit, busy }) {
   );
 }
 
+// TWM-174: a transient overlay over Destinations, shown only when Guide's
+// fixed-checklist gate finds one genuinely missing field that Meridian's
+// judgment-based gate never needed — not a new screen, not logic embedded
+// in Plan Builder. Known facts render as read-only chips; only the single
+// missing field is asked.
+function CheckpointOverlay({ knownFacts, message, value, onChange, onSubmit, busy, error }) {
+  function submit() {
+    if (!value.trim()) return;
+    onSubmit();
+  }
+  return (
+    <div className="checkpoint-overlay" role="dialog" aria-modal="true" aria-label="One more thing before we plan">
+      <div className="checkpoint-card">
+        <span className="eyebrow">One more thing</span>
+        {knownFacts.length > 0 && (
+          <div className="checkpoint-known-facts">
+            {knownFacts.map(fact => <span key={fact} className="checkpoint-fact-chip">{fact}</span>)}
+          </div>
+        )}
+        <p className="checkpoint-message">{message || 'Guide needs one more detail before it can propose a plan.'}</p>
+        {error && <div className="price-evidence state-unsafe" role="alert">{error}</div>}
+        <div className="checkpoint-input-row">
+          <input
+            type="text"
+            aria-label="Your answer"
+            placeholder="Your answer…"
+            value={value}
+            disabled={busy}
+            onChange={event => onChange(event.target.value)}
+            onKeyDown={event => { if (event.key === 'Enter') submit(); }}
+          />
+          <button type="button" className="btn btn-primary" disabled={busy || !value.trim()} onClick={submit}>Send</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Destinations() {
   const navigate = useNavigate();
   const { updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState } = useTrip();
@@ -254,6 +293,13 @@ export default function Destinations() {
   const [clarifyInput, setClarifyInput] = useState('');
   const [planError, setPlanError] = useState(null);
   const [planningId, setPlanningId] = useState(null);
+  const [checkpointAwaiting, setCheckpointAwaiting] = useState(null);
+  const [checkpointMessage, setCheckpointMessage] = useState('');
+  const [checkpointInput, setCheckpointInput] = useState('');
+  const [checkpointBusy, setCheckpointBusy] = useState(false);
+  const [checkpointError, setCheckpointError] = useState(null);
+  const trackedCheckpointFields = useRef(new Set());
+  const checkpointWasShown = useRef(false);
   const [moreLikeThisId, setMoreLikeThisId] = useState(null);
   const [moreLikeThisQualifier, setMoreLikeThisQualifier] = useState('');
   const [refinementOpen, setRefinementOpen] = useState(false);
@@ -404,6 +450,11 @@ export default function Destinations() {
     doPlanThis(option);
   }
 
+  // TWM-174: bootstraps Guide immediately (instead of leaving it to
+  // TripPreview's own mount) so the checkpoint gap — if any — can surface
+  // right here on Destinations, before navigating away. TripPreview's own
+  // boot effect already no-ops once plannerState/awaiting exists, so this
+  // doesn't double-start Guide.
   async function doPlanThis(option) {
     setPlanError(null);
     setPlanningId(option.key);
@@ -413,11 +464,48 @@ export default function Destinations() {
       // Display-only field read by Itinerary/Logistics/RequestQuote; TWM-106
       // moved the Plan Builder itself onto Backend-persisted trip_context.
       updateTrip({ destination: { type: option.type, name: option.name } });
-      navigate('/trip-preview');
+      const response = await sendTripCommand('start_planning');
+      proceedFromGuideResponse(response);
     } catch (commandError) {
       setPlanError(commandError.message || 'Something went wrong.');
     } finally {
       setPlanningId(null);
+    }
+  }
+
+  // Shared by both the initial start_planning bootstrap and each checkpoint
+  // answer — Guide gates one fixed field at a time, so a single answer may
+  // reveal another gap before all five are satisfied.
+  function proceedFromGuideResponse(response) {
+    const nextAwaiting = response.trip?.trip_state?.planner_state?.conversation_context?.awaiting;
+    if (isFixedFieldGap(nextAwaiting)) {
+      setCheckpointAwaiting(nextAwaiting);
+      setCheckpointMessage(response.message || '');
+      checkpointWasShown.current = true;
+      if (!trackedCheckpointFields.current.has(nextAwaiting)) {
+        trackedCheckpointFields.current.add(nextAwaiting);
+        trackEvent('checkpoint_shown', { field: nextAwaiting });
+      }
+      return;
+    }
+    if (checkpointWasShown.current) trackEvent('checkpoint_resolved', {});
+    setCheckpointAwaiting(null);
+    navigate('/trip-preview', { state: { guideMessage: response.message } });
+  }
+
+  async function submitCheckpoint() {
+    const value = checkpointInput.trim();
+    if (!value) return;
+    setCheckpointBusy(true);
+    setCheckpointError(null);
+    setCheckpointInput('');
+    try {
+      const response = await sendTripCommand('traveler_message', { message: value });
+      proceedFromGuideResponse(response);
+    } catch (commandError) {
+      setCheckpointError(commandError.message || 'Something went wrong.');
+    } finally {
+      setCheckpointBusy(false);
     }
   }
 
@@ -508,6 +596,17 @@ export default function Destinations() {
 
   return (
     <div className="wrap">
+      {checkpointAwaiting && (
+        <CheckpointOverlay
+          knownFacts={pills}
+          message={checkpointMessage}
+          value={checkpointInput}
+          onChange={setCheckpointInput}
+          onSubmit={submitCheckpoint}
+          busy={checkpointBusy}
+          error={checkpointError}
+        />
+      )}
       <BackToTrip />
       <span className="eyebrow">Destination matcher</span>
       <h1>Let's find <em>your</em> place</h1>

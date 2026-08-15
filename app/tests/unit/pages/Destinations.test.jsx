@@ -253,11 +253,21 @@ describe('Destinations (real Meridian integration)', () => {
     expect(screen.getByText(/could not validate the recommendation response safely/)).toBeInTheDocument();
   });
 
-  it('Plan this trip persists selection through select_destination and navigates to Trip Preview', async () => {
+  it('Plan this trip persists selection through select_destination, bootstraps Guide, and navigates to Trip Preview', async () => {
     const server = createServer({ recommendation: successOutcome() });
     server.queueCommand(() => jsonResponse({
       message: 'Madhya Pradesh Heritage and Nature is confirmed.', agent_meta: null,
       trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
+    }));
+    // TWM-174: doPlanThis also bootstraps Guide (start_planning) before
+    // navigating, so a checkpoint gap can surface here if one exists — this
+    // fixture has no gap (awaiting: null), so it proceeds straight through.
+    server.queueCommand(() => jsonResponse({
+      message: 'A few more questions before we plan.', agent_meta: null,
+      trip: {
+        id: 'trip-1', title: 'Trip', version: 5,
+        trip_state: { ...server.tripState, planner_state: { conversation_context: { awaiting: null }, places: [], day_plan: [] } },
+      },
     }));
     fetchMock = createFetchMock(server);
     global.fetch = fetchMock;
@@ -273,6 +283,9 @@ describe('Destinations (real Meridian integration)', () => {
     const commandCall = fetchMock.mock.calls.find(call => call[1]?.body?.includes('"command":"select_destination"'));
     const body = JSON.parse(commandCall[1].body);
     expect(body.option_id).toBe('gwalior-orchha-khajuraho-panna');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+      body: expect.stringContaining('"command":"start_planning"'),
+    })));
   });
 
   it('More like this sends the structured reference without committing selection', async () => {
@@ -311,6 +324,13 @@ describe('Destinations (real Meridian integration)', () => {
     server.queueCommand(() => jsonResponse({
       message: 'Confirmed.', agent_meta: null,
       trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
+    }));
+    server.queueCommand(() => jsonResponse({
+      message: 'A few more questions before we plan.', agent_meta: null,
+      trip: {
+        id: 'trip-1', title: 'Trip', version: 5,
+        trip_state: { ...server.tripState, planner_state: { conversation_context: { awaiting: null }, places: [], day_plan: [] } },
+      },
     }));
     fetchMock = createFetchMock(server);
     global.fetch = fetchMock;
@@ -623,5 +643,117 @@ describe('Destinations (real Meridian integration)', () => {
     // other traveler_message already uses, not a new bespoke payload.
     expect(body.message).toBe(adversarial);
     expect(document.querySelector('script')).toBeNull();
+  });
+
+  describe('Discover→Plan checkpoint overlay (TWM-174)', () => {
+    it('shows the checkpoint with known facts and Guide\'s single missing field, never rendering the matrix underneath as the destination', async () => {
+      const server = createServer({ recommendation: successOutcome() });
+      server.queueCommand(() => jsonResponse({
+        message: 'Confirmed.', agent_meta: null,
+        trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
+      }));
+      server.queueCommand(() => jsonResponse({
+        message: 'What is your rough budget?', agent_meta: null,
+        trip: {
+          id: 'trip-1', title: 'Trip', version: 5,
+          trip_state: { ...server.tripState, planner_state: { conversation_context: { awaiting: 'budget' }, places: [], day_plan: [] } },
+        },
+      }));
+      fetchMock = createFetchMock(server);
+      global.fetch = fetchMock;
+      renderDestinations();
+      await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+
+      fireEvent.click(screen.getByText('Plan this trip →'));
+
+      const overlay = await screen.findByRole('dialog', { name: 'One more thing before we plan' });
+      expect(within(overlay).getByText('What is your rough budget?')).toBeInTheDocument();
+      // Known facts (from trip_context) shown as read-only chips.
+      expect(within(overlay).getByText('From Delhi')).toBeInTheDocument();
+    });
+
+    it('never shows the checkpoint when Guide has no gap — proceeds straight to Trip Preview', async () => {
+      const server = createServer({ recommendation: successOutcome() });
+      server.queueCommand(() => jsonResponse({
+        message: 'Confirmed.', agent_meta: null,
+        trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
+      }));
+      server.queueCommand(() => jsonResponse({
+        message: 'Anything else before I plan?', agent_meta: null,
+        trip: {
+          id: 'trip-1', title: 'Trip', version: 5,
+          trip_state: { ...server.tripState, planner_state: { conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [] } },
+        },
+      }));
+      fetchMock = createFetchMock(server);
+      global.fetch = fetchMock;
+      renderDestinations();
+      await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+
+      fireEvent.click(screen.getByText('Plan this trip →'));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+        body: expect.stringContaining('"command":"start_planning"'),
+      })));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('submitting the checkpoint answer resolves the gap and proceeds, chaining to a second field if another gap remains', async () => {
+      const server = createServer({ recommendation: successOutcome() });
+      server.queueCommand(() => jsonResponse({
+        message: 'Confirmed.', agent_meta: null,
+        trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
+      }));
+      server.queueCommand(() => jsonResponse({
+        message: 'What is your rough budget?', agent_meta: null,
+        trip: {
+          id: 'trip-1', title: 'Trip', version: 5,
+          trip_state: { ...server.tripState, planner_state: { conversation_context: { awaiting: 'budget' }, places: [], day_plan: [] } },
+        },
+      }));
+      // Answering budget reveals a second gap (num_travelers) — the
+      // checkpoint must chain to it, not assume one round-trip is enough.
+      server.queueCommand(() => jsonResponse({
+        message: 'How many travelers?', agent_meta: null,
+        trip: {
+          id: 'trip-1', title: 'Trip', version: 6,
+          trip_state: { ...server.tripState, planner_state: { conversation_context: { awaiting: 'num_travelers' }, places: [], day_plan: [] } },
+        },
+      }));
+      fetchMock = createFetchMock(server);
+      global.fetch = fetchMock;
+      renderDestinations();
+      await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+
+      fireEvent.click(screen.getByText('Plan this trip →'));
+      await screen.findByText('What is your rough budget?');
+
+      fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: '₹1,00,000' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+      await screen.findByText('How many travelers?');
+      expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+        body: expect.stringContaining('"₹1,00,000"'),
+      }));
+    });
+
+    it('never shows the checkpoint for the Selected-already-chosen shortcut (no start_planning re-call)', async () => {
+      const server = createServer({
+        recommendation: successOutcome(),
+        tripState: tripState({
+          trip_context: {
+            origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2,
+            selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
+          },
+        }),
+      });
+      fetchMock = createFetchMock(server);
+      global.fetch = fetchMock;
+      renderDestinations();
+      await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+
+      fireEvent.click(screen.getByText('Plan this trip →'));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
   });
 });

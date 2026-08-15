@@ -4,11 +4,16 @@ import { useTrip } from '../context/TripContext.jsx';
 import {
   buildRemovePlaceMessage, buildReplacePlaceMessage, buildSetPaceMessage, planBuilderSummary,
 } from '../lib/guidePlanAdapter.js';
+import { buildPlanRecapTurn } from '../lib/planChat.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import BackToTrip from '../components/BackToTrip.jsx';
+import HonestTransition from '../components/ui/HonestTransition.jsx';
+import PaceMeter from '../components/ui/PaceMeter.jsx';
 import '../styles/preview.css';
 
 const PACE_OPTIONS = ['relaxed', 'balanced', 'packed'];
+const REOPEN_DESTINATION_MESSAGE = 'I want to change my destination and explore other options.';
+const REOPEN_STEPS = ['Stepping back from your current plan', 'Bringing in Meridian, who handles destination matching', 'Finding fresh options'];
 
 // Shared by the gating-question screen and the chat drawer — both are a
 // plain free-text message to Guide, just with a different placeholder and
@@ -39,6 +44,14 @@ function FreeTextComposer({ value, onChange, onSubmit, placeholder, pending }) {
 // together in one step — there is no separate approve-places screen at any
 // point, and this screen is the real destination for both paths (the
 // known-destination path used to bypass it entirely and land on /dashboard).
+//
+// TWM-174: kept as a single route rather than splitting Plan chat onto its
+// own URL — the gating (!planReady) branch is restyled to read as its own
+// distinct screen (no BackToTrip, its own refresh-recap variant, matching
+// Discover's pattern), while the ready branch is Plan Builder proper. Both
+// entry-path navigate() calls (ScoutChat.jsx:48, JourneyEntry.jsx:112,
+// owned by the Discover & Destinations story) are unchanged by this
+// decision — they still land here regardless of gating/ready state.
 export default function TripPreview() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -69,8 +82,11 @@ export default function TripPreview() {
   const [freeText, setFreeText] = useState('');
   const [replacingPlace, setReplacingPlace] = useState(null);
   const [replacement, setReplacement] = useState('');
+  const [reversing, setReversing] = useState(false);
+  const [reversalError, setReversalError] = useState(null);
   const bootStarted = useRef(false);
   const trackedPlanBuilderView = useRef(false);
+  const initializedRecap = useRef(false);
   // Best-effort distinction for planning_entry — a selected recommendation
   // means Discover led here; otherwise it's a known-destination entry.
   const planningEntry = tripContext?.selected_option ? 'discovered_destination' : 'known_destination';
@@ -112,6 +128,19 @@ export default function TripPreview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripLoadStatus, frozenPlan]);
 
+  // TWM-174: Plan chat's refresh-recap — a refresh mid-gating-conversation
+  // must not read as a blank slate. Only fires when there's no message
+  // already in hand (a fresh navigation from ScoutChat/JourneyEntry already
+  // carries one via location.state) and the plan isn't ready yet.
+  useEffect(() => {
+    if (initializedRecap.current || tripLoadStatus !== 'ready') return;
+    initializedRecap.current = true;
+    if (location.state?.guideMessage || planReady || message) return;
+    const recap = buildPlanRecapTurn(tripContext, { awaiting });
+    if (recap) setMessage(recap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripLoadStatus]);
+
   useEffect(() => {
     if (trackedPlanBuilderView.current || bootStatus !== 'ready' || !planReady) return;
     trackedPlanBuilderView.current = true;
@@ -145,6 +174,41 @@ export default function TripPreview() {
     // Freezing navigates via the frozenPlan effect above once commandSnapshot updates.
   }
 
+  // TWM-174: wires Guide's reopen_destination_discovery (already built
+  // Backend-side, TWM-110) to a real UI affordance. A deterministic,
+  // explicit message — not raw free text — since this is a UI-triggered
+  // action, not an ambiguous traveler utterance to interpret. Guide still
+  // makes the judgment call per its own prompt rules; if it asks a
+  // clarifying question instead of reversing (ambiguous per its own
+  // criteria), that response is shown inline rather than assumed to have
+  // succeeded.
+  async function reopenDestinationDiscovery() {
+    setReversing(true);
+    setReversalError(null);
+    trackEvent('reopen_destination_discovery_triggered', { source: 'plan_builder_reversal' });
+    try {
+      const response = await sendTripCommand('traveler_message', { message: REOPEN_DESTINATION_MESSAGE });
+      const nextState = response.trip?.trip_state;
+      if (nextState?.active_agent === 'meridian' && nextState?.stage === 'matching') {
+        navigate('/destinations');
+        return;
+      }
+      setMessage(response.message || '');
+    } catch (error) {
+      setReversalError(error.message || 'Could not reconsider the destination.');
+    } finally {
+      setReversing(false);
+    }
+  }
+
+  if (reversing) {
+    return (
+      <main className="wrap plan-builder">
+        <HonestTransition steps={REOPEN_STEPS} label="Finding new matches" />
+      </main>
+    );
+  }
+
   if (bootStatus === 'error') {
     return (
       <main className="wrap plan-builder">
@@ -167,18 +231,15 @@ export default function TripPreview() {
   }
 
   // Guide is still gating on trip context (the five fixed facts, or the
-  // sixth "anything else?" question) — no places/day_plan yet. Ask here
-  // instead of a separate screen; the plan appears the moment it's ready.
-  // TODO(TWM-174): once Plan chat gets its own dedicated screen (separate
-  // from Plan Builder), drop BackToTrip from this gating branch — the
-  // mockup's Plan-chat screens (06a/06c) have no back-link, only Plan
-  // Builder does.
+  // sixth "anything else?" question) — no places/day_plan yet. This reads
+  // as its own screen (Plan chat) per TWM-174, not embedded Plan Builder
+  // filler: no BackToTrip here (matches Discover's entry-chat pattern of no
+  // back-link until results exist, per the mockup).
   if (!planReady) {
     return (
-      <main className="wrap plan-builder">
-        <BackToTrip />
-        <span className="eyebrow">Guide Plan Builder</span>
-        <h1>A few more details</h1>
+      <main className="wrap plan-builder plan-chat">
+        <span className="eyebrow">Guide</span>
+        <h1>Let's shape <em>your plan</em></h1>
         <p className="lede">{message || (awaiting ? 'Guide needs a bit more before it can propose a plan.' : 'Setting up your plan…')}</p>
         {message && <div className="revision-message" role="status">{message}</div>}
         <div className="builder-controls" aria-label="Answer Guide">
@@ -210,12 +271,13 @@ export default function TripPreview() {
       </section>
 
       {message && <div className="revision-message" role="status">{message}</div>}
+      {reversalError && <div className="price-evidence state-unsafe" role="alert">{reversalError}</div>}
 
       <section aria-label="Day plan">
         {dayPlan.map(dayEntry => (
           <article className="day-card" key={dayEntry.day_number}>
             <header className="day-card-head">
-              <div className="day-card-title"><span className="daynum">{dayEntry.day_number}</span><div><h2>Day {dayEntry.day_number}</h2><span className="pace-badge">{dayEntry.pace}</span></div></div>
+              <div className="day-card-title"><span className="daynum">{dayEntry.day_number}</span><div><h2>Day {dayEntry.day_number}</h2><PaceMeter pace={dayEntry.pace} /></div></div>
               <div className="pace-actions" role="group" aria-label={`Adjust Day ${dayEntry.day_number} pace`}>
                 {PACE_OPTIONS.filter(pace => pace !== dayEntry.pace).map(pace => (
                   <button
@@ -229,13 +291,14 @@ export default function TripPreview() {
               </div>
             </header>
             {dayEntry.buffer_note && <p className="buffer-note">{dayEntry.buffer_note}</p>}
-            <ul className="plan-list">
-              {dayEntry.places.map(place => {
+            <ol className="plan-list">
+              {dayEntry.places.map((place, placeIndex) => {
                 const rowKey = `${dayEntry.day_number}-${place}`;
                 return (
                 <li className="item-row" key={rowKey}>
                   {replacingPlace === rowKey ? (
                     <span className="replace-row">
+                      <span className="place-number" aria-hidden="true">{placeIndex + 1}</span>
                       <input
                         aria-label={`Replace ${place} with`}
                         value={replacement}
@@ -263,7 +326,7 @@ export default function TripPreview() {
                     </span>
                   ) : (
                     <>
-                      <span>{place}</span>
+                      <span className="place-name"><span className="place-number" aria-hidden="true">{placeIndex + 1}</span>{place}</span>
                       <span className="item-actions">
                         <button type="button" disabled={pending} aria-label={`Replace ${place}`} onClick={() => { setReplacingPlace(rowKey); setReplacement(''); }}>Replace</button>
                         <button type="button" disabled={pending} aria-label={`Remove ${place}`} onClick={() => sendEdit(buildRemovePlaceMessage(place), 'remove')}>Remove</button>
@@ -273,7 +336,7 @@ export default function TripPreview() {
                 </li>
                 );
               })}
-            </ul>
+            </ol>
           </article>
         ))}
       </section>
@@ -295,9 +358,18 @@ export default function TripPreview() {
         </section>
       )}
 
+      {/* TWM-174: Approve is the single, visually distinct commit action —
+          deliberately its own row, not sharing space with the free-text
+          refine drawer above (different-weight actions). */}
       <footer className="builder-footer">
-        <button type="button" className="btn btn-primary" disabled={pending} onClick={generate}>Finalize my trip →</button>
+        <button type="button" className="btn btn-primary" disabled={pending} onClick={generate}>Approve this plan →</button>
       </footer>
+
+      <p className="reversal-link">
+        <button type="button" className="link-button" onClick={reopenDestinationDiscovery} disabled={pending}>
+          Not the right destination? Let's explore other options →
+        </button>
+      </p>
     </main>
   );
 }
