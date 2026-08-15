@@ -11,7 +11,7 @@
 .matrix-option-header:hover{background:var(--accent-bg);}
 th.focused .matrix-option-header,td.focused{background:var(--accent-bg);}
 .matrix-option-rank{font-size:10px;font-weight:800;color:var(--tm);text-transform:uppercase;}
-.matrix-option-name{font-family:'Fraunces',serif;font-size:14px;font-weight:700;color:var(--tp);}
+.matrix-option-name{font-family:var(--font-display);font-size:14px;font-weight:700;color:var(--tp);}
 .matrix-option-type{font-size:10.5px;color:var(--ts);}
 .matrix-criterion-label{font-weight:600;color:var(--tp);white-space:nowrap;}
 

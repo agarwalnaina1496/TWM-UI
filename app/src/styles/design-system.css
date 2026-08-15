@@ -31,3 +31,8 @@
 .honest-transition-steps li.done{color:var(--tone-positive);}
 .honest-transition-steps li.active{color:var(--tp);font-weight:600;}
 .honest-transition-steps .step-marker{flex-shrink:0;width:16px;text-align:center;}
+/* The final step holds at "active" for as long as the real operation
+   takes — sometimes a while — so it pulses rather than sitting static,
+   reading as alive instead of frozen. */
+.honest-transition-steps li.active .step-marker{animation:honest-transition-pulse 1.4s ease-in-out infinite;}
+@keyframes honest-transition-pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
