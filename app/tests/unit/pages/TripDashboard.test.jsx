@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -483,6 +483,24 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       renderDashboard();
       expect(await screen.findByRole('status', { name: 'Building your itinerary' })).toBeInTheDocument();
       expect(screen.queryByText(/Building your detailed itinerary/)).not.toBeInTheDocument();
+    });
+
+    // Regression: proves the 20s-per-step cadence is actually wired through
+    // to HonestTransition, not just present as an unused/dropped prop — the
+    // default step, cleared at 1100ms, must still be "active" here.
+    it('honors the 20s-per-step cadence, not HonestTransition\'s 1100ms default', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      commandSnapshot = snapshotWith({});
+      sendTripCommand = vi.fn(() => new Promise(() => {}));
+      render(<MemoryRouter><TripDashboard /></MemoryRouter>);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+      expect(screen.getAllByRole('listitem')[0]).toHaveClass('active');
+      expect(screen.getAllByRole('listitem')[0]).not.toHaveClass('done');
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(19000); }); // total 20100ms — past the real cadence
+      expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
+      vi.useRealTimers();
     });
 
     it('shows the one-time booking prompt only on a real fresh generation, and persists that it was shown', async () => {
