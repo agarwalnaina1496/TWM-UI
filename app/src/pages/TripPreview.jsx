@@ -5,6 +5,7 @@ import {
   buildRemovePlaceMessage, buildReplacePlaceMessage, buildSetPaceMessage, planBuilderSummary,
 } from '../lib/guidePlanAdapter.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
+import BackToTrip from '../components/BackToTrip.jsx';
 import '../styles/preview.css';
 
 const PACE_OPTIONS = ['relaxed', 'balanced', 'packed'];
@@ -147,6 +148,7 @@ export default function TripPreview() {
   if (bootStatus === 'error') {
     return (
       <main className="wrap plan-builder">
+        <BackToTrip />
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Planning could not start</strong>
           <span>{bootError}</span>
@@ -158,6 +160,7 @@ export default function TripPreview() {
   if (bootStatus !== 'ready' || !plannerState) {
     return (
       <main className="wrap plan-builder">
+        <BackToTrip />
         <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Guide is drafting your plan…</div>
       </main>
     );
@@ -169,6 +172,7 @@ export default function TripPreview() {
   if (!planReady) {
     return (
       <main className="wrap plan-builder">
+        <BackToTrip />
         <span className="eyebrow">Guide Plan Builder</span>
         <h1>A few more details</h1>
         <p className="lede">{message || (awaiting ? 'Guide needs a bit more before it can propose a plan.' : 'Setting up your plan…')}</p>
@@ -190,6 +194,7 @@ export default function TripPreview() {
 
   return (
     <main className="wrap plan-builder">
+      <BackToTrip />
       <span className="eyebrow">Guide Plan Builder</span>
       <h1>{summary.destinations.join(', ') || 'Your trip'} <em>| {summary.durationDays} days</em></h1>
       <p className="lede">Shape the places and day pace together. Dates can stay open until you book.</p>

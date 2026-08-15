@@ -79,7 +79,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(await screen.findByText(/browsing as a guest/i)).toBeInTheDocument();
     expect(screen.getByText('Coorg')).toBeInTheDocument();
     expect(screen.getByText('Destination chosen')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /review recommendations/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
   });
 
   it('shows the View trip CTA for an itinerary-ready trip', async () => {
@@ -91,7 +91,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     renderDashboardHome({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
     expect(await screen.findByText('Signed in as Traveler')).toBeInTheDocument();
     expect(screen.getByText('Itinerary ready')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /view trip/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
   });
 
   it.each([
@@ -167,7 +167,7 @@ describe('DashboardHome (TWM-108/163)', () => {
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('Deleted elsewhere');
 
-    await userEvent.click(within(screen.getByText('Deleted elsewhere').closest('.trip-card')).getByRole('button', { name: /review recommendations/i }));
+    await userEvent.click(within(screen.getByText('Deleted elsewhere').closest('.trip-card')).getByRole('button', { name: 'Open trip →' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('This trip is no longer available.');
     expect(screen.queryByText('Deleted elsewhere')).not.toBeInTheDocument();

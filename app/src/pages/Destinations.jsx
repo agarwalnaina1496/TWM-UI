@@ -5,9 +5,15 @@ import { getRecommendations, TripApiError } from '../lib/tripApi.js';
 import { safeMatcherOutcomeViewModel } from '../lib/recommendationViewModel.js';
 import { contextRecapPills } from '../lib/tripLifecycle.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
+import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
+import BackToTrip from '../components/BackToTrip.jsx';
+import StatusPill from '../components/ui/StatusPill.jsx';
 import '../styles/destinations.css';
 
+const OPEN_ID_KEY = uiStateKey(UI_STATE_SCREEN.DESTINATIONS, 'openId');
+
 const OUTCOME_ICON = { MATCH: '✓', TRADEOFF: '⚠', MISMATCH: '✕' };
+const OUTCOME_TONE = { MATCH: 'positive', TRADEOFF: 'caution', MISMATCH: 'negative' };
 const BEEN_BEFORE_OPTIONS = [
   { id: 'loved', icon: '❤️', label: 'Loved it' },
   { id: 'would-go-back', icon: '🔁', label: 'Would go back' },
@@ -121,9 +127,9 @@ export default function Destinations() {
 
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState(null);
-  // Backend-persisted (ui_state.destinationsOpenId) so it survives a refresh;
+  // Backend-persisted (ui_state[OPEN_ID_KEY]) so it survives a refresh;
   // openId itself stays local React state for instant toggling.
-  const [openId, setOpenId] = useState(() => uiState.destinationsOpenId ?? null);
+  const [openId, setOpenId] = useState(() => uiState[OPEN_ID_KEY] ?? null);
   const [beenBefore, setBeenBefore] = useState({});
   const [clarifyInput, setClarifyInput] = useState('');
   const [planError, setPlanError] = useState(null);
@@ -213,9 +219,9 @@ export default function Destinations() {
   useEffect(() => {
     if (restoredOpenId.current || tripLoadStatus !== 'ready') return;
     restoredOpenId.current = true;
-    if (uiState.destinationsOpenId) setOpenId(uiState.destinationsOpenId);
+    if (uiState[OPEN_ID_KEY]) setOpenId(uiState[OPEN_ID_KEY]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripLoadStatus, uiState.destinationsOpenId]);
+  }, [tripLoadStatus, uiState[OPEN_ID_KEY]]);
 
   const outcome = useMemo(
     () => (latest ? safeMatcherOutcomeViewModel(latest) : null),
@@ -244,7 +250,7 @@ export default function Destinations() {
   function toggleOpen(key) {
     const next = openId === key ? null : key;
     setOpenId(next);
-    updateUiState({ destinationsOpenId: next }).catch(() => {});
+    updateUiState({ [OPEN_ID_KEY]: next }).catch(() => {});
   }
 
   async function planThis(option) {
@@ -273,7 +279,7 @@ export default function Destinations() {
       });
       await refreshLatest(response.trip?.id, { fromCommand: true });
       setOpenId(null);
-      updateUiState({ destinationsOpenId: null }).catch(() => {});
+      updateUiState({ [OPEN_ID_KEY]: null }).catch(() => {});
     } catch (commandError) {
       setPlanError(commandError.message || 'Something went wrong.');
     } finally {
@@ -304,6 +310,7 @@ export default function Destinations() {
 
   return (
     <div className="wrap">
+      <BackToTrip />
       <span className="eyebrow">Destination matcher</span>
       <h1>Let's find <em>your</em> place</h1>
       <p className="lede">Matching against what you just told me — ranked by how well each fits.</p>
@@ -396,9 +403,9 @@ export default function Destinations() {
                 <div className="estimate-qualifier">Qualified planning estimate · not checked prices</div>
                 <div className="criteria-list">
                   {d.evaluations.map(ev => (
-                    <span key={ev.criterion_id} className={`criteria-pill outcome-${ev.outcome.toLowerCase()}`}>
-                      {OUTCOME_ICON[ev.outcome]} {criterionLabel(outcome.data.criteria, ev.criterion_id)}
-                    </span>
+                    <StatusPill key={ev.criterion_id} tone={OUTCOME_TONE[ev.outcome]} icon={OUTCOME_ICON[ev.outcome]}>
+                      {criterionLabel(outcome.data.criteria, ev.criterion_id)}
+                    </StatusPill>
                   ))}
                   {d.other_considerations.length > 0 && (
                     <span
@@ -419,7 +426,7 @@ export default function Destinations() {
                         <div className="eval-head">
                           <span className="eval-icon">{criterionIcon(ev.criterion_id)}</span>
                           <span className="eval-conclusion">{ev.conclusion}</span>
-                          <span className={`criteria-pill outcome-${ev.outcome.toLowerCase()}`}>{OUTCOME_ICON[ev.outcome]}</span>
+                          <StatusPill tone={OUTCOME_TONE[ev.outcome]} icon={OUTCOME_ICON[ev.outcome]}>{ev.outcome.toLowerCase()}</StatusPill>
                         </div>
                         {ev.details.map((detail, di) => <DetailBlock key={di} detail={detail} />)}
                         {ev.tradeoffs?.map(t => <div key={t} className="eval-tradeoff">⚠ {t}</div>)}

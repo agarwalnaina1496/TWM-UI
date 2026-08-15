@@ -1,0 +1,25 @@
+/* TWM-171: shared status-pill + back-to-trip primitives. Every screen must
+   reach for these instead of hand-rolling another one-off pill/link. */
+
+.status-pill{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--font-body);font-size:var(--fs-eyebrow);font-weight:700;
+  letter-spacing:.02em;border-radius:99px;padding:5px 11px;line-height:1.2;
+}
+.status-pill-filled.status-pill-positive{background:var(--tone-positive-bg);color:var(--tone-positive);}
+.status-pill-filled.status-pill-caution{background:var(--tone-caution-bg);color:var(--tone-caution);}
+.status-pill-filled.status-pill-negative{background:var(--tone-negative-bg);color:var(--tone-negative);}
+.status-pill-filled.status-pill-neutral{background:var(--tone-neutral-bg);color:var(--tone-neutral);}
+
+.status-pill-outline{background:transparent;border:1px solid currentColor;}
+.status-pill-outline.status-pill-positive{color:var(--tone-positive);}
+.status-pill-outline.status-pill-caution{color:var(--tone-caution);}
+.status-pill-outline.status-pill-negative{color:var(--tone-negative);}
+.status-pill-outline.status-pill-neutral{color:var(--tone-neutral);}
+
+.back-to-trip{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:var(--fs-body-sm);font-weight:600;color:var(--ts);
+  text-decoration:none;margin:16px 0 4px;
+}
+.back-to-trip:hover{color:var(--tp);}

@@ -95,6 +95,8 @@ export default function DashboardHome() {
         setNotice('This trip is no longer available.');
         return;
       }
+      // TWM-171: every stage routes to /dashboard now — stageCta().to is
+      // constant, kept for a single source of truth rather than hardcoding here.
       navigate(stageCta(t.trip_state).to);
     } finally {
       setBusyId(null);
@@ -231,7 +233,7 @@ export default function DashboardHome() {
                     )}
                   </div>
                   <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => handleOpen(t)}>
-                    {cta.label} →
+                    {cta.label}
                   </button>
                 </div>
               );
