@@ -79,13 +79,13 @@ function readyItineraryState({ version = 1, history = [], proposedRevision = nul
 // every fixture below is exercising the post-approval Atlas contract, so
 // frozen_plan defaults present here (a dedicated thin-state describe block
 // below covers the pre-frozen case explicitly).
-function snapshotWith(itineraryState, { anchors = [], plannerState } = {}) {
+function snapshotWith(itineraryState, { anchors = [], plannerState } = {}, { trip_context: tripContext = {} } = {}) {
   return {
     id: 'trip-1',
     version: 1,
     trip_state: {
       stage: 'planned',
-      trip_context: {},
+      trip_context: tripContext,
       planner_state: plannerState ?? { frozen_plan: { guide_revision: 3, guide_state: {} } },
       itinerary_state: itineraryState,
       logistics_state: { anchors },
@@ -269,15 +269,110 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // placeholder until the Bookings, Docs & Support story lands next. The
   // underlying confirm_logistics command is unchanged and untested here on
   // purpose; that coverage returns with the real Bookings tab.
-  it('shows an explicit inert placeholder on the Bookings tab, not a blank or broken page', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState());
-    sendTripCommand = vi.fn();
-    const user = userEvent.setup();
-    await readyDashboard();
-    await user.click(screen.getByRole('button', { name: /Bookings/ }));
-    expect(screen.getByLabelText('Bookings placeholder')).toBeInTheDocument();
-    expect(screen.getByText('Coming soon')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /logistics/i })).not.toBeInTheDocument();
+  // TWM-176: real Bookings content, replacing TWM-175's inert placeholder.
+  describe('Bookings tab (TWM-176)', () => {
+    it('shows the origin<->destination transport leg, not just local transfers, bundled as one round-trip decision', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      // Fixture: both days are Rishikesh, so the round trip is Delhi <-> Rishikesh.
+      expect(screen.getByText('Delhi ⇄ Rishikesh round trip')).toBeInTheDocument();
+    });
+
+    it('expanding a segment shows mode-tagged options; an infeasible long-haul mode is genuinely absent, with an explanatory note', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+
+      expect(screen.getAllByText(/Flight/).length).toBeGreaterThan(0);
+      // Fixture is a 2-day trip — Bus (14h template) is excluded as infeasible.
+      expect(screen.queryByText(/^Bus:/)).not.toBeInTheDocument();
+      expect(screen.getByText(/Bus excluded/)).toBeInTheDocument();
+    });
+
+    it('shows a specific "not booked yet" label per segment, never a bare generic one', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      await readyDashboard();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      expect(screen.getByText('Delhi ⇄ Rishikesh round trip not booked yet')).toBeInTheDocument();
+      expect(screen.queryByText('Not booked yet')).not.toBeInTheDocument();
+    });
+
+    it('shows a confirmed segment with the 🔒-confirmed treatment — property/service name, price/detail, and confirmation number, never a bare status word', async () => {
+      commandSnapshot = snapshotWith(
+        readyItineraryState(), { anchors: [anchor({ type: 'stay', label: 'Rishikesh · 2 nights', detail: 'Riverside Cottage, ₹4,200/night', reference: 'CONF-9921' })] },
+        { trip_context: { origin: 'Delhi' } },
+      );
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      expect(screen.getByText('🔒 confirmed')).toBeInTheDocument();
+      expect(screen.getByText('Riverside Cottage, ₹4,200/night')).toBeInTheDocument();
+      expect(screen.getByText('✓ CONF-9921')).toBeInTheDocument();
+    });
+
+    it('Activity category only appears when a real Atlas item genuinely requires advance booking — never as an empty section', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState());
+      sendTripCommand = vi.fn();
+      await readyDashboard();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      // Fixture has no ACTIVITY item with requires_advance_booking: true.
+      expect(screen.queryByRole('heading', { name: /Activity/ })).not.toBeInTheDocument();
+    });
+
+    it('shows the Activity category with a real Atlas-flagged item, framed as the exception not the norm', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState());
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: {
+            days: [{
+              day_number: 1, date: null, title: 'Arrival', primary_location: 'Rishikesh', summary: 'x',
+              timeline: [{
+                start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Rafting', location: 'Rishikesh',
+                detail: 'Book a slot ahead — limited daily capacity.', movement_guidance: null,
+                estimated_cost_low: null, estimated_cost_high: null,
+                reference: generalReference(), requires_advance_booking: true, booking_readiness: 'needs_advance_booking',
+              }],
+              seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+            }],
+          },
+        }),
+      };
+      global.fetch = defaultFetchMock();
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      expect(screen.getByRole('heading', { name: /Activity/ })).toBeInTheDocument();
+      expect(screen.getByText(/the exception, not the norm/)).toBeInTheDocument();
+      expect(screen.getByText('Rafting not booked yet')).toBeInTheDocument();
+    });
+
+    it('the confirm-it-yourself flow is reachable per segment, and submits a real confirm_logistics command', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      sendTripCommand = vi.fn(async () => ({ message: 'Noted.', agent_meta: null, trip: commandSnapshot }));
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+      await user.click(screen.getByText('Add a confirmation →'));
+      await user.type(screen.getByLabelText('Details'), 'Confirmed 8:00 AM flight, PNR ABC123.');
+      await user.click(screen.getByRole('button', { name: 'Save confirmation' }));
+
+      expect(sendTripCommand).toHaveBeenCalledWith('confirm_logistics', expect.objectContaining({
+        logisticsConfirmation: expect.objectContaining({ type: 'transport', label: 'Delhi ⇄ Rishikesh round trip' }),
+      }));
+    });
   });
 
   it('has no remaining reference to /logistics?tab=... anywhere on the redesigned Dashboard', async () => {

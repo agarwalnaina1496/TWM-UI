@@ -4,11 +4,16 @@ import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
+import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary } from '../lib/tripApi.js';
 import {
-  anchorsForDay, bookingReadinessLabel, dayCostRange,
+  anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange,
   verificationTone, trustStripCounts, bookingReadinessRollup,
 } from '../lib/atlasView.js';
+import {
+  transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions,
+  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel,
+} from '../lib/bookingCatalog.js';
 import { contextRecapPills, stageBadge, stageCta } from '../lib/tripLifecycle.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
@@ -183,6 +188,139 @@ function TrustStrip({ counts }) {
   );
 }
 
+const EMPTY_CONFIRM_FIELDS = { label: '', detail: '', dayNumber: '', reference: '', notes: '' };
+
+function ConfirmationForm({ dayOptions, fields, setFields, onSubmit, onCancel, pending, error }) {
+  return (
+    <form className="confirmation-form" onSubmit={onSubmit}>
+      <label>What's confirmed?
+        <input required value={fields.label} disabled={pending} placeholder="e.g. Delhi to Gwalior train" onChange={event => setFields(previous => ({ ...previous, label: event.target.value }))} />
+      </label>
+      <label>Details
+        <textarea required value={fields.detail} disabled={pending} placeholder="e.g. Confirmed arrival at 2:00 PM via train 12050" onChange={event => setFields(previous => ({ ...previous, detail: event.target.value }))} />
+      </label>
+      <label>Day
+        <select value={fields.dayNumber} disabled={pending} onChange={event => setFields(previous => ({ ...previous, dayNumber: event.target.value }))}>
+          <option value="">Not day-specific</option>
+          {dayOptions.map(day => <option key={day} value={day}>Day {day}</option>)}
+        </select>
+      </label>
+      <label>Confirmation code (optional)
+        <input value={fields.reference} disabled={pending} onChange={event => setFields(previous => ({ ...previous, reference: event.target.value }))} />
+      </label>
+      <label>Notes (optional)
+        <input value={fields.notes} disabled={pending} onChange={event => setFields(previous => ({ ...previous, notes: event.target.value }))} />
+      </label>
+      {error && <p className="confirm-error" role="alert">{error}</p>}
+      <div className="confirmation-form-actions">
+        <button type="button" className="btn btn-ghost" disabled={pending} onClick={onCancel}>Cancel</button>
+        <button type="submit" className="btn btn-primary" disabled={pending || !fields.label.trim() || !fields.detail.trim()}>Save confirmation</button>
+      </div>
+    </form>
+  );
+}
+
+const MODE_ICON = { flight: '✈️', train: '🚆', bus: '🚌', drive: '🚗' };
+
+// TWM-176: mode-tag component — flight/train/bus/drive labels, reused on
+// every transport option card.
+function ModeTag({ mode }) {
+  return <StatusPill tone="neutral" variant="outline">{MODE_ICON[mode] || '🧭'} {modeLabel(mode)}</StatusPill>;
+}
+
+function TransportOptionCard({ option, best }) {
+  return (
+    <article className={`stay-option-card${best ? ' picked' : ''}`}>
+      {best && <span className="pick-badge">Our pick</span>}
+      <ModeTag mode={option.mode} />
+      <strong>{option.name}</strong>
+      <span className="stay-option-tag">{option.durationHours}h · {moneyRange(option.priceLow, option.priceHigh)}</span>
+      <a className={`btn ${best ? 'btn-primary' : 'btn-ghost'}`} href={option.url} target="_blank" rel="noreferrer">Check ↗</a>
+    </article>
+  );
+}
+
+function StayOptionCard({ option, best }) {
+  return (
+    <article className={`stay-option-card${best ? ' picked' : ''}`}>
+      {best && <span className="pick-badge">Our pick</span>}
+      <strong>{option.name}</strong>
+      <span className="stay-option-tag">{option.fit} · {moneyRange(option.priceLow, option.priceHigh)}</span>
+      <a className={`btn ${best ? 'btn-primary' : 'btn-ghost'}`} href={option.url} target="_blank" rel="noreferrer">Check stay ↗</a>
+    </article>
+  );
+}
+
+// TWM-176: the shared inline-expansion pattern for an unresolved Transport
+// or Stay segment — tapping "Resolve" expands ranked options right here, no
+// navigation, no separate Logistics page. Confirmed segments (an anchor
+// already exists) skip straight to the 🔒-confirmed treatment.
+function BookingSegment({ label, anchor, expanded, onToggleExpand, options, excluded, renderOption, onOpenConfirm }) {
+  if (anchor) {
+    return (
+      <article className="dashboard-card anchor-card">
+        <div>
+          <span className="badge badge-confirmed">🔒 confirmed</span>
+          <h3>{anchor.label}</h3>
+          <p>{anchor.detail}</p>
+          {anchor.reference && <div className="confirmation-chip">✓ {anchor.reference}</div>}
+        </div>
+      </article>
+    );
+  }
+  return (
+    <div className="stay-block">
+      <div className="stay-block-head">
+        <div>
+          <span className="state suggested">{notBookedYetLabel(label)}</span>
+          <h3 className="route-title">{label}</h3>
+        </div>
+        <button type="button" className="btn btn-ghost" onClick={onToggleExpand} aria-expanded={expanded}>{expanded ? 'Hide options ▴' : 'Resolve ▾'}</button>
+      </div>
+      {expanded && (
+        <>
+          <div className="stay-options-grid">{options.map((option, index) => renderOption(option, index === 0))}</div>
+          {excluded?.length > 0 && (
+            <p className="already-booked-note">{excluded.map(item => item.reason).join(' ')}</p>
+          )}
+          <p className="already-booked-note">Already booked this yourself? <button type="button" className="link-button" onClick={onOpenConfirm}>Add a confirmation →</button></p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// TWM-176: Activity bookings only ever come from real Atlas-flagged
+// requires_advance_booking items — no mock options catalog, since there's
+// no realistic "shop for an activity" search to fabricate. Just a
+// self-confirm affordance, framed as the exception for that day.
+function ActivitySegment({ activity, anchor, onOpenConfirm }) {
+  if (anchor) {
+    return (
+      <article className="dashboard-card anchor-card">
+        <div>
+          <span className="badge badge-confirmed">🔒 confirmed</span>
+          <h3>{anchor.label}</h3>
+          <p>{anchor.detail}</p>
+          {anchor.reference && <div className="confirmation-chip">✓ {anchor.reference}</div>}
+        </div>
+      </article>
+    );
+  }
+  return (
+    <div className="stay-block">
+      <div className="stay-block-head">
+        <div>
+          <span className="state suggested">{notBookedYetLabel(activity.title)}</span>
+          <h3 className="route-title">{activity.title} · Day {activity.dayNumber}</h3>
+          <p>{activity.detail}</p>
+        </div>
+      </div>
+      <p className="already-booked-note">Already booked this yourself? <button type="button" className="link-button" onClick={onOpenConfirm}>Add a confirmation →</button></p>
+    </div>
+  );
+}
+
 export default function TripDashboard() {
   const { commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState } = useTrip();
   const [params] = useSearchParams();
@@ -220,6 +358,12 @@ export default function TripDashboard() {
 
   const [revisionPending, setRevisionPending] = useState(false);
   const [revisionError, setRevisionError] = useState(null);
+
+  const [expandedBookingId, setExpandedBookingId] = useState(null);
+  const [confirmType, setConfirmType] = useState(null); // 'transport' | 'stay' | 'activity' | null
+  const [confirmFields, setConfirmFields] = useState(EMPTY_CONFIRM_FIELDS);
+  const [confirmPending, setConfirmPending] = useState(false);
+  const [confirmError, setConfirmError] = useState(null);
 
   const tripId = commandSnapshot?.id;
 
@@ -310,6 +454,48 @@ export default function TripDashboard() {
     }
   }
 
+  function toggleExpandedBooking(id, segmentType, { isRoundTrip = false, excludedOptions = [] } = {}) {
+    setExpandedBookingId(previous => {
+      const next = previous === id ? null : id;
+      if (next) {
+        trackEvent('booking_intent', { booking_type: 'browse_options', segment_type: segmentType, is_round_trip_bundle: isRoundTrip });
+        for (const excludedOption of excludedOptions) {
+          trackEvent('mode_excluded', { segment_type: segmentType, mode: excludedOption.mode, reason: excludedOption.reason });
+        }
+      }
+      return next;
+    });
+  }
+
+  function openConfirmForm(type, label, dayNumber) {
+    setConfirmType(type);
+    setConfirmFields({ ...EMPTY_CONFIRM_FIELDS, label, dayNumber: dayNumber ? String(dayNumber) : '' });
+    setConfirmError(null);
+  }
+
+  async function submitConfirmForm(event) {
+    event.preventDefault();
+    setConfirmPending(true);
+    setConfirmError(null);
+    try {
+      await sendTripCommand('confirm_logistics', {
+        logisticsConfirmation: {
+          type: confirmType,
+          label: confirmFields.label.trim(),
+          detail: confirmFields.detail.trim(),
+          day_number: confirmFields.dayNumber ? Number(confirmFields.dayNumber) : null,
+          reference: confirmFields.reference.trim() || null,
+          notes: confirmFields.notes.trim() || null,
+        },
+      });
+      setConfirmType(null);
+    } catch (error) {
+      setConfirmError(error.message || 'Could not save that confirmation.');
+    } finally {
+      setConfirmPending(false);
+    }
+  }
+
   function resolveBookingPrompt(destination) {
     trackEvent('booking_prompt_choice', { choice: destination });
     setShowBookingPrompt(false);
@@ -372,6 +558,31 @@ export default function TripDashboard() {
   const proposedRevision = itineraryState.proposed_revision;
   const trustCounts = trustStripCounts(finalItinerary, result);
   const readiness = bookingReadinessRollup(days, anchors);
+
+  const dayNumbers = days.map(day => day.day_number);
+  const bookingOrigin = tripState?.trip_context?.origin;
+  const transportAnchors = anchorsByType(anchors, 'transport');
+  const stayAnchors = anchorsByType(anchors, 'stay');
+  const activityAnchors = anchorsByType(anchors, 'activity');
+  const findAnchor = (typeAnchors, label) => typeAnchors.find(a => a.label === label);
+  const transportLegList = transportLegs(days, bookingOrigin);
+  const { bundle: roundTripBundle, rest: soloLegs } = bundleRoundTrip(transportLegList);
+  const stayLegList = stayLegs(days);
+  const activityList = activityBookings(days);
+
+  // Orphan anchors: confirmations left over from a route the current
+  // itinerary no longer computes (e.g. after a regeneration). Segments
+  // already show their own matching anchor inline, so only anchors with
+  // no matching segment need the generic AnchorList fallback here.
+  const transportLabels = new Set([
+    ...(roundTripBundle ? [`${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`] : []),
+    ...soloLegs.map(leg => `${leg.from} → ${leg.to}`),
+  ]);
+  const stayLabels = new Set(stayLegList.map(stay => `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`));
+  const activityLabels = new Set(activityList.map(activity => activity.title));
+  const orphanTransportAnchors = transportAnchors.filter(a => !transportLabels.has(a.label));
+  const orphanStayAnchors = stayAnchors.filter(a => !stayLabels.has(a.label));
+  const orphanActivityAnchors = activityAnchors.filter(a => !activityLabels.has(a.label));
 
   return (
     <main className="wrap dashboard">
@@ -471,7 +682,7 @@ export default function TripDashboard() {
         <div className="docs-placeholder">
           <span className="docs-placeholder-icon">📁</span>
           <strong>Coming soon</strong>
-          <p>Upload and keep track of your trip documents here.</p>
+          <p>Once this is ready, you'll be able to collect everything for this trip in one place — flight and train tickets, hotel confirmations, and copies of IDs you'll need on the road.</p>
         </div>
       </section>}
 
@@ -527,25 +738,91 @@ export default function TripDashboard() {
       </section>}
 
       {tab === 'Bookings' && <section aria-label="Bookings">
-        <div className="tab-intro"><div><h2>🧳 Bookings</h2><p>Content arrives in the next story.</p></div></div>
-        <div className="docs-placeholder" aria-label="Bookings placeholder">
-          <span className="docs-placeholder-icon">🧳</span>
-          <strong>Coming soon</strong>
-          <p>Confirmed stays, transport, and activities will live here.</p>
-        </div>
+        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Real route options for every leg — schedules and fares are yours to verify before you book.</p></div></div>
+        <AnchorList anchors={orphanTransportAnchors} />
+        {roundTripBundle && (() => {
+          const label = `${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`;
+          const rawOptions = transportOptionsFor(roundTripBundle.outbound);
+          const { feasible, excluded } = feasibleTransportOptions(rawOptions, { tripDurationDays: days.length });
+          return (
+            <BookingSegment
+              label={label}
+              anchor={findAnchor(transportAnchors, label)}
+              expanded={expandedBookingId === roundTripBundle.id}
+              onToggleExpand={() => toggleExpandedBooking(roundTripBundle.id, 'transport', { isRoundTrip: true, excludedOptions: excluded })}
+              options={feasible}
+              excluded={excluded}
+              renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
+              onOpenConfirm={() => openConfirmForm('transport', label)}
+            />
+          );
+        })()}
+        {soloLegs.map(leg => {
+          const label = `${leg.from} → ${leg.to}`;
+          const rawOptions = transportOptionsFor(leg);
+          const { feasible, excluded } = feasibleTransportOptions(rawOptions, { tripDurationDays: days.length });
+          return (
+            <BookingSegment
+              key={leg.id}
+              label={label}
+              anchor={findAnchor(transportAnchors, label)}
+              expanded={expandedBookingId === leg.id}
+              onToggleExpand={() => toggleExpandedBooking(leg.id, 'transport', { excludedOptions: excluded })}
+              options={feasible}
+              excluded={excluded}
+              renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
+              onOpenConfirm={() => openConfirmForm('transport', label)}
+            />
+          );
+        })}
+        {confirmType === 'transport' && (
+          <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
+        )}
+
+        <div className="tab-intro"><div><h2>🏨 Stay</h2><p>Real properties for every base — check dates and price before booking.</p></div></div>
+        <AnchorList anchors={orphanStayAnchors} />
+        {stayLegList.map(stay => {
+          const rawOptions = stayOptionsFor(stay);
+          return (
+            <BookingSegment
+              key={stay.id}
+              label={`${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`}
+              anchor={findAnchor(stayAnchors, `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`)}
+              expanded={expandedBookingId === stay.id}
+              onToggleExpand={() => toggleExpandedBooking(stay.id, 'stay')}
+              options={rawOptions}
+              excluded={[]}
+              renderOption={(option, best) => <StayOptionCard key={option.name} option={option} best={best} />}
+              onOpenConfirm={() => openConfirmForm('stay', `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`)}
+            />
+          );
+        })}
+        {confirmType === 'stay' && (
+          <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
+        )}
+
+        {activityList.length > 0 && (
+          <>
+            <div className="tab-intro"><div><h2>🎟️ Activity</h2><p>Only shown when advance booking is genuinely required — the exception, not the norm, for this trip.</p></div></div>
+            <AnchorList anchors={orphanActivityAnchors} />
+            {activityList.map(activity => (
+              <ActivitySegment
+                key={activity.id}
+                activity={activity}
+                anchor={findAnchor(activityAnchors, activity.title)}
+                onOpenConfirm={() => openConfirmForm('activity', activity.title, activity.dayNumber)}
+              />
+            ))}
+            {confirmType === 'activity' && (
+              <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
+            )}
+          </>
+        )}
       </section>}
 
       {tab === 'Support' && <section>
         <div className="tab-intro"><div><h2>💬 Support</h2><p>Get help with this specific itinerary.</p></div></div>
-        <section className="support-box">
-          <span className="support-label">Questions or changes to this itinerary?</span>
-          <p>This is specifically for support on the plan you've already received — swapping something, adjusting dates, or anything unclear. For actually booking the trip, use the option below instead.</p>
-          <button type="button" className="btn btn-primary" onClick={() => alert('This would open a conversation with the TravelWithMe team.')}>Talk to the TravelWithMe team</button>
-        </section>
-        <section className="booking-help-box">
-          <div><h3>Want us to help book this trip?</h3><p>Our team can handle flights, stays, and every reservation end-to-end, so you don't have to.</p></div>
-          <button type="button" className="btn btn-amber" onClick={() => { trackEvent('booking_intent', { booking_type: 'concierge_request' }); alert('This would start a TravelWithMe-led booking request.'); }}>Get booking help →</button>
-        </section>
+        <SupportContent intro="Swapping something, adjusting dates, or anything unclear about the plan you've already received — this is the place." />
       </section>}
     </main>
   );
