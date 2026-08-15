@@ -26,3 +26,20 @@
 .trip-card-timestamp{color:var(--tm);margin-left:8px;}
 .trip-card-recap{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 .trip-card-recap-pill{font-size:10.5px;font-weight:600;background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:3px 9px;color:var(--ts);}
+.trip-card .meta{display:flex;align-items:center;gap:8px;}
+
+.trip-search{flex:1 1 240px;max-width:320px;font:inherit;font-size:13px;border:1px solid var(--border);border-radius:10px;padding:9px 12px;background:var(--surface);color:var(--tp);}
+.trip-search::placeholder{color:var(--tm);}
+
+.hero-trip .trip-card{border-color:var(--accent);box-shadow:0 8px 24px rgba(156,90,52,0.1);}
+
+.section-title{font-family:'Fraunces',serif;font-size:15px;font-weight:600;margin:22px 0 10px;}
+
+.explore-rail-row{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;}
+.explore-card{flex:0 0 220px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);padding:14px 16px;}
+.explore-card .name{font-family:'Fraunces',serif;font-size:14px;font-weight:600;margin-bottom:6px;}
+.explore-card .status-pill{margin-bottom:8px;}
+.explore-card-empty{font-size:12px;color:var(--tm);margin:0 0 10px;}
+.explore-card .btn{margin-top:10px;width:100%;}
+
+.past-trips .trip-card{opacity:.72;}

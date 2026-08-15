@@ -46,8 +46,8 @@ describe('DashboardHome (TWM-108/163)', () => {
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     expect(await screen.findByText('No trips yet')).toBeInTheDocument();
-    expect(screen.getByText('Plan a Trip')).toBeInTheDocument();
-    expect(screen.getByText('Discover Destination')).toBeInTheDocument();
+    expect(screen.getByText("Know where you're going?")).toBeInTheDocument();
+    expect(screen.getByText('Still deciding?')).toBeInTheDocument();
   });
 
   it('shows a "+ New trip" menu when trips exist, with both entry actions', async () => {
@@ -94,41 +94,108 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
   });
 
-  it.each([
-    ['active', 'matching', 'In conversation'],
-    ['upcoming', 'planned', 'Itinerary ready'],
-    ['completed', 'done', 'Completed'],
-  ])('filters to the %s section', async (filterKey, stage, badgeText) => {
-    const itinerary = stage === 'planned' ? { itinerary_state: { status: 'ready' } } : {};
+  // TWM-172: discover-only sessions (no destination chosen yet — stage
+  // matching/recommendation_ready/recommended) never appear in the main
+  // committed-trips list, only the lighter "Continue exploring" rail.
+  it('keeps discover-only trips out of the main list, in the explore rail instead', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
       trips: [
-        tripRecord({ id: 'trip-1', title: 'Matches filter', trip_state: { stage, trip_context: { origin: 'Delhi' }, ...itinerary } }),
+        tripRecord({ id: 'trip-1', title: 'Committed trip', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } }),
         tripRecord({
-          id: 'trip-2', title: 'Recommended trip', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } },
+          id: 'trip-2', title: 'Still browsing', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } },
           updated_at: '2025-12-01T00:00:00.000Z',
         }),
       ],
     }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    await screen.findByText('Matches filter');
+    await screen.findByText('Committed trip');
 
-    const label = filterKey[0].toUpperCase() + filterKey.slice(1);
-    await userEvent.click(screen.getByRole('tab', { name: new RegExp(`^${label}`) }));
+    expect(screen.getByText('Continue exploring')).toBeInTheDocument();
+    const railCard = screen.getByText('Still browsing').closest('.explore-card');
+    expect(railCard).toBeInTheDocument();
+    expect(within(railCard).getByRole('button', { name: 'Review recommendations' })).toBeInTheDocument();
 
-    expect(screen.getByText('Matches filter')).toBeInTheDocument();
-    expect(screen.getByText(badgeText)).toBeInTheDocument();
+    const committedCard = screen.getByText('Committed trip').closest('.trip-card');
+    expect(committedCard).toBeInTheDocument();
+    expect(within(committedCard).getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
   });
 
-  it('empty-state "Plan a Trip" clears the current trip locally without creating a Backend record yet', async () => {
+  // TWM-172: hero selection is date-driven off trip_context.month — an
+  // ongoing (current-month) trip always outranks an upcoming one.
+  it('promotes the ongoing trip to the hero position over an upcoming one', async () => {
+    const now = new Date();
+    const currentMonthName = now.toLocaleDateString('en-US', { month: 'long' });
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [
+        tripRecord({ id: 'trip-1', title: 'Later trip', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi', month: 'December' } } }),
+        tripRecord({ id: 'trip-2', title: 'Happening now', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi', month: currentMonthName } } }),
+      ],
+    }));
+    renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    await screen.findByText('Later trip');
+
+    const hero = document.querySelector('.hero-trip');
+    expect(hero).toBeInTheDocument();
+    expect(within(hero).getByText('Happening now')).toBeInTheDocument();
+  });
+
+  it('shows no hero at all when no committed trip has a parseable month', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [tripRecord({ title: 'Vague trip', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
+    }));
+    renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    await screen.findByText('Vague trip');
+    expect(document.querySelector('.hero-trip')).not.toBeInTheDocument();
+  });
+
+  // TWM-172: completed trips get their own quiet section, separate from the
+  // regular committed list.
+  it('separates completed trips into their own past-trips section', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [
+        tripRecord({ id: 'trip-1', title: 'Still going', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } }),
+        tripRecord({ id: 'trip-2', title: 'All done', trip_state: { stage: 'done', trip_context: { origin: 'Delhi' } } }),
+      ],
+    }));
+    renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    await screen.findByText('Still going');
+
+    const pastSection = document.querySelector('.past-trips');
+    expect(pastSection).toBeInTheDocument();
+    expect(within(pastSection).getByText('All done')).toBeInTheDocument();
+    expect(within(pastSection).queryByText('Still going')).not.toBeInTheDocument();
+  });
+
+  // TWM-172: search is a client-side filter over the traveler's own trips
+  // only — never a destination lookup (no extra fetch is issued).
+  it('search filters to matching trips only, without issuing any lookup request', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [
+        tripRecord({ id: 'trip-1', title: 'Coorg weekend', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } }),
+        tripRecord({ id: 'trip-2', title: 'Manali trip', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } }),
+      ],
+    }));
+    renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    await screen.findByText('Coorg weekend');
+
+    const callsBefore = fetchMock.mock.calls.length;
+    await userEvent.type(screen.getByLabelText('Search your trips'), 'coorg');
+
+    expect(screen.getByText('Coorg weekend')).toBeInTheDocument();
+    expect(screen.queryByText('Manali trip')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.length).toBe(callsBefore);
+  });
+
+  it('empty-state "Know where you\'re going?" clears the current trip locally without creating a Backend record yet', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('No trips yet');
 
     const callsBefore = fetchMock.mock.calls.length;
-    await userEvent.click(screen.getByText('Plan a Trip'));
+    await userEvent.click(screen.getByText("Know where you're going?"));
 
     // No POST — the Backend trip is created lazily by the traveler's first
-    // message on the new journey, not by clicking "Plan a Trip" itself.
+    // message on the new journey, not by clicking the entry door itself.
     expect(fetchMock.mock.calls.length).toBe(callsBefore);
   });
 
@@ -156,9 +223,9 @@ describe('DashboardHome (TWM-108/163)', () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({
         trips: [
-          tripRecord({ id: 'trip-1', title: 'Coorg', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } }),
+          tripRecord({ id: 'trip-1', title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } }),
           tripRecord({
-            id: 'trip-2', title: 'Deleted elsewhere', trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' } },
+            id: 'trip-2', title: 'Deleted elsewhere', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } },
             updated_at: '2025-12-01T00:00:00.000Z',
           }),
         ],
