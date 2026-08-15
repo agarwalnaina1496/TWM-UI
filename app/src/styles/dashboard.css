@@ -138,6 +138,41 @@
 .dashboard-tabs button.active{color:var(--accent);border-bottom:3px solid var(--accent);background:transparent}
 
 .revision-review{border-color:#e1ad35;background:#fff8e7}
+/* TWM-175: equal-weight actions — neither button reads as more committal. */
+.revision-actions{display:flex;gap:10px}
+.revision-actions .btn{flex:1;background:#fff;border:1.5px solid #e1ad35;color:#7c5a12}
+.revision-actions .btn:hover{background:#fff3d6}
+
+/* TWM-175: thin-state Dashboard — reachable from message one. */
+.thin-state-card{max-width:520px;margin:40px auto;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:36px 32px}
+.thin-state-card .trip-recap{justify-content:center;margin:14px 0}
+.thin-state-empty,.thin-state-note{color:var(--tm);font-size:13.5px;margin:10px 0 18px}
+.thin-state-card .btn{margin-top:6px}
+
+/* TWM-175: trip-shape day-strip on Overview — tappable, jumps into Itinerary. */
+.day-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 16px}
+.day-strip-pill{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;border-radius:14px;border:1px solid var(--border);background:var(--surface);cursor:pointer;min-width:64px}
+.day-strip-pill:hover{border-color:var(--accent)}
+.day-strip-pill.active{background:var(--accent);border-color:var(--accent)}
+.day-strip-num{font-weight:800;font-size:14px;color:var(--tp)}
+.day-strip-pill.active .day-strip-num,.day-strip-pill.active .day-strip-location{color:#fff}
+.day-strip-location{font-size:10.5px;color:var(--tm);white-space:nowrap}
+
+.route-rationale{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:14px 0;margin-bottom:18px}
+.route-rationale p{margin:0;font-size:13.5px;line-height:1.6;color:var(--ts)}
+
+/* TWM-175: always-visible trust strip — never hidden behind a disclosure. */
+.trust-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:20px}
+.trust-strip-item{display:flex;flex-direction:column;gap:3px}
+.trust-strip-item strong{font-family:'Fraunces',serif;font-size:19px;font-weight:700;color:var(--tp)}
+.trust-strip-item strong.trust-strip-ratio{font-family:'Inter',sans-serif;font-size:13px;font-weight:700}
+.trust-strip-item span{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--tm);font-weight:700}
+@media(max-width:640px){.trust-strip{grid-template-columns:1fr}}
+
+.honest-empty{color:var(--tm);font-size:13px;font-style:italic;margin:6px 0 0}
+
+/* TWM-175: one-time booking prompt, reusing the checkpoint-overlay pattern. */
+.booking-prompt-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 
 /* ===== Cards (Transport/Stays) ===== */
 .dashboard-card{border:1px solid var(--border);background:var(--surface);border-radius:16px;padding:18px 20px;margin:12px 0;transition:box-shadow .15s ease,transform .15s ease}

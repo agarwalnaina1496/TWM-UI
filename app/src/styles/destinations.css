@@ -1,12 +1,11 @@
 .trip-recap{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 26px;}
 .recap-pill{font-size:11px;font-weight:600;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:5px 11px;color:var(--ts);}
 
-/* TWM-174: transient checkpoint overlay — Discover→Plan fixed-field gap only. */
-.checkpoint-overlay{position:fixed;inset:0;background:rgba(28,22,16,0.4);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;}
-.checkpoint-card{background:var(--surface);border-radius:20px;padding:28px 26px;max-width:420px;width:100%;box-shadow:0 24px 60px rgba(28,22,16,0.3);}
+/* TWM-174: Destinations-specific checkpoint-overlay parts. The generic
+   overlay/card/message shell lives in design-system.css since TWM-175's
+   booking prompt reuses it too. */
 .checkpoint-known-facts{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px;}
 .checkpoint-fact-chip{font-size:11px;font-weight:600;background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:4px 10px;color:var(--ts);}
-.checkpoint-message{font-size:14px;color:var(--tp);line-height:1.5;margin:14px 0 16px;}
 .checkpoint-input-row{display:flex;gap:8px;}
 .checkpoint-input-row input{flex:1;border:1px solid var(--border);border-radius:10px;padding:11px 13px;font-size:13.5px;background:var(--bg);color:var(--tp);}
 
