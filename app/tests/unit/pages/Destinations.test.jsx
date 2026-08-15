@@ -381,7 +381,7 @@ describe('Destinations (real Meridian integration)', () => {
   });
 
   it('restores the expanded card from Backend-persisted ui_state after a refresh', async () => {
-    const server = createServer({ recommendation: successOutcome(), uiState: { destinationsOpenId: 'gwalior-orchha-khajuraho-panna' } });
+    const server = createServer({ recommendation: successOutcome(), uiState: { 'destinations.openId': 'gwalior-orchha-khajuraho-panna' } });
     fetchMock = createFetchMock(server);
     global.fetch = fetchMock;
     renderDestinations();
@@ -394,7 +394,7 @@ describe('Destinations (real Meridian integration)', () => {
     const server = createServer({ recommendation: successOutcome() });
     server.queueCommand(() => jsonResponse({
       id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState,
-      ui_state: { destinationsOpenId: 'gwalior-orchha-khajuraho-panna' },
+      ui_state: { 'destinations.openId': 'gwalior-orchha-khajuraho-panna' },
     }));
     fetchMock = createFetchMock(server);
     global.fetch = fetchMock;
@@ -405,7 +405,7 @@ describe('Destinations (real Meridian integration)', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/ui-state', expect.objectContaining({
       method: 'PATCH',
-      body: JSON.stringify({ expected_version: 3, ui_state: { destinationsOpenId: 'gwalior-orchha-khajuraho-panna' } }),
+      body: JSON.stringify({ expected_version: 3, ui_state: { 'destinations.openId': 'gwalior-orchha-khajuraho-panna' } }),
     })));
   });
 

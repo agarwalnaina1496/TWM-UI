@@ -11,9 +11,23 @@
      hardcoding another near-duplicate px value — that drift is how the app
      ended up with 6+ font-sizes all doing "secondary body text" duty. */
   --fs-eyebrow:11px; --fs-body-sm:13.5px; --fs-card-title:17px;
+  /* Font families (TWM-171): editorial serif for judgment-call content
+     (option names, headings), plain grotesk for operational UI, mono for
+     data/numerals. Reach for these vars, not literal font-family strings. */
+  --font-display:'Fraunces',serif; --font-body:'Inter',sans-serif; --font-mono:'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+
+  /* Status vocabulary (TWM-171): 4 tones, single source of truth. Never use
+     --accent for these — accent is reserved strictly for actions. Neutral
+     grayscale ramp doubles as the categorical/chart palette (e.g. budget
+     breakdown) so status tones never leak into chart usage either. */
+  --tone-positive:#5B6E5A; --tone-positive-bg:#EAEFE6;
+  --tone-caution:#96701F; --tone-caution-bg:#F6ECD6;
+  --tone-negative:#A23E3E; --tone-negative-bg:#F6E2E2;
+  --tone-neutral:#7C7268; --tone-neutral-bg:#EDEAE4;
+  --chart-1:#7C7268; --chart-2:#AFA593; --chart-3:#5B6E5A; --chart-4:#3E5C76;
 }
 *{box-sizing:border-box;}
-body{margin:0;background:var(--bg);color:var(--tp);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+body{margin:0;background:var(--bg);color:var(--tp);font-family:var(--font-body);-webkit-font-smoothing:antialiased;}
 a{color:inherit;}
 
 .wrap{max-width:900px;margin:0 auto;padding:0 20px;}

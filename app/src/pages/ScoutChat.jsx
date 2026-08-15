@@ -5,6 +5,7 @@ import { QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
 import { planReady } from '../hooks/useGuidePlanning.js';
+import BackToTrip from '../components/BackToTrip.jsx';
 import '../styles/chat.css';
 
 let nextId = 1;
@@ -80,6 +81,7 @@ export default function ScoutChat() {
   const thinkingMessage = useThinkingMessage(busy);
   return (
     <div className="chat-page chat-screen">
+      <BackToTrip />
       <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
       <span className="eyebrow">✦ Scout</span>
       <h1>Tell Scout <em>in your own words</em></h1>

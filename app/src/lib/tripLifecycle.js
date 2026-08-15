@@ -87,13 +87,12 @@ const STAGE_CTA = {
   done: { label: 'View trip', to: '/dashboard' },
 };
 
-// Stage-aware CTA for a Dashboard-home card / the landing resolver's
-// single-trip resume path. Itinerary-ready always wins regardless of stage
-// label, since the per-trip Dashboard (TWM-107/97) is the real target once
-// Atlas has produced a version — matching the story's required Dashboard CTA.
-// Labeled "View trip", not "Open/View Dashboard" (TWM-165) — the traveler is
-// already on Dashboard-home when they see this, so naming the destination
-// after the page they're leaving reads as confusing self-reference.
+// Stage-aware CTA for the landing resolver's single-trip resume path and any
+// other stage-derived link. NOTE: Dashboard-home's own trip card (TWM-171)
+// deliberately does NOT use this — it always renders a fixed "Open trip →"
+// label routed to /dashboard regardless of stage, hardcoded at that call
+// site rather than folded in here, since this lookup's per-stage distinction
+// is real reusable logic other callers may still want.
 export function stageCta(tripState) {
   const stage = tripState?.stage ?? 'new';
   if (isItineraryReady(tripState)) return { label: 'View trip', to: '/dashboard' };

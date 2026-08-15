@@ -130,6 +130,15 @@ test('filters narrow Dashboard-home to the selected category', async ({ page }) 
   await expect(page.getByText('Madhya Pradesh circuit')).not.toBeVisible();
 });
 
+test('trip card renders exactly one primary affordance ("Open trip →"), regardless of stage', async ({ page }) => {
+  const active = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } });
+  await mockTripCommandFlow(page, [], { initialTrips: [active] });
+  await page.goto('');
+  const card = page.locator('.trip-card', { hasText: 'Coorg weekend' });
+  await expect(card.getByRole('button', { name: 'Open trip →' })).toHaveCount(1);
+  await expect(card.getByRole('button')).toHaveCount(2); // "Open trip →" + "Rename" only
+});
+
 test('a fresh trip with no traveler context does not clutter Dashboard-home', async ({ page }) => {
   const empty = tripRecord({ trip_state: {} });
   await mockTripCommandFlow(page, [], { initialTrips: [empty] });

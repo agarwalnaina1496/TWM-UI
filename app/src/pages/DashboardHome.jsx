@@ -5,7 +5,7 @@ import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { trackEvent } from '../lib/analytics.js';
 import {
-  isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, contextRecapPills, contextDestination,
+  isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, contextRecapPills, contextDestination,
 } from '../lib/tripLifecycle.js';
 import '../styles/dashboard-home.css';
 
@@ -95,7 +95,10 @@ export default function DashboardHome() {
         setNotice('This trip is no longer available.');
         return;
       }
-      navigate(stageCta(t.trip_state).to);
+      // TWM-171: the trip card always opens Dashboard, independent of
+      // stageCta()'s per-stage routing (that helper is still used elsewhere
+      // for stage-aware resume links) — hardcoded here, not in tripLifecycle.js.
+      navigate('/dashboard');
     } finally {
       setBusyId(null);
     }
@@ -192,7 +195,6 @@ export default function DashboardHome() {
           ) : (
             shown.map(t => {
               const badge = stageBadge(t.trip_state);
-              const cta = stageCta(t.trip_state);
               const destination = contextDestination(t.trip_state?.trip_context);
               const recapPills = contextRecapPills(t.trip_state?.trip_context);
               const timestamp = formatTripTimestamp(t);
@@ -230,8 +232,11 @@ export default function DashboardHome() {
                       </div>
                     )}
                   </div>
+                  {/* TWM-171: exactly one primary affordance per card, fixed
+                      label regardless of stage — stage is communicated via
+                      the adjacent badge, not this button's text. */}
                   <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => handleOpen(t)}>
-                    {cta.label} →
+                    Open trip →
                   </button>
                 </div>
               );
