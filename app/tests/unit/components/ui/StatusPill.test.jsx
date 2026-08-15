@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import StatusPill, { STATUS_PILL_TONES, STATUS_PILL_VARIANTS } from './StatusPill.jsx';
+import StatusPill, { STATUS_PILL_TONES, STATUS_PILL_VARIANTS } from '../../../../src/components/ui/StatusPill.jsx';
 
 describe('StatusPill', () => {
   for (const tone of STATUS_PILL_TONES) {

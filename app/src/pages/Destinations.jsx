@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { getRecommendations, TripApiError } from '../lib/tripApi.js';
-import { safeMatcherOutcomeViewModel } from '../lib/recommendationViewModel.js';
+import { safeMatcherOutcomeViewModel, rollupSummary } from '../lib/recommendationViewModel.js';
 import { contextRecapPills } from '../lib/tripLifecycle.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
+import HonestTransition from '../components/ui/HonestTransition.jsx';
 import '../styles/destinations.css';
 
-const OPEN_ID_KEY = uiStateKey(UI_STATE_SCREEN.DESTINATIONS, 'openId');
+const FOCUSED_KEY = uiStateKey(UI_STATE_SCREEN.DESTINATIONS, 'focusedKey');
+const EVIDENCE_OPEN_KEY = uiStateKey(UI_STATE_SCREEN.DESTINATIONS, 'evidenceOpen');
 
 const OUTCOME_ICON = { MATCH: '✓', TRADEOFF: '⚠', MISMATCH: '✕' };
 const OUTCOME_TONE = { MATCH: 'positive', TRADEOFF: 'caution', MISMATCH: 'negative' };
@@ -19,6 +21,7 @@ const BEEN_BEFORE_OPTIONS = [
   { id: 'would-go-back', icon: '🔁', label: 'Would go back' },
   { id: 'not-for-me', icon: '😐', label: 'Not for me' },
 ];
+const MATCHING_STEPS = ['Reviewing what you told us', 'Matching against real destinations', 'Ranking by fit'];
 
 function optionLabel(option) {
   return option.type === 'circuit' ? 'Multi-stop circuit' : 'Single destination';
@@ -72,42 +75,11 @@ function DetailBlock({ detail }) {
   return null;
 }
 
-function moneyRange(range) {
-  return `₹${range.minimum.toLocaleString('en-IN')}–₹${range.maximum.toLocaleString('en-IN')}`;
-}
-
-function costBreakdownTotal(detail) {
-  if (detail.group_total) return detail.group_total;
-  const groupItems = detail.items.filter(item => item.group);
-  if (!groupItems.length) return null;
-  return {
-    minimum: groupItems.reduce((sum, item) => sum + item.group.minimum, 0),
-    maximum: groupItems.reduce((sum, item) => sum + item.group.maximum, 0),
-  };
-}
-
-// Heuristic, not a schema guarantee: the largest group cost estimate across
-// an option's criteria is treated as its complete-trip estimate for the
-// collapsed card. Real Meridian output (TWM-125) places the full round-trip
-// breakdown on the budget/affordability criterion, which is normally also
-// the largest total among an option's evaluations.
-function totalPartyEstimate(option) {
-  let best = null;
-  option.evaluations.forEach(evaluation => {
-    evaluation.details.forEach(detail => {
-      if (detail.type !== 'cost_breakdown') return;
-      const total = costBreakdownTotal(detail);
-      if (total && (!best || total.maximum > best.maximum)) best = total;
-    });
-  });
-  return best;
-}
-
 const ACCESS_LABEL_PATTERN = /access|route|connect|transfer|flight|airport|drive|reach/i;
 
 // Heuristic: the first fact whose label reads as access/route information,
-// so the collapsed card can show a practical-access line without inventing
-// a dedicated "access_summary" field the real contract doesn't have.
+// so the detail card can show a practical-access line without inventing a
+// dedicated "access_summary" field the real contract doesn't have.
 function accessFact(option) {
   for (const evaluation of option.evaluations) {
     for (const detail of evaluation.details) {
@@ -119,24 +91,178 @@ function accessFact(option) {
   return null;
 }
 
+// TWM-173: criteria (rows) x options (columns) comparison matrix, replacing
+// three full-width stacked cards. Clicking an option's header focuses it —
+// the detail card below stays in sync with whichever column is focused.
+function ComparisonMatrix({ criteria, options, focusedKey, onFocus }) {
+  return (
+    <div className="matrix-wrap">
+      <table className="comparison-matrix">
+        <thead>
+          <tr>
+            <th className="matrix-corner" scope="col" />
+            {options.map(option => (
+              <th key={option.key} className={option.key === focusedKey ? 'focused' : ''} scope="col">
+                <button type="button" className="matrix-option-header" onClick={() => onFocus(option.key)} aria-pressed={option.key === focusedKey}>
+                  <span className="matrix-option-rank">#{option.rank}</span>
+                  <span className="matrix-option-name">{option.name}</span>
+                  <span className="matrix-option-type">{optionLabel(option)}</span>
+                </button>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {criteria.map(criterion => (
+            <tr key={criterion.id}>
+              <th className="matrix-criterion-label" scope="row">{criterion.label}</th>
+              {options.map(option => {
+                const evaluation = option.evaluations.find(ev => ev.criterion_id === criterion.id);
+                return (
+                  <td key={option.key} className={option.key === focusedKey ? 'focused' : ''}>
+                    {evaluation && (
+                      <StatusPill tone={OUTCOME_TONE[evaluation.outcome]} icon={OUTCOME_ICON[evaluation.outcome]} variant="outline">
+                        {evaluation.outcome.toLowerCase()}
+                      </StatusPill>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// TWM-173: collapsed by default — name, type, rank, one-line summary, and
+// the single "Plan this trip →" CTA are all immediately visible without
+// expanding anything. Full evidence sits behind "See why this fits ▾".
+function OptionDetailCard({
+  option, criteria, isSelected, evidenceOpen, onToggleEvidence, onPlan, planning,
+  moreLikeThisQualifier, onQualifierChange, onMoreLikeThis, moreLikeThisBusy,
+  beenBefore, onToggleBeenBefore, travelers,
+}) {
+  const access = accessFact(option);
+  return (
+    <div className="dest-detail-card">
+      {isSelected && <span className="pick-badge">Selected</span>}
+      <div className="dest-name">{option.name}</div>
+      <div className="dest-tag">{optionLabel(option)} · Rank #{option.rank}</div>
+      <p className="dest-summary">{option.summary}</p>
+      {access && <div className="decision-facts"><span>{access.value}</span></div>}
+      <div className="rollup-summary">{rollupSummary(option.evaluations)}{travelers ? ` for ${travelers}` : ''}</div>
+
+      <button type="button" className="reason-toggle" onClick={onToggleEvidence}>
+        See why this fits <span>{evidenceOpen ? '▴' : '▾'}</span>
+      </button>
+      {evidenceOpen && (
+        <div className="reason-body open">
+          {option.evaluations.map(ev => (
+            <div key={ev.criterion_id} className="eval-block">
+              <div className="eval-head">
+                <span className="eval-icon">{criterionIcon(ev.criterion_id)}</span>
+                <span className="eval-conclusion">{criterionLabel(criteria, ev.criterion_id)}: {ev.conclusion}</span>
+                <StatusPill tone={OUTCOME_TONE[ev.outcome]} icon={OUTCOME_ICON[ev.outcome]}>{ev.outcome.toLowerCase()}</StatusPill>
+              </div>
+              {ev.details.map((detail, di) => <DetailBlock key={di} detail={detail} />)}
+              {ev.tradeoffs?.map(t => <div key={t} className="eval-tradeoff">⚠ {t}</div>)}
+            </div>
+          ))}
+          {option.other_considerations.length > 0 && (
+            <div className="other-considerations">
+              <div className="other-considerations-title">Other considerations</div>
+              <div className="detail-tags">
+                {option.other_considerations.map(o => <span key={o} className="detail-tag">{o}</span>)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="more-like-this-row">
+        <input
+          type="text"
+          className="more-like-this-input"
+          placeholder="Optional: cheaper, closer, slower…"
+          aria-label={`Refine ${option.name}`}
+          value={moreLikeThisQualifier}
+          onChange={event => onQualifierChange(event.target.value)}
+        />
+        <button type="button" className="btn btn-ghost" onClick={onMoreLikeThis} disabled={moreLikeThisBusy}>✨ More like this</button>
+      </div>
+
+      {/* TWM-173: one consistent literal CTA regardless of state — the
+          former three-way "Continue planning"/"Plan this trip"/"Want to
+          plan this?" split was implementation-path noise, not a real
+          state difference the traveler needed to see. */}
+      <div className="dest-actions">
+        <button type="button" className="btn btn-primary" onClick={onPlan} disabled={planning}>Plan this trip →</button>
+      </div>
+
+      <div className="been-before">
+        <span className="been-before-label">Been here before? <em>tell us how it was</em></span>
+        <div className="been-before-opts">
+          {BEEN_BEFORE_OPTIONS.map(opt => (
+            <button type="button" key={opt.id} className={`been-before-pill${beenBefore === opt.id ? ' selected' : ''}`} onClick={() => onToggleBeenBefore(opt.id)}>
+              <span>{opt.icon}</span>{opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// TWM-173: always present regardless of result state — open comparison or
+// refinement with no specific option in mind, distinct from the per-option
+// "More like this" qualifier.
+function RefinementDrawer({ open, onToggle, value, onChange, onSubmit, busy }) {
+  return (
+    <div className="refinement-drawer">
+      <button type="button" className="refinement-toggle" onClick={onToggle} aria-expanded={open}>
+        Not quite right? Tell us more <span>{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <div className="refinement-body">
+          <textarea
+            className="refinement-input"
+            aria-label="Tell us more"
+            placeholder="e.g. I'd rather avoid long overnight trains, or I want somewhere quieter…"
+            value={value}
+            onChange={event => onChange(event.target.value)}
+          />
+          <button type="button" className="btn btn-primary" onClick={onSubmit} disabled={busy || !value.trim()}>Send</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Destinations() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
   const { updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState } = useTrip();
-  const nextMode = params.get('next') || 'preview'; // 'preview' or 'none'
 
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState(null);
-  // Backend-persisted (ui_state[OPEN_ID_KEY]) so it survives a refresh;
-  // openId itself stays local React state for instant toggling.
-  const [openId, setOpenId] = useState(() => uiState[OPEN_ID_KEY] ?? null);
+  // Backend-persisted so both survive a refresh; local React state for
+  // instant interaction.
+  const [focusedKey, setFocusedKey] = useState(() => uiState[FOCUSED_KEY] ?? null);
+  const [evidenceOpen, setEvidenceOpen] = useState(() => !!uiState[EVIDENCE_OPEN_KEY]);
   const [beenBefore, setBeenBefore] = useState({});
   const [clarifyInput, setClarifyInput] = useState('');
   const [planError, setPlanError] = useState(null);
   const [planningId, setPlanningId] = useState(null);
   const [moreLikeThisId, setMoreLikeThisId] = useState(null);
+  const [moreLikeThisQualifier, setMoreLikeThisQualifier] = useState('');
+  const [refinementOpen, setRefinementOpen] = useState(false);
+  const [refinementValue, setRefinementValue] = useState('');
+  const [refinementBusy, setRefinementBusy] = useState(false);
   const triggered = useRef(false);
-  const restoredOpenId = useRef(false);
+  const restoredFocus = useRef(false);
+  const trackedFailureStatus = useRef(null);
+  const trackedTransitionShown = useRef(false);
 
   const tripState = commandSnapshot?.trip_state;
   const tripId = commandSnapshot?.id;
@@ -149,15 +275,6 @@ export default function Destinations() {
   const [recoStatus, setRecoStatus] = useState('idle'); // idle | loading | ready | error
   const [recoError, setRecoError] = useState(null);
 
-  // Accepts an explicit id (from a just-created trip's own command response)
-  // rather than always trusting the `tripId` closure — ensureTrip() can
-  // lazily create the trip mid-command, so the tripId captured when a
-  // handler was defined can be stale by the time its promise resolves.
-  //
-  // `fromCommand` (TWM-149): only a refetch triggered right after a matcher
-  // command succeeded represents Meridian actually producing a new round —
-  // the passive mount-time fetch below just loads whatever round already
-  // existed, so it must not re-fire recommendations_generated.
   const refreshLatest = useCallback(async (idOverride, { fromCommand = false } = {}) => {
     const id = idOverride ?? tripId;
     if (!id) {
@@ -214,14 +331,16 @@ export default function Destinations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripLoadStatus, recoStatus, latest, awaiting]);
 
-  // Restores which card was expanded before a refresh, once, without
-  // clobbering a toggle the traveler makes afterward.
+  // Restores which option was focused (and whether its evidence was open)
+  // before a refresh, once, without clobbering a toggle the traveler makes
+  // afterward.
   useEffect(() => {
-    if (restoredOpenId.current || tripLoadStatus !== 'ready') return;
-    restoredOpenId.current = true;
-    if (uiState[OPEN_ID_KEY]) setOpenId(uiState[OPEN_ID_KEY]);
+    if (restoredFocus.current || tripLoadStatus !== 'ready') return;
+    restoredFocus.current = true;
+    if (uiState[FOCUSED_KEY]) setFocusedKey(uiState[FOCUSED_KEY]);
+    if (uiState[EVIDENCE_OPEN_KEY]) setEvidenceOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripLoadStatus, uiState[OPEN_ID_KEY]]);
+  }, [tripLoadStatus, uiState[FOCUSED_KEY], uiState[EVIDENCE_OPEN_KEY]]);
 
   const outcome = useMemo(
     () => (latest ? safeMatcherOutcomeViewModel(latest) : null),
@@ -240,20 +359,52 @@ export default function Destinations() {
     trackEvent('recommendations_viewed', { recommendation_count: outcome.data.options.length });
   }, [outcome, latest?.version]);
 
+  useEffect(() => {
+    if (outcome?.kind !== 'failure' || !outcome.data) return;
+    if (trackedFailureStatus.current === outcome.data.status) return;
+    trackedFailureStatus.current = outcome.data.status;
+    trackEvent('terminal_failure_shown', { status: outcome.data.status });
+  }, [outcome]);
+
+  // Once options are known, default focus to the best-ranked option so the
+  // detail card always shows something rather than nothing.
+  useEffect(() => {
+    if (focusedKey || outcome?.kind !== 'options' || !outcome.data) return;
+    setFocusedKey(outcome.data.options[0]?.key ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outcome]);
+
   const pills = contextRecapPills(tripState?.trip_context);
   const selectedOption = tripState?.trip_context?.selected_option ?? null;
 
-  function toggleBeenBefore(key, id) {
-    setBeenBefore(previous => ({ ...previous, [key]: previous[key] === id ? null : id }));
+  function focusOption(key) {
+    if (key === focusedKey) return;
+    setFocusedKey(key);
+    setEvidenceOpen(false);
+    updateUiState({ [FOCUSED_KEY]: key, [EVIDENCE_OPEN_KEY]: false }).catch(() => {});
   }
 
-  function toggleOpen(key) {
-    const next = openId === key ? null : key;
-    setOpenId(next);
-    updateUiState({ [OPEN_ID_KEY]: next }).catch(() => {});
+  // Persists both keys together, always — evidenceOpen alone would be
+  // ambiguous about *which* option it belongs to after a refresh.
+  function toggleEvidence() {
+    const next = !evidenceOpen;
+    setEvidenceOpen(next);
+    updateUiState({ [FOCUSED_KEY]: focusedKey, [EVIDENCE_OPEN_KEY]: next }).catch(() => {});
   }
 
-  async function planThis(option) {
+  // TWM-173: one unified CTA — an already-selected option just navigates
+  // (no re-selection needed); every other option runs select_destination
+  // first. Same literal "Plan this trip →" text either way.
+  function planThis(option) {
+    const isSelected = selectedOption && selectedOption.type === option.type && selectedOption.id === option.key;
+    if (isSelected) {
+      navigate('/trip-preview');
+      return;
+    }
+    doPlanThis(option);
+  }
+
+  async function doPlanThis(option) {
     setPlanError(null);
     setPlanningId(option.key);
     try {
@@ -273,13 +424,21 @@ export default function Destinations() {
   async function moreLikeThis(option) {
     setMoreLikeThisId(option.key);
     setPlanError(null);
+    const instructions = moreLikeThisQualifier.trim();
     try {
       const response = await sendTripCommand('more_like_this', {
-        refinement: { type: 'MORE_LIKE_THIS', reference: { type: option.type, id: option.key } },
+        refinement: {
+          type: 'MORE_LIKE_THIS',
+          reference: { type: option.type, id: option.key },
+          ...(instructions ? { instructions } : {}),
+        },
       });
+      trackEvent('more_like_this_used', { with_qualifier: Boolean(instructions) });
       await refreshLatest(response.trip?.id, { fromCommand: true });
-      setOpenId(null);
-      updateUiState({ [OPEN_ID_KEY]: null }).catch(() => {});
+      setMoreLikeThisQualifier('');
+      setFocusedKey(null);
+      setEvidenceOpen(false);
+      updateUiState({ [FOCUSED_KEY]: null, [EVIDENCE_OPEN_KEY]: false }).catch(() => {});
     } catch (commandError) {
       setPlanError(commandError.message || 'Something went wrong.');
     } finally {
@@ -303,10 +462,49 @@ export default function Destinations() {
     }
   }
 
+  async function submitRefinement() {
+    const value = refinementValue.trim();
+    if (!value) return;
+    setRefinementValue('');
+    setRefinementBusy(true);
+    setPlanError(null);
+    try {
+      trackEvent('refinement_drawer_used', {});
+      const response = await sendTripCommand('traveler_message', { message: value });
+      await refreshLatest(response.trip?.id, { fromCommand: true });
+      setRefinementOpen(false);
+    } catch (commandError) {
+      setPlanError(commandError.message || 'Something went wrong.');
+    } finally {
+      setRefinementBusy(false);
+    }
+  }
+
+  function tapFailureChip(suggestion, status) {
+    trackEvent('terminal_failure_chip_tapped', { status });
+    setClarifyInput(suggestion);
+  }
+
   const thinking = tripLoadStatus === 'loading' || recoStatus === 'loading' || triggering
     || (tripLoadStatus === 'ready' && recoStatus === 'ready' && !latest && !awaiting && !triggerError);
+
+  // TWM-173: this trigger point is the initial Discover entry. The Direct-
+  // Plan reversal link (Guide's reopen_destination_discovery, per TWM-174)
+  // should fire this same component/event with trigger: 'destination_reversal'
+  // once that link exists, so funnel analysis can tell the two apart.
+  useEffect(() => {
+    if (!thinking || trackedTransitionShown.current) return;
+    trackedTransitionShown.current = true;
+    trackEvent('honest_transition_shown', { trigger: 'initial_discover' });
+  }, [thinking]);
+
   const showTripLoadError = tripLoadStatus === 'error';
   const showRecoError = !showTripLoadError && recoStatus === 'error';
+  const focusedOption = outcome?.kind === 'options' && outcome.data
+    ? outcome.data.options.find(o => o.key === focusedKey) ?? outcome.data.options[0]
+    : null;
+  const isFocusedSelected = focusedOption && selectedOption
+    && selectedOption.type === focusedOption.type && selectedOption.id === focusedOption.key;
 
   return (
     <div className="wrap">
@@ -333,7 +531,7 @@ export default function Destinations() {
       )}
 
       {!showTripLoadError && !showRecoError && thinking && (
-        <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Matching destinations to your answers…</div>
+        <HonestTransition steps={MATCHING_STEPS} label="Finding your matches" />
       )}
 
       {!showTripLoadError && !showRecoError && !thinking && triggerError && (
@@ -355,12 +553,15 @@ export default function Destinations() {
       )}
 
       {!showTripLoadError && !showRecoError && !thinking && !triggerError && outcome?.kind === 'failure' && (
-        <div className="price-evidence state-unsafe" role="alert">
+        <div className="terminal-failure" role="alert">
+          <span className="terminal-failure-badge">Scout</span>
           <strong>{outcome.data.message}</strong>
           {outcome.data.constraintAdjustmentSuggestions.length > 0 && (
-            <ul className="detail-checklist">
-              {outcome.data.constraintAdjustmentSuggestions.map(suggestion => <li key={suggestion}>{suggestion}</li>)}
-            </ul>
+            <div className="terminal-failure-chips">
+              {outcome.data.constraintAdjustmentSuggestions.map(suggestion => (
+                <button type="button" key={suggestion} className="chip" onClick={() => tapFailureChip(suggestion, outcome.data.status)}>{suggestion}</button>
+              ))}
+            </div>
           )}
           <div className="chat-input-bar">
             <input type="text" className="chat-input" placeholder="Adjust and try again…" value={clarifyInput} onChange={event => setClarifyInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') submitClarification(); }} />
@@ -381,89 +582,39 @@ export default function Destinations() {
           <h2 className="section-title">A few that fit well</h2>
           <p className="lede recommendation-summary">{outcome.data.message}</p>
           {planError && <div className="price-evidence state-unsafe" role="alert">{planError}</div>}
-          {outcome.data.options.map((d, i) => {
-            const isBest = i === 0 && outcome.data.status === 'SUCCESS';
-            const isOpen = openId === d.key;
-            const isSelected = selectedOption && selectedOption.type === d.type && selectedOption.id === d.key;
-            const totalEstimate = totalPartyEstimate(d);
-            const access = accessFact(d);
-            const travelers = tripState?.trip_context?.travelers;
-            return (
-              <div key={d.key} className={`dest-card${isBest ? ' best' : ''}`}>
-                {isSelected ? <span className="pick-badge">Selected</span> : isBest && <span className="pick-badge">Our pick</span>}
-                <div className="dest-name">{d.name}</div>
-                <div className="dest-tag">{optionLabel(d)}</div>
-                <p className="dest-summary">{d.summary}</p>
-                {(totalEstimate || access) && (
-                  <div className="decision-facts">
-                    {totalEstimate && <span><strong>{moneyRange(totalEstimate)}</strong> estimated total{travelers ? ` for ${travelers}` : ''}</span>}
-                    {access && <span>{access.value}</span>}
-                  </div>
-                )}
-                <div className="estimate-qualifier">Qualified planning estimate · not checked prices</div>
-                <div className="criteria-list">
-                  {d.evaluations.map(ev => (
-                    <StatusPill key={ev.criterion_id} tone={OUTCOME_TONE[ev.outcome]} icon={OUTCOME_ICON[ev.outcome]}>
-                      {criterionLabel(outcome.data.criteria, ev.criterion_id)}
-                    </StatusPill>
-                  ))}
-                  {d.other_considerations.length > 0 && (
-                    <span
-                      className="criteria-pill outcome-more"
-                      title={d.other_considerations.join(' · ')}
-                    >
-                      +{d.other_considerations.length} other consideration{d.other_considerations.length === 1 ? '' : 's'}
-                    </span>
-                  )}
-                </div>
-                <button type="button" className="reason-toggle" onClick={() => toggleOpen(d.key)}>
-                  Why this one <span>{isOpen ? '▴' : '▾'}</span>
-                </button>
-                {isOpen && (
-                  <div className="reason-body open">
-                    {d.evaluations.map(ev => (
-                      <div key={ev.criterion_id} className="eval-block">
-                        <div className="eval-head">
-                          <span className="eval-icon">{criterionIcon(ev.criterion_id)}</span>
-                          <span className="eval-conclusion">{ev.conclusion}</span>
-                          <StatusPill tone={OUTCOME_TONE[ev.outcome]} icon={OUTCOME_ICON[ev.outcome]}>{ev.outcome.toLowerCase()}</StatusPill>
-                        </div>
-                        {ev.details.map((detail, di) => <DetailBlock key={di} detail={detail} />)}
-                        {ev.tradeoffs?.map(t => <div key={t} className="eval-tradeoff">⚠ {t}</div>)}
-                      </div>
-                    ))}
-                    {d.other_considerations.length > 0 && (
-                      <div className="other-considerations">
-                        <div className="other-considerations-title">Other considerations</div>
-                        <div className="detail-tags">
-                          {d.other_considerations.map(o => <span key={o} className="detail-tag">{o}</span>)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="dest-actions">
-                  <button type="button" className="btn btn-ghost" onClick={() => moreLikeThis(d)} disabled={moreLikeThisId === d.key}>✨ More like this</button>
-                  {isSelected
-                    ? <button type="button" className="btn btn-primary" onClick={() => navigate('/trip-preview')}>Continue planning →</button>
-                    : nextMode === 'preview'
-                      ? <button type="button" className="btn btn-primary" onClick={() => planThis(d)} disabled={planningId === d.key}>Plan this trip →</button>
-                      : <Link className="btn btn-primary" to="/trip-preview" onClick={() => { sendTripCommand('select_destination', { optionId: d.key }).catch(() => {}); trackEvent('destination_selected', { selection_source: 'want_to_plan_this' }); updateTrip({ destination: { type: d.type, name: d.name } }); }}>Want to plan this? →</Link>}
-                </div>
-                <div className="been-before">
-                  <span className="been-before-label">Been here before? <em>tell us how it was</em></span>
-                  <div className="been-before-opts">
-                    {BEEN_BEFORE_OPTIONS.map(opt => (
-                      <button type="button" key={opt.id} className={`been-before-pill${beenBefore[d.key] === opt.id ? ' selected' : ''}`} onClick={() => toggleBeenBefore(d.key, opt.id)}>
-                        <span>{opt.icon}</span>{opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+
+          <ComparisonMatrix criteria={outcome.data.criteria} options={outcome.data.options} focusedKey={focusedOption?.key} onFocus={focusOption} />
+
+          {focusedOption && (
+            <OptionDetailCard
+              option={focusedOption}
+              criteria={outcome.data.criteria}
+              isSelected={isFocusedSelected}
+              evidenceOpen={evidenceOpen}
+              onToggleEvidence={toggleEvidence}
+              onPlan={() => planThis(focusedOption)}
+              planning={planningId === focusedOption.key}
+              moreLikeThisQualifier={moreLikeThisQualifier}
+              onQualifierChange={setMoreLikeThisQualifier}
+              onMoreLikeThis={() => moreLikeThis(focusedOption)}
+              moreLikeThisBusy={moreLikeThisId === focusedOption.key}
+              beenBefore={beenBefore[focusedOption.key] ?? null}
+              onToggleBeenBefore={id => setBeenBefore(previous => ({ ...previous, [focusedOption.key]: previous[focusedOption.key] === id ? null : id }))}
+              travelers={tripState?.trip_context?.travelers}
+            />
+          )}
         </div>
+      )}
+
+      {!showTripLoadError && !thinking && (
+        <RefinementDrawer
+          open={refinementOpen}
+          onToggle={() => setRefinementOpen(open => !open)}
+          value={refinementValue}
+          onChange={setRefinementValue}
+          onSubmit={submitRefinement}
+          busy={refinementBusy}
+        />
       )}
     </div>
   );

@@ -75,14 +75,14 @@ test('loads real recommendations via the continue command, shows a disclosed tra
   await page.goto('destinations?next=preview');
   await expect(page.getByText('A few that fit well')).toBeVisible();
 
-  const circuitCard = page.locator('.dest-card', { hasText: 'Madhya Pradesh Heritage and Nature' });
-  await expect(circuitCard.getByText('Multi-stop circuit')).toBeVisible();
-  await expect(circuitCard.getByText(/⚠/)).toBeVisible();
+  await expect(page.locator('.matrix-wrap').getByText('Multi-stop circuit')).toBeVisible();
+  await expect(page.locator('.matrix-wrap').getByText(/⚠/)).toBeVisible();
 
-  await circuitCard.getByText('Why this one').click();
-  await expect(circuitCard.getByText(/A late add-on activity could push the total slightly higher\./)).toBeVisible();
+  const detailCard = page.locator('.dest-detail-card');
+  await detailCard.getByText('See why this fits').click();
+  await expect(detailCard.getByText(/A late add-on activity could push the total slightly higher\./)).toBeVisible();
 
-  await circuitCard.getByText('Plan this trip →').click();
+  await detailCard.getByText('Plan this trip →').click();
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await expect(page.getByText('Gwalior Fort')).toBeVisible();
 });
@@ -105,8 +105,8 @@ test('More like this refreshes recommendations through the real command without 
   await page.goto('destinations?next=preview');
   await expect(page.getByText('A few that fit well')).toBeVisible();
 
-  const circuitCard = page.locator('.dest-card', { hasText: 'Madhya Pradesh Heritage and Nature' });
-  await circuitCard.getByRole('button', { name: 'More like this' }).click();
+  const detailCard = page.locator('.dest-detail-card');
+  await detailCard.getByRole('button', { name: 'More like this' }).click();
   await expect(page.getByText(/Refreshed around Madhya Pradesh Heritage and Nature/)).toBeVisible();
   // Refreshing recommendations must not itself commit a selection — staying
   // on /destinations (never routed to /trip-preview) proves that.
