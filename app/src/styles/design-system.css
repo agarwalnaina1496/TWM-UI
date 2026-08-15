@@ -36,3 +36,9 @@
    reading as alive instead of frozen. */
 .honest-transition-steps li.active .step-marker{animation:honest-transition-pulse 1.4s ease-in-out infinite;}
 @keyframes honest-transition-pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+
+/* TWM-174: generic gate-overlay shell — Destinations' checkpoint and
+   TWM-175's booking prompt both use this shape (scrim + centered card). */
+.checkpoint-overlay{position:fixed;inset:0;background:rgba(28,22,16,0.4);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;}
+.checkpoint-card{background:var(--surface);border-radius:20px;padding:28px 26px;max-width:420px;width:100%;box-shadow:0 24px 60px rgba(28,22,16,0.3);}
+.checkpoint-message{font-size:14px;color:var(--tp);line-height:1.5;margin:14px 0 16px;}

@@ -70,3 +70,51 @@ export function anchorsForDay(anchors, dayNumber) {
 export function anchorsByType(anchors, type) {
   return (anchors || []).filter(anchor => anchor.type === type);
 }
+
+// TWM-175: AtlasTripSummary's real field is num_travelers — TripHero used
+// to read the wrong key (`travelers`), which never exists on the schema, so
+// party size always silently fell back to a hardcoded default of 2.
+export function travelerCount(summary) {
+  return summary?.num_travelers ?? null;
+}
+
+const VERIFICATION_TONE = { VERIFIED: 'positive', GENERAL_GUIDANCE: 'neutral' };
+
+export function verificationTone(status) {
+  return VERIFICATION_TONE[status] || 'neutral';
+}
+
+// Always-visible trust-strip counts — assumptions, open (unresolved) items,
+// and a verified-vs-general-guidance tally across every timeline item and
+// practical note that carries a reference. Never hidden behind a closed
+// disclosure (AtlasReference.status is the single biggest capability-to-UI
+// mismatch the agent-capability audit found).
+export function trustStripCounts(finalItinerary, result) {
+  const items = (finalItinerary?.days || []).flatMap(day => day.timeline || []);
+  const references = [
+    ...items.map(item => item.reference),
+    ...(finalItinerary?.practical_notes || []).map(note => note.reference),
+  ].filter(Boolean);
+  return {
+    assumptionsCount: (finalItinerary?.assumptions || []).length,
+    unresolvedCount: (result?.unresolved || []).length,
+    verifiedCount: references.filter(ref => ref.status === 'VERIFIED').length,
+    generalGuidanceCount: references.filter(ref => ref.status === 'GENERAL_GUIDANCE').length,
+  };
+}
+
+// A booking-readiness rollup ("N of M bookable items ready") — a timeline
+// item is bookable when it requires_advance_booking; it's "ready" once a
+// confirmed logistics anchor exists for that day (the real, application-owned
+// signal a booking was actually handled — never inferred from Atlas's own
+// booking_readiness label, which only reflects whether Atlas thinks the item
+// is suggestable, not whether the traveler actually booked anything).
+export function bookingReadinessRollup(days, anchors) {
+  const bookableItems = (days || []).flatMap(day =>
+    (day.timeline || [])
+      .filter(item => item.requires_advance_booking)
+      .map(item => ({ ...item, day_number: day.day_number }))
+  );
+  const ready = bookableItems.filter(item => anchorsForDay(anchors, item.day_number).length > 0).length;
+  return { ready, total: bookableItems.length };
+}

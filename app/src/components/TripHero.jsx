@@ -1,11 +1,14 @@
-import { tripDatesLabel } from '../lib/atlasView.js';
+import { tripDatesLabel, travelerCount } from '../lib/atlasView.js';
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
-export default function TripHero({ finalItinerary, travelers, actions = null }) {
+// TWM-175: partySize used to read summary.travelers, a field that doesn't
+// exist on AtlasTripSummary (the real field is num_travelers) — it always
+// silently fell back to a hardcoded 2 regardless of the real count.
+export default function TripHero({ finalItinerary, actions = null }) {
   const { trip_summary: summary, budget_summary: budget, days } = finalItinerary;
   const dates = tripDatesLabel(days, summary.date_range);
-  const partySize = travelers || summary.travelers || 2;
+  const partySize = travelerCount(summary) ?? 2;
 
   return (
     <section className="dashboard-hero">
