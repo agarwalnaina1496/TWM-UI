@@ -44,21 +44,18 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
     expect(stageBadge(state(overrides)).text).toBe(expectedText);
   });
 
-  // TWM-171: stageCta() now routes every stage to /dashboard with one
-  // literal "Open trip →" label — Dashboard is reachable from message one
-  // and itself carries the traveler into whichever Build screen applies.
   it.each([
-    ['new, no context', {}],
-    ['new, has context', { trip_context: { origin: 'Delhi' } }],
-    ['matching', { stage: 'matching' }],
-    ['recommendation_ready', { stage: 'recommendation_ready' }],
-    ['recommended', { stage: 'recommended' }],
-    ['matched', { stage: 'matched' }],
-    ['planning', { stage: 'planning' }],
-    ['planned', { stage: 'planned' }],
-    ['itinerary ready overrides stage', { stage: 'matched', itinerary_state: { status: 'ready' } }],
-  ])('stageCta: %s always routes to /dashboard with the "Open trip →" label', (_label, overrides) => {
-    expect(stageCta(state(overrides))).toEqual({ label: 'Open trip →', to: '/dashboard' });
+    ['new, no context', {}, '/'],
+    ['new, has context', { trip_context: { origin: 'Delhi' } }, '/scout-chat'],
+    ['matching', { stage: 'matching' }, '/scout-chat'],
+    ['recommendation_ready', { stage: 'recommendation_ready' }, '/scout-chat'],
+    ['recommended', { stage: 'recommended' }, '/destinations'],
+    ['matched', { stage: 'matched' }, '/destinations'],
+    ['planning', { stage: 'planning' }, '/trip-preview'],
+    ['planned', { stage: 'planned' }, '/dashboard'],
+    ['itinerary ready overrides stage', { stage: 'matched', itinerary_state: { status: 'ready' } }, '/dashboard'],
+  ])('stageCta: %s -> %s', (_label, overrides, expectedTo) => {
+    expect(stageCta(state(overrides)).to).toBe(expectedTo);
   });
 });
 

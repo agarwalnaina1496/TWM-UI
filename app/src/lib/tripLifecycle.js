@@ -75,29 +75,27 @@ export function stageBadge(tripState) {
   return STAGE_BADGES[stage] || STAGE_BADGES.new;
 }
 
-// TWM-171: the Dashboard-home CTA is now a single literal "Open trip →"
-// routed to /dashboard for every stage — Dashboard is reachable from message
-// one and itself carries the traveler into whichever Build screen is
-// relevant, so the card no longer needs a per-stage label/route pair. Kept
-// as a lookup (not a bare constant) since status-tag derivation elsewhere
-// may still want a stage-keyed shape.
 const STAGE_CTA = {
-  new: { label: 'Open trip →', to: '/dashboard' },
-  matching: { label: 'Open trip →', to: '/dashboard' },
-  recommendation_ready: { label: 'Open trip →', to: '/dashboard' },
-  recommended: { label: 'Open trip →', to: '/dashboard' },
-  matched: { label: 'Open trip →', to: '/dashboard' },
-  planning: { label: 'Open trip →', to: '/dashboard' },
-  planned: { label: 'Open trip →', to: '/dashboard' },
-  booked: { label: 'Open trip →', to: '/dashboard' },
-  done: { label: 'Open trip →', to: '/dashboard' },
+  new: { label: 'Start planning', to: '/' },
+  matching: { label: 'Resume matching', to: '/scout-chat' },
+  recommendation_ready: { label: 'Generate recommendations', to: '/scout-chat' },
+  recommended: { label: 'Review recommendations', to: '/destinations' },
+  matched: { label: 'Review recommendations', to: '/destinations' },
+  planning: { label: 'Resume planning', to: '/trip-preview' },
+  planned: { label: 'View trip', to: '/dashboard' },
+  booked: { label: 'View trip', to: '/dashboard' },
+  done: { label: 'View trip', to: '/dashboard' },
 };
 
-// Stage-aware CTA for a Dashboard-home card / the landing resolver's
-// single-trip resume path. Label and route are now constant across every
-// stage (TWM-171) — stage still distinguishes cards via stageBadge(), not
-// via this CTA.
+// Stage-aware CTA for the landing resolver's single-trip resume path and any
+// other stage-derived link. NOTE: Dashboard-home's own trip card (TWM-171)
+// deliberately does NOT use this — it always renders a fixed "Open trip →"
+// label routed to /dashboard regardless of stage, hardcoded at that call
+// site rather than folded in here, since this lookup's per-stage distinction
+// is real reusable logic other callers may still want.
 export function stageCta(tripState) {
   const stage = tripState?.stage ?? 'new';
+  if (isItineraryReady(tripState)) return { label: 'View trip', to: '/dashboard' };
+  if (stage === 'new' && hasTripContext(tripState)) return { label: 'Resume chat', to: '/scout-chat' };
   return STAGE_CTA[stage] || STAGE_CTA.new;
 }
