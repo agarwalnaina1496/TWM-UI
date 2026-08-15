@@ -1,27 +1,50 @@
 .trip-recap{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 26px;}
 .recap-pill{font-size:11px;font-weight:600;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:5px 11px;color:var(--ts);}
 
-.dest-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px 26px;margin-bottom:18px;position:relative;transition:box-shadow .15s ease,transform .15s ease;}
-.dest-card:hover{box-shadow:0 6px 20px rgba(33,28,22,0.08);transform:translateY(-1px);}
-.dest-card.best{border-color:var(--accent);box-shadow:0 10px 28px rgba(156,90,52,0.14);}
+/* TWM-173: criteria x options comparison matrix, replacing stacked cards. */
+.matrix-wrap{overflow-x:auto;margin-bottom:18px;border:1px solid var(--border);border-radius:16px;background:var(--surface);}
+.comparison-matrix{width:100%;border-collapse:collapse;font-size:12.5px;}
+.comparison-matrix th,.comparison-matrix td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);}
+.comparison-matrix thead th{vertical-align:top;border-bottom:2px solid var(--border);}
+.matrix-corner{width:140px;}
+.matrix-option-header{all:unset;display:flex;flex-direction:column;gap:2px;cursor:pointer;padding:4px;border-radius:10px;}
+.matrix-option-header:hover{background:var(--accent-bg);}
+th.focused .matrix-option-header,td.focused{background:var(--accent-bg);}
+.matrix-option-rank{font-size:10px;font-weight:800;color:var(--tm);text-transform:uppercase;}
+.matrix-option-name{font-family:var(--font-display);font-size:14px;font-weight:700;color:var(--tp);}
+.matrix-option-type{font-size:10.5px;color:var(--ts);}
+.matrix-criterion-label{font-weight:600;color:var(--tp);white-space:nowrap;}
+
+.dest-detail-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px 26px;margin-bottom:18px;position:relative;}
 .pick-badge{position:absolute;top:-11px;left:24px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:5px 12px;border-radius:99px;letter-spacing:.02em;box-shadow:0 2px 6px rgba(156,90,52,0.25);}
 .dest-name{font-family:'Fraunces',serif;font-size:23px;font-weight:700;margin:6px 0 4px;letter-spacing:-0.01em;}
 .dest-tag{font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:12px;}
-.why-list{margin:0 0 14px;padding:0;list-style:none;}
-.why-list li{font-size:13.5px;color:var(--ts);padding:4px 0 4px 18px;position:relative;line-height:1.5;}
-.why-list li::before{content:'✓';position:absolute;left:0;color:var(--sage);font-weight:700;}
 
 .dest-summary{font-size:13.5px;color:var(--ts);margin:0 0 14px;line-height:1.5;}
 .decision-facts{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12.5px;color:var(--tp);background:var(--accent-bg);border-radius:12px;padding:10px 14px;margin-bottom:12px;}
 .decision-facts span{display:inline-flex;align-items:center;gap:4px;}
-.estimate-qualifier{font-size:10.5px;color:var(--tm);margin-bottom:14px;}
+.rollup-summary{font-size:12px;font-weight:600;color:var(--ts);margin-bottom:14px;}
 
-.criteria-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
-.criteria-pill{font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;border:1px solid transparent;white-space:nowrap;}
-.criteria-pill.outcome-match{background:var(--sage-bg);color:var(--sage);}
-.criteria-pill.outcome-tradeoff{background:#fdf3e0;color:#9c6a20;}
-.criteria-pill.outcome-mismatch{background:#fbe8e6;color:#b5442e;}
-.criteria-pill.outcome-more{background:var(--bg);color:var(--tm);border-color:var(--border);}
+.more-like-this-row{display:flex;gap:8px;margin-bottom:12px;}
+.more-like-this-input{flex:1;font:inherit;font-size:12.5px;border:1px solid var(--border);border-radius:10px;padding:9px 12px;background:var(--surface);color:var(--tp);}
+.more-like-this-input::placeholder{color:var(--tm);}
+
+/* TWM-173: terminal-failure states get their own Scout-voiced, rust-toned
+   treatment — visually distinct from .state-unsafe (reused for real load
+   errors), with constraint_adjustment_suggestions as tappable chips. */
+.terminal-failure{border:1px solid var(--tone-negative);background:var(--tone-negative-bg);border-radius:16px;padding:18px 20px;margin:0 0 18px;}
+.terminal-failure-badge{display:inline-block;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--tone-negative);margin-bottom:6px;}
+.terminal-failure strong{display:block;font-size:14px;color:var(--tp);margin-bottom:10px;}
+.terminal-failure-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+.terminal-failure .chip{background:var(--surface);}
+
+/* TWM-173: always-present general refinement drawer. */
+.refinement-drawer{margin-top:8px;}
+.refinement-toggle{all:unset;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--ts);display:flex;align-items:center;gap:6px;padding:8px 0;}
+.refinement-toggle:hover{color:var(--tp);}
+.refinement-body{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;}
+.refinement-input{font:inherit;font-size:13px;border:1px solid var(--border);border-radius:10px;padding:10px 12px;min-height:70px;resize:vertical;background:var(--bg);color:var(--tp);}
+.refinement-body .btn{align-self:flex-end;}
 
 .reason-toggle{width:100%;border:1px solid var(--border);background:var(--surface);border-radius:12px;padding:11px 14px;font-size:12.5px;font-weight:700;color:var(--tp);text-align:left;display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:10px;transition:border-color .15s ease;}
 .reason-toggle:hover{border-color:var(--accent);}
@@ -32,7 +55,6 @@
 .eval-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
 .eval-icon{flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--accent-bg);display:grid;place-items:center;font-size:13px}
 .eval-conclusion{flex:1;font-weight:600;font-size:12.5px;color:var(--tp);line-height:1.4;}
-.eval-head .criteria-pill{flex-shrink:0;padding:3px 7px;}
 .eval-tradeoff{font-size:12px;color:#9c6a20;margin-top:4px;margin-left:36px;}
 
 .detail-checklist{list-style:none;margin:2px 0 0 36px;padding:0;}

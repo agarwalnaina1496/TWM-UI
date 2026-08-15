@@ -6,6 +6,8 @@ import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
 import { planReady } from '../hooks/useGuidePlanning.js';
 import { trackEvent } from '../lib/analytics.js';
+import { buildRecapTurn } from '../lib/discoverChat.js';
+import FactsPanel from '../components/FactsPanel.jsx';
 import '../styles/chat.css';
 
 let nextMessageId = 1;
@@ -20,7 +22,7 @@ const KNOWN_DESTINATION_PROMPT = 'Where are you headed?';
 export default function JourneyEntry() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { commandSnapshot, sendTripCommand } = useTrip();
+  const { commandSnapshot, sendTripCommand, tripLoadStatus } = useTrip();
   const intent = params.get('intent');
   const isDiscover = intent === ENTRY_INTENTS.DISCOVER;
   const [destination, setDestination] = useState('');
@@ -38,18 +40,35 @@ export default function JourneyEntry() {
   const entered = useRef(false);
   const lastCommand = useRef(null);
 
-  // Hardcoded per-intent greeting shown immediately, with no Backend call —
-  // the owning specialist only gets involved once the traveler actually
-  // sends something.
+  // Known-destination path keeps its original unconditional greeting — out
+  // of scope for this story (Guide's chat, not Discover/Destinations).
   useEffect(() => {
-    if (initialized.current) return;
+    if (isDiscover || initialized.current) return;
     initialized.current = true;
     setMessages(previous => [
       ...previous,
-      { id: nextMessageId++, role: 'assistant', text: isDiscover ? DISCOVER_WELCOME : KNOWN_DESTINATION_WELCOME },
-      { id: nextMessageId++, role: 'assistant', text: isDiscover ? DISCOVER_ORIGIN_PROMPT : KNOWN_DESTINATION_PROMPT },
+      { id: nextMessageId++, role: 'assistant', text: KNOWN_DESTINATION_WELCOME },
+      { id: nextMessageId++, role: 'assistant', text: KNOWN_DESTINATION_PROMPT },
     ]);
   }, [isDiscover]);
+
+  // TWM-173: Discover's greeting must not reset to a cold open on a refresh
+  // mid-conversation — a trip that already has real trip_context (the
+  // traveler refreshed after sending at least one message) gets a recap
+  // turn instead. Waits for the trip to actually finish loading so a fresh
+  // trip and a not-yet-loaded trip aren't confused with each other.
+  useEffect(() => {
+    if (!isDiscover || initialized.current || tripLoadStatus !== 'ready') return;
+    initialized.current = true;
+    const recap = buildRecapTurn(commandSnapshot?.trip_state, { awaiting: commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting });
+    setMessages(previous => (recap
+      ? [...previous, { id: nextMessageId++, role: 'assistant', text: recap }]
+      : [...previous,
+        { id: nextMessageId++, role: 'assistant', text: DISCOVER_WELCOME },
+        { id: nextMessageId++, role: 'assistant', text: DISCOVER_ORIGIN_PROMPT },
+      ]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDiscover, tripLoadStatus]);
 
   // planning_started fires once, right as the known-destination journey
   // actually begins (mounting this screen with that intent) — this path has
@@ -136,6 +155,7 @@ export default function JourneyEntry() {
       {isDiscover ? (
         <>
           <p className="lede">Tell Scout what matters to you, and it'll narrow down destinations that fit.</p>
+          <FactsPanel tripContext={commandSnapshot?.trip_state?.trip_context} />
           <div className="chat-log" aria-live="polite">
             {messages.map(message => (
               <div key={message.id} className={`chat-row chat-row-${message.role}`}>

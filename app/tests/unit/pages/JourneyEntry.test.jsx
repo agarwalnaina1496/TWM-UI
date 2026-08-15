@@ -7,14 +7,16 @@ import JourneyEntry from '../../../src/pages/JourneyEntry.jsx';
 const navigate = vi.fn();
 let commandSnapshot;
 let sendTripCommand;
+let tripLoadStatus;
+let searchParams = new URLSearchParams();
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus }),
 }));
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
   useNavigate: () => navigate,
-  useSearchParams: () => [new URLSearchParams()],
+  useSearchParams: () => [searchParams],
 }));
 
 function readyPlannerState() {
@@ -55,5 +57,34 @@ describe('JourneyEntry known-destination chat', () => {
     await user.click(screen.getByRole('button', { name: 'Start planning' }));
     expect(navigate).toHaveBeenCalledWith('/trip-preview', { state: { guideMessage: 'Here is your plan.' } });
     expect(navigate).not.toHaveBeenCalledWith('/dashboard');
+  });
+});
+
+describe('JourneyEntry Discover refresh recap and facts panel (TWM-173)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    commandSnapshot = null;
+    tripLoadStatus = 'ready';
+    searchParams = new URLSearchParams('intent=discover_destination');
+  });
+
+  it('shows the cold-open greeting for a fresh Discover session with no saved context', () => {
+    commandSnapshot = { trip_state: {} };
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(screen.getByText(/Hey there! I'm Scout/)).toBeInTheDocument();
+    expect(screen.getByText('To start, where will you be traveling from?')).toBeInTheDocument();
+  });
+
+  it('shows a recap turn instead of the cold-open greeting after a refresh mid-conversation', () => {
+    commandSnapshot = { trip_state: { trip_context: { origin: 'Delhi' } } };
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(screen.queryByText(/Hey there! I'm Scout/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Picking up where you left off/)).toBeInTheDocument();
+  });
+
+  it('shows the live facts panel for known trip_context fields', () => {
+    commandSnapshot = { trip_state: { trip_context: { origin: 'Delhi', travelers: 2 } } };
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(screen.getByLabelText('What we know so far')).toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recommendationViewModel, safeRecommendationViewModel } from '../../../src/lib/recommendationViewModel.js';
+import { recommendationViewModel, safeRecommendationViewModel, rollupCounts, rollupSummary } from '../../../src/lib/recommendationViewModel.js';
 
 function response() {
   return {
@@ -65,5 +65,25 @@ describe('recommendationViewModel', () => {
     const result = safeRecommendationViewModel({ status: 'SUCCESS', traveler_criteria: [], options: [] });
     expect(result.data).toBeNull();
     expect(result.error).toMatch(/criteria/i);
+  });
+});
+
+describe('rollupCounts / rollupSummary (TWM-173)', () => {
+  const evaluations = [
+    { outcome: 'MATCH' }, { outcome: 'MATCH' }, { outcome: 'TRADEOFF' }, { outcome: 'MISMATCH' },
+  ];
+
+  it('counts each outcome without inventing a number the agent never declared', () => {
+    expect(rollupCounts(evaluations)).toEqual({ MATCH: 2, TRADEOFF: 1, MISMATCH: 1 });
+  });
+
+  it('summarizes only the outcomes actually present, correctly pluralized', () => {
+    expect(rollupSummary(evaluations)).toBe('2 matches · 1 trade-off · 1 mismatch');
+    expect(rollupSummary([{ outcome: 'MATCH' }])).toBe('1 match');
+  });
+
+  it('returns an empty summary for no evaluations', () => {
+    expect(rollupSummary([])).toBe('');
+    expect(rollupCounts([])).toEqual({ MATCH: 0, TRADEOFF: 0, MISMATCH: 0 });
   });
 });

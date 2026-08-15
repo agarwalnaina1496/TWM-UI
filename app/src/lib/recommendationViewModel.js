@@ -123,6 +123,30 @@ export function safeFailureOutcomeViewModel(payload) {
 
 // Dispatches a raw saved matcher_state.recommendations entry to the right
 // safe view model by its status, or reports it as invalid.
+// TWM-173: replaces totalPartyEstimate()'s fabricated cost total (the UI's
+// own comment called it a heuristic, "not a schema-guaranteed number") with
+// an honest count of what Meridian actually declared per criterion — no
+// number the agent didn't say.
+export function rollupCounts(evaluations) {
+  const counts = { MATCH: 0, TRADEOFF: 0, MISMATCH: 0 };
+  evaluations.forEach(ev => { if (counts[ev.outcome] !== undefined) counts[ev.outcome] += 1; });
+  return counts;
+}
+
+const ROLLUP_LABEL = {
+  MATCH: ['match', 'matches'],
+  TRADEOFF: ['trade-off', 'trade-offs'],
+  MISMATCH: ['mismatch', 'mismatches'],
+};
+
+export function rollupSummary(evaluations) {
+  const counts = rollupCounts(evaluations);
+  return ['MATCH', 'TRADEOFF', 'MISMATCH']
+    .filter(outcome => counts[outcome] > 0)
+    .map(outcome => `${counts[outcome]} ${ROLLUP_LABEL[outcome][counts[outcome] === 1 ? 0 : 1]}`)
+    .join(' · ');
+}
+
 export function safeMatcherOutcomeViewModel(payload, metadataByOption = {}) {
   if (isObject(payload) && OPTION_STATUSES.has(payload.status)) {
     const result = safeRecommendationViewModel(payload, metadataByOption);

@@ -7,9 +7,10 @@ import ScoutChat from '../../../src/pages/ScoutChat.jsx';
 const navigate = vi.fn();
 let commandSnapshot;
 let sendTripCommand;
+let tripLoadStatus;
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus }),
 }));
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
@@ -30,6 +31,7 @@ describe('ScoutChat advice-entry chat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     commandSnapshot = null;
+    tripLoadStatus = 'ready';
   });
 
   it('routes to the unified Plan Builder once a Guide-owned turn generates a complete plan, without throwing', async () => {
@@ -57,5 +59,65 @@ describe('ScoutChat advice-entry chat', () => {
     await user.type(input, 'Plan a Coorg trip{Enter}');
     expect(await screen.findByText('And roughly what budget?')).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    commandSnapshot = null;
+    tripLoadStatus = 'ready';
+  });
+
+  it('shows the cold-open greeting for a trip with no saved context yet', () => {
+    commandSnapshot = { trip_state: {} };
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.getByText(/Hey there! I'm Scout/)).toBeInTheDocument();
+  });
+
+  it('shows a recap turn instead of the cold-open greeting once real trip_context is already saved', () => {
+    commandSnapshot = { trip_state: { trip_context: { origin: 'Delhi', travelers: 2 } } };
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.queryByText(/Hey there! I'm Scout/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Picking up where you left off/)).toBeInTheDocument();
+    expect(screen.getByText(/From Delhi/)).toBeInTheDocument();
+  });
+
+  it('waits for the trip to finish loading before deciding which greeting to show', () => {
+    tripLoadStatus = 'loading';
+    commandSnapshot = { trip_state: { trip_context: { origin: 'Delhi' } } };
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.queryByText(/Hey there! I'm Scout/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Picking up where you left off/)).not.toBeInTheDocument();
+  });
+
+  it('shows the live facts panel for known trip_context fields', () => {
+    commandSnapshot = { trip_state: { trip_context: { origin: 'Delhi', travelers: 2 } } };
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.getByLabelText('What we know so far')).toBeInTheDocument();
+    expect(screen.getByText('Delhi')).toBeInTheDocument();
+  });
+
+  it('shows the hand-off note exactly once, on the real scout -> meridian transition', async () => {
+    commandSnapshot = { trip_state: { active_agent: 'scout', trip_context: { origin: 'Delhi' } } };
+    sendTripCommand = vi.fn(async () => ({
+      message: 'Here are some matches.',
+      trip: { trip_state: { active_agent: 'meridian', planner_state: null } },
+    }));
+    const { rerender } = render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.queryByText(/Bringing in Meridian/)).not.toBeInTheDocument();
+
+    // Simulate the trip snapshot updating to meridian ownership after a turn.
+    commandSnapshot = { trip_state: { active_agent: 'meridian', trip_context: { origin: 'Delhi' } } };
+    rerender(<MemoryRouter><ScoutChat /></MemoryRouter>);
+
+    expect(await screen.findByText(/Bringing in Meridian, who handles destination matching/)).toBeInTheDocument();
+    expect(sendTripCommand).not.toHaveBeenCalled();
+  });
+
+  it('shows no hand-off note when a trip loads already owned by meridian', () => {
+    commandSnapshot = { trip_state: { active_agent: 'meridian', trip_context: { origin: 'Delhi' } } };
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.queryByText(/Bringing in Meridian/)).not.toBeInTheDocument();
   });
 });
