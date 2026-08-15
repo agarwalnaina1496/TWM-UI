@@ -169,6 +169,10 @@ export default function TripPreview() {
   // Guide is still gating on trip context (the five fixed facts, or the
   // sixth "anything else?" question) — no places/day_plan yet. Ask here
   // instead of a separate screen; the plan appears the moment it's ready.
+  // TODO(TWM-174): once Plan chat gets its own dedicated screen (separate
+  // from Plan Builder), drop BackToTrip from this gating branch — the
+  // mockup's Plan-chat screens (06a/06c) have no back-link, only Plan
+  // Builder does.
   if (!planReady) {
     return (
       <main className="wrap plan-builder">
