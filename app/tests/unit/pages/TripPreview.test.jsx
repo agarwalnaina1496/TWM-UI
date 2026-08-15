@@ -51,7 +51,7 @@ describe('TripPreview real Guide Plan Builder', () => {
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Triveni Ghat')).toBeInTheDocument());
     expect(sendTripCommand).toHaveBeenCalledWith('start_planning');
-    expect(screen.getAllByRole('button', { name: /Finalize my trip/ })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /Approve this plan/ })).toHaveLength(1);
     expect(screen.queryByText(/Approve places|Approve itinerary/)).not.toBeInTheDocument();
   });
 
@@ -105,14 +105,28 @@ describe('TripPreview real Guide Plan Builder', () => {
   });
 
   it('asks Guide\'s pending gating question instead of the day plan when there is no plan yet', () => {
-    commandSnapshot = snapshotWith({ conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [], revision: 1 });
+    // No saved trip_context — a genuinely fresh gating conversation, not a
+    // refresh — so the generic filler shows, not a recap turn.
+    commandSnapshot = snapshotWith({ conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [], revision: 1 }, {});
     sendTripCommand = vi.fn();
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
     expect(screen.getByText(/Guide needs a bit more/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Finalize my trip/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Approve this plan/ })).not.toBeInTheDocument();
   });
 
-  it('finalizes the plan on Finalize my trip', async () => {
+  // TWM-174: Plan chat's refresh-recap variant, mirroring Discover's
+  // pattern — a refresh mid-gating-conversation must not read as a blank
+  // slate. No BackToTrip on this screen, matching Discover's entry-chat.
+  it('shows a recap turn instead of generic filler when trip_context already exists (refresh mid-conversation)', () => {
+    commandSnapshot = snapshotWith({ conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [], revision: 1 });
+    sendTripCommand = vi.fn();
+    render(<MemoryRouter><TripPreview /></MemoryRouter>);
+    expect(screen.getAllByText(/Picking up where you left off/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Rishikesh/).length).toBeGreaterThan(0);
+    expect(screen.queryByText('← Back to trip')).not.toBeInTheDocument();
+  });
+
+  it('finalizes the plan on Approve this plan', async () => {
     commandSnapshot = snapshotWith(readyPlannerState());
     sendTripCommand = vi.fn(async command => {
       if (command === 'approve_plan') {
@@ -125,7 +139,7 @@ describe('TripPreview real Guide Plan Builder', () => {
     });
     const user = userEvent.setup();
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
-    await user.click(screen.getByRole('button', { name: /Finalize my trip/ }));
+    await user.click(screen.getByRole('button', { name: /Approve this plan/ }));
     expect(sendTripCommand).toHaveBeenCalledWith('approve_plan');
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/dashboard', { replace: true }));
   });
@@ -180,5 +194,57 @@ describe('TripPreview real Guide Plan Builder', () => {
     const day2Row = day2Actions.closest('.day-card');
     expect(within(day2Row).getByRole('button', { name: 'Replace Lunch' })).toBeInTheDocument();
     expect(within(day2Row).queryByRole('textbox', { name: 'Replace Lunch with' })).not.toBeInTheDocument();
+  });
+
+  it('shows pace as a density meter and places as a numbered sequence', () => {
+    commandSnapshot = snapshotWith(readyPlannerState());
+    sendTripCommand = vi.fn();
+    render(<MemoryRouter><TripPreview /></MemoryRouter>);
+    expect(screen.getByRole('img', { name: 'Pace: relaxed' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Pace: balanced' })).toBeInTheDocument();
+    expect(screen.getByText('Triveni Ghat').closest('.place-name')).toHaveTextContent('1');
+    expect(screen.getByText('Ram Jhula').closest('.place-name')).toHaveTextContent('1'); // day 2's own place #1
+  });
+
+  describe('reopen_destination_discovery reversal link (TWM-174)', () => {
+    it('is present on the ready Plan Builder, low-key styled as a link not a button', () => {
+      commandSnapshot = snapshotWith(readyPlannerState());
+      sendTripCommand = vi.fn();
+      render(<MemoryRouter><TripPreview /></MemoryRouter>);
+      const link = screen.getByText(/Not the right destination\?/);
+      expect(link).toHaveClass('link-button');
+    });
+
+    it('shows the honest-transition screen while reversing, then navigates to Destinations once Guide reverses to Meridian', async () => {
+      commandSnapshot = snapshotWith(readyPlannerState());
+      let resolveCommand;
+      sendTripCommand = vi.fn(() => new Promise(resolve => { resolveCommand = resolve; }));
+      const user = userEvent.setup();
+      render(<MemoryRouter><TripPreview /></MemoryRouter>);
+      await user.click(screen.getByText(/Not the right destination\?/));
+
+      expect(screen.getByRole('status', { name: 'Finding new matches' })).toBeInTheDocument();
+      expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', { message: expect.stringContaining('change my destination') });
+
+      resolveCommand({
+        message: "Let's look at other destinations.",
+        trip: { trip_state: { active_agent: 'meridian', stage: 'matching' } },
+      });
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/destinations'));
+    });
+
+    it('shows Guide\'s clarifying question inline, without navigating, when Guide treats the request as ambiguous', async () => {
+      commandSnapshot = snapshotWith(readyPlannerState());
+      sendTripCommand = vi.fn(async () => ({
+        message: 'Do you want to adjust this trip, or pick a different destination?',
+        trip: { trip_state: { active_agent: 'guide', planner_state: readyPlannerState() } },
+      }));
+      const user = userEvent.setup();
+      render(<MemoryRouter><TripPreview /></MemoryRouter>);
+      await user.click(screen.getByText(/Not the right destination\?/));
+
+      expect(await screen.findByText('Do you want to adjust this trip, or pick a different destination?')).toBeInTheDocument();
+      expect(navigate).not.toHaveBeenCalledWith('/destinations');
+    });
   });
 });

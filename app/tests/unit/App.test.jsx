@@ -217,7 +217,7 @@ describe('App guest-first routing (TWM-140)', () => {
       // The unified Plan Builder (TripPreview), not the chat, now shows the
       // generated plan — the known-destination path never lands on /dashboard.
       expect(await screen.findByText('Coorg Palace')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Finalize my trip/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Approve this plan/ })).toBeInTheDocument();
     });
   });
 });

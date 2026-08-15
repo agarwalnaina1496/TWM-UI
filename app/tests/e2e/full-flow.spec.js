@@ -129,7 +129,7 @@ test('full flow: header nav entry through Dashboard', async ({ page }) => {
   // a single Finalize action freezes the plan.
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await expect(page.getByText('Abbey Falls')).toBeVisible();
-  await page.getByText('Finalize my trip →').click();
+  await page.getByText('Approve this plan →').click();
 
   // TWM-140: no Choose Plan interstitial — approve_plan navigates straight in.
   // TWM-97: the Dashboard itself triggers start_itinerary and renders the real result.
