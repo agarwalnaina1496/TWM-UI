@@ -55,11 +55,17 @@ export default function LoginModal() {
       if (mode === 'signup') {
         await signup(trimmedEmail, password);
         trackEvent('signup_completed');
+        // No auto-login (TWM-178) — clear the form and switch to the login
+        // form so the traveler logs in themselves with the account they
+        // just created, instead of silently signing them in.
+        setEmail('');
+        setPassword('');
+        setMode('login');
       } else {
         await login(trimmedEmail, password);
         trackEvent('login_completed');
+        closeLoginModal();
       }
-      closeLoginModal();
     } catch (err) {
       setError(err instanceof AuthApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {

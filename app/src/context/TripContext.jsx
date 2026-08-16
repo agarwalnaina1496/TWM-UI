@@ -4,7 +4,7 @@ import {
   renameTrip as renameTripApi, saveUiState as saveUiStateApi, sendTripCommand as sendTripCommandApi, TripApiError,
 } from '../lib/tripApi.js';
 import {
-  AuthApiError, fetchCurrentUser, login as loginApi, logout as logoutApi, signup as signupApi,
+  fetchCurrentUser, login as loginApi, logout as logoutApi, signup as signupApi,
 } from '../lib/authApi.js';
 
 const TripContext = createContext(null);
@@ -344,28 +344,14 @@ export function TripProvider({ children }) {
     setTrip(DEFAULT_TRIP);
   }
 
-  // Signup does not auto-login server-side (TWM-178: a deliberate separate
-  // step, matching this form's own two-step signup→login shape) — chaining
-  // an explicit login here with the same credentials is what actually logs
-  // the traveler in per this story's own acceptance criteria. Any guest
-  // trips get reassigned during the signup call itself (TWM-179), so the
-  // claim count comes from that first response — the login call that
-  // follows finds nothing left to claim and correctly reports 0.
+  // Signup does not auto-login (TWM-178: a deliberate separate step) — the
+  // traveler logs in themselves afterward via the explicit login form.
+  // Guest trips already get reassigned during this signup call itself
+  // (TWM-179), so the claim notice is driven by this response, not a
+  // follow-up login.
   async function signup(email, password) {
     const signupResult = await signupApi(email, password);
-    let loginResult;
-    try {
-      loginResult = await loginApi(email, password);
-    } catch {
-      // The account was created — only the follow-up login failed (e.g. a
-      // network blip). A generic error here would wrongly read as "signup
-      // didn't work," so this tells the traveler their account is real and
-      // to just log in, rather than retry signup into a duplicate-email 409.
-      throw new AuthApiError('Your account was created, but logging you in failed. Please log in.');
-    }
-    setAuth(authFromUser(loginResult));
     if (signupResult.claimed_trip_count > 0) setClaimNotice({ count: signupResult.claimed_trip_count });
-    await loadTripsNow().catch(() => {});
     return signupResult;
   }
 

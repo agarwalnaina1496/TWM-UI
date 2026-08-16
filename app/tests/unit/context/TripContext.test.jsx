@@ -56,20 +56,45 @@ describe('TripContext auth state', () => {
     expect(result.current.auth.loggedIn).toBe(false);
   });
 
-  it('signup gives a distinct error when the account was created but the follow-up login fails', async () => {
+  it('signup does not auto-login — auth stays guest and no login call is made', async () => {
     global.fetch = vi.fn((url) => {
       if (url === '/api/auth/me') return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
       if (url === '/api/auth/signup') return Promise.resolve(jsonResponse({ id: 'u1', email: 't@example.com', claimed_trip_count: 0 }, { status: 201 }));
-      if (url === '/api/auth/login') return Promise.resolve(jsonResponse({ detail: 'Server error.' }, { status: 500 }));
+      if (url === '/api/auth/login') throw new Error('signup must not call /api/auth/login');
+      return Promise.resolve(jsonResponse({ trips: [] }));
+    });
+    const { result } = renderHook(() => useTrip(), { wrapper });
+
+    let signupResult;
+    await act(async () => { signupResult = await result.current.signup('t@example.com', 'hunter22!!'); });
+
+    expect(signupResult.email).toBe('t@example.com');
+    expect(result.current.auth).toEqual({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+  });
+
+  it('signup surfaces the real error on a duplicate email', async () => {
+    global.fetch = vi.fn((url) => {
+      if (url === '/api/auth/me') return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
+      if (url === '/api/auth/signup') return Promise.resolve(jsonResponse({ detail: 'Email is already registered.' }, { status: 409 }));
       return Promise.resolve(jsonResponse({ trips: [] }));
     });
     const { result } = renderHook(() => useTrip(), { wrapper });
 
     await expect(act(async () => { await result.current.signup('t@example.com', 'hunter22!!'); }))
-      .rejects.toThrow('Your account was created, but logging you in failed. Please log in.');
-    // Auth wasn't set from the failed login — but the account genuinely
-    // exists server-side, which is the whole point of the distinct message.
-    expect(result.current.auth.loggedIn).toBe(false);
+      .rejects.toThrow('Email is already registered.');
+  });
+
+  it('signup sets a claim notice when trips were reassigned', async () => {
+    global.fetch = vi.fn((url) => {
+      if (url === '/api/auth/me') return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
+      if (url === '/api/auth/signup') return Promise.resolve(jsonResponse({ id: 'u1', email: 't@example.com', claimed_trip_count: 2 }, { status: 201 }));
+      return Promise.resolve(jsonResponse({ trips: [] }));
+    });
+    const { result } = renderHook(() => useTrip(), { wrapper });
+
+    await act(async () => { await result.current.signup('t@example.com', 'hunter22!!'); });
+
+    expect(result.current.claimNotice).toEqual({ count: 2 });
   });
 
   it('continueWithoutLogin sets isGuest true and loggedIn false', () => {
