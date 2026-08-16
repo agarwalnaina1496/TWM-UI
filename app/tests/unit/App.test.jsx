@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../../src/App.jsx';
 import { TripProvider } from '../../src/context/TripContext.jsx';
-import { SeedAuth } from './testUtils.js';
+import { SeedAuth, mockFetchWithGuestSession } from './testUtils.js';
 
 function renderApp(initialEntries, auth) {
   return render(
@@ -53,8 +53,7 @@ describe('App guest-first routing (TWM-140)', () => {
     let fetchMock;
 
     beforeEach(() => {
-      fetchMock = vi.fn();
-      global.fetch = fetchMock;
+      fetchMock = mockFetchWithGuestSession();
     });
 
     afterEach(() => {
@@ -116,8 +115,7 @@ describe('App guest-first routing (TWM-140)', () => {
     let fetchMock;
 
     beforeEach(() => {
-      fetchMock = vi.fn();
-      global.fetch = fetchMock;
+      fetchMock = mockFetchWithGuestSession();
     });
 
     afterEach(() => {
@@ -157,8 +155,7 @@ describe('App guest-first routing (TWM-140)', () => {
     let fetchMock;
 
     beforeEach(() => {
-      fetchMock = vi.fn();
-      global.fetch = fetchMock;
+      fetchMock = mockFetchWithGuestSession();
     });
 
     afterEach(() => {

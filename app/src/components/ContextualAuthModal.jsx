@@ -4,9 +4,12 @@ import '../styles/contextual-auth-modal.css';
 
 // Reusable contextual authentication invitation (TWM-140). Renders only when
 // a traveler requests a capability that benefits from an account — never as
-// an unsolicited interruption. Login opens only after "Log in and sync" is
-// explicitly chosen; dismiss/"Continue without login" keeps the traveler on
-// the originating screen with their anonymous trip state intact.
+// an unsolicited interruption. Login opens only after "Log in to save this
+// trip" is explicitly chosen; dismiss/"Continue without login" keeps the
+// traveler on the originating screen with their anonymous trip state intact.
+// Copy reframed from "sync across devices" toward "don't lose this trip"
+// (TWM-180) — trip recovery is the real, provable reason to log in today;
+// cross-device sync is a weaker, unbuilt claim.
 export default function ContextualAuthModal({ open, onClose, benefit, guestNote, onContinueWithoutLogin }) {
   const { openLoginModal } = useTrip();
   const dialogRef = useRef(null);
@@ -23,7 +26,7 @@ export default function ContextualAuthModal({ open, onClose, benefit, guestNote,
 
   if (!open) return null;
 
-  function handleLoginAndSync() {
+  function handleLoginToSave() {
     onClose();
     openLoginModal();
   }
@@ -47,7 +50,7 @@ export default function ContextualAuthModal({ open, onClose, benefit, guestNote,
         <h2 id="auth-invite-title">{benefit}</h2>
         {guestNote && <p className="auth-invite-note">{guestNote}</p>}
         <div className="auth-invite-actions">
-          <button type="button" className="btn btn-primary btn-full" onClick={handleLoginAndSync}>Log in and sync</button>
+          <button type="button" className="btn btn-primary btn-full" onClick={handleLoginToSave}>Log in to save this trip</button>
           <button type="button" className="btn btn-ghost btn-full" onClick={handleContinueWithoutLogin}>Continue without login</button>
         </div>
       </div>

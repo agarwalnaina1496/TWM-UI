@@ -1,13 +1,18 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useSearchParams } from 'react-router-dom';
 import Header from '../../../src/components/Header.jsx';
 import LoginModal from '../../../src/components/LoginModal.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
-import { SeedAuth } from '../testUtils.js';
+import { SeedAuth, mockFetchWithGuestSession } from '../testUtils.js';
 
 function renderHeader(auth) {
+  // TripProvider's own boot check (GET /auth/me) is authoritative and runs
+  // after SeedAuth's seed (child effects fire before parent effects) — mock
+  // it to agree with the seeded state, or it would overwrite the seed back
+  // to guest once it resolves.
+  mockFetchWithGuestSession({ authenticatedAs: auth?.loggedIn ? { id: 'u1', email: auth.email } : null });
   return render(
     <MemoryRouter>
       <TripProvider>
@@ -18,6 +23,7 @@ function renderHeader(auth) {
 }
 
 function renderHeaderWithLoginModal(initialEntries) {
+  mockFetchWithGuestSession();
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <TripProvider>
@@ -29,6 +35,7 @@ function renderHeaderWithLoginModal(initialEntries) {
 }
 
 function renderHeaderWithJourneyRoute() {
+  mockFetchWithGuestSession();
   return render(
     <MemoryRouter initialEntries={['/']}>
       <TripProvider>
@@ -50,6 +57,11 @@ function JourneyEntryProbe() {
 describe('Header', () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete global.fetch;
   });
 
   it('shows the brand link (home) and an explicit Log in for a fresh anonymous visitor', () => {

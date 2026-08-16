@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import DashboardHome from '../../../src/pages/DashboardHome.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
-import { SeedAuth } from '../testUtils.js';
+import { SeedAuth, mockFetchWithGuestSession } from '../testUtils.js';
 
 function jsonResponse(body, { status = 200 } = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -31,10 +31,15 @@ function renderDashboardHome(auth) {
 describe('DashboardHome (TWM-108/163)', () => {
   let fetchMock;
 
+  // TripProvider's own boot check (GET /auth/me) is authoritative and runs
+  // after SeedAuth's seed (child effects fire before parent effects) — mock
+  // it to agree with the seeded state, or it would overwrite the seed back
+  // to guest once it resolves. Most tests here are guest-scoped; the two
+  // logged-in tests re-create fetchMock with authenticatedAs before queuing
+  // their trips response.
   beforeEach(() => {
     localStorage.clear();
-    fetchMock = vi.fn();
-    global.fetch = fetchMock;
+    fetchMock = mockFetchWithGuestSession();
   });
 
   afterEach(() => {
@@ -83,6 +88,7 @@ describe('DashboardHome (TWM-108/163)', () => {
   });
 
   it('shows the View trip CTA for an itinerary-ready trip', async () => {
+    fetchMock = mockFetchWithGuestSession({ authenticatedAs: { id: 'u1', email: 't@example.com' } });
     fetchMock.mockResolvedValueOnce(jsonResponse({
       trips: [tripRecord({
         title: 'Manali', trip_state: { stage: 'planned', trip_context: { origin: 'Delhi' }, itinerary_state: { status: 'ready' } },
@@ -277,16 +283,17 @@ describe('DashboardHome (TWM-108/163)', () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    expect(await screen.findByText('Log in to sync across devices')).toBeInTheDocument();
+    expect(await screen.findByText("Log in so you don't lose this")).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('does not show the account-only history lock for a logged-in traveler', async () => {
+    fetchMock = mockFetchWithGuestSession({ authenticatedAs: { id: 'u1', email: 't@example.com' } });
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
     await screen.findByText('No trips yet');
-    expect(screen.queryByText('Log in to sync across devices')).not.toBeInTheDocument();
+    expect(screen.queryByText("Log in so you don't lose this")).not.toBeInTheDocument();
   });
 
   it('opens the contextual sync invitation only after an explicit click, never automatically', async () => {
@@ -295,9 +302,9 @@ describe('DashboardHome (TWM-108/163)', () => {
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('No trips yet');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByText('Log in to sync across devices'));
+    await userEvent.click(screen.getByText("Log in so you don't lose this"));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Log in to sync this trip across devices')).toBeInTheDocument();
+    expect(screen.getByText("Log in so you don't lose this trip")).toBeInTheDocument();
   });
 
   it('choosing Continue without login closes the modal but keeps the invitation visible for next time', async () => {
@@ -305,10 +312,10 @@ describe('DashboardHome (TWM-108/163)', () => {
       .mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     await screen.findByText('No trips yet');
-    await userEvent.click(screen.getByText('Log in to sync across devices'));
+    await userEvent.click(screen.getByText("Log in so you don't lose this"));
     await userEvent.click(screen.getByRole('button', { name: 'Continue without login' }));
     expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByText('Log in to sync across devices')).toBeInTheDocument();
+    expect(screen.getByText("Log in so you don't lose this")).toBeInTheDocument();
   });
 });

@@ -13,7 +13,7 @@ function Harness({ initialOpen = true, onContinueWithoutLogin }) {
         <ContextualAuthModal
           open={initialOpen}
           onClose={() => {}}
-          benefit="Log in to sync this trip across devices"
+          benefit="Log in so you don't lose this trip"
           guestNote="Your current trip stays available on this device either way."
           onContinueWithoutLogin={onContinueWithoutLogin}
         />
@@ -37,15 +37,15 @@ describe('ContextualAuthModal', () => {
     render(<Harness />);
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveAttribute('aria-modal', 'true');
-    expect(screen.getByText('Log in to sync this trip across devices')).toBeInTheDocument();
+    expect(screen.getByText("Log in so you don't lose this trip")).toBeInTheDocument();
     expect(screen.getByText(/stays available on this device either way/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Log in and sync' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Log in to save this trip' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue without login' })).toBeInTheDocument();
   });
 
-  it('"Log in and sync" closes this modal and opens the login overlay in its place', async () => {
+  it('"Log in to save this trip" closes this modal and opens the login overlay in its place', async () => {
     render(<Harness />);
-    await userEvent.click(screen.getByRole('button', { name: 'Log in and sync' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Log in to save this trip' }));
     expect(screen.getByRole('heading', { name: /log in to continue/i })).toBeInTheDocument();
   });
 
@@ -59,6 +59,6 @@ describe('ContextualAuthModal', () => {
 
   it('focuses the first action button on open for keyboard accessibility', () => {
     render(<Harness />);
-    expect(screen.getByRole('button', { name: 'Log in and sync' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Log in to save this trip' })).toHaveFocus();
   });
 });

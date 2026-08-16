@@ -250,7 +250,7 @@ export default function DashboardHome() {
         ) : (
           <span className="account-status">
             You're browsing as a guest.<br />
-            <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in to sync across devices</span>
+            <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in so you don't lose this</span>
           </span>
         )}
       </div>
@@ -258,7 +258,7 @@ export default function DashboardHome() {
       <ContextualAuthModal
         open={syncInviteOpen}
         onClose={() => setSyncInviteOpen(false)}
-        benefit="Log in to sync this trip across devices"
+        benefit="Log in so you don't lose this trip"
         guestNote="Your current trip stays available on this device either way."
       />
 

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import Destinations from '../../../src/pages/Destinations.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
+import { wrapFetchMockWithGuestSession } from '../testUtils.js';
 
 function jsonResponse(body, { status = 200 } = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -109,7 +110,7 @@ describe('Destinations (real Meridian integration)', () => {
 
   it('shows an honest step-by-step transition while the trip loads (TWM-173)', () => {
     fetchMock = vi.fn(() => new Promise(() => {}));
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
     expect(screen.getByRole('status', { name: 'Finding your matches' })).toBeInTheDocument();
   });
@@ -122,7 +123,7 @@ describe('Destinations (real Meridian integration)', () => {
       return jsonResponse({ message: null, agent_meta: null, trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} } });
     });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
 
     renderDestinations();
 
@@ -136,7 +137,7 @@ describe('Destinations (real Meridian integration)', () => {
   it('renders a real SUCCESS result already saved on the trip without re-triggering matching', async () => {
     const server = createServer({ recommendation: successOutcome() });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
@@ -150,7 +151,7 @@ describe('Destinations (real Meridian integration)', () => {
   it('shows the exact persisted budget/origin/traveler recap, not a generic bucketed label', async () => {
     const server = createServer({ recommendation: successOutcome() });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
@@ -174,7 +175,7 @@ describe('Destinations (real Meridian integration)', () => {
     });
     const server = createServer({ recommendation: softFail });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getAllByText('Pondicherry')[0]).toBeInTheDocument());
@@ -197,7 +198,7 @@ describe('Destinations (real Meridian integration)', () => {
       return jsonResponse({ message: 'Here is an option within the new budget.', agent_meta: null, trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} } });
     });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
 
     renderDestinations();
 
@@ -227,7 +228,7 @@ describe('Destinations (real Meridian integration)', () => {
       return jsonResponse({ message: null, agent_meta: null, trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} } });
     });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
 
     renderDestinations();
 
@@ -246,7 +247,7 @@ describe('Destinations (real Meridian integration)', () => {
   it('fails closed on a malformed saved recommendation instead of partially rendering it', async () => {
     const server = createServer({ recommendation: { status: 'SUCCESS', message: 'x', traveler_criteria: [], options: [] } });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('Recommendations unavailable')).toBeInTheDocument());
@@ -270,7 +271,7 @@ describe('Destinations (real Meridian integration)', () => {
       },
     }));
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
 
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
@@ -298,7 +299,7 @@ describe('Destinations (real Meridian integration)', () => {
       });
     });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
 
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
@@ -333,7 +334,7 @@ describe('Destinations (real Meridian integration)', () => {
       },
     }));
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
 
     renderDestinations(['/destinations?next=none']);
     await waitFor(() => expect(screen.getByText('Plan this trip →')).toBeInTheDocument());
@@ -352,7 +353,7 @@ describe('Destinations (real Meridian integration)', () => {
       tripState: tripState({ trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2, travel_window: 'Dec–Jan' } }),
     });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
@@ -379,7 +380,7 @@ describe('Destinations (real Meridian integration)', () => {
     });
     const server = createServer({ recommendation: withAccessFact });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
@@ -397,7 +398,7 @@ describe('Destinations (real Meridian integration)', () => {
       }),
     });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
@@ -416,7 +417,7 @@ describe('Destinations (real Meridian integration)', () => {
       uiState: { 'destinations.focusedKey': 'gwalior-orchha-khajuraho-panna', 'destinations.evidenceOpen': true },
     });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
@@ -430,7 +431,7 @@ describe('Destinations (real Meridian integration)', () => {
       ui_state: { 'destinations.focusedKey': 'gwalior-orchha-khajuraho-panna', 'destinations.evidenceOpen': true },
     }));
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
 
@@ -455,7 +456,7 @@ describe('Destinations (real Meridian integration)', () => {
     server.queueCommand(() => { throw new TypeError('Network request failed'); });
     server.queueCommand(handler);
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
 
     renderDestinations();
 
@@ -473,7 +474,7 @@ describe('Destinations (real Meridian integration)', () => {
       return jsonResponse({ id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} });
     });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
 
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
@@ -499,7 +500,7 @@ describe('Destinations (real Meridian integration)', () => {
     });
     const server = createServer({ recommendation: withAdversarialText });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText(/A quiet hill town\./)).toBeInTheDocument());
@@ -529,7 +530,7 @@ describe('Destinations (real Meridian integration)', () => {
     const server = createServer({ recommendation: twoOptions });
     server.queueCommand(() => jsonResponse({ id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} }));
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getAllByText('Coorg')[0]).toBeInTheDocument());
@@ -549,7 +550,7 @@ describe('Destinations (real Meridian integration)', () => {
       trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
     }));
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
 
@@ -581,7 +582,7 @@ describe('Destinations (real Meridian integration)', () => {
       trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
     }));
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('What is your budget?')).toBeInTheDocument());
@@ -602,7 +603,7 @@ describe('Destinations (real Meridian integration)', () => {
     };
     const server = createServer({ recommendation: hardFail });
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('No option satisfies the stated hard requirements.')).toBeInTheDocument());
@@ -625,7 +626,7 @@ describe('Destinations (real Meridian integration)', () => {
       trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
     }));
     fetchMock = createFetchMock(server);
-    global.fetch = fetchMock;
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
 
@@ -660,7 +661,7 @@ describe('Destinations (real Meridian integration)', () => {
         },
       }));
       fetchMock = createFetchMock(server);
-      global.fetch = fetchMock;
+      global.fetch = wrapFetchMockWithGuestSession(fetchMock);
       renderDestinations();
       await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
 
@@ -689,7 +690,7 @@ describe('Destinations (real Meridian integration)', () => {
         },
       }));
       fetchMock = createFetchMock(server);
-      global.fetch = fetchMock;
+      global.fetch = wrapFetchMockWithGuestSession(fetchMock);
       renderDestinations();
       await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
 
@@ -724,7 +725,7 @@ describe('Destinations (real Meridian integration)', () => {
         },
       }));
       fetchMock = createFetchMock(server);
-      global.fetch = fetchMock;
+      global.fetch = wrapFetchMockWithGuestSession(fetchMock);
       renderDestinations();
       await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
 
@@ -751,7 +752,7 @@ describe('Destinations (real Meridian integration)', () => {
         }),
       });
       fetchMock = createFetchMock(server);
-      global.fetch = fetchMock;
+      global.fetch = wrapFetchMockWithGuestSession(fetchMock);
       renderDestinations();
       await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
 

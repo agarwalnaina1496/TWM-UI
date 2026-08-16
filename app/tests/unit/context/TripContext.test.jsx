@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { TripProvider, useTrip } from '../../../src/context/TripContext.jsx';
+import { mockFetchWithGuestSession } from '../testUtils.js';
 
 function wrapper({ children }) {
   return <TripProvider>{children}</TripProvider>;
@@ -11,8 +12,16 @@ function jsonResponse(body, { status = 200 } = {}) {
 }
 
 describe('TripContext auth state', () => {
+  let fetchMock;
+
   beforeEach(() => {
     localStorage.clear();
+    fetchMock = mockFetchWithGuestSession();
+    fetchMock.mockResolvedValue(jsonResponse({ trips: [] }));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('defaults to an anonymous guest with access (TWM-140 guest-first)', () => {
@@ -21,11 +30,30 @@ describe('TripContext auth state', () => {
     expect(result.current.hasAccess).toBe(true);
   });
 
-  it('login sets loggedIn true and isGuest false', () => {
+  it('login calls the real endpoint and sets loggedIn true / isGuest false from the response', async () => {
+    global.fetch = vi.fn((url) => {
+      if (url === '/api/auth/me') return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
+      if (url === '/api/auth/login') return Promise.resolve(jsonResponse({ id: 'u1', email: 't@example.com', claimed_trip_count: 0 }));
+      return Promise.resolve(jsonResponse({ trips: [] }));
+    });
     const { result } = renderHook(() => useTrip(), { wrapper });
-    act(() => result.current.login({ name: 'Traveler', email: 't@example.com' }));
-    expect(result.current.auth).toEqual({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
+
+    await act(async () => { await result.current.login('t@example.com', 'hunter22!!'); });
+
+    expect(result.current.auth).toEqual({ loggedIn: true, isGuest: false, name: 't@example.com', email: 't@example.com' });
     expect(result.current.hasAccess).toBe(true);
+  });
+
+  it('login rejects with the real error and leaves auth unchanged on wrong credentials', async () => {
+    global.fetch = vi.fn((url) => {
+      if (url === '/api/auth/me') return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
+      if (url === '/api/auth/login') return Promise.resolve(jsonResponse({ detail: 'Incorrect email or password.' }, { status: 401 }));
+      return Promise.resolve(jsonResponse({ trips: [] }));
+    });
+    const { result } = renderHook(() => useTrip(), { wrapper });
+
+    await expect(act(async () => { await result.current.login('t@example.com', 'wrong'); })).rejects.toThrow();
+    expect(result.current.auth.loggedIn).toBe(false);
   });
 
   it('continueWithoutLogin sets isGuest true and loggedIn false', () => {
@@ -35,10 +63,12 @@ describe('TripContext auth state', () => {
     expect(result.current.hasAccess).toBe(true);
   });
 
-  it('logout resets to the default anonymous-guest state, keeping access', () => {
+  it('logout calls the real endpoint and resets to the default anonymous-guest state, keeping access', async () => {
     const { result } = renderHook(() => useTrip(), { wrapper });
-    act(() => result.current.login({ name: 'Traveler', email: 't@example.com' }));
-    act(() => result.current.logout());
+    act(() => result.current.setAuthDirect({ loggedIn: true, isGuest: false, name: 't@example.com', email: 't@example.com' }));
+
+    await act(async () => { await result.current.logout(); });
+
     expect(result.current.auth).toEqual({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
     expect(result.current.hasAccess).toBe(true);
   });
@@ -52,7 +82,7 @@ describe('TripContext auth state', () => {
 
   it('keeps trip and auth in memory only — nothing survives a remount via localStorage', () => {
     const { result, unmount } = renderHook(() => useTrip(), { wrapper });
-    act(() => result.current.login({ name: 'Traveler', email: 't@example.com' }));
+    act(() => result.current.setAuthDirect({ loggedIn: true, isGuest: false, name: 't@example.com', email: 't@example.com' }));
     act(() => result.current.updateTrip({ destination: { type: 'single', name: 'Coorg', places: null } }));
     expect(localStorage.length).toBe(0);
     unmount();
@@ -78,8 +108,7 @@ describe('TripContext Backend-authoritative trip record', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    fetchMock = vi.fn();
-    global.fetch = fetchMock;
+    fetchMock = mockFetchWithGuestSession();
   });
 
   afterEach(() => {
@@ -200,8 +229,7 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    fetchMock = vi.fn();
-    global.fetch = fetchMock;
+    fetchMock = mockFetchWithGuestSession();
   });
 
   afterEach(() => {

@@ -3,6 +3,9 @@ import {
   createTrip, getTrip, listTrips, mergeCommandTripRecord, newIdempotencyKey, queueTripMutation,
   renameTrip as renameTripApi, saveUiState as saveUiStateApi, sendTripCommand as sendTripCommandApi, TripApiError,
 } from '../lib/tripApi.js';
+import {
+  fetchCurrentUser, login as loginApi, logout as logoutApi, signup as signupApi,
+} from '../lib/authApi.js';
 
 const TripContext = createContext(null);
 
@@ -38,6 +41,13 @@ const DEFAULT_TRIP = {
 // working session; login is an explicit upgrade, never a precondition.
 const DEFAULT_AUTH = { loggedIn: false, isGuest: true, name: 'Guest', email: '' };
 
+// Backend accounts have no separate display-name concept (TWM-178's User
+// model is email + password only) — `name` mirrors `email` for the
+// existing "Signed in as {name}" surfaces rather than inventing one.
+function authFromUser(user) {
+  return user ? { loggedIn: true, isGuest: false, name: user.email, email: user.email } : DEFAULT_AUTH;
+}
+
 export function TripProvider({ children }) {
   const [trip, setTrip] = useState(DEFAULT_TRIP);
   const [auth, setAuth] = useState(DEFAULT_AUTH);
@@ -58,6 +68,10 @@ export function TripProvider({ children }) {
   const [trips, setTrips] = useState([]);
   const [tripLoadStatus, setTripLoadStatus] = useState('idle'); // idle | loading | ready | error
   const [tripLoadError, setTripLoadError] = useState(null);
+  // One-time "your guest trips are now saved" moment (TWM-179/180) — set
+  // after a signup/login response that actually reassigned trips, cleared
+  // once the traveler dismisses it.
+  const [claimNotice, setClaimNotice] = useState(null);
   const ensureTripPromise = useRef(null);
   const bootPromiseRef = useRef(null);
   const tripRecordRef = useRef(null);
@@ -114,8 +128,25 @@ export function TripProvider({ children }) {
     return bootPromiseRef.current;
   }
 
+  // Real session check (TWM-180): a valid JWT cookie survives a refresh,
+  // so `auth` must be derived from the Backend, not reconstructed from
+  // nothing on every mount. Runs alongside the guest trip-list boot load,
+  // not blocking on it — an authenticated GET /trips already resolves by
+  // the JWT server-side regardless of which of these two finishes first.
+  async function checkSession() {
+    try {
+      const user = await fetchCurrentUser();
+      setAuth(authFromUser(user));
+    } catch {
+      // Infrastructure failure checking the session — fail closed to
+      // guest rather than claim a login that couldn't be confirmed.
+      setAuth(DEFAULT_AUTH);
+    }
+  }
+
   useEffect(() => {
     ensureBootStarted();
+    checkSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -313,16 +344,56 @@ export function TripProvider({ children }) {
     setTrip(DEFAULT_TRIP);
   }
 
-  function login({ name, email }) {
-    setAuth({ loggedIn: true, isGuest: false, name, email });
+  // Signup does not auto-login server-side (TWM-178: a deliberate separate
+  // step, matching this form's own two-step signup→login shape) — chaining
+  // an explicit login here with the same credentials is what actually logs
+  // the traveler in per this story's own acceptance criteria. Any guest
+  // trips get reassigned during the signup call itself (TWM-179), so the
+  // claim count comes from that first response — the login call that
+  // follows finds nothing left to claim and correctly reports 0.
+  async function signup(email, password) {
+    const signupResult = await signupApi(email, password);
+    const loginResult = await loginApi(email, password);
+    setAuth(authFromUser(loginResult));
+    if (signupResult.claimed_trip_count > 0) setClaimNotice({ count: signupResult.claimed_trip_count });
+    await loadTripsNow().catch(() => {});
+    return signupResult;
+  }
+
+  async function login(email, password) {
+    const result = await loginApi(email, password);
+    setAuth(authFromUser(result));
+    if (result.claimed_trip_count > 0) setClaimNotice({ count: result.claimed_trip_count });
+    await loadTripsNow().catch(() => {});
+    return result;
   }
 
   function continueWithoutLogin() {
-    setAuth({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    setAuth(DEFAULT_AUTH);
   }
 
-  function logout() {
-    setAuth(DEFAULT_AUTH);
+  // Clears the real session cookie server-side (TWM-180) — logging out no
+  // longer just resets in-memory state, so a subsequent refresh actually
+  // stays logged out instead of silently restoring via a still-valid cookie.
+  async function logout() {
+    try {
+      await logoutApi();
+    } finally {
+      setAuth(DEFAULT_AUTH);
+      await loadTripsNow().catch(() => {});
+    }
+  }
+
+  function dismissClaimNotice() {
+    setClaimNotice(null);
+  }
+
+  // Test-only: seeds `auth` directly, bypassing the real signup/login
+  // network calls entirely. Used by the test suite's SeedAuth fixture to
+  // establish a pre-authenticated session without mocking a full
+  // signup/login round trip — never called from product code.
+  function setAuthDirect(nextAuth) {
+    setAuth(nextAuth);
   }
 
   // Updates contact details without changing loggedIn/isGuest — used where a
@@ -335,8 +406,10 @@ export function TripProvider({ children }) {
 
   return (
     <TripContext.Provider value={{
-      trip, updateTrip, startNewTrip, auth, hasAccess, login, continueWithoutLogin, logout, setContact,
+      trip, updateTrip, startNewTrip, auth, hasAccess, signup, login, continueWithoutLogin, logout, setContact,
+      setAuthDirect,
       loginModalOpen, openLoginModal, closeLoginModal,
+      claimNotice, dismissClaimNotice,
       commandSnapshot, sendTripCommand,
       currentTripId: tripRecord?.id ?? null, tripLoadStatus, tripLoadError, retryTripLoad, renameCurrentTrip,
       trips, openTrip, renameTrip,
