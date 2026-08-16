@@ -564,6 +564,11 @@ export default function TripDashboard() {
   const transportAnchors = anchorsByType(anchors, 'transport');
   const stayAnchors = anchorsByType(anchors, 'stay');
   const activityAnchors = anchorsByType(anchors, 'activity');
+  // Matches by exact string equality against the anchor's stored `.label`
+  // (anchors have no stable id linking them back to a computed segment).
+  // Every call site below that builds a `label` for a segment/confirm form
+  // is part of this contract — changing that formatting without updating
+  // this matcher will silently reclassify real confirmed anchors as orphaned.
   const findAnchor = (typeAnchors, label) => typeAnchors.find(a => a.label === label);
   const transportLegList = transportLegs(days, bookingOrigin);
   const { bundle: roundTripBundle, rest: soloLegs } = bundleRoundTrip(transportLegList);
