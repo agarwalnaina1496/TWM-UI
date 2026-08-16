@@ -112,10 +112,10 @@ describe('LoginModal', () => {
     expect(screen.getByText('Sign up →')).toBeInTheDocument();
   });
 
-  it('submitting the signup form calls signup then login, and shows the claim-confirmation moment', async () => {
+  it('submitting the signup form clears the form, switches to login mode, and shows the claim-confirmation moment — no auto-login', async () => {
     fetchMock.mockImplementation((url) => {
       if (url === '/api/auth/signup') return Promise.resolve(jsonResponse(201, { id: 'u1', email: 'trav@example.com', claimed_trip_count: 1 }));
-      if (url === '/api/auth/login') return Promise.resolve(jsonResponse(200, { id: 'u1', email: 'trav@example.com', claimed_trip_count: 0 }));
+      if (url === '/api/auth/login') throw new Error('signup must not call /api/auth/login');
       return Promise.resolve(jsonResponse(200, { trips: [] }));
     });
     renderLoginModal();
@@ -125,10 +125,15 @@ describe('LoginModal', () => {
     await userEvent.type(screen.getByPlaceholderText('••••••••'), 'hunter22!!');
     await userEvent.click(screen.getByText('Sign up →'));
 
-    expect(await screen.findByText(/Auth: logged-in - trav@example.com/)).toBeInTheDocument();
+    expect(await screen.findByText('Your trip is now saved to your account.')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/signup', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({ method: 'POST' }));
-    expect(screen.getByText('Your trip is now saved to your account.')).toBeInTheDocument();
+    // Still guest — no auto-login — and the overlay stays open, now on the
+    // login form, with the fields cleared for the traveler to log in.
+    expect(screen.getByText(/Auth: guest - Guest/)).toBeInTheDocument();
+    expect(screen.getByText('Modal open: true')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /log in to continue/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('you@email.com')).toHaveValue('');
+    expect(screen.getByPlaceholderText('••••••••')).toHaveValue('');
   });
 
   it('shows the real error on a duplicate-email signup', async () => {
