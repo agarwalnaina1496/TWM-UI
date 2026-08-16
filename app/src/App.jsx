@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import LoginModal, { LoginRouteRedirect } from './components/LoginModal.jsx';
+import ClaimConfirmation from './components/ClaimConfirmation.jsx';
 import ScoutChat from './pages/ScoutChat.jsx';
 import Destinations from './pages/Destinations.jsx';
 import TripPreview from './pages/TripPreview.jsx';
@@ -30,6 +31,7 @@ export default function App() {
     <>
       <Header />
       <LoginModal />
+      <ClaimConfirmation />
       <Routes>
         <Route path="/login" element={<LoginRouteRedirect />} />
         <Route path="/" element={<DashboardHome />} />
