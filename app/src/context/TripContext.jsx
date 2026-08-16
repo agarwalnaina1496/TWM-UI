@@ -4,7 +4,7 @@ import {
   renameTrip as renameTripApi, saveUiState as saveUiStateApi, sendTripCommand as sendTripCommandApi, TripApiError,
 } from '../lib/tripApi.js';
 import {
-  fetchCurrentUser, login as loginApi, logout as logoutApi, signup as signupApi,
+  AuthApiError, fetchCurrentUser, login as loginApi, logout as logoutApi, signup as signupApi,
 } from '../lib/authApi.js';
 
 const TripContext = createContext(null);
@@ -353,7 +353,16 @@ export function TripProvider({ children }) {
   // follows finds nothing left to claim and correctly reports 0.
   async function signup(email, password) {
     const signupResult = await signupApi(email, password);
-    const loginResult = await loginApi(email, password);
+    let loginResult;
+    try {
+      loginResult = await loginApi(email, password);
+    } catch {
+      // The account was created — only the follow-up login failed (e.g. a
+      // network blip). A generic error here would wrongly read as "signup
+      // didn't work," so this tells the traveler their account is real and
+      // to just log in, rather than retry signup into a duplicate-email 409.
+      throw new AuthApiError('Your account was created, but logging you in failed. Please log in.');
+    }
     setAuth(authFromUser(loginResult));
     if (signupResult.claimed_trip_count > 0) setClaimNotice({ count: signupResult.claimed_trip_count });
     await loadTripsNow().catch(() => {});

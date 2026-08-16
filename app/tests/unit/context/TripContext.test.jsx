@@ -56,6 +56,22 @@ describe('TripContext auth state', () => {
     expect(result.current.auth.loggedIn).toBe(false);
   });
 
+  it('signup gives a distinct error when the account was created but the follow-up login fails', async () => {
+    global.fetch = vi.fn((url) => {
+      if (url === '/api/auth/me') return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
+      if (url === '/api/auth/signup') return Promise.resolve(jsonResponse({ id: 'u1', email: 't@example.com', claimed_trip_count: 0 }, { status: 201 }));
+      if (url === '/api/auth/login') return Promise.resolve(jsonResponse({ detail: 'Server error.' }, { status: 500 }));
+      return Promise.resolve(jsonResponse({ trips: [] }));
+    });
+    const { result } = renderHook(() => useTrip(), { wrapper });
+
+    await expect(act(async () => { await result.current.signup('t@example.com', 'hunter22!!'); }))
+      .rejects.toThrow('Your account was created, but logging you in failed. Please log in.');
+    // Auth wasn't set from the failed login — but the account genuinely
+    // exists server-side, which is the whole point of the distinct message.
+    expect(result.current.auth.loggedIn).toBe(false);
+  });
+
   it('continueWithoutLogin sets isGuest true and loggedIn false', () => {
     const { result } = renderHook(() => useTrip(), { wrapper });
     act(() => result.current.continueWithoutLogin());
