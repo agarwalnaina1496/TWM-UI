@@ -5,8 +5,8 @@ import LoginModal, { LoginRouteRedirect } from './components/LoginModal.jsx';
 import ScoutChat from './pages/ScoutChat.jsx';
 import Destinations from './pages/Destinations.jsx';
 import TripPreview from './pages/TripPreview.jsx';
-import Logistics from './pages/Logistics.jsx';
 import RequestQuote from './pages/RequestQuote.jsx';
+import Support from './pages/Support.jsx';
 import DashboardHome from './pages/DashboardHome.jsx';
 import JourneyEntry from './pages/JourneyEntry.jsx';
 import TripDashboard from './pages/TripDashboard.jsx';
@@ -42,8 +42,8 @@ export default function App() {
         <Route path="/journey-entry" element={<JourneyEntry key={location.search} />} />
         <Route path="/destinations" element={<Destinations />} />
         <Route path="/trip-preview" element={<TripPreview />} />
-        <Route path="/logistics" element={<Logistics />} />
         <Route path="/request-quote" element={<RequestQuote />} />
+        <Route path="/support" element={<Support />} />
         <Route path="/dashboard" element={<TripDashboard />} />
         <Route path="/my-trips" element={<DashboardHome />} />
       </Routes>

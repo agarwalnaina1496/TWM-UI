@@ -52,12 +52,21 @@
 .support-label{display:block;font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ts);margin-bottom:8px}
 .support-box p{margin:0 0 16px;font-size:14px;line-height:1.6;color:var(--ts);max-width:70ch}
 
-.booking-help-box{display:flex;justify-content:space-between;align-items:center;gap:16px;background:var(--tp);color:#fff;border-radius:16px;padding:24px 26px;margin:20px 0}
-.booking-help-box h3{font-family:'Fraunces',serif;font-size:19px;margin:0 0 6px;color:#fff}
-.booking-help-box p{margin:0;font-size:13.5px;line-height:1.5;color:#d8d3c9;max-width:44ch}
-.btn-amber{background:var(--accent);color:#fff;white-space:nowrap}
-.btn-amber:hover{background:var(--accent-deep,#7c4527)}
-@media(max-width:700px){.booking-help-box{flex-direction:column;align-items:flex-start}.btn-amber{width:100%}}
+/* TWM-176: Self-Led FAQ — no TWM-Led upsell language here. */
+.support-faq{margin:20px 0;border:1px solid var(--border);border-radius:16px;padding:6px 22px}
+.support-faq h3{font-family:'Fraunces',serif;font-size:15px;font-weight:600;margin:16px 0 4px}
+.support-faq details{padding:12px 0;border-bottom:1px solid var(--border)}
+.support-faq details:last-child{border-bottom:0}
+.support-faq summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--tp)}
+.support-faq p{margin:8px 0 0;font-size:13px;color:var(--ts);line-height:1.5}
+
+/* TWM-176: lean confirm-it-yourself form, reused across Transport/Stay/Activity. */
+.confirmation-form{display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin:12px 0}
+.confirmation-form label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:var(--ts)}
+.confirmation-form input,.confirmation-form select,.confirmation-form textarea{font:inherit;font-size:13.5px;border:1px solid var(--border);border-radius:9px;padding:9px 11px;background:var(--bg);color:var(--tp)}
+.confirmation-form textarea{min-height:60px;resize:vertical}
+.confirm-error{color:var(--tone-negative);font-size:12.5px;margin:0}
+.confirmation-form-actions{display:flex;justify-content:flex-end;gap:8px}
 
 /* ===== Overview stat tiles ===== */
 

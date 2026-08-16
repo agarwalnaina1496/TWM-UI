@@ -24,6 +24,12 @@
 }
 .back-to-trip:hover{color:var(--tp);}
 
+/* TWM-174: shared low-key inline text-button — Plan Builder's reversal link
+   and TWM-176's "Add a confirmation" links both use this. */
+.link-button{all:unset;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--tm);}
+.link-button:hover{color:var(--ts);text-decoration:underline;}
+.link-button:disabled{cursor:not-allowed;opacity:.6;}
+
 /* TWM-173: honest step-by-step transition, replacing generic "thinking…" spinners. */
 .honest-transition{margin:60px 0;display:flex;justify-content:center;}
 .honest-transition-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}

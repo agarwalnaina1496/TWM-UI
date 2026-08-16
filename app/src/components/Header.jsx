@@ -46,6 +46,9 @@ export default function Header() {
           <span className="nav-tab" onClick={handleDiscover}>Discover Destination</span>
         </nav>
         <div className="header-nav-group">
+          {/* TWM-176: minimal, trip-independent Support link — account-level
+              issues shouldn't require an open trip to reach help. */}
+          <Link className="nav-tab" to="/support">Support</Link>
           {auth.loggedIn
             ? <span className="logout-link" onClick={handleLogout}>Log out</span>
             : <span className="login-link" onClick={handleLogin}>Log in</span>}
