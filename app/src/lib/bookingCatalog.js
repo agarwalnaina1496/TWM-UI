@@ -1,12 +1,17 @@
 import { routeStops } from './atlasView.js';
+import { resolveTrustedAction, getTripFeasibility } from './tripApi.js';
 
-// TWM-176: booking mock data built directly against the real Atlas schema
-// shape (primary_location, day_number, timeline, kind, requires_advance_booking)
-// — deliberately NOT reusing mockAtlasTrip.js's structurally different shape
-// (cost_inr, base, number, items). Search/ranking/reasoning here are
-// permanent; only the terminal action (external "Check ↗" today vs. "Book &
-// pay" once TWM-143/live inventory lands) changes later — no rework needed
-// at that transition.
+// TWM-176/TWM-132: booking data built directly against the real Atlas
+// schema shape (primary_location, day_number, timeline, kind,
+// requires_advance_booking) — deliberately NOT reusing mockAtlasTrip.js's
+// structurally different shape (cost_inr, base, number, items).
+// Search/ranking/reasoning here (transportLegs/bundleRoundTrip/stayLegs) are
+// permanent, pure route-derivation from Atlas days with no Backend
+// dependency. TWM-132 is the transition promised in the old header comment:
+// the terminal action (transportOptionsFor/feasibleTransportOptions/
+// stayOptionsFor) now calls the real TWM-130/TWM-131 trusted-action and
+// feasibility endpoints instead of returning mock MODE_TEMPLATE bands and a
+// Google search URL — so every one of these is now async.
 
 export const MODES = ['flight', 'train', 'bus', 'drive'];
 const MODE_LABEL = { flight: 'Flight', train: 'Train', bus: 'Bus', drive: 'Drive' };
@@ -14,44 +19,134 @@ export function modeLabel(mode) {
   return MODE_LABEL[mode] || mode;
 }
 
-// Illustrative placeholder bands per mode — not derived from any real
-// distance/route calculation. Replaced wholesale once TWM-143 lands.
-const MODE_TEMPLATE = {
-  flight: { durationHours: 2, priceLow: 6000, priceHigh: 12000 },
-  train: { durationHours: 6, priceLow: 1200, priceHigh: 3000 },
-  bus: { durationHours: 14, priceLow: 800, priceHigh: 1800 },
-  drive: { durationHours: 5, priceLow: 3000, priceHigh: 6000 },
-};
+// twm/schemas/trusted_action.py's TrustedActionDomain is only
+// flight/train/bus/stay — "drive has no action of any kind" (its
+// feasibility is purely computed distance/routing, never a partner
+// handoff, per that schema's own docstring). Modes with no domain here are
+// feasibility-only: never a trusted-action network call, never a CTA.
+const DOMAIN_FOR_MODE = { flight: 'flight', train: 'train', bus: 'bus' };
 
-function searchUrl(query) {
-  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+// Judgement call (TWM-132, documented per the story's instruction to
+// "render whichever the API actually returns rather than assuming one
+// path"): requesting action_type=CHECK_PRICES for domain=flight always
+// resolves to internal_capability: "flight_search" (twm/services/
+// trusted_action/service.py's CHECK_PRICES branch never attaches an
+// external target) — and the live flight-offer UI that capability points at
+// (TWM-146) is explicitly out of scope for this story, not started. Rather
+// than surface a dead-end CTA today, this module requests
+// action_type=SEARCH_REDIRECT for flight too (ixigo), which the backend
+// contract already documents as flight's "second, alternative option" —
+// giving the flight card a real, working link now. Once TWM-146 ships,
+// flight's request here should switch to CHECK_PRICES as its primary path
+// (with SEARCH_REDIRECT alongside it), per the contract's own framing.
+const ACTION_TYPE_FOR_MODE = { flight: 'SEARCH_REDIRECT', train: 'SEARCH_REDIRECT', bus: 'SEARCH_REDIRECT' };
+
+// Resolves one mode's trusted action into the shape TransportOptionCard
+// consumes. Every backend outcome (resolved / missing_input /
+// unsupported_partner / disabled, plus a network-error fallback) maps to a
+// `status`, so the card can render each safely instead of assuming
+// `resolved` — a hard requirement from TWM-130's status discriminator.
+async function resolveTransportOption(tripId, leg, mode) {
+  const name = `${modeLabel(mode)}: ${leg.from} → ${leg.to}`;
+  const domain = DOMAIN_FOR_MODE[mode];
+  if (!domain) {
+    // drive: feasibility-only, no trusted-action domain exists.
+    return { mode, name, status: 'no_action' };
+  }
+  try {
+    const result = await resolveTrustedAction(tripId, {
+      action_type: ACTION_TYPE_FOR_MODE[mode],
+      domain,
+      origin: leg.from,
+      destination: leg.to,
+    });
+    return toTransportOption(mode, name, result);
+  } catch (error) {
+    return { mode, name, status: 'error', errorMessage: error.message || 'Could not load this option.' };
+  }
 }
 
-export function transportOptionsFor(leg) {
-  return MODES.map(mode => ({
-    mode,
-    name: `${modeLabel(mode)}: ${leg.from} → ${leg.to}`,
-    ...MODE_TEMPLATE[mode],
-    url: searchUrl(`${leg.from} to ${leg.to} ${mode}`),
-  }));
+function toTransportOption(mode, name, result) {
+  if (result.status === 'resolved') {
+    const action = result.action;
+    return {
+      mode,
+      name,
+      status: 'resolved',
+      url: action.target?.target_url ?? null,
+      internalCapability: action.internal_capability ?? null,
+      affiliateDisclosure: !!action.affiliate_disclosure,
+    };
+  }
+  return { mode, name, status: result.status };
 }
 
-// Mode-filter: only feasible modes are returned at all — infeasible modes
-// are genuinely absent (in `excluded`, for the explanatory note), never
-// rendered faded. A long-haul mode (e.g. a >12h bus) isn't practical
-// against a short trip.
-export function feasibleTransportOptions(options, { tripDurationDays }) {
-  const ceilingHours = tripDurationDays <= 5 ? 12 : 24;
+// Async: resolves every mode's trusted action for one leg in parallel.
+// Called from TripDashboard.jsx inside a useEffect (not synchronously
+// during render — see the page's Bookings-tab loading/error state).
+export async function transportOptionsFor(tripId, leg) {
+  return Promise.all(MODES.map(mode => resolveTransportOption(tripId, leg, mode)));
+}
+
+// Fetches the real per-route TripFeasibilityAssessment (flight/train/bus/
+// drive) for a leg. May resolve to null — the Backend has no assessment for
+// this route yet — which callers must treat as "no feasibility data", not
+// an error.
+export async function fetchLegFeasibility(tripId, leg) {
+  return getTripFeasibility(tripId, { origin: leg.from, destination: leg.to });
+}
+
+// Merges the real TripFeasibilityAssessment onto each mode's resolved
+// option — duration/distance/reason now come straight from the Backend
+// (already computed there), never re-synthesized client-side. A mode with
+// status: ruled_out is genuinely excluded (in `excluded`, for the
+// explanatory note), never rendered faded. When no assessment exists yet,
+// every option is treated as feasible with no duration/reason attached.
+export function feasibleTransportOptions(options, feasibility) {
+  const modesByName = new Map((feasibility?.modes || []).map(entry => [entry.mode, entry]));
   const feasible = [];
   const excluded = [];
   for (const option of options) {
-    if (option.durationHours > ceilingHours) {
-      excluded.push({ ...option, reason: `${modeLabel(option.mode)} excluded — a ${option.durationHours}h journey isn't practical for a ${tripDurationDays}-day trip.` });
+    const modeFeasibility = modesByName.get(option.mode);
+    const enriched = modeFeasibility
+      ? {
+        ...option,
+        durationMinutes: modeFeasibility.estimated_duration_minutes,
+        distanceKm: modeFeasibility.estimated_distance_km,
+        reason: modeFeasibility.reason,
+        durationSource: modeFeasibility.duration_source,
+        verification: modeFeasibility.verification,
+        feasibilityStatus: modeFeasibility.status,
+      }
+      : option;
+    if (modeFeasibility?.status === 'ruled_out') {
+      excluded.push(enriched);
     } else {
-      feasible.push(option);
+      feasible.push(enriched);
     }
   }
   return { feasible, excluded };
+}
+
+// "Recommended mode" selection (TWM-132 — no explicit ranking rule was
+// specified in the Linear description beyond "clearly best" or "only one
+// feasible"). Judgement call, documented here: fixed priority order
+// flight > drive > train > bus among feasible modes — flight and drive are
+// Backend-computed (never an LLM estimate) and are generally the fastest
+// practical options for a multi-city trip; train/bus are only preferred
+// when neither faster mode is feasible. A mode only counts as
+// recommendable when it actually has something actionable to show (a
+// resolved trusted action, or drive's feasibility-only no_action state —
+// never a missing_input/unsupported_partner/disabled/error mode, which has
+// no safe CTA to recommend).
+const MODE_PRIORITY = ['flight', 'drive', 'train', 'bus'];
+export function recommendedMode(feasibleOptions) {
+  const actionable = (feasibleOptions || []).filter(option => option.status === 'resolved' || option.status === 'no_action');
+  for (const mode of MODE_PRIORITY) {
+    const found = actionable.find(option => option.mode === mode);
+    if (found) return found;
+  }
+  return null;
 }
 
 // Transport legs: consecutive primary_location changes across days, PLUS
@@ -88,18 +183,38 @@ export function stayLegs(days) {
   return routeStops(days).map(stop => ({ id: `stay-${stop.location}`, location: stop.location, nights: stop.dayNumbers.length }));
 }
 
-const STAY_TIERS = [
-  { fit: 'Value-oriented base', priceLow: 1500, priceHigh: 2500 },
-  { fit: 'Mid-range comfort', priceLow: 2800, priceHigh: 4200 },
-  { fit: 'Higher-budget option', priceLow: 5000, priceHigh: 9000 },
-];
+// Approved stay partners (twm/schemas/trusted_action.py's
+// _ALLOWED_PARTNERS_BY_DOMAIN["stay"]), capped to 3 so the Bookings tab
+// still shows a tiered comparison rather than every approved partner.
+const STAY_PARTNERS = ['hotellook', 'booking_com', 'agoda'];
+const PARTNER_LABEL = {
+  hotellook: 'Hotellook', booking_com: 'Booking.com', agoda: 'Agoda', hostelworld: 'Hostelworld', ixigo: 'ixigo',
+};
 
-export function stayOptionsFor(stay) {
-  return STAY_TIERS.map(tier => ({
-    name: `${stay.location} — ${tier.fit}`,
-    ...tier,
-    url: searchUrl(`hotels in ${stay.location}`),
-  }));
+async function resolveStayOption(tripId, stay, partner) {
+  const name = `${stay.location} — ${PARTNER_LABEL[partner] || partner}`;
+  try {
+    const result = await resolveTrustedAction(tripId, {
+      action_type: 'SEARCH_REDIRECT',
+      domain: 'stay',
+      destination: stay.location,
+      preferred_partner: partner,
+    });
+    if (result.status === 'resolved') {
+      const action = result.action;
+      return { name, status: 'resolved', url: action.target?.target_url ?? null, affiliateDisclosure: !!action.affiliate_disclosure };
+    }
+    return { name, status: result.status };
+  } catch (error) {
+    return { name, status: 'error', errorMessage: error.message || 'Could not load this option.' };
+  }
+}
+
+// Async: resolves the approved stay partners in parallel for one stay leg.
+// Called from TripDashboard.jsx inside a useEffect, mirroring
+// transportOptionsFor.
+export async function stayOptionsFor(tripId, stay) {
+  return Promise.all(STAY_PARTNERS.map(partner => resolveStayOption(tripId, stay, partner)));
 }
 
 // Activity bookings are never mock — only real Atlas-flagged items, the

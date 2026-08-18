@@ -122,10 +122,27 @@ function jsonResponse(body, { status = 200 } = {}) {
 let itineraryVersionsResponse;
 let itineraryFetchResponse;
 
+// TWM-132: a generic resolved SEARCH_REDIRECT action, reused as the default
+// trusted-action fixture across Bookings-tab tests that don't care about
+// the specific resolution outcome.
+function resolvedActionResponse({ affiliate = true } = {}) {
+  return {
+    status: 'resolved',
+    generated_at: '2026-01-01T00:00:00.000Z',
+    action: {
+      action_type: 'SEARCH_REDIRECT', domain: 'flight',
+      target: { partner: 'ixigo', path: 'search', query_params: {}, target_url: 'https://www.ixigo.com/search' },
+      internal_capability: null, affiliate_disclosure: affiliate, generated_at: '2026-01-01T00:00:00.000Z',
+    },
+  };
+}
+
 function defaultFetchMock() {
   return vi.fn(async (url) => {
     if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
     if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+    if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+    if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
     return jsonResponse({});
   });
 }
@@ -281,18 +298,68 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.getByText('Delhi ⇄ Rishikesh round trip')).toBeInTheDocument();
     });
 
-    it('expanding a segment shows mode-tagged options; an infeasible long-haul mode is genuinely absent, with an explanatory note', async () => {
+    it('expanding a segment shows mode-tagged options; an infeasible mode is genuinely absent, with the Backend-provided explanatory note', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
       sendTripCommand = vi.fn();
+      global.fetch = vi.fn(async url => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) {
+          return jsonResponse({
+            modes: [
+              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90 },
+              { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'bus', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'Bus excluded — a 14h journey is not practical for a 2-day trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.' },
+            ],
+          });
+        }
+        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        return jsonResponse({});
+      });
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
       await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
-      expect(screen.getAllByText(/Flight/).length).toBeGreaterThan(0);
-      // Fixture is a 2-day trip — Bus (14h template) is excluded as infeasible.
+      await waitFor(() => expect(screen.getAllByText(/Flight/).length).toBeGreaterThan(0));
+      // Bus is ruled_out per the mocked feasibility assessment — genuinely
+      // absent from the options grid, not just faded.
       expect(screen.queryByText(/^Bus:/)).not.toBeInTheDocument();
-      expect(screen.getByText(/Bus excluded/)).toBeInTheDocument();
+      expect(screen.getAllByText(/Bus excluded/).length).toBeGreaterThan(0);
+    });
+
+    it('shows a recommended-mode card and the "why other modes aren\'t shown" feasibility row, with a GENERAL_GUIDANCE tag for the llm_estimated train mode', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      global.fetch = vi.fn(async url => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) {
+          return jsonResponse({
+            modes: [
+              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90 },
+              { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'bus', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'Not practical for this trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.' },
+            ],
+          });
+        }
+        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+
+      await waitFor(() => expect(screen.getByLabelText('Recommended mode')).toBeInTheDocument());
+      expect(within(screen.getByLabelText('Recommended mode')).getByText('Fastest option.')).toBeInTheDocument();
+
+      await user.click(screen.getByText("Why other modes aren't shown"));
+      const disclosure = screen.getByText("Why other modes aren't shown").closest('details');
+      expect(within(disclosure).getByText('Not practical for this trip.')).toBeInTheDocument();
+      expect(within(disclosure).getAllByText('General guidance').length).toBeGreaterThan(0);
     });
 
     it('shows a specific "not booked yet" label per segment, never a bare generic one', async () => {
@@ -356,6 +423,34 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.getByRole('heading', { name: /Activity/ })).toBeInTheDocument();
       expect(screen.getByText(/the exception, not the norm/)).toBeInTheDocument();
       expect(screen.getByText('Rafting not booked yet')).toBeInTheDocument();
+    });
+
+    it('renders the affiliate disclosure line when the resolved trusted action carries it, never dropping it', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+      await waitFor(() => expect(screen.getAllByText(/This is an affiliate link/).length).toBeGreaterThan(0));
+    });
+
+    it('shows an inert note, no broken link, when a trusted action resolves to missing_input', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      global.fetch = vi.fn(async url => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+        if (url.includes('/trusted-action')) return jsonResponse({ status: 'missing_input', generated_at: '2026-01-01T00:00:00.000Z', missing_input: { missing_fields: ['origin'], message: 'Tell us the missing details.' } });
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+      await waitFor(() => expect(screen.getAllByText(/Flight/).length).toBeGreaterThan(0));
+      expect(document.querySelector('a[href*="ixigo"]')).toBeNull();
     });
 
     it('the confirm-it-yourself flow is reachable per segment, and submits a real confirm_logistics command', async () => {
