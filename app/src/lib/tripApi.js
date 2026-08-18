@@ -145,6 +145,18 @@ export async function getTripFeasibility(id, { origin, destination }) {
   return request(`/${id}/trusted-action/feasibility`, { method: 'POST', body: JSON.stringify({ origin, destination }) });
 }
 
+// TWM-146: explicit live flight search — POST /trips/{id}/flight-search.
+// Returns a FlightSearchResponse, status-discriminated
+// (clarification_needed/unavailable/offer/expired/partial/failed); the
+// caller must branch on `.status`, never assume `.offers` is populated.
+// Route/date/traveler fields on the payload are all optional at the schema
+// level (a vague/partial request is a typed clarification_needed outcome,
+// not a validation error) — see bookingCatalog.js's searchFlightOption for
+// how this repo currently populates (or honestly omits) each field.
+export async function searchFlights(id, payload) {
+  return request(`/${id}/flight-search`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
 export async function renameTrip(id, title, expectedVersion) {
   const saved = await request(`/${id}`, {
     method: 'PATCH',
