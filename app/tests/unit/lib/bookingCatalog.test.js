@@ -5,6 +5,15 @@ import {
   fetchLegFeasibility,
 } from '../../../src/lib/bookingCatalog.js';
 
+function flightSearchResponse(overrides = {}) {
+  return {
+    status: 'clarification_needed',
+    queried_at: '2026-01-01T00:00:00.000Z',
+    clarification: { missing_fields: ['origin', 'destination'], message: 'Tell us your route.' },
+    ...overrides,
+  };
+}
+
 function jsonResponse(body, { status = 200 } = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
@@ -33,6 +42,7 @@ beforeEach(() => {
   global.fetch = vi.fn(async url => {
     if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
     if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
+    if (url.includes('/flight-search')) return jsonResponse(flightSearchResponse());
     return jsonResponse({});
   });
 });
@@ -45,8 +55,8 @@ describe('transportLegs', () => {
       { day_number: 3, primary_location: 'Orchha' },
     ];
     const legs = transportLegs(days, 'Delhi');
-    expect(legs[0]).toEqual({ id: 'outbound-origin', from: 'Delhi', to: 'Gwalior' });
-    expect(legs[legs.length - 1]).toEqual({ id: 'return-origin', from: 'Orchha', to: 'Delhi' });
+    expect(legs[0]).toEqual({ id: 'outbound-origin', from: 'Delhi', to: 'Gwalior', departureDate: null });
+    expect(legs[legs.length - 1]).toEqual({ id: 'return-origin', from: 'Orchha', to: 'Delhi', departureDate: null });
     expect(legs).toHaveLength(3); // Delhi->Gwalior, Gwalior->Orchha, Orchha->Delhi
   });
 
@@ -57,6 +67,17 @@ describe('transportLegs', () => {
 
   it('is empty for no days', () => {
     expect(transportLegs([], 'Delhi')).toEqual([]);
+  });
+
+  it('threads through a real Atlas day.date when present, never fabricating one', () => {
+    const days = [
+      { day_number: 1, primary_location: 'Gwalior', date: '2026-03-01' },
+      { day_number: 2, primary_location: 'Orchha', date: '2026-03-02' },
+    ];
+    const legs = transportLegs(days, 'Delhi');
+    expect(legs[0].departureDate).toBe('2026-03-01'); // outbound: first stop's first date
+    expect(legs[1].departureDate).toBe('2026-03-02'); // inner leg: destination stop's first date
+    expect(legs[2].departureDate).toBe('2026-03-02'); // return: last stop's last date
   });
 });
 
@@ -115,6 +136,117 @@ describe('transportOptionsFor', () => {
     global.fetch = vi.fn(async () => { throw new Error('network down'); });
     const options = await transportOptionsFor('trip-1', leg);
     expect(options.find(o => o.mode === 'flight')).toMatchObject({ status: 'error' });
+  });
+});
+
+describe('flight live-offer resolution (TWM-146)', () => {
+  const leg = { from: 'Delhi', to: 'Gwalior', departureDate: '2026-03-01' };
+
+  function withFlightSearch(response) {
+    global.fetch = vi.fn(async url => {
+      if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+      if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
+      if (url.includes('/flight-search')) return jsonResponse(response);
+      return jsonResponse({});
+    });
+  }
+
+  it('still resolves the trusted-action CTA for flight (url/affiliateDisclosure unchanged)', async () => {
+    withFlightSearch(flightSearchResponse());
+    const options = await transportOptionsFor('trip-1', leg, 2);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight).toMatchObject({ status: 'resolved', url: 'https://www.ixigo.com/search?domain=flight', affiliateDisclosure: true });
+  });
+
+  it('maps status: offer to the recommended (is_recommended) offer as the primary liveOffer', async () => {
+    withFlightSearch(flightSearchResponse({
+      status: 'offer',
+      offers: [
+        { origin_iata: 'DEL', destination_iata: 'GWL', trip_type: 'one_way', departure_date: '2026-03-01', money: { currency: 'INR', per_traveler_amount_minor_units: 500000, traveler_count: 2, group_total_minor_units: 1000000, group_total_is_approximate: true }, baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'x' }, price_found_at: '2026-01-01T00:00:00.000Z', is_recommended: false, airline_code: '6E' },
+        { origin_iata: 'DEL', destination_iata: 'GWL', trip_type: 'one_way', departure_date: '2026-03-01', money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true }, baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'y' }, price_found_at: '2026-01-01T00:00:00.000Z', is_recommended: true, airline_name: 'IndiGo', stop_count: 0 },
+      ],
+    }));
+    const options = await transportOptionsFor('trip-1', leg, 2);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight.liveOffer).toMatchObject({ status: 'offer', priceLabel: 'approx. INR 8,000.00', airline: 'IndiGo', stopCount: 0 });
+  });
+
+  it('falls back to the first offer when none is flagged is_recommended (defensive, should not happen per contract)', async () => {
+    withFlightSearch(flightSearchResponse({
+      status: 'partial',
+      offers: [
+        { origin_iata: 'DEL', destination_iata: 'GWL', trip_type: 'one_way', departure_date: '2026-03-01', money: { currency: 'INR', per_traveler_amount_minor_units: 500000, traveler_count: 1, group_total_minor_units: 500000, group_total_is_approximate: true }, baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'x' }, price_found_at: '2026-01-01T00:00:00.000Z', is_recommended: false, airline_code: '6E' },
+      ],
+    }));
+    const options = await transportOptionsFor('trip-1', leg, 1);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight.liveOffer).toMatchObject({ status: 'partial', airline: '6E' });
+  });
+
+  it('renders a specific missing-field prompt for clarification_needed, not a generic error', async () => {
+    withFlightSearch(flightSearchResponse({ status: 'clarification_needed', clarification: { missing_fields: ['departure_date'], message: 'We need your exact departure date.' } }));
+    const options = await transportOptionsFor('trip-1', leg, 2);
+    expect(options.find(o => o.mode === 'flight').liveOffer).toMatchObject({ status: 'clarification_needed', message: 'We need your exact departure date.' });
+  });
+
+  it('renders the Backend-authored unavailable.message safely', async () => {
+    withFlightSearch(flightSearchResponse({ status: 'unavailable', clarification: undefined, unavailable: { code: 'provider_timeout', message: 'The flight provider timed out.' } }));
+    const options = await transportOptionsFor('trip-1', leg, 2);
+    expect(options.find(o => o.mode === 'flight').liveOffer).toMatchObject({ status: 'unavailable', message: 'The flight provider timed out.' });
+  });
+
+  it('renders expired/failed statuses safely with no raw data', async () => {
+    withFlightSearch(flightSearchResponse({ status: 'expired', clarification: undefined }));
+    let options = await transportOptionsFor('trip-1', leg, 2);
+    expect(options.find(o => o.mode === 'flight').liveOffer).toMatchObject({ status: 'expired' });
+
+    withFlightSearch(flightSearchResponse({ status: 'failed', clarification: undefined, failure: { code: 'internal_error', message: 'Something went wrong.' } }));
+    options = await transportOptionsFor('trip-1', leg, 2);
+    expect(options.find(o => o.mode === 'flight').liveOffer).toMatchObject({ status: 'failed' });
+  });
+
+  it('surfaces a flight-search network failure as liveOffer.status: failed without blocking the CTA', async () => {
+    global.fetch = vi.fn(async url => {
+      if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+      if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
+      if (url.includes('/flight-search')) throw new Error('flight search down');
+      return jsonResponse({});
+    });
+    const options = await transportOptionsFor('trip-1', leg, 2);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight.liveOffer).toMatchObject({ status: 'failed' });
+    expect(flight.status).toBe('resolved'); // CTA unaffected by the live-offer failure
+  });
+
+  it('resolves origin_iata/destination_iata for a known city pair via the closed CITY_IATA lookup', async () => {
+    let capturedBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+      if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
+      if (url.includes('/flight-search')) {
+        capturedBody = JSON.parse(options.body);
+        return jsonResponse(flightSearchResponse());
+      }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Kochi', departureDate: '2026-03-01' }, 2);
+    expect(capturedBody).toMatchObject({ origin_iata: 'BLR', destination_iata: 'COK' });
+  });
+
+  it('omits origin_iata/destination_iata for a city with no direct airport, rather than guessing a nearest one', async () => {
+    let capturedBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+      if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
+      if (url.includes('/flight-search')) {
+        capturedBody = JSON.parse(options.body);
+        return jsonResponse(flightSearchResponse({ status: 'clarification_needed', clarification: { missing_fields: ['origin', 'destination'], message: 'We need airport details.' } }));
+      }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Alleppey', departureDate: '2026-03-01' }, 2);
+    expect(capturedBody).not.toHaveProperty('destination_iata');
+    expect(capturedBody).toMatchObject({ origin_iata: 'BLR' });
   });
 });
 

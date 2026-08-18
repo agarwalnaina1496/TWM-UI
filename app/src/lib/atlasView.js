@@ -42,14 +42,20 @@ export function dayCostRange(day) {
 // Ordered, deduped (consecutive) list of route stops across all days, each
 // carrying the day numbers spent there — the real Atlas contract has no
 // coordinates, so the Map tab shows route order only, not a visual map.
+// dates (TWM-146): additive, non-breaking alongside dayNumbers — carries
+// each stop's real Atlas day.date when present (may be entirely absent, see
+// tripDatesLabel above), so a caller that needs an exact calendar date (the
+// flight-search payload) can read stops[i].dates[0] without re-deriving it,
+// while every existing dayNumbers-only consumer is unaffected.
 export function routeStops(days) {
   const stops = [];
   for (const day of days || []) {
     const last = stops[stops.length - 1];
     if (last && last.location === day.primary_location) {
       last.dayNumbers.push(day.day_number);
+      if (day.date) last.dates.push(day.date);
     } else {
-      stops.push({ location: day.primary_location, dayNumbers: [day.day_number] });
+      stops.push({ location: day.primary_location, dayNumbers: [day.day_number], dates: day.date ? [day.date] : [] });
     }
   }
   return stops;

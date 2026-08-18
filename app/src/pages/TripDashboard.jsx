@@ -8,7 +8,7 @@ import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary } from '../lib/tripApi.js';
 import {
   anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange,
-  verificationTone, trustStripCounts, bookingReadinessRollup,
+  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
 } from '../lib/atlasView.js';
 import {
   transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
@@ -270,8 +270,65 @@ function durationDistanceLabel(option) {
   return parts.join(' · ');
 }
 
+// TWM-146: "prices last checked X ago" freshness note — offer.price_found_at
+// is the provider's own cache timestamp (twm/schemas/flight_search.py), not
+// TWM's request time, so this is honestly "how old is this cached price",
+// not "how long ago did we search".
+function timeAgoLabel(isoTimestamp) {
+  if (!isoTimestamp) return null;
+  const ms = Date.now() - new Date(isoTimestamp).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+// TWM-146: the live-offer block — clearly a DIFFERENT thing from the CTA
+// below it (real Backend-searched price/airline/stops data, no url of its
+// own; see bookingCatalog.js's toLiveOffer/resolveFlightOption). Every
+// FlightSearchResponseStatus branch is rendered explicitly and safely —
+// clarification/unavailable/expired/failed never fall through to a blank
+// or misleading card.
+function FlightLiveOfferInfo({ liveOffer }) {
+  if (!liveOffer) return null;
+  if (liveOffer.status === 'offer' || liveOffer.status === 'partial') {
+    const freshness = timeAgoLabel(liveOffer.priceFoundAt);
+    return (
+      <div className="live-offer-block">
+        <StatusPill tone="positive" variant="filled">
+          {liveOffer.status === 'partial' ? 'Live offer (partial)' : 'Live offer'}
+        </StatusPill>
+        <strong className="live-offer-price">{liveOffer.priceLabel}</strong>
+        <span className="stay-option-tag">
+          {liveOffer.airline || 'Airline not disclosed'}
+          {liveOffer.stopCount != null && ` · ${liveOffer.stopCount === 0 ? 'Nonstop' : `${liveOffer.stopCount} stop${liveOffer.stopCount === 1 ? '' : 's'}`}`}
+        </span>
+        {freshness && <span className="stay-option-tag">Prices last checked {freshness}</span>}
+        {liveOffer.offerExpiresAt && <span className="stay-option-tag">Expires {new Date(liveOffer.offerExpiresAt).toLocaleString()}</span>}
+      </div>
+    );
+  }
+  if (liveOffer.status === 'clarification_needed') {
+    return <p className="already-booked-note">{liveOffer.message}</p>;
+  }
+  if (liveOffer.status === 'unavailable') {
+    return <p className="already-booked-note" role="alert">{liveOffer.message}</p>;
+  }
+  if (liveOffer.status === 'expired') {
+    return <p className="already-booked-note">This live price has expired — check again for a current one.</p>;
+  }
+  if (liveOffer.status === 'failed') {
+    return <p className="already-booked-note" role="alert">{liveOffer.message || 'Could not load live flight prices.'}</p>;
+  }
+  return null;
+}
+
 function TransportOptionCard({ option, best }) {
   const durationDistance = durationDistanceLabel(option);
+  const isFlight = option.mode === 'flight';
   return (
     <article className={`stay-option-card${best ? ' picked' : ''}`}>
       {best && <span className="pick-badge">Our pick</span>}
@@ -283,7 +340,15 @@ function TransportOptionCard({ option, best }) {
           {option.durationSource === 'llm_estimated' && <VerificationTag status={option.verification?.status} />}
         </span>
       )}
-      <TrustedActionCta option={option} label="Check ↗" best={best} />
+      {isFlight && <FlightLiveOfferInfo liveOffer={option.liveOffer} />}
+      {isFlight && (
+        <span className="stay-option-tag">
+          {option.liveOffer?.status === 'offer' || option.liveOffer?.status === 'partial'
+            ? 'External action — search elsewhere to book'
+            : 'Search elsewhere (no TWM-resolved price)'}
+        </span>
+      )}
+      <TrustedActionCta option={option} label={isFlight ? 'Search flights ↗' : 'Check ↗'} best={best} />
     </article>
   );
 }
@@ -495,13 +560,19 @@ export default function TripDashboard() {
     const { bundle, rest } = bundleRoundTrip(legs);
     const legsToFetch = [...(bundle ? [bundle.outbound] : []), ...rest];
     const stays = stayLegs(bookingDays);
+    // TWM-146: threaded through to flight's live-offer search so
+    // FlightSearchRequest.travelers is populated whenever Atlas has it,
+    // instead of always hitting clarification_needed for a field we
+    // actually know — see bookingCatalog.searchFlightOffer's comment for
+    // why departure_date/IATA still aren't threaded through today.
+    const partySize = travelerCount(itineraryResult.result.final_itinerary.trip_summary);
 
     let cancelled = false;
     (async () => {
       try {
         const transportEntries = await Promise.all(legsToFetch.map(async leg => {
           const [options, feasibility] = await Promise.all([
-            transportOptionsFor(tripId, leg),
+            transportOptionsFor(tripId, leg, partySize),
             fetchLegFeasibility(tripId, leg).catch(() => null),
           ]);
           return [legKey(leg), { options, feasibility }];

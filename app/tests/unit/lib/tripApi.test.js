@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createTrip, getTrip, listTrips, normalizeTripRecord, queueTripMutation, renameTrip, saveUiState, TripApiError,
-  resolveTrustedAction, getTripFeasibility,
+  resolveTrustedAction, getTripFeasibility, searchFlights,
 } from '../../../src/lib/tripApi.js';
 
 function jsonResponse(body, { status = 200 } = {}) {
@@ -140,5 +140,25 @@ describe('tripApi', () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(null));
     const result = await getTripFeasibility('trip-1', { origin: 'Delhi', destination: 'Goa' });
     expect(result).toBeNull();
+  });
+
+  // TWM-146: POST /trips/{id}/flight-search — mirrors resolveTrustedAction/
+  // getTripFeasibility's existing style.
+  it('searchFlights POSTs the payload to /trips/{id}/flight-search', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'clarification_needed', queried_at: '2026-01-01T00:00:00.000Z', clarification: { missing_fields: ['departure_date'], message: 'Tell us your dates.' } }));
+    const payload = { departure_date: '2026-03-01', travelers: { adults: 2 } };
+    const result = await searchFlights('trip-1', payload);
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/flight-search', expect.objectContaining({
+      method: 'POST', body: JSON.stringify(payload),
+    }));
+    expect(result.status).toBe('clarification_needed');
+  });
+
+  it('searchFlights surfaces an offer response with offers untouched', async () => {
+    const offer = { origin_iata: 'DEL', destination_iata: 'GOI', trip_type: 'one_way', departure_date: '2026-03-01', money: { currency: 'INR', per_traveler_amount_minor_units: 500000, traveler_count: 1, group_total_minor_units: 500000, group_total_is_approximate: true }, baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'x' }, price_found_at: '2026-01-01T00:00:00.000Z', is_recommended: true };
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'offer', queried_at: '2026-01-01T00:00:00.000Z', offers: [offer] }));
+    const result = await searchFlights('trip-1', {});
+    expect(result.offers).toHaveLength(1);
+    expect(result.offers[0].is_recommended).toBe(true);
   });
 });

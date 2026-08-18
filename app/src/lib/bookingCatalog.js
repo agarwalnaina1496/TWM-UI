@@ -1,5 +1,5 @@
 import { routeStops } from './atlasView.js';
-import { resolveTrustedAction, getTripFeasibility } from './tripApi.js';
+import { resolveTrustedAction, getTripFeasibility, searchFlights } from './tripApi.js';
 
 // TWM-176/TWM-132: booking data built directly against the real Atlas
 // schema shape (primary_location, day_number, timeline, kind,
@@ -12,6 +12,39 @@ import { resolveTrustedAction, getTripFeasibility } from './tripApi.js';
 // stayOptionsFor) now calls the real TWM-130/TWM-131 trusted-action and
 // feasibility endpoints instead of returning mock MODE_TEMPLATE bands and a
 // Google search URL — so every one of these is now async.
+
+// TWM-146 follow-up: a small, closed city-name -> IATA lookup, so
+// searchFlightOffer can actually populate origin_iata/destination_iata for
+// major Indian cities instead of always falling through to
+// clarification_needed. Deliberately scoped to cities that genuinely have
+// their own airport with a well-known IATA code -- a hill town or
+// non-airport destination (Alleppey, Coorg, Manali, Rishikesh, Spiti
+// Valley, etc.) is left unmapped on purpose: attaching a "nearest airport"
+// code would imply a direct-flight claim this app never actually makes, and
+// the honest outcome for those is the Backend's typed clarification_needed
+// (a traveler genuinely can't fly directly into a hill town). Case-
+// insensitive exact-name lookup only, not a geocoder.
+const CITY_IATA = {
+  'delhi': 'DEL', 'new delhi': 'DEL',
+  'agra': 'AGR',
+  'jaipur': 'JAI',
+  'mumbai': 'BOM',
+  'bengaluru': 'BLR', 'bangalore': 'BLR',
+  'kochi': 'COK', 'cochin': 'COK',
+  'goa': 'GOI', 'panaji': 'GOI',
+  'jaisalmer': 'JSA',
+  'udaipur': 'UDR',
+  'varanasi': 'VNS',
+  'chennai': 'MAA',
+  'kolkata': 'CCU',
+  'hyderabad': 'HYD',
+  'pune': 'PNQ',
+  'amritsar': 'ATQ',
+};
+
+function iataForCity(name) {
+  return CITY_IATA[(name || '').trim().toLowerCase()] || null;
+}
 
 export const MODES = ['flight', 'train', 'bus', 'drive'];
 const MODE_LABEL = { flight: 'Flight', train: 'Train', bus: 'Bus', drive: 'Drive' };
@@ -26,28 +59,164 @@ export function modeLabel(mode) {
 // feasibility-only: never a trusted-action network call, never a CTA.
 const DOMAIN_FOR_MODE = { flight: 'flight', train: 'train', bus: 'bus' };
 
-// Judgement call (TWM-132, documented per the story's instruction to
-// "render whichever the API actually returns rather than assuming one
-// path"): requesting action_type=CHECK_PRICES for domain=flight always
-// resolves to internal_capability: "flight_search" (twm/services/
-// trusted_action/service.py's CHECK_PRICES branch never attaches an
-// external target) — and the live flight-offer UI that capability points at
-// (TWM-146) is explicitly out of scope for this story, not started. Rather
-// than surface a dead-end CTA today, this module requests
-// action_type=SEARCH_REDIRECT for flight too (ixigo), which the backend
-// contract already documents as flight's "second, alternative option" —
-// giving the flight card a real, working link now. Once TWM-146 ships,
-// flight's request here should switch to CHECK_PRICES as its primary path
-// (with SEARCH_REDIRECT alongside it), per the contract's own framing.
+// TWM-146 update to the note this replaces: flight's live-offer *data*
+// (price/airline/stops/freshness) now comes from a real search
+// (searchFlightOffer/POST /trips/{id}/flight-search, twm/schemas/
+// flight_search.py's NormalizedFlightOffer), not from the trusted-action
+// resolve at all. But NormalizedFlightOffer deliberately carries no url
+// (twm/schemas/flight_search.py's FlightProviderProvenance docstring: "a
+// live offer never doubles as a booking-authority action object") — so the
+// flight card's actual clickable CTA still has to come from
+// resolveTrustedAction, exactly as before. This module still requests
+// action_type=SEARCH_REDIRECT (ixigo) for flight's CTA, per the backend
+// contract's own framing of SEARCH_REDIRECT as flight's alternative/
+// external-action path (CHECK_PRICES's internal_capability: "flight_search"
+// has no external target to link to — see trusted_action/service.py — so
+// switching the CTA request to CHECK_PRICES would only regress the CTA to a
+// dead link now that searchFlights already covers CHECK_PRICES's data
+// role). resolveFlightOption below fetches both concurrently and returns
+// them as clearly separated concerns on one option object: `liveOffer`
+// (search data, no url) and the existing resolved/url/affiliateDisclosure
+// fields (the CTA) — never merged into one ambiguous shape.
 const ACTION_TYPE_FOR_MODE = { flight: 'SEARCH_REDIRECT', train: 'SEARCH_REDIRECT', bus: 'SEARCH_REDIRECT' };
+
+// Missing-field copy for a typed clarification_needed outcome — never a
+// generic "error", always names what's actually absent
+// (FlightSearchClarification.missing_fields).
+const FLIGHT_MISSING_FIELD_LABEL = {
+  origin: 'a departure city',
+  destination: 'a destination airport',
+  departure_date: 'your exact departure date',
+  return_date: 'your return date',
+  travelers: 'traveler count',
+};
+
+function flightMissingFieldsLabel(missingFields) {
+  return (missingFields || []).map(field => FLIGHT_MISSING_FIELD_LABEL[field] || field).join(', ');
+}
+
+// FlightMoney.group_total_is_approximate is always true for the current
+// provider generation (twm/schemas/flight_search.py) — the "approx."
+// qualifier is a hard requirement, never dropped even when the field says
+// true every time today.
+function flightPriceLabel(money) {
+  const amount = (money.group_total_minor_units / 100).toLocaleString(undefined, {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+  return `${money.group_total_is_approximate ? 'approx. ' : ''}${money.currency} ${amount}`;
+}
+
+// Picks the Backend-ranked offer (NormalizedFlightOffer.is_recommended,
+// TWM-145's ranking) as the card's primary content; falls back to the first
+// offer defensively if none is flagged (should not happen per the backend
+// contract, but never crash the card on that assumption).
+function pickPrimaryOffer(offers) {
+  return offers.find(offer => offer.is_recommended) || offers[0];
+}
+
+// Maps a FlightSearchResponse (status-discriminated) into the shape
+// FlightLiveOfferCard renders — never conflated with AtlasReference
+// evidence or a qualified Atlas cost estimate (TWM-144's contract keeps
+// these structurally distinct; this mapping preserves that distinction by
+// construction, not by convention).
+function toLiveOffer(response) {
+  const status = response.status;
+  if ((status === 'offer' || status === 'partial') && response.offers?.length) {
+    const offer = pickPrimaryOffer(response.offers);
+    return {
+      status,
+      priceLabel: flightPriceLabel(offer.money),
+      airline: offer.airline_name || offer.airline_code || null,
+      stopCount: offer.stop_count ?? null,
+      priceFoundAt: offer.price_found_at,
+      offerExpiresAt: offer.offer_expires_at ?? null,
+    };
+  }
+  if (status === 'clarification_needed') {
+    return {
+      status,
+      message: response.clarification?.message || `We need ${flightMissingFieldsLabel(response.clarification?.missing_fields)} to search live flight prices.`,
+      missingFields: response.clarification?.missing_fields || [],
+    };
+  }
+  if (status === 'unavailable') {
+    return { status, message: response.unavailable?.message };
+  }
+  // expired / failed: render safely, never raw provider/error data.
+  return { status };
+}
+
+// Judgement call (TWM-146, documented per the story's instruction: "if
+// exact date/traveler-count data genuinely isn't available at the call
+// site today, that's fine"): transportLegs/routeStops (atlasView.js) now
+// pass through leg.departureDate straight from the real Atlas day.date
+// when the itinerary has per-day dates — but Atlas frequently only has a
+// travel-month/day-count window this early (see tripDatesLabel). Route is
+// resolved via CITY_IATA (above) for the closed set of major Indian cities
+// that genuinely have their own airport; leg.from/leg.to are otherwise
+// free-text city/location labels (e.g. "Home" or a primary_location
+// string) with no IATA code available, in which case origin_iata/
+// destination_iata are simply omitted — sending an unresolved or guessed
+// value would violate FlightSearchRequest's 3-letter IATA pattern or
+// misrepresent a hill town as having a direct flight. Rather than fabricate
+// an IATA code or a date, this function sends only what is genuinely known
+// — traveler count (from AtlasTripSummary.num_travelers), departure_date
+// when Atlas supplied one, and origin/destination IATA when CITY_IATA
+// resolves them — and lets the Backend's own typed clarification_needed
+// outcome (FlightSearchClarification) render honestly for whatever's still
+// missing. This is the "render the typed clarification_needed state
+// honestly" branch the story anticipated,
+// not a bug.
+async function searchFlightOffer(tripId, leg, travelerCount) {
+  const payload = {};
+  const originIata = iataForCity(leg.from);
+  const destinationIata = iataForCity(leg.to);
+  if (originIata) payload.origin_iata = originIata;
+  if (destinationIata) payload.destination_iata = destinationIata;
+  if (leg.departureDate) payload.departure_date = leg.departureDate;
+  if (travelerCount) payload.travelers = { adults: Math.max(1, travelerCount) };
+  try {
+    const response = await searchFlights(tripId, payload);
+    return toLiveOffer(response);
+  } catch (error) {
+    return { status: 'failed', message: error.message || 'Could not load live flight prices.' };
+  }
+}
+
+// Flight's option object combines two independently-fetched concerns:
+// the CTA (resolveTrustedAction — url/affiliateDisclosure, unchanged from
+// TWM-132) and `liveOffer` (searchFlightOffer — price/airline/stops/
+// freshness, never a url). Fetched concurrently; a failure in one never
+// blocks the other from rendering.
+async function resolveFlightOption(tripId, leg, travelerCount) {
+  const name = `${modeLabel('flight')}: ${leg.from} → ${leg.to}`;
+  const [ctaOption, liveOffer] = await Promise.all([
+    resolveTrustedAction(tripId, {
+      action_type: ACTION_TYPE_FOR_MODE.flight,
+      domain: 'flight',
+      origin: leg.from,
+      destination: leg.to,
+    })
+      .then(result => toTransportOption('flight', name, result))
+      .catch(error => ({ mode: 'flight', name, status: 'error', errorMessage: error.message || 'Could not load this option.' })),
+    searchFlightOffer(tripId, leg, travelerCount),
+  ]);
+  return { ...ctaOption, liveOffer };
+}
 
 // Resolves one mode's trusted action into the shape TransportOptionCard
 // consumes. Every backend outcome (resolved / missing_input /
 // unsupported_partner / disabled, plus a network-error fallback) maps to a
 // `status`, so the card can render each safely instead of assuming
 // `resolved` — a hard requirement from TWM-130's status discriminator.
-async function resolveTransportOption(tripId, leg, mode) {
+async function resolveTransportOption(tripId, leg, mode, travelerCount) {
   const name = `${modeLabel(mode)}: ${leg.from} → ${leg.to}`;
+  if (mode === 'flight') {
+    // flight combines the trusted-action CTA with a real live-offer search
+    // (TWM-146) — see resolveFlightOption's own comment for why these two
+    // network calls are kept as separate concerns on one option object.
+    return resolveFlightOption(tripId, leg, travelerCount);
+  }
   const domain = DOMAIN_FOR_MODE[mode];
   if (!domain) {
     // drive: feasibility-only, no trusted-action domain exists.
@@ -84,8 +253,8 @@ function toTransportOption(mode, name, result) {
 // Async: resolves every mode's trusted action for one leg in parallel.
 // Called from TripDashboard.jsx inside a useEffect (not synchronously
 // during render — see the page's Bookings-tab loading/error state).
-export async function transportOptionsFor(tripId, leg) {
-  return Promise.all(MODES.map(mode => resolveTransportOption(tripId, leg, mode)));
+export async function transportOptionsFor(tripId, leg, travelerCount) {
+  return Promise.all(MODES.map(mode => resolveTransportOption(tripId, leg, mode, travelerCount)));
 }
 
 // Fetches the real per-route TripFeasibilityAssessment (flight/train/bus/
@@ -153,15 +322,25 @@ export function recommendedMode(feasibleOptions) {
 // the origin<->destination bookend legs — the old Logistics page showed
 // only local transfers between stops and dropped the actual origin leg
 // entirely.
+// departureDate (TWM-146): best-effort only, derived straight from
+// stops[i].dates (routeStops's additive Atlas day.date passthrough) — never
+// fabricated. The outbound-origin leg uses the first stop's first date (the
+// traveler needs to be there by then); an inner leg uses its destination
+// stop's first date (when the traveler arrives there); the return-origin
+// leg uses the last stop's last date (departing after the final stop).
+// When Atlas has no per-day dates yet (tripDatesLabel's "Travel month"/
+// day-count fallback case), every leg's departureDate is null — the honest
+// outcome, not a guess.
 export function transportLegs(days, origin) {
   const stops = routeStops(days);
   if (stops.length === 0) return [];
   const originLabel = origin || 'Home';
-  const legs = [{ id: 'outbound-origin', from: originLabel, to: stops[0].location }];
+  const legs = [{ id: 'outbound-origin', from: originLabel, to: stops[0].location, departureDate: stops[0].dates?.[0] ?? null }];
   for (let i = 0; i < stops.length - 1; i++) {
-    legs.push({ id: `leg-${i}`, from: stops[i].location, to: stops[i + 1].location });
+    legs.push({ id: `leg-${i}`, from: stops[i].location, to: stops[i + 1].location, departureDate: stops[i + 1].dates?.[0] ?? null });
   }
-  legs.push({ id: 'return-origin', from: stops[stops.length - 1].location, to: originLabel });
+  const lastStop = stops[stops.length - 1];
+  legs.push({ id: 'return-origin', from: lastStop.location, to: originLabel, departureDate: lastStop.dates?.[lastStop.dates.length - 1] ?? null });
   return legs;
 }
 
