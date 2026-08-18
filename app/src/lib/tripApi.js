@@ -127,6 +127,24 @@ export async function getItinerary(id) {
   return request(`/${id}/itinerary`);
 }
 
+// TWM-131/132: resolves a single trusted travel action (CHECK_PRICES /
+// PROVIDER / SEARCH_REDIRECT) for one leg/domain — POST
+// /trips/{id}/trusted-action. Returns a TrustedActionResult, status-
+// discriminated (resolved/missing_input/unsupported_partner/disabled); the
+// caller must branch on `.status`, never assume `.action` is present.
+export async function resolveTrustedAction(id, payload) {
+  return request(`/${id}/trusted-action`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+// TWM-131/132: per-route feasibility across all four transport modes
+// (flight/train/bus/drive) for an origin/destination pair — POST
+// /trips/{id}/trusted-action/feasibility. May return null (Backend has no
+// assessment for this route yet); the caller must treat that as "no
+// feasibility data", not an error.
+export async function getTripFeasibility(id, { origin, destination }) {
+  return request(`/${id}/trusted-action/feasibility`, { method: 'POST', body: JSON.stringify({ origin, destination }) });
+}
+
 export async function renameTrip(id, title, expectedVersion) {
   const saved = await request(`/${id}`, {
     method: 'PATCH',
