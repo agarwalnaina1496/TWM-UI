@@ -14,8 +14,7 @@ import {
   transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
 } from '../lib/bookingCatalog.js';
-import { contextRecapPills } from '../lib/tripLifecycle.js';
-import { dashboardTrackStatuses, dashboardOverviewState, OVERVIEW_STATE_COPY } from '../lib/dashboardTracks.js';
+import { dashboardTrackStatuses, dashboardOverviewState, OVERVIEW_STATE_COPY, contextFactRows } from '../lib/dashboardTracks.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import '../styles/dashboard.css';
@@ -142,31 +141,73 @@ function TrackCard({ trackKey, track, tripId }) {
   );
 }
 
+// TWM-182: the non-Overview tabs' pre-freeze placeholder — same "available
+// once ready" honesty as the Bookings/Documents track cards, reachable by
+// tapping the tab itself (matching the mockup, where the tab bar is present
+// even before a plan exists) rather than only via the track board.
+function ThinStateTabPlaceholder({ tab }) {
+  const note = tab === 'Itinerary'
+    ? 'Your day-by-day plan will appear here once Guide finishes it.'
+    : 'Available once your itinerary is ready.';
+  return (
+    <div className="dashboard-card thin-tab-placeholder">
+      <p>{note}</p>
+    </div>
+  );
+}
+
 // TWM-175/182: Dashboard is reachable from message one, not gated behind
-// itinerary-ready — the 4-track board (Route/Day plan/Bookings/Documents,
-// Budget explicitly excluded per product decision) plus a per-state Overview
-// headline, filling in honestly as the trip matures. Never attempts to boot
-// Atlas before a plan is actually frozen (the Backend rejects start_itinerary
+// itinerary-ready — the tab bar, the 4-track board (Route/Day plan/Bookings/
+// Documents, Budget explicitly excluded per product decision as its own
+// track but still shown as a chip here), and a per-state Overview headline,
+// filling in honestly as the trip matures. Never attempts to boot Atlas
+// before a plan is actually frozen (the Backend rejects start_itinerary
 // otherwise), which is what used to surface as a raw error on an early visit.
 function ThinStateDashboard({ tripState, tripId }) {
-  const pills = contextRecapPills(tripState?.trip_context);
+  const [tab, setTab] = useState('Overview');
+  const tripContext = tripState?.trip_context;
+  const factRows = contextFactRows(tripContext);
+  const budget = tripContext?.budget;
   const tracks = dashboardTrackStatuses(tripState);
   const overviewState = dashboardOverviewState(tripState);
   const copy = OVERVIEW_STATE_COPY[overviewState];
   return (
-    <main className="wrap dashboard">
-      <div className="thin-state-card">
-        <h1 className="hero-title">{copy.heading}</h1>
-        <p className="thin-state-note">{copy.note}</p>
-        {pills.length > 0 ? (
-          <div className="trip-recap">{pills.map(p => <span key={p} className="recap-pill">{p}</span>)}</div>
-        ) : (
-          <p className="thin-state-empty">Nothing saved yet — this fills in as you go.</p>
-        )}
-      </div>
-      <div className="track-board" role="region" aria-label="Trip tracks">
-        {Object.entries(tracks).map(([trackKey, track]) => <TrackCard key={trackKey} trackKey={trackKey} track={track} tripId={tripId} />)}
-      </div>
+    <main className="wrap dashboard dashboard-wide">
+      <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">
+        {TABS.map(({ name, icon }) => (
+          <button type="button" aria-current={tab === name ? 'page' : undefined} className={tab === name ? 'active' : ''} key={name} onClick={() => setTab(name)}>
+            <span className="tab-icon">{icon}</span> {name}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 'Overview' ? (
+        <>
+          <div className="thin-state-card">
+            <h1 className="hero-title">{copy.heading}</h1>
+            <p className="thin-state-note">{copy.note}</p>
+            {budget && <span className="recap-pill">{budget}</span>}
+          </div>
+          <div className="track-board" role="region" aria-label="Trip tracks">
+            {Object.entries(tracks).map(([trackKey, track]) => <TrackCard key={trackKey} trackKey={trackKey} track={track} tripId={tripId} />)}
+          </div>
+          {factRows.length > 0 ? (
+            <div className="trip-facts">
+              <h2 className="trip-facts-heading">Understanding your trip so far</h2>
+              {factRows.map(row => (
+                <div className="trip-facts-row" key={row.label}>
+                  <span className="trip-facts-label">{row.label}</span>
+                  <span className="trip-facts-value">{row.value}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="thin-state-empty">Nothing saved yet — this fills in as you go.</p>
+          )}
+        </>
+      ) : (
+        <ThinStateTabPlaceholder tab={tab} />
+      )}
     </main>
   );
 }
@@ -790,7 +831,7 @@ export default function TripDashboard() {
   // than falling through to an empty-looking thin state.
   if (tripLoadStatus === 'ready' && !commandSnapshot) {
     return (
-      <main className="wrap dashboard">
+      <main className="wrap dashboard dashboard-wide">
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Trip unavailable</strong>
           <span>This trip is no longer available.</span>
@@ -809,7 +850,7 @@ export default function TripDashboard() {
 
   if (bootStatus === 'error') {
     return (
-      <main className="wrap dashboard">
+      <main className="wrap dashboard dashboard-wide">
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Itinerary unavailable</strong>
           <span>{bootError}</span>
@@ -820,7 +861,7 @@ export default function TripDashboard() {
 
   if (itineraryStatus === 'error') {
     return (
-      <main className="wrap dashboard">
+      <main className="wrap dashboard dashboard-wide">
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Itinerary unavailable</strong>
           <span>{itineraryFetchError}</span>
@@ -831,7 +872,7 @@ export default function TripDashboard() {
 
   if (bootStatus === 'booting' && itineraryState?.status !== 'ready') {
     return (
-      <main className="wrap dashboard">
+      <main className="wrap dashboard dashboard-wide">
         <HonestTransition steps={ARRIVAL_STEPS} label="Building your itinerary" stepDurationMs={ARRIVAL_STEP_DURATION_MS} />
       </main>
     );
@@ -839,7 +880,7 @@ export default function TripDashboard() {
 
   if (bootStatus !== 'ready' || itineraryState?.status !== 'ready' || itineraryStatus !== 'ready' || itineraryTripId !== tripId) {
     return (
-      <main className="wrap dashboard">
+      <main className="wrap dashboard dashboard-wide">
         <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading your trip…</div>
       </main>
     );
@@ -888,7 +929,7 @@ export default function TripDashboard() {
   const orphanActivityAnchors = activityAnchors.filter(a => !activityLabels.has(a.label));
 
   return (
-    <main className="wrap dashboard">
+    <main className="wrap dashboard dashboard-wide">
       {showBookingPrompt && (
         <BookingPromptOverlay
           onResolveBookings={() => resolveBookingPrompt('bookings')}

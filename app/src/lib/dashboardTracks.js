@@ -107,6 +107,35 @@ export function dashboardOverviewState(tripState) {
   return 'known-destination-ongoing';
 }
 
+// "Understanding your trip so far" — the mockup's data-table recap
+// (Origin/Dates/Duration/Travelers rows), distinct from Destinations'/My
+// Trips' pill-based contextRecapPills: labeled rows instead of bare
+// formatted strings, and budget deliberately excluded here (shown as its
+// own chip near the Overview heading instead, matching the mockup).
+// trip_context is free-form (Scout extracts whatever field names fit the
+// conversation), so a field simply doesn't appear as a row when absent.
+const FACT_ROWS = [
+  ['origin', 'Origin', value => String(value)],
+  ['travel_window', 'Dates', value => String(value)],
+  ['month', 'Dates', value => String(value)],
+  ['dates', 'Dates', value => String(value)],
+  ['duration_days', 'Duration', value => `${value} day${value === 1 ? '' : 's'}`],
+  ['travelers', 'Travelers', value => String(value)],
+];
+
+export function contextFactRows(tripContext) {
+  const seenLabels = new Set();
+  const rows = [];
+  for (const [key, label, format] of FACT_ROWS) {
+    if (seenLabels.has(label)) continue; // travel_window/month/dates are alternates for the same "Dates" row
+    const value = tripContext?.[key];
+    if (value === undefined || value === null || value === '') continue;
+    rows.push({ label, value: format(value) });
+    seenLabels.add(label);
+  }
+  return rows;
+}
+
 export const OVERVIEW_STATE_COPY = {
   'unknown-destination-ongoing': {
     heading: 'Still finding your destination',
