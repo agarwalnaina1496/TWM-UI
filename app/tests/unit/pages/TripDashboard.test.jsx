@@ -10,9 +10,10 @@ let tripLoadStatus;
 let uiState;
 let updateUiState;
 let openTrip;
+let viewTrip;
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState, openTrip }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState, openTrip, viewTrip }),
 }));
 
 function generalReference() {
@@ -103,8 +104,8 @@ function anchor(overrides = {}) {
   };
 }
 
-function renderDashboard() {
-  return render(<MemoryRouter><TripDashboard /></MemoryRouter>);
+function renderDashboard(initialEntries = ['/dashboard']) {
+  return render(<MemoryRouter initialEntries={initialEntries}><TripDashboard /></MemoryRouter>);
 }
 
 // Renders and waits for the itinerary fetch to resolve so tab interactions
@@ -168,6 +169,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     uiState = {};
     updateUiState = vi.fn(async () => {});
     openTrip = vi.fn(async () => ({ ok: true }));
+    viewTrip = vi.fn(() => ({ ok: true }));
     // Prior versions are fetched lazily via GET /trips/{id}/itinerary-versions
     // (TWM-155) — default to empty; individual tests override as needed.
     itineraryVersionsResponse = { versions: [] };
@@ -941,6 +943,16 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     // the page straight into the itinerary-boot flow (see the `frozenPlan`
     // effect above). That "no primary CTA" case is covered as a pure unit
     // test on dashboardPrimaryCta itself, in dashboardTracks.test.js.
+
+    // TWM-185: a hard reload/bookmark on /dashboard?tripId=... must resolve
+    // that trip — commandSnapshot starts null/mismatched (no prior
+    // viewTrip/openTrip call happened this session), just like a real reload.
+    it('resolves the trip named by ?tripId= via viewTrip when landing fresh, with no prior commandSnapshot', async () => {
+      commandSnapshot = null;
+      sendTripCommand = vi.fn();
+      renderDashboard(['/dashboard?tripId=trip-1']);
+      await waitFor(() => expect(viewTrip).toHaveBeenCalledWith('trip-1'));
+    });
 
     // TWM-182: viewTrip's cache-only render can leave commandSnapshot null
     // once its background existence check 404s while the traveler is

@@ -8,6 +8,8 @@ import { planReady } from '../hooks/useGuidePlanning.js';
 import { trackEvent } from '../lib/analytics.js';
 import { buildRecapTurn } from '../lib/discoverChat.js';
 import FactsPanel from '../components/FactsPanel.jsx';
+import { withTripId } from '../lib/tripUrl.js';
+import { useTripFromUrl } from '../lib/useTripFromUrl.js';
 import '../styles/chat.css';
 
 let nextMessageId = 1;
@@ -22,7 +24,12 @@ const KNOWN_DESTINATION_PROMPT = 'Where are you headed?';
 export default function JourneyEntry() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { commandSnapshot, sendTripCommand, tripLoadStatus } = useTrip();
+  const { commandSnapshot, sendTripCommand, tripLoadStatus, openTrip } = useTrip();
+  // TWM-185: reload/bookmark/deep-link safe for the "resuming a
+  // mid-conversation trip" case. The normal fresh-entry path (via Header/
+  // DashboardHome's startNewTrip()) has no ?tripId= at all — this simply
+  // no-ops then, exactly as it should for a genuinely new trip.
+  useTripFromUrl(openTrip);
   const intent = params.get('intent');
   const isDiscover = intent === ENTRY_INTENTS.DISCOVER;
   const [destination, setDestination] = useState('');
@@ -128,7 +135,7 @@ export default function JourneyEntry() {
         // Carry Guide's completion message forward — this component
         // unmounts on navigate, so it can't append it to the (now-gone)
         // chat log itself; TripPreview reads it from location.state.
-        navigate('/trip-preview', { state: { guideMessage: response.message } });
+        navigate(withTripId('/trip-preview', response.trip.id), { state: { guideMessage: response.message } });
         return;
       }
       if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
@@ -169,7 +176,7 @@ export default function JourneyEntry() {
               </div>
             )}
             {commandSnapshot?.trip_state?.stage === 'recommended' && (
-              <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>See destinations →</button>
+              <button type="button" className="btn btn-primary" onClick={() => navigate(withTripId('/destinations?next=preview', commandSnapshot?.id))}>See destinations →</button>
             )}
           </div>
           <div className="chat-input-bar">

@@ -8,6 +8,8 @@ import { planReady } from '../hooks/useGuidePlanning.js';
 import { buildRecapTurn, didHandoffOccur } from '../lib/discoverChat.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import FactsPanel from '../components/FactsPanel.jsx';
+import { withTripId } from '../lib/tripUrl.js';
+import { useTripFromUrl } from '../lib/useTripFromUrl.js';
 import '../styles/chat.css';
 
 let nextId = 1;
@@ -17,7 +19,11 @@ const HANDOFF_NOTE = '→ Bringing in Meridian, who handles destination matching
 export default function ScoutChat() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { commandSnapshot, sendTripCommand, tripLoadStatus } = useTrip();
+  const { commandSnapshot, sendTripCommand, tripLoadStatus, openTrip } = useTrip();
+  // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this page
+  // reads matcher_state/planner_state to decide what to do next and can't
+  // safely act on a possibly-thin cached record.
+  useTripFromUrl(openTrip);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -50,7 +56,7 @@ export default function ScoutChat() {
         // Guide generated the complete plan in this turn — go straight to
         // the unified Plan Builder instead of showing the message here,
         // this component unmounts on navigate. Same handoff as JourneyEntry.
-        navigate('/trip-preview', { state: { guideMessage: response.message } });
+        navigate(withTripId('/trip-preview', response.trip.id), { state: { guideMessage: response.message } });
         return;
       }
       say('assistant', response.message);

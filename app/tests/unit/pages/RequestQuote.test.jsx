@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import RequestQuote from '../../../src/pages/RequestQuote.jsx';
 import { TripProvider, useTrip } from '../../../src/context/TripContext.jsx';
 
@@ -9,12 +10,17 @@ function AuthSentinel() {
   return <div>Auth: {auth.loggedIn ? 'logged-in' : 'not-logged-in'} - {auth.name} - {auth.email}</div>;
 }
 
+// TWM-185: TripProvider now reads the boot URL's ?tripId= via useLocation(),
+// so it needs a Router in scope — mirrors how it's actually mounted in the
+// app (inside BrowserRouter, main.jsx).
 function renderRequestQuote() {
   return render(
-    <TripProvider>
-      <RequestQuote />
-      <AuthSentinel />
-    </TripProvider>
+    <MemoryRouter>
+      <TripProvider>
+        <RequestQuote />
+        <AuthSentinel />
+      </TripProvider>
+    </MemoryRouter>
   );
 }
 

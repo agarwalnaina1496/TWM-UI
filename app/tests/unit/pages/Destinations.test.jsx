@@ -108,6 +108,20 @@ describe('Destinations (real Meridian integration)', () => {
     vi.restoreAllMocks();
   });
 
+  // TWM-185: a hard reload/bookmark on /destinations?tripId=... must resolve
+  // that trip via a full fetch, not just rely on whatever the boot's own
+  // thin list load happened to pick — commandSnapshot starts empty, just
+  // like a real reload with no prior openTrip call this session.
+  it('resolves the trip named by ?tripId= via a full openTrip fetch when landing fresh', async () => {
+    const server = createServer({ recommendation: successOutcome() });
+    fetchMock = createFetchMock(server);
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
+
+    renderDestinations(['/destinations?tripId=trip-1']);
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(call => call[0] === '/api/trips/trip-1')).toBe(true));
+  });
+
   it('shows an honest step-by-step transition while the trip loads (TWM-173)', () => {
     fetchMock = vi.fn(() => new Promise(() => {}));
     global.fetch = wrapFetchMockWithGuestSession(fetchMock);

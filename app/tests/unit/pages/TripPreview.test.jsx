@@ -10,9 +10,10 @@ let trip;
 let commandSnapshot;
 let sendTripCommand;
 let tripLoadStatus;
+let openTrip;
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ trip, updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus }),
+  useTrip: () => ({ trip, updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus, openTrip }),
 }));
 vi.mock('react-router-dom', async () => ({ ...(await vi.importActual('react-router-dom')), useNavigate: () => navigate }));
 
@@ -38,6 +39,19 @@ describe('TripPreview real Guide Plan Builder', () => {
     vi.clearAllMocks();
     trip = {};
     tripLoadStatus = 'ready';
+    openTrip = vi.fn();
+  });
+
+  // TWM-185: a hard reload/bookmark on /trip-preview?tripId=... must resolve
+  // that trip via a full fetch — commandSnapshot starts null, just like a
+  // real reload with no prior openTrip call this session. Uses a snapshot
+  // with no frozen plan and no planner_state so the boot-effect's own
+  // start_planning guard doesn't fire and confuse this assertion.
+  it('resolves the trip named by ?tripId= via openTrip when landing fresh', async () => {
+    commandSnapshot = null;
+    sendTripCommand = vi.fn();
+    render(<MemoryRouter initialEntries={['/trip-preview?tripId=trip-1']}><TripPreview /></MemoryRouter>);
+    await waitFor(() => expect(openTrip).toHaveBeenCalledWith('trip-1'));
   });
 
   it('bootstraps a fresh discover-path session with start_planning', async () => {

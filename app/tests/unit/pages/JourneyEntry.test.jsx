@@ -8,10 +8,11 @@ const navigate = vi.fn();
 let commandSnapshot;
 let sendTripCommand;
 let tripLoadStatus;
+let openTrip;
 let searchParams = new URLSearchParams();
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, openTrip }),
 }));
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
@@ -32,6 +33,24 @@ describe('JourneyEntry known-destination chat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     commandSnapshot = null;
+    openTrip = vi.fn();
+    searchParams = new URLSearchParams();
+  });
+
+  // TWM-185: a hard reload/bookmark on /journey-entry?tripId=... (resuming a
+  // mid-conversation trip) must resolve that trip via a full fetch. The
+  // normal fresh-entry path (startNewTrip() first, no ?tripId=) is
+  // untouched — the hook simply no-ops when the param is absent.
+  it('resolves the trip named by ?tripId= via openTrip when landing fresh', () => {
+    searchParams = new URLSearchParams('intent=known_destination&tripId=trip-1');
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(openTrip).toHaveBeenCalledWith('trip-1');
+  });
+
+  it('does not call openTrip for a genuinely new trip (no ?tripId=)', () => {
+    searchParams = new URLSearchParams('intent=known_destination');
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(openTrip).not.toHaveBeenCalled();
   });
 
   it('asks the sixth "anything else" question once the five fixed fields are answered', () => {
