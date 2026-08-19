@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   createTrip, getTrip, listTrips, mergeCommandTripRecord, newIdempotencyKey, queueTripMutation,
   renameTrip as renameTripApi, saveUiState as saveUiStateApi, sendTripCommand as sendTripCommandApi, TripApiError,
@@ -6,6 +7,7 @@ import {
 import {
   fetchCurrentUser, login as loginApi, logout as logoutApi, signup as signupApi,
 } from '../lib/authApi.js';
+import { TRIP_ID_PARAM } from '../lib/tripUrl.js';
 
 const TripContext = createContext(null);
 
@@ -49,6 +51,12 @@ function authFromUser(user) {
 }
 
 export function TripProvider({ children }) {
+  // TWM-185: read once at boot time only (via a ref, not a reactive value —
+  // this must never re-trigger loadTripsNow on ordinary in-app navigation,
+  // only inform the very first list-load's choice of "current" trip).
+  const location = useLocation();
+  const bootUrlTripIdRef = useRef(new URLSearchParams(location.search).get(TRIP_ID_PARAM));
+
   const [trip, setTrip] = useState(DEFAULT_TRIP);
   const [auth, setAuth] = useState(DEFAULT_AUTH);
   const [commandSnapshot, setCommandSnapshot] = useState(null);
@@ -112,7 +120,13 @@ export function TripProvider({ children }) {
     setTripLoadError(null);
     try {
       const records = await listTrips();
-      const record = records[0] ?? null;
+      // TWM-185: a URL-provided trip id (hard reload, bookmark, shared link
+      // on any of the 5 trip-specific routes) takes precedence over an
+      // arbitrary first trip — that URL is the traveler's actual intent.
+      // Falls through to records[0] when the id is absent or doesn't match
+      // any of this guest's trips (e.g. a stale/foreign link).
+      const urlTripId = bootUrlTripIdRef.current;
+      const record = (urlTripId && records.find(r => r.id === urlTripId)) || records[0] || null;
       setTrips(records);
       updateTripRecord(record);
       markTripDetailFull(false);

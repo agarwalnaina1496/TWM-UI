@@ -17,6 +17,8 @@ import {
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
+import { withTripId } from '../lib/tripUrl.js';
+import { useTripFromUrl } from '../lib/useTripFromUrl.js';
 import '../styles/dashboard.css';
 
 // TWM-175: 5 tabs, down from 7 — Map folds into Overview's day-strip (it
@@ -120,7 +122,7 @@ function DashboardCtaButton({ cta, tripId, className }) {
     setPending(true);
     try {
       await openTrip(tripId);
-      navigate(cta.to);
+      navigate(withTripId(cta.to, tripId));
     } finally {
       setPending(false);
     }
@@ -566,9 +568,14 @@ function ActivitySegment({ activity, anchor, onOpenConfirm }) {
 }
 
 export default function TripDashboard() {
-  const { commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState } = useTrip();
+  const { commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState, viewTrip } = useTrip();
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  // TWM-185: reload/bookmark/deep-link safe — resolves whichever trip
+  // ?tripId= names, cheaply (matches DashboardHome's own "Open trip →" cost
+  // tradeoff: viewTrip renders off the cached list entry with zero network
+  // cost for the common case, still fetches full detail in the background).
+  useTripFromUrl(viewTrip);
   const initialTab = TABS.some(t => t.name === params.get('tab')) ? params.get('tab') : 'Overview';
   const [tab, setTab] = useState(initialTab);
   const [activeDay, setActiveDay] = useState(null);

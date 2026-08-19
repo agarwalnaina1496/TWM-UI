@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { TripProvider, useTrip } from '../../../src/context/TripContext.jsx';
 import { mockFetchWithGuestSession } from '../testUtils.js';
 
+// TWM-185: TripProvider now reads the boot URL's ?tripId= via useLocation(),
+// so it needs a Router in scope — mirrors how it's actually mounted in the
+// app (inside BrowserRouter, main.jsx).
 function wrapper({ children }) {
-  return <TripProvider>{children}</TripProvider>;
+  return <MemoryRouter><TripProvider>{children}</TripProvider></MemoryRouter>;
 }
 
 function jsonResponse(body, { status = 200 } = {}) {
@@ -275,6 +279,44 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  // TWM-185: a hard reload/bookmark on a trip-specific route (?tripId=) must
+  // land on that trip, not an arbitrary first one — the URL is the
+  // traveler's actual intent here.
+  it('boots to the URL-provided trip id instead of records[0] when both are available', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [
+        { id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} },
+        { id: 'trip-b', title: 'B', version: 1, trip_state: {}, ui_state: {} },
+      ],
+    }));
+    function wrapperWithUrlTripId({ children }) {
+      return <MemoryRouter initialEntries={['/dashboard?tripId=trip-b']}><TripProvider>{children}</TripProvider></MemoryRouter>;
+    }
+
+    const { result } = renderHook(() => useTrip(), { wrapper: wrapperWithUrlTripId });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+
+    expect(result.current.currentTripId).toBe('trip-b');
+    expect(result.current.trips.map(t => t.id)).toEqual(['trip-a', 'trip-b']); // full list still kept, only "current" changes
+  });
+
+  // A stale/foreign ?tripId= (not among this guest's trips) must not leave
+  // the app with no current trip at all — falls back to records[0], same as
+  // when the param is absent entirely.
+  it('falls back to records[0] when the URL trip id does not match any of this guest\'s trips', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [{ id: 'trip-a', title: 'A', version: 1, trip_state: {}, ui_state: {} }],
+    }));
+    function wrapperWithUnknownUrlTripId({ children }) {
+      return <MemoryRouter initialEntries={['/dashboard?tripId=trip-does-not-exist']}><TripProvider>{children}</TripProvider></MemoryRouter>;
+    }
+
+    const { result } = renderHook(() => useTrip(), { wrapper: wrapperWithUnknownUrlTripId });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+
+    expect(result.current.currentTripId).toBe('trip-a');
   });
 
   it('keeps every listed trip in `trips` instead of discarding all but the first', async () => {

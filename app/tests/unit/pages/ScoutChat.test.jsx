@@ -8,14 +8,16 @@ const navigate = vi.fn();
 let commandSnapshot;
 let sendTripCommand;
 let tripLoadStatus;
+let openTrip;
+let searchParams = new URLSearchParams();
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, openTrip }),
 }));
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
   useNavigate: () => navigate,
-  useSearchParams: () => [new URLSearchParams()],
+  useSearchParams: () => [searchParams],
 }));
 
 function readyPlannerState() {
@@ -32,6 +34,17 @@ describe('ScoutChat advice-entry chat', () => {
     vi.clearAllMocks();
     commandSnapshot = null;
     tripLoadStatus = 'ready';
+    openTrip = vi.fn();
+    searchParams = new URLSearchParams();
+  });
+
+  // TWM-185: a hard reload/bookmark on /scout-chat?tripId=... must resolve
+  // that trip via a full fetch — commandSnapshot starts null, just like a
+  // real reload with no prior openTrip call this session.
+  it('resolves the trip named by ?tripId= via openTrip when landing fresh', async () => {
+    searchParams = new URLSearchParams('tripId=trip-1');
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(openTrip).toHaveBeenCalledWith('trip-1');
   });
 
   it('routes to the unified Plan Builder once a Guide-owned turn generates a complete plan, without throwing', async () => {
@@ -67,6 +80,8 @@ describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
     vi.clearAllMocks();
     commandSnapshot = null;
     tripLoadStatus = 'ready';
+    openTrip = vi.fn();
+    searchParams = new URLSearchParams();
   });
 
   it('shows the cold-open greeting for a trip with no saved context yet', () => {

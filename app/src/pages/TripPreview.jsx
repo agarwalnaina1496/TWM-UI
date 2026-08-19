@@ -9,6 +9,8 @@ import { trackEvent, trackFailure } from '../lib/analytics.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
 import PaceMeter from '../components/ui/PaceMeter.jsx';
+import { withTripId } from '../lib/tripUrl.js';
+import { useTripFromUrl } from '../lib/useTripFromUrl.js';
 import '../styles/preview.css';
 
 const PACE_OPTIONS = ['relaxed', 'balanced', 'packed'];
@@ -55,7 +57,11 @@ function FreeTextComposer({ value, onChange, onSubmit, placeholder, pending }) {
 export default function TripPreview() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { commandSnapshot, sendTripCommand, tripLoadStatus } = useTrip();
+  const { commandSnapshot, sendTripCommand, tripLoadStatus, openTrip } = useTrip();
+  // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this
+  // page's boot effect below decides whether to fire start_planning off
+  // real planner_state and must never act on a possibly-thin cached record.
+  useTripFromUrl(openTrip);
 
   const tripState = commandSnapshot?.trip_state;
   const tripContext = tripState?.trip_context;
@@ -96,7 +102,8 @@ export default function TripPreview() {
   // triggering the (also idempotent) Atlas itinerary generation from there.
   useEffect(() => {
     if (!frozenPlan) return;
-    navigate('/dashboard', { replace: true });
+    navigate(withTripId('/dashboard', commandSnapshot?.id), { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frozenPlan, navigate]);
 
   // Bootstraps the real Guide session for the discover path (the
@@ -190,7 +197,7 @@ export default function TripPreview() {
       const response = await sendTripCommand('traveler_message', { message: REOPEN_DESTINATION_MESSAGE });
       const nextState = response.trip?.trip_state;
       if (nextState?.active_agent === 'meridian' && nextState?.stage === 'matching') {
-        navigate('/destinations');
+        navigate(withTripId('/destinations', response.trip?.id ?? commandSnapshot?.id));
         return;
       }
       setMessage(response.message || '');

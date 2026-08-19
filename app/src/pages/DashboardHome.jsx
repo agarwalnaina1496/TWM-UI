@@ -10,6 +10,7 @@ import {
   tripStatusLine, relativeUpdatedAt,
 } from '../lib/tripLifecycle.js';
 import { isDiscoverOnly, selectHeroTrip } from '../lib/tripHero.js';
+import { withTripId } from '../lib/tripUrl.js';
 import '../styles/dashboard-home.css';
 
 const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution', 'b-matched': 'caution', 'b-done': 'positive' };
@@ -122,7 +123,7 @@ export default function DashboardHome() {
         setNotice('This trip is no longer available.');
         return;
       }
-      navigate(to);
+      navigate(withTripId(to, t.id));
     } finally {
       setBusyId(null);
     }

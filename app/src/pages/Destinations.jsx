@@ -11,6 +11,8 @@ import { planReady } from '../hooks/useGuidePlanning.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
+import { withTripId } from '../lib/tripUrl.js';
+import { useTripFromUrl } from '../lib/useTripFromUrl.js';
 import '../styles/destinations.css';
 
 const FOCUSED_KEY = uiStateKey(UI_STATE_SCREEN.DESTINATIONS, 'focusedKey');
@@ -311,7 +313,10 @@ function CheckpointOverlay({ knownFacts, message, value, onChange, onSubmit, bus
 
 export default function Destinations() {
   const navigate = useNavigate();
-  const { updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState } = useTrip();
+  const { updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState, openTrip } = useTrip();
+  // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this page
+  // triggers matching/reads matcher_state to decide what to do next.
+  useTripFromUrl(openTrip);
 
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState(null);
@@ -479,7 +484,7 @@ export default function Destinations() {
   function planThis(option) {
     const isSelected = selectedOption && selectedOption.type === option.type && selectedOption.id === option.key;
     if (isSelected) {
-      navigate('/trip-preview');
+      navigate(withTripId('/trip-preview', commandSnapshot?.id));
       return;
     }
     doPlanThis(option);
@@ -529,7 +534,7 @@ export default function Destinations() {
     }
     if (checkpointWasShown.current) trackEvent('checkpoint_resolved', {});
     setCheckpointAwaiting(null);
-    navigate('/trip-preview', { state: { guideMessage: response.message } });
+    navigate(withTripId('/trip-preview', response.trip?.id ?? commandSnapshot?.id), { state: { guideMessage: response.message } });
   }
 
   async function submitCheckpoint() {
