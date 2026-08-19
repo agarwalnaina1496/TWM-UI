@@ -16,13 +16,13 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
 
   await mockTripCommandFlow(page, [
     {
-      command: 'scout_entry',
+      command: 'discover_entry',
       response: commandResponse(ASK_ORIGIN, tripRecord({
         version: 2,
         trip_state: {
           stage: 'new', active_agent: 'scout',
           trip_context: { original_traveler_request: GOLDEN_QUERY, weather_preference: "no sub-zero/snowstorm situations unless it's a deliberate choice" },
-          matcher_state: { conversation_context: { awaiting: 'origin' } },
+          matcher_state: { conversation_context: { awaiting: 'origin_city' } },
         },
       })),
     },
@@ -42,7 +42,7 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
       response: commandResponse(HANDOFF, tripRecord({
         version: 4,
         trip_state: {
-          stage: 'matching', active_agent: 'meridian',
+          stage: 'recommended', active_agent: 'meridian',
           trip_context: { original_traveler_request: GOLDEN_QUERY, origin: 'Delhi', budget: '₹1,00,000 total for both', duration_days: 14 },
           matcher_state: { conversation_context: { awaiting: null } },
         },
@@ -91,10 +91,11 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
 
   await page.goto('login');
   await page.getByText('Continue without login').click();
-  await page.getByPlaceholder(/Plan my Coorg trip/).fill(GOLDEN_QUERY);
+  await page.getByText('Discover Destination').click();
+  await expect(page).toHaveURL(/\/app\/journey-entry/);
+  await page.getByPlaceholder('Tell Scout about your trip…').fill(GOLDEN_QUERY);
   await page.getByLabel('Send').click();
 
-  await expect(page).toHaveURL(/\/app\/scout-chat/);
   await expect(page.getByText(ASK_ORIGIN)).toBeVisible();
   await page.getByRole('button', { name: 'Delhi', exact: true }).click();
   await expect(page.getByText(ASK_BUDGET)).toBeVisible();
@@ -108,15 +109,20 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
   // The exact persisted budget must survive verbatim, never a generic bucket.
   await expect(page.getByText('₹1,00,000 total for both', { exact: true })).toBeVisible();
 
-  const mpCard = page.locator('.dest-card', { hasText: 'Madhya Pradesh Heritage and Nature' });
-  await expect(page.locator('.dest-card', { hasText: 'Kerala Culture, Backwaters and Coast' })).toBeVisible();
-  await expect(page.locator('.dest-card', { hasText: 'Assam' })).toBeVisible();
+  // TWM-173: options render as columns in a criteria x options comparison
+  // matrix, not separate cards — the detail card below shows whichever
+  // column is focused (rank #1, Madhya Pradesh, by default).
+  await expect(page.getByRole('button', { name: /Kerala Culture, Backwaters and Coast/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Assam/ })).toBeVisible();
+
+  const detailCard = page.locator('.dest-detail-card');
+  await expect(detailCard.getByText('Madhya Pradesh Heritage and Nature')).toBeVisible();
 
   // The verbatim weather qualifier from the golden fixture criteria survives the handoff.
-  await mpCard.getByText('Why this one').click();
-  await expect(mpCard.getByText(/Winter days generally support sightseeing/)).toBeVisible();
+  await detailCard.getByText('See why this fits').click();
+  await expect(detailCard.getByText(/Winter days generally support sightseeing/)).toBeVisible();
 
-  await mpCard.getByText('Plan this trip →').click();
+  await detailCard.getByText('Plan this trip →').click();
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await expect(page.getByText('Gwalior Fort')).toBeVisible();
 });

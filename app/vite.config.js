@@ -13,5 +13,15 @@ export default defineConfig(({ command }) => ({
     setupFiles: './tests/setup.js',
     globals: true,
     exclude: [...configDefaults.exclude, 'tests/e2e/**'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      // Baseline measured on the existing suite (statements 87.38%,
+      // branches 77.45%, functions 85.25%, lines 90.61%) — set a few
+      // points below so CI fails on a real regression, not on noise from
+      // adding one small uncovered branch. Raise these deliberately as
+      // coverage improves, never lower them to make a failing PR pass.
+      thresholds: { statements: 85, branches: 75, functions: 83, lines: 88 },
+    },
   },
 }))

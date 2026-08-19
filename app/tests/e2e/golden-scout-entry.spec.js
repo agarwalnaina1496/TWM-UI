@@ -9,13 +9,13 @@ const HANDOFF = 'I’ll look for a comfortable 14-day trip within budget.';
 test('exact natural-language journey preserves nuance and hands off after two quick replies', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
-      command: 'scout_entry',
+      command: 'discover_entry',
       response: commandResponse(ASK_ORIGIN, tripRecord({
         version: 2,
         trip_state: {
           stage: 'new', active_agent: 'scout',
           trip_context: { original_traveler_request: GOLDEN_QUERY, weather_preference: "no sub-zero/snowstorm situations unless it's a deliberate choice" },
-          matcher_state: { conversation_context: { awaiting: 'origin' } },
+          matcher_state: { conversation_context: { awaiting: 'origin_city' } },
         },
       })),
     },
@@ -35,7 +35,7 @@ test('exact natural-language journey preserves nuance and hands off after two qu
       response: commandResponse(HANDOFF, tripRecord({
         version: 4,
         trip_state: {
-          stage: 'matching', active_agent: 'meridian', trip_context: { original_traveler_request: GOLDEN_QUERY },
+          stage: 'recommended', active_agent: 'meridian', trip_context: { original_traveler_request: GOLDEN_QUERY },
           matcher_state: { conversation_context: { awaiting: null } },
         },
       })),
@@ -44,10 +44,11 @@ test('exact natural-language journey preserves nuance and hands off after two qu
 
   await page.goto('login');
   await page.getByText('Continue without login').click();
-  await page.getByPlaceholder(/Plan my Coorg trip/).fill(GOLDEN_QUERY);
+  await page.getByText('Discover Destination').click();
+  await expect(page).toHaveURL(/\/app\/journey-entry/);
+  await page.getByPlaceholder('Tell Scout about your trip…').fill(GOLDEN_QUERY);
   await page.getByLabel('Send').click();
 
-  await expect(page).toHaveURL(/\/app\/scout-chat/);
   await expect(page.getByText(ASK_ORIGIN)).toBeVisible();
   await page.getByRole('button', { name: 'Delhi', exact: true }).click();
   await expect(page.getByText(ASK_BUDGET)).toBeVisible();

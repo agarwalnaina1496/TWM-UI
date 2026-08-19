@@ -50,10 +50,10 @@ function twoStopAtlasResult() {
 test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and Support is reachable with no trip open', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
-      command: 'scout_entry',
+      command: 'discover_entry',
       response: commandResponse('Where will you be travelling from?', tripRecord({
         version: 2,
-        trip_state: { stage: 'new', active_agent: 'scout', matcher_state: { conversation_context: { awaiting: 'origin' } } },
+        trip_state: { stage: 'new', active_agent: 'scout', matcher_state: { conversation_context: { awaiting: 'origin_city' } } },
       })),
     },
     {
@@ -67,7 +67,7 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
       command: 'traveler_message',
       response: commandResponse('I’ll look for a comfortable 14-day trip within budget.', tripRecord({
         version: 4,
-        trip_state: { stage: 'matching', active_agent: 'meridian', matcher_state: { conversation_context: { awaiting: null } } },
+        trip_state: { stage: 'recommended', active_agent: 'meridian', matcher_state: { conversation_context: { awaiting: null } } },
       })),
     },
     {
@@ -158,7 +158,9 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
 
   await page.goto('login');
   await page.getByText('Continue without login').click();
-  await page.getByPlaceholder(/Plan my Coorg trip/).fill(GOLDEN_QUERY);
+  await page.getByText('Discover Destination').click();
+  await expect(page).toHaveURL(/\/app\/journey-entry/);
+  await page.getByPlaceholder('Tell Scout about your trip…').fill(GOLDEN_QUERY);
   await page.getByLabel('Send').click();
   await page.getByRole('button', { name: 'Delhi' }).click();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
@@ -171,19 +173,22 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
   await page.getByText('Approve this plan →').click();
 
   await expect(page).toHaveURL(/\/app\/dashboard/);
-  await page.getByRole('button', { name: 'Bookings' }).click();
+  // TWM-175: a one-time "itinerary ready" prompt covers the tab nav the
+  // first time a trip's itinerary is generated — dismiss it first.
+  await page.getByRole('button', { name: 'Take a look at the trip first' }).click();
+  await page.getByRole('navigation', { name: 'Trip Dashboard tabs' }).getByRole('button', { name: 'Bookings' }).click();
 
   // Transport: the Delhi -> Coorg -> Wayanad -> Delhi route is a round trip
   // (returns to origin), so it bundles as one priced decision, not per-leg.
   await expect(page.getByText('🚗 Transport')).toBeVisible();
-  const roundTripLabel = page.getByText(/Delhi ⇄ Coorg round trip|Delhi ⇄ Wayanad round trip/);
+  const roundTripLabel = page.getByRole('heading', { name: /Delhi ⇄ Coorg round trip|Delhi ⇄ Wayanad round trip/ });
   await expect(roundTripLabel).toBeVisible();
   await page.getByRole('button', { name: /Resolve/ }).first().click();
   await expect(page.getByRole('link', { name: 'Check ↗' }).first()).toBeVisible();
 
   // Activity: only the Atlas-flagged Wayanad safari appears, framed as the exception.
   await expect(page.getByText(/the exception, not the norm/)).toBeVisible();
-  await expect(page.getByText(/Wildlife safari/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Wildlife safari/ })).toBeVisible();
   await expect(page.getByText('Abbey Falls')).toHaveCount(0);
 
   // Support: no TWM-Led upsell language anywhere on the tab.

@@ -8,10 +8,10 @@ import { commandResponse, mockTripCommandFlow, readyItineraryState, tripRecord }
 test('advice journey reaches destination match, Choose Plan and Self-Led Dashboard', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
-      command: 'scout_entry',
+      command: 'discover_entry',
       response: commandResponse('Where will you be travelling from?', tripRecord({
         version: 2,
-        trip_state: { stage: 'new', active_agent: 'scout', matcher_state: { conversation_context: { awaiting: 'origin' } } },
+        trip_state: { stage: 'new', active_agent: 'scout', matcher_state: { conversation_context: { awaiting: 'origin_city' } } },
       })),
     },
     {
@@ -25,7 +25,7 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
       command: 'traveler_message',
       response: commandResponse('I’ll look for a comfortable 14-day trip within budget.', tripRecord({
         version: 4,
-        trip_state: { stage: 'matching', active_agent: 'meridian', matcher_state: { conversation_context: { awaiting: null } } },
+        trip_state: { stage: 'recommended', active_agent: 'meridian', matcher_state: { conversation_context: { awaiting: null } } },
       })),
     },
     {
@@ -109,7 +109,9 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
 
   await page.goto('login');
   await page.getByText('Continue without login').click();
-  await page.getByPlaceholder(/Plan my Coorg trip/).fill(GOLDEN_QUERY);
+  await page.getByText('Discover Destination').click();
+  await expect(page).toHaveURL(/\/app\/journey-entry/);
+  await page.getByPlaceholder('Tell Scout about your trip…').fill(GOLDEN_QUERY);
   await page.getByLabel('Send').click();
   await page.getByRole('button', { name: 'Delhi' }).click();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
@@ -126,6 +128,6 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
   // TWM-140: no Choose Plan interstitial — approve_plan navigates straight in.
   // TWM-97: the Dashboard itself triggers start_itinerary and renders the real result.
   await expect(page).toHaveURL(/\/app\/dashboard/);
-  await expect(page.getByRole('button', { name: /Days/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('button', { name: /Overview/ })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByText('Abbey Falls Getaway')).toBeVisible();
 });
