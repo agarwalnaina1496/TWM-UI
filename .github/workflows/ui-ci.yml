@@ -21,6 +21,7 @@ jobs:
   lint-test-build:
     name: UI / lint, unit tests, build
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +46,12 @@ jobs:
   e2e:
     name: UI / Playwright e2e
     runs-on: ubuntu-latest
+    # Recurring failure mode this guards against: "Install Playwright
+    # browsers" hanging on a flaky download/apt mirror with no caching to
+    # fall back on, sitting silently for hours against the platform's
+    # default 360-minute job timeout instead of failing fast so a retry can
+    # succeed. 15 min comfortably covers a real (cached or fresh) run.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +63,16 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Without this, every run re-downloads Chromium + its OS deps from
+      # scratch — slow, and the main source of the hangs the timeout above
+      # guards against. Keyed on the lockfile so a Playwright version bump
+      # invalidates the cache automatically.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('app/package-lock.json') }}
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
