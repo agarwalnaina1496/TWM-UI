@@ -859,14 +859,25 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.queryByText('Your trip so far')).not.toBeInTheDocument();
     });
 
-    it('shows the budget as a chip above "Your trip so far", not as a row in it', async () => {
+    it('shows budget as a row in "Your trip so far" when present, and omits it when absent', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
         trip_state: { stage: 'matching', trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
-      await screen.findByText('₹1,00,000 total for both');
+      const facts = await screen.findByText('Your trip so far');
+      const budgetRow = within(facts.closest('.trip-facts')).getByText('Budget').closest('.trip-facts-row');
+      expect(within(budgetRow).getByText('₹1,00,000 total for both')).toBeInTheDocument();
+    });
+
+    it('omits the Budget row entirely when trip_context has no budget', async () => {
+      commandSnapshot = {
+        id: 'trip-1', version: 1,
+        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+      };
+      sendTripCommand = vi.fn();
+      renderDashboard();
       const facts = await screen.findByText('Your trip so far');
       expect(within(facts.closest('.trip-facts')).queryByText('Budget')).not.toBeInTheDocument();
     });

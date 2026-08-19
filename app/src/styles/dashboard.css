@@ -158,14 +158,10 @@
 .revision-actions .btn{flex:1;background:#fff;border:1.5px solid #e1ad35;color:#7c5a12}
 .revision-actions .btn:hover{background:#fff3d6}
 
-/* TWM-175/182: thin-state Dashboard — reachable from message one. Budget
-   sits as its own chip above "Your trip so far", no wrapping headline card. */
-.thin-state-budget-row{max-width:640px;margin:0 auto 8px;text-align:center}
-
-/* TWM-182: "Your trip so far" — labeled data-table recap (Destination row
-   first, either its settled value or a stage-aware CTA to go pick one, then
-   Origin/Dates/Duration/Travelers as available), replacing the old 4-track
-   board and bare recap-pill list per the Wayfinder mockup. */
+/* TWM-182: "Your trip so far" — labeled data-table recap (Origin, then
+   Dates or Month+Duration, No. of travelers, Budget, Destination last —
+   each conditional on the field actually being present), replacing the old
+   4-track board and separate budget chip per the Wayfinder mockup. */
 .trip-facts{max-width:640px;margin:24px auto 0}
 .trip-facts-heading{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);margin:0 0 8px}
 .trip-facts-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:11px 0;border-bottom:1px solid var(--border)}

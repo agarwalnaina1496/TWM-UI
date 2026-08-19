@@ -145,8 +145,7 @@ function ThinStateTabPlaceholder({ tab }) {
 function ThinStateDashboard({ tripState, tripId }) {
   const [tab, setTab] = useState('Overview');
   const tripContext = tripState?.trip_context;
-  const factRows = [destinationFactRow(tripState), ...contextFactRows(tripContext)];
-  const budget = tripContext?.budget;
+  const factRows = [...contextFactRows(tripContext), destinationFactRow(tripState)];
   const primaryCta = dashboardPrimaryCta(tripState);
   return (
     <main className="wrap dashboard dashboard-wide">
@@ -160,11 +159,6 @@ function ThinStateDashboard({ tripState, tripId }) {
 
       {tab === 'Overview' ? (
         <>
-          {budget && (
-            <div className="thin-state-budget-row">
-              <span className="recap-pill">{budget}</span>
-            </div>
-          )}
           <div className="trip-facts">
             <h2 className="trip-facts-heading">Your trip so far</h2>
             {factRows.map(row => (

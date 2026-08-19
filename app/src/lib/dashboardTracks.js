@@ -84,10 +84,10 @@ function unavailableTrack() {
   return { status: 'pending', label: 'Available once your itinerary is ready', cta: null };
 }
 
-// TWM-182: "Your trip so far"'s Destination row — a fixed row, always
-// first, that either shows the settled destination or a stage-aware CTA to
-// go pick one. Reuses routeTrack's own done/CTA split so this never drifts
-// from the (now-removed) Route track card's logic.
+// TWM-182: "Your trip so far"'s Destination row — a fixed row, always last,
+// that either shows the settled destination or a stage-aware CTA to go pick
+// one. Reuses routeTrack's own done/CTA split so this never drifts from the
+// (now-removed) Route track card's logic.
 export function destinationFactRow(tripState) {
   const track = routeTrack(tripState);
   if (track.status === 'done') return { label: 'Destination', value: track.label };
@@ -113,31 +113,36 @@ export function dashboardPrimaryCta(tripState) {
   return tracks.route.cta || tracks.dayPlan.cta || null;
 }
 
-// "Your trip so far" — the data-table recap (Destination/Origin/Dates/
-// Duration/Travelers rows), distinct from Destinations'/My Trips' pill-based
-// contextRecapPills: labeled rows instead of bare formatted strings, and
-// budget deliberately excluded here (shown as its own chip instead, matching
-// the mockup). trip_context is free-form (Scout extracts whatever field
-// names fit the conversation), so a field simply doesn't appear as a row
-// when absent.
-const FACT_ROWS = [
-  ['origin', 'Origin', value => String(value)],
-  ['travel_window', 'Dates', value => String(value)],
-  ['month', 'Dates', value => String(value)],
-  ['dates', 'Dates', value => String(value)],
-  ['duration_days', 'Duration', value => `${value} day${value === 1 ? '' : 's'}`],
-  ['travelers', 'Travelers', value => String(value)],
-];
+// "Your trip so far" — the data-table recap (Origin/Dates-or-Month+Duration/
+// No. of travelers/Budget rows, Destination last), distinct from
+// Destinations'/My Trips' pill-based contextRecapPills: labeled rows
+// instead of bare formatted strings. trip_context is free-form (Scout
+// extracts whatever field names fit the conversation), so a field simply
+// doesn't appear as a row when absent.
+const dayLabel = value => `${value} day${value === 1 ? '' : 's'}`;
+
+function dateRows(tripContext) {
+  // Exact dates known (travel_window preferred over a bare dates string):
+  // show only Dates — duration is redundant once the actual dates are given.
+  // Otherwise, fall back to Month + Duration together, since neither alone
+  // pins down the trip on its own.
+  const exactDates = tripContext?.travel_window ?? tripContext?.dates;
+  if (exactDates !== undefined && exactDates !== null && exactDates !== '') {
+    return [{ label: 'Dates', value: String(exactDates) }];
+  }
+  const rows = [];
+  if (tripContext?.month) rows.push({ label: 'Month', value: String(tripContext.month) });
+  const duration = tripContext?.duration_days;
+  if (duration !== undefined && duration !== null && duration !== '') rows.push({ label: 'Duration', value: dayLabel(duration) });
+  return rows;
+}
 
 export function contextFactRows(tripContext) {
-  const seenLabels = new Set();
   const rows = [];
-  for (const [key, label, format] of FACT_ROWS) {
-    if (seenLabels.has(label)) continue; // travel_window/month/dates are alternates for the same "Dates" row
-    const value = tripContext?.[key];
-    if (value === undefined || value === null || value === '') continue;
-    rows.push({ label, value: format(value) });
-    seenLabels.add(label);
-  }
+  if (tripContext?.origin) rows.push({ label: 'Origin', value: String(tripContext.origin) });
+  rows.push(...dateRows(tripContext));
+  const travelers = tripContext?.travelers;
+  if (travelers !== undefined && travelers !== null && travelers !== '') rows.push({ label: 'No. of travelers', value: String(travelers) });
+  if (tripContext?.budget) rows.push({ label: 'Budget', value: String(tripContext.budget) });
   return rows;
 }
