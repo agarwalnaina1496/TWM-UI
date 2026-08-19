@@ -55,6 +55,21 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByText('Still deciding?')).toBeInTheDocument();
   });
 
+  // TWM-182: trips starts as [] before the boot fetch resolves — the
+  // empty-state check must consult tripLoadStatus, not just trips.length,
+  // or a returning traveler with real trips briefly sees "No trips yet".
+  it('shows a loading state before the empty state while trips are still being fetched', async () => {
+    let resolveTrips;
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => { resolveTrips = resolve; }));
+    renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+
+    expect(screen.getByText('Loading your trips…')).toBeInTheDocument();
+    expect(screen.queryByText('No trips yet')).not.toBeInTheDocument();
+
+    resolveTrips(jsonResponse({ trips: [] }));
+    expect(await screen.findByText('No trips yet')).toBeInTheDocument();
+  });
+
   it('shows a "+ New trip" menu when trips exist, with both entry actions', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
       trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],

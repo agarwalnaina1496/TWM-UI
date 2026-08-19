@@ -14,7 +14,8 @@ import {
   transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
 } from '../lib/bookingCatalog.js';
-import { contextRecapPills, stageBadge, stageCta } from '../lib/tripLifecycle.js';
+import { contextRecapPills } from '../lib/tripLifecycle.js';
+import { dashboardTrackStatuses, dashboardOverviewState, OVERVIEW_STATE_COPY } from '../lib/dashboardTracks.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import '../styles/dashboard.css';
@@ -93,28 +94,58 @@ function AnchorList({ anchors }) {
   );
 }
 
-// TWM-175: Dashboard is reachable from message one, not gated behind
-// itinerary-ready — a thin recap + status + CTA into whichever Build screen
-// is relevant, filling in as the trip matures. Never attempts to boot Atlas
-// before a plan is actually frozen (the Backend rejects start_itinerary
+const TRACK_META = {
+  route: { icon: '🧭', label: 'Route' },
+  dayPlan: { icon: '📅', label: 'Day plan' },
+  bookings: { icon: '🧳', label: 'Bookings' },
+  documents: { icon: '📁', label: 'Documents' },
+};
+
+const TRACK_STATUS_TONE = { done: 'positive', progress: 'caution', pending: 'neutral' };
+const TRACK_STATUS_TEXT = { done: 'Done', progress: 'In progress', pending: 'Not started' };
+
+function TrackCard({ trackKey, track }) {
+  const navigate = useNavigate();
+  const meta = TRACK_META[trackKey];
+  return (
+    <article className="dashboard-card track-card" aria-label={meta.label}>
+      <div className="track-card-head">
+        <span className="track-card-icon" aria-hidden="true">{meta.icon}</span>
+        <h3>{meta.label}</h3>
+        <StatusPill tone={TRACK_STATUS_TONE[track.status]}>{TRACK_STATUS_TEXT[track.status]}</StatusPill>
+      </div>
+      <p className="track-card-label">{track.label}</p>
+      {track.cta && (
+        <button type="button" className="btn btn-ghost" onClick={() => navigate(track.cta.to)}>{track.cta.label} →</button>
+      )}
+    </article>
+  );
+}
+
+// TWM-175/182: Dashboard is reachable from message one, not gated behind
+// itinerary-ready — the 4-track board (Route/Day plan/Bookings/Documents,
+// Budget explicitly excluded per product decision) plus a per-state Overview
+// headline, filling in honestly as the trip matures. Never attempts to boot
+// Atlas before a plan is actually frozen (the Backend rejects start_itinerary
 // otherwise), which is what used to surface as a raw error on an early visit.
 function ThinStateDashboard({ tripState }) {
-  const navigate = useNavigate();
-  const badge = stageBadge(tripState);
-  const cta = stageCta(tripState);
   const pills = contextRecapPills(tripState?.trip_context);
+  const tracks = dashboardTrackStatuses(tripState);
+  const overviewState = dashboardOverviewState(tripState);
+  const copy = OVERVIEW_STATE_COPY[overviewState];
   return (
     <main className="wrap dashboard">
       <div className="thin-state-card">
-        <StatusPill tone="neutral">{badge.text}</StatusPill>
-        <h1 className="hero-title">Your <em>trip</em></h1>
+        <h1 className="hero-title">{copy.heading}</h1>
+        <p className="thin-state-note">{copy.note}</p>
         {pills.length > 0 ? (
           <div className="trip-recap">{pills.map(p => <span key={p} className="recap-pill">{p}</span>)}</div>
         ) : (
           <p className="thin-state-empty">Nothing saved yet — this fills in as you go.</p>
         )}
-        <p className="thin-state-note">Your itinerary will appear here once your plan is approved.</p>
-        <button type="button" className="btn btn-primary" onClick={() => navigate(cta.to)}>{cta.label}</button>
+      </div>
+      <div className="track-board" role="region" aria-label="Trip tracks">
+        {Object.entries(tracks).map(([trackKey, track]) => <TrackCard key={trackKey} trackKey={trackKey} track={track} />)}
       </div>
     </main>
   );

@@ -741,6 +741,42 @@ describe('Destinations (real Meridian integration)', () => {
       }));
     });
 
+    // TWM-182: Guide can clear a fixed-field gate on the same turn it
+    // finishes the plan — a stale `awaiting` value must not stall a
+    // completed plan behind the checkpoint overlay.
+    it('proceeds straight to Trip Preview when day_plan is already populated, even if awaiting still names a fixed field', async () => {
+      const server = createServer({ recommendation: successOutcome() });
+      server.queueCommand(() => jsonResponse({
+        message: 'Confirmed.', agent_meta: null,
+        trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
+      }));
+      server.queueCommand(() => jsonResponse({
+        message: 'Here is your finished plan.', agent_meta: null,
+        trip: {
+          id: 'trip-1', title: 'Trip', version: 5,
+          trip_state: {
+            ...server.tripState,
+            planner_state: {
+              conversation_context: { awaiting: 'budget' },
+              places: [{ name: 'Gwalior Fort' }],
+              day_plan: [{ day: 1, places: ['Gwalior Fort'] }],
+            },
+          },
+        },
+      }));
+      fetchMock = createFetchMock(server);
+      global.fetch = wrapFetchMockWithGuestSession(fetchMock);
+      renderDestinations();
+      await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+
+      fireEvent.click(screen.getByText('Plan this trip →'));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({
+        body: expect.stringContaining('"command":"start_planning"'),
+      })));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
     it('never shows the checkpoint for the Selected-already-chosen shortcut (no start_planning re-call)', async () => {
       const server = createServer({
         recommendation: successOutcome(),

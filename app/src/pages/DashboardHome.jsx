@@ -44,7 +44,7 @@ function matchesSearch(t, query) {
 // separate filter no longer adds anything the new structure doesn't already
 // split out.
 export default function DashboardHome() {
-  const { trips, auth, startNewTrip, openTrip, renameTrip } = useTrip();
+  const { trips, tripLoadStatus, auth, startNewTrip, openTrip, renameTrip } = useTrip();
   const navigate = useNavigate();
   const [syncInviteOpen, setSyncInviteOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -239,7 +239,11 @@ export default function DashboardHome() {
     );
   }
 
-  const trueEmpty = visibleTrips.length === 0;
+  // Gated on tripLoadStatus, not just visibleTrips.length === 0 — trips
+  // starts as an empty array before the boot fetch resolves, so an
+  // unconditional length check briefly renders a real account as empty.
+  const stillLoading = tripLoadStatus !== 'ready';
+  const trueEmpty = !stillLoading && visibleTrips.length === 0;
 
   return (
     <div className="wrap">
@@ -264,7 +268,11 @@ export default function DashboardHome() {
 
       {notice && <div className="price-evidence state-unsafe" role="alert">{notice}</div>}
 
-      {trueEmpty ? (
+      {stillLoading ? (
+        <div className="empty-trips" aria-busy="true">
+          <p>Loading your trips…</p>
+        </div>
+      ) : trueEmpty ? (
         <div className="empty-trips">
           <p className="empty-trips-title">No trips yet</p>
           <p>Start planning your next adventure.</p>
