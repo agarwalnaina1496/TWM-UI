@@ -35,3 +35,18 @@ export const QUICK_REPLIES = Object.freeze({
   // Guide's sixth gating question, asked after the five fixed facts above.
   anything_else: ["Nothing else, let's plan"],
 });
+
+// TWM-183: same `awaiting` keying as QUICK_REPLIES above — a per-turn
+// accessible label/placeholder pair for the known-destination chat input,
+// so a screen-reader user (and a sighted one glancing at the placeholder)
+// gets the field the visible question text is actually asking for, instead
+// of a permanently-stuck "Destination" label past the first turn.
+export const AWAITING_INPUT_LABELS = Object.freeze({
+  origin_city: { label: 'Starting location', placeholder: 'e.g. Delhi' },
+  num_travelers: { label: 'Number of travelers', placeholder: 'e.g. 2' },
+  duration_days: { label: 'Trip duration', placeholder: 'e.g. 5 days' },
+  travel_dates: { label: 'Travel dates', placeholder: 'e.g. next month, or flexible' },
+  budget: { label: 'Budget', placeholder: 'e.g. ₹1,00,000 total for both' },
+  anything_else: { label: 'Anything else to add', placeholder: 'Anything else, or just say you\'re ready' },
+});
+export const DESTINATION_INPUT_LABEL = { label: 'Destination', placeholder: 'e.g. Coorg, Karnataka' };

@@ -23,6 +23,29 @@ describe('buildRecapTurn', () => {
     const text = buildRecapTurn({ trip_context: { origin: 'Delhi' } });
     expect(text).not.toBeNull();
   });
+
+  // TWM-183: "Resume matching" must show the traveler's actual last
+  // exchange, not a generic synthesized recap, whenever a real one was
+  // saved — matcher_state.conversation_context.last_meridian_message is
+  // exactly what Meridian said last turn.
+  it('prefers the real last exchange (last_meridian_message) over the generic synthesized recap', () => {
+    const text = buildRecapTurn({
+      trip_context: { origin: 'Delhi' },
+      matcher_state: { conversation_context: { last_meridian_message: 'Got it — Delhi. How many days are you thinking?' } },
+    });
+    expect(text).toBe('Got it — Delhi. How many days are you thinking?');
+    expect(text).not.toContain('Picking up where you left off');
+  });
+
+  it('falls back to the generic synthesized recap when no real last message was ever saved', () => {
+    const text = buildRecapTurn({ trip_context: { origin: 'Delhi' }, matcher_state: { conversation_context: {} } });
+    expect(text).toContain('Picking up where you left off');
+  });
+
+  it('ignores a blank/whitespace-only last_meridian_message and falls back to the generic recap', () => {
+    const text = buildRecapTurn({ trip_context: { origin: 'Delhi' }, matcher_state: { conversation_context: { last_meridian_message: '   ' } } });
+    expect(text).toContain('Picking up where you left off');
+  });
 });
 
 describe('buildFactsPanel', () => {

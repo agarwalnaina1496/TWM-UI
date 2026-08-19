@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
+import { ENTRY_INTENTS, QUICK_REPLIES, AWAITING_INPUT_LABELS, DESTINATION_INPUT_LABEL } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
 import { planReady } from '../hooks/useGuidePlanning.js';
@@ -46,6 +46,12 @@ export default function JourneyEntry() {
   // dynamic clarification loop Scout uses) — the UI never pre-collects it.
   const entered = useRef(false);
   const lastCommand = useRef(null);
+  // TWM-183: submitDestination optimistically clears the `destination`
+  // input state before awaiting the network response — "Try again" must
+  // resend the value that was actually submitted, not re-read the
+  // now-cleared input, or its guard (`if (!value...) return;`) silently
+  // no-ops. Mirrors the Discover path's own lastCommand ref pattern.
+  const lastDestinationValue = useRef('');
 
   // Known-destination path keeps its original unconditional greeting — out
   // of scope for this story (Guide's chat, not Discover/Destinations).
@@ -120,6 +126,7 @@ export default function JourneyEntry() {
     const value = (override ?? destination).trim();
     if (!value || busy) return;
     const isFirstSend = !entered.current;
+    lastDestinationValue.current = value;
     setDestination('');
     setBusy(true);
     setError(null);
@@ -150,6 +157,9 @@ export default function JourneyEntry() {
   const quickReplies = (QUICK_REPLIES[awaiting] || []).map(value => ({ label: value, value }));
   const guideAwaiting = commandSnapshot?.trip_state?.planner_state?.conversation_context?.awaiting;
   const guideQuickReplies = QUICK_REPLIES[guideAwaiting] || [];
+  // TWM-183: the input's accessible label/placeholder must track the
+  // active question, not stay stuck on "Destination" past the first turn.
+  const destinationInputLabel = (guideAwaiting && AWAITING_INPUT_LABELS[guideAwaiting]) || DESTINATION_INPUT_LABEL;
   const thinkingMessage = useThinkingMessage(busy);
 
   return (
@@ -201,12 +211,12 @@ export default function JourneyEntry() {
             )}
           </div>
           <div className="chat-input-bar">
-            <input className="chat-input" aria-label="Destination" placeholder="e.g. Coorg, Karnataka" value={destination} onChange={event => setDestination(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') submitDestination(); }} />
+            <input className="chat-input" aria-label={destinationInputLabel.label} placeholder={destinationInputLabel.placeholder} value={destination} onChange={event => setDestination(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') submitDestination(); }} />
             <button type="button" className="chat-send" onClick={() => submitDestination()} disabled={busy} aria-label="Start planning">→</button>
           </div>
         </>
       )}
-      {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={isDiscover ? () => sendDiscover(lastCommand.current?.message ?? '') : () => submitDestination()}>Try again</button></div>}
+      {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={isDiscover ? () => sendDiscover(lastCommand.current?.message ?? '') : () => submitDestination(lastDestinationValue.current)}>Try again</button></div>}
     </div>
   );
 }

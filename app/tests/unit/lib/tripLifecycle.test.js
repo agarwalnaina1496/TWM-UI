@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, tripStatusLine, relativeUpdatedAt,
+  contextRecapPills,
 } from '../../../src/lib/tripLifecycle.js';
 
 function state(overrides = {}) {
@@ -137,6 +138,21 @@ describe('relativeUpdatedAt (TWM-184)', () => {
   it('30+ days: falls back to an absolute date', () => {
     vi.useFakeTimers().setSystemTime(new Date('2026-08-19T12:00:00Z'));
     expect(relativeUpdatedAt('2026-06-01T12:00:00Z')).toBe('updated Jun 1, 2026');
+  });
+});
+
+describe('contextRecapPills (TWM-183)', () => {
+  // origin_city is where Meridian's own extraction (and the known-
+  // destination entry path) sometimes lands the origin — was previously
+  // invisible to every RECAP_FIELDS-based caller (My Trips cards, the
+  // Discover-chat fallback recap) whenever a trip's origin only existed
+  // under this key instead of the plain `origin` field.
+  it('recognizes origin_city, not just origin', () => {
+    expect(contextRecapPills({ origin_city: 'Bengaluru' })).toContain('From Bengaluru');
+  });
+
+  it('still recognizes the plain origin field', () => {
+    expect(contextRecapPills({ origin: 'Delhi' })).toContain('From Delhi');
   });
 });
 
