@@ -460,11 +460,16 @@ export default function Destinations() {
   }
 
   // Persists both keys together, always — evidenceOpen alone would be
-  // ambiguous about *which* option it belongs to after a refresh.
+  // ambiguous about *which* option it belongs to after a refresh. Persists
+  // focusedOption's key (what's actually on screen, falling back to
+  // options[0]) rather than the raw focusedKey state — the auto-focus
+  // effect above hasn't necessarily committed yet on the very first
+  // toggle, so focusedKey can still be null while the card already shows
+  // the top-ranked option.
   function toggleEvidence() {
     const next = !evidenceOpen;
     setEvidenceOpen(next);
-    updateUiState({ [FOCUSED_KEY]: focusedKey, [EVIDENCE_OPEN_KEY]: next }).catch(() => {});
+    updateUiState({ [FOCUSED_KEY]: focusedOption?.key ?? null, [EVIDENCE_OPEN_KEY]: next }).catch(() => {});
   }
 
   // TWM-173: one unified CTA — an already-selected option just navigates
