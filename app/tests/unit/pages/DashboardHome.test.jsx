@@ -55,6 +55,21 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByText('Still deciding?')).toBeInTheDocument();
   });
 
+  // TWM-182: trips starts as [] before the boot fetch resolves — the
+  // empty-state check must consult tripLoadStatus, not just trips.length,
+  // or a returning traveler with real trips briefly sees "No trips yet".
+  it('shows a loading state before the empty state while trips are still being fetched', async () => {
+    let resolveTrips;
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => { resolveTrips = resolve; }));
+    renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+
+    expect(screen.getByText('Loading your trips…')).toBeInTheDocument();
+    expect(screen.queryByText('No trips yet')).not.toBeInTheDocument();
+
+    resolveTrips(jsonResponse({ trips: [] }));
+    expect(await screen.findByText('No trips yet')).toBeInTheDocument();
+  });
+
   it('shows a "+ New trip" menu when trips exist, with both entry actions', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
       trips: [tripRecord({ title: 'Coorg', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } })],
@@ -239,7 +254,15 @@ describe('DashboardHome (TWM-108/163)', () => {
     })));
   });
 
-  it('opening a trip that returns 404 shows an unavailable notice and drops the card (TWM-109)', async () => {
+  // TWM-182: the plain "Open trip →" card now renders instantly from the
+  // already-cached list entry (viewTrip) rather than always verifying with
+  // a live GET first — so a trip deleted elsewhere is no longer caught
+  // before navigating away from Home. viewTrip still fires a background
+  // openTrip for the same id to confirm existence; on a 404 that drops the
+  // trip from the shared `trips` cache exactly as before (TWM-109) — the
+  // "unavailable" notice itself now surfaces on the Dashboard page the
+  // traveler already navigated to (see TripDashboard.test.jsx), not here.
+  it('opening a cached trip that turns out deleted elsewhere still drops it from the shared trips cache (TWM-109)', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({
         trips: [
@@ -256,8 +279,10 @@ describe('DashboardHome (TWM-108/163)', () => {
 
     await userEvent.click(within(screen.getByText('Deleted elsewhere').closest('.trip-card')).getByRole('button', { name: 'Open trip →' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('This trip is no longer available.');
-    expect(screen.queryByText('Deleted elsewhere')).not.toBeInTheDocument();
+    // The cache-only open resolves and navigates immediately (no blocking
+    // fetch); the background verification's 404 lands moments later and
+    // removes the card once it does.
+    await waitFor(() => expect(screen.queryByText('Deleted elsewhere')).not.toBeInTheDocument());
     expect(screen.getByText('Coorg')).toBeInTheDocument();
   });
 

@@ -330,6 +330,64 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
     expect(result.current.commandSnapshot.trip_state.stage).toBe('planning');
   });
 
+  // TWM-182 follow-up: once a genuine single-trip fetch has happened for an
+  // id (not merely the boot's thin list load), re-opening the same id is
+  // safe to skip — the cached record is already complete, so a second
+  // openTrip call shouldn't cost another round trip.
+  it('openTrip does not re-fetch when the current trip already came from a full single-trip fetch', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [
+          { id: 'trip-a', title: 'A', version: 1, trip_state: { stage: 'matched' }, ui_state: {} },
+          { id: 'trip-b', title: 'B', version: 1, trip_state: { stage: 'planning' }, ui_state: {} },
+        ],
+      }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'trip-b', title: 'B', version: 1, trip_state: { stage: 'planning' }, ui_state: {} }));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+
+    await act(async () => { await result.current.openTrip('trip-b'); });
+    const callsAfterFirstOpen = fetchMock.mock.calls.length;
+
+    await act(async () => { await result.current.openTrip('trip-b'); });
+
+    expect(fetchMock.mock.calls.length).toBe(callsAfterFirstOpen);
+    expect(result.current.currentTripId).toBe('trip-b');
+  });
+
+  // TWM-182: reproduced live — GET /api/trips (list) omits planner_state
+  // entirely, while GET /api/trips/{id} (single) includes it. The boot load
+  // can make a trip "current" via the thin list response alone (its stage
+  // already matches tripRecordRef.current.id); openTrip on that same id must
+  // still hit the full-detail endpoint, or commandSnapshot stays thin and
+  // TripPreview's boot effect wrongly re-fires start_planning on an
+  // already-started Guide session (Backend 422s: "Guide planning has
+  // already started").
+  it('openTrip always re-fetches full detail, even when the boot load already made this id current via the thin list response', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [{ id: 'trip-a', title: 'A', version: 1, trip_state: { stage: 'planning' }, ui_state: {} }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        id: 'trip-a', title: 'A', version: 1,
+        trip_state: { stage: 'planning', active_agent: 'guide', planner_state: { conversation_context: { awaiting: 'trip_duration' } } },
+        ui_state: {},
+      }));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    expect(result.current.currentTripId).toBe('trip-a');
+    expect(result.current.commandSnapshot.trip_state.planner_state).toBeUndefined();
+
+    const callsBefore = fetchMock.mock.calls.length;
+    await act(async () => { await result.current.openTrip('trip-a'); });
+
+    expect(fetchMock.mock.calls.length).toBe(callsBefore + 1);
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-a', expect.not.objectContaining({ method: expect.anything() }));
+    expect(result.current.commandSnapshot.trip_state.planner_state.conversation_context.awaiting).toBe('trip_duration');
+  });
+
   it('renameTrip renames a non-current trip without switching currentTripId', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({

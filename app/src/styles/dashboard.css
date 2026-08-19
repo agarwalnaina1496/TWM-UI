@@ -153,10 +153,20 @@
 .revision-actions .btn:hover{background:#fff3d6}
 
 /* TWM-175: thin-state Dashboard — reachable from message one. */
-.thin-state-card{max-width:520px;margin:40px auto;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:36px 32px}
+.thin-state-card{max-width:640px;margin:40px auto 0;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:36px 32px}
 .thin-state-card .trip-recap{justify-content:center;margin:14px 0}
 .thin-state-empty,.thin-state-note{color:var(--tm);font-size:13.5px;margin:10px 0 18px}
 .thin-state-card .btn{margin-top:6px}
+
+/* TWM-182: the 4-track board (Route/Day plan/Bookings/Documents) shown
+   alongside the per-state Overview headline for any not-yet-frozen trip. */
+.track-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;max-width:900px;margin:24px auto 0}
+.track-card{flex-direction:column;align-items:flex-start;gap:10px}
+.track-card-head{display:flex;align-items:center;gap:8px;width:100%}
+.track-card-icon{font-size:16px}
+.track-card-head h3{margin:0;font-size:14px;font-weight:700;flex:1}
+.track-card-label{color:var(--ts);font-size:13px;margin:0}
+.track-card .btn{align-self:flex-start}
 
 /* TWM-175: trip-shape day-strip on Overview — tappable, jumps into Itinerary. */
 .day-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 16px}

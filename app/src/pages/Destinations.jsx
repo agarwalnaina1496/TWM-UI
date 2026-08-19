@@ -7,6 +7,7 @@ import { contextRecapPills } from '../lib/tripLifecycle.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { isFixedFieldGap } from '../lib/planChat.js';
+import { planReady } from '../hooks/useGuidePlanning.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
@@ -511,8 +512,12 @@ export default function Destinations() {
   // answer — Guide gates one fixed field at a time, so a single answer may
   // reveal another gap before all five are satisfied.
   function proceedFromGuideResponse(response) {
-    const nextAwaiting = response.trip?.trip_state?.planner_state?.conversation_context?.awaiting;
-    if (isFixedFieldGap(nextAwaiting)) {
+    const plannerState = response.trip?.trip_state?.planner_state;
+    const nextAwaiting = plannerState?.conversation_context?.awaiting;
+    // Guide can clear the fixed-field checkpoint gate on the same turn it
+    // finishes the plan — planReady must win over isFixedFieldGap, or a
+    // completed plan gets stuck showing a stale checkpoint prompt.
+    if (!planReady(plannerState) && isFixedFieldGap(nextAwaiting)) {
       setCheckpointAwaiting(nextAwaiting);
       setCheckpointMessage(response.message || '');
       checkpointWasShown.current = true;

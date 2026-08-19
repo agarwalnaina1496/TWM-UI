@@ -44,7 +44,7 @@ function matchesSearch(t, query) {
 // separate filter no longer adds anything the new structure doesn't already
 // split out.
 export default function DashboardHome() {
-  const { trips, auth, startNewTrip, openTrip, renameTrip } = useTrip();
+  const { trips, tripLoadStatus, auth, startNewTrip, openTrip, viewTrip, renameTrip } = useTrip();
   const navigate = useNavigate();
   const [syncInviteOpen, setSyncInviteOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -108,12 +108,18 @@ export default function DashboardHome() {
   // card from another session) fails closed — the context already dropped
   // it from `trips`, so the card disappears and we just surface why instead
   // of navigating into a dead trip.
-  async function handleOpen(t, { to = '/dashboard' } = {}) {
+  //
+  // TWM-182: the plain "Open trip →" card always lands on /dashboard, which
+  // can safely render off the cheap list-cached record (viewTrip) — no
+  // network cost for the common case. handleExploreRailOpen below overrides
+  // this to the full openTrip, since its `to` can be a decision-making page
+  // (ScoutChat/Destinations/TripPreview) that needs real planner_state.
+  async function handleOpen(t, { to = '/dashboard', fetchTrip = viewTrip } = {}) {
     if (busyId) return;
     setBusyId(t.id);
     setNotice(null);
     try {
-      const result = await openTrip(t.id);
+      const result = await fetchTrip(t.id);
       if (!result.ok) {
         setNotice('This trip is no longer available.');
         return;
@@ -126,7 +132,7 @@ export default function DashboardHome() {
 
   function handleExploreRailOpen(t) {
     trackEvent('explore_rail_engaged', { stage: t.trip_state?.stage ?? 'new' });
-    handleOpen(t, { to: stageCta(t.trip_state).to });
+    handleOpen(t, { to: stageCta(t.trip_state).to, fetchTrip: openTrip });
   }
 
   function startRename(t) {
@@ -239,7 +245,11 @@ export default function DashboardHome() {
     );
   }
 
-  const trueEmpty = visibleTrips.length === 0;
+  // Gated on tripLoadStatus, not just visibleTrips.length === 0 — trips
+  // starts as an empty array before the boot fetch resolves, so an
+  // unconditional length check briefly renders a real account as empty.
+  const stillLoading = tripLoadStatus !== 'ready';
+  const trueEmpty = !stillLoading && visibleTrips.length === 0;
 
   return (
     <div className="wrap">
@@ -264,7 +274,11 @@ export default function DashboardHome() {
 
       {notice && <div className="price-evidence state-unsafe" role="alert">{notice}</div>}
 
-      {trueEmpty ? (
+      {stillLoading ? (
+        <div className="empty-trips" aria-busy="true">
+          <p>Loading your trips…</p>
+        </div>
+      ) : trueEmpty ? (
         <div className="empty-trips">
           <p className="empty-trips-title">No trips yet</p>
           <p>Start planning your next adventure.</p>

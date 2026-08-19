@@ -14,7 +14,8 @@ import {
   transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
 } from '../lib/bookingCatalog.js';
-import { contextRecapPills, stageBadge, stageCta } from '../lib/tripLifecycle.js';
+import { contextRecapPills } from '../lib/tripLifecycle.js';
+import { dashboardTrackStatuses, dashboardOverviewState, OVERVIEW_STATE_COPY } from '../lib/dashboardTracks.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import '../styles/dashboard.css';
@@ -93,28 +94,78 @@ function AnchorList({ anchors }) {
   );
 }
 
-// TWM-175: Dashboard is reachable from message one, not gated behind
-// itinerary-ready — a thin recap + status + CTA into whichever Build screen
-// is relevant, filling in as the trip matures. Never attempts to boot Atlas
-// before a plan is actually frozen (the Backend rejects start_itinerary
-// otherwise), which is what used to surface as a raw error on an early visit.
-function ThinStateDashboard({ tripState }) {
+const TRACK_META = {
+  route: { icon: '🧭', label: 'Route' },
+  dayPlan: { icon: '📅', label: 'Day plan' },
+  bookings: { icon: '🧳', label: 'Bookings' },
+  documents: { icon: '📁', label: 'Documents' },
+};
+
+const TRACK_STATUS_TONE = { done: 'positive', progress: 'caution', pending: 'neutral' };
+const TRACK_STATUS_TEXT = { done: 'Done', progress: 'In progress', pending: 'Not started' };
+
+// TWM-182: every track CTA lands on a decision-making page (ScoutChat,
+// Destinations, TripPreview) that reads real planner_state/matcher_state to
+// decide what to do next — never safe to navigate there off ThinStateDashboard's
+// possibly-cheap, list-cached tripState (see TripContext.viewTrip). Always
+// ensures a full single-trip fetch first, regardless of how the Dashboard
+// itself was reached; openTrip is already a no-op if one already happened.
+function TrackCard({ trackKey, track, tripId }) {
   const navigate = useNavigate();
-  const badge = stageBadge(tripState);
-  const cta = stageCta(tripState);
+  const { openTrip } = useTrip();
+  const [pending, setPending] = useState(false);
+  const meta = TRACK_META[trackKey];
+
+  async function goToCta() {
+    if (pending) return;
+    setPending(true);
+    try {
+      await openTrip(tripId);
+      navigate(track.cta.to);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <article className="dashboard-card track-card" aria-label={meta.label}>
+      <div className="track-card-head">
+        <span className="track-card-icon" aria-hidden="true">{meta.icon}</span>
+        <h3>{meta.label}</h3>
+        <StatusPill tone={TRACK_STATUS_TONE[track.status]}>{TRACK_STATUS_TEXT[track.status]}</StatusPill>
+      </div>
+      <p className="track-card-label">{track.label}</p>
+      {track.cta && (
+        <button type="button" className="btn btn-ghost" disabled={pending} onClick={goToCta}>{track.cta.label} →</button>
+      )}
+    </article>
+  );
+}
+
+// TWM-175/182: Dashboard is reachable from message one, not gated behind
+// itinerary-ready — the 4-track board (Route/Day plan/Bookings/Documents,
+// Budget explicitly excluded per product decision) plus a per-state Overview
+// headline, filling in honestly as the trip matures. Never attempts to boot
+// Atlas before a plan is actually frozen (the Backend rejects start_itinerary
+// otherwise), which is what used to surface as a raw error on an early visit.
+function ThinStateDashboard({ tripState, tripId }) {
   const pills = contextRecapPills(tripState?.trip_context);
+  const tracks = dashboardTrackStatuses(tripState);
+  const overviewState = dashboardOverviewState(tripState);
+  const copy = OVERVIEW_STATE_COPY[overviewState];
   return (
     <main className="wrap dashboard">
       <div className="thin-state-card">
-        <StatusPill tone="neutral">{badge.text}</StatusPill>
-        <h1 className="hero-title">Your <em>trip</em></h1>
+        <h1 className="hero-title">{copy.heading}</h1>
+        <p className="thin-state-note">{copy.note}</p>
         {pills.length > 0 ? (
           <div className="trip-recap">{pills.map(p => <span key={p} className="recap-pill">{p}</span>)}</div>
         ) : (
           <p className="thin-state-empty">Nothing saved yet — this fills in as you go.</p>
         )}
-        <p className="thin-state-note">Your itinerary will appear here once your plan is approved.</p>
-        <button type="button" className="btn btn-primary" onClick={() => navigate(cta.to)}>{cta.label}</button>
+      </div>
+      <div className="track-board" role="region" aria-label="Trip tracks">
+        {Object.entries(tracks).map(([trackKey, track]) => <TrackCard key={trackKey} trackKey={trackKey} track={track} tripId={tripId} />)}
       </div>
     </main>
   );
@@ -490,6 +541,7 @@ function ActivitySegment({ activity, anchor, onOpenConfirm }) {
 
 export default function TripDashboard() {
   const { commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState } = useTrip();
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const initialTab = TABS.some(t => t.name === params.get('tab')) ? params.get('tab') : 'Overview';
   const [tab, setTab] = useState(initialTab);
@@ -729,11 +781,30 @@ export default function TripDashboard() {
     if (destination === 'bookings') setTab('Bookings');
   }
 
+  // TWM-182: viewTrip's cache-only render (see TripContext.jsx) still fires
+  // a background openTrip to confirm the trip actually exists server-side —
+  // the one thing its cheap path skips that the full fetch used to guarantee
+  // for free (TWM-109, a trip deleted from another session/device). If that
+  // comes back 404, dropUnavailableTrip clears commandSnapshot to null while
+  // the traveler is already looking at this page — surface it plainly rather
+  // than falling through to an empty-looking thin state.
+  if (tripLoadStatus === 'ready' && !commandSnapshot) {
+    return (
+      <main className="wrap dashboard">
+        <div className="price-evidence state-unsafe" role="alert">
+          <strong>Trip unavailable</strong>
+          <span>This trip is no longer available.</span>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={() => navigate('/')}>Back to your trips</button>
+      </main>
+    );
+  }
+
   // TWM-175: reachable from message one — never attempts to boot Atlas
   // before a plan is frozen, so an early visit shows a real recap + CTA
   // instead of a crash or a blank page.
   if (tripLoadStatus === 'ready' && !frozenPlan) {
-    return <ThinStateDashboard tripState={tripState} />;
+    return <ThinStateDashboard tripState={tripState} tripId={tripId} />;
   }
 
   if (bootStatus === 'error') {
