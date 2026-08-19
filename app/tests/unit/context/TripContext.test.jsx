@@ -388,6 +388,63 @@ describe('TripContext multi-trip handling (TWM-108)', () => {
     expect(result.current.commandSnapshot.trip_state.planner_state.conversation_context.awaiting).toBe('trip_duration');
   });
 
+  // TWM-182 fast-follow: reproduced live. viewTrip's original short-circuit
+  // (`if (id === tripRecordRef.current?.id) return ...`) bypassed both the
+  // itinerary-ready check and the background verify/upgrade whenever the id
+  // merely matched — even though the boot's thin list load, not a full
+  // fetch, is what made it "current". An itinerary-ready trip that happened
+  // to be the boot's default current trip got stuck showing the thin track
+  // board (never upgrading to the full TripDashboard), confirmed live on
+  // staging.
+  it('viewTrip still fires a background full fetch when the already-current trip is only thin (from the boot list load)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [{ id: 'trip-a', title: 'A', version: 1, trip_state: { stage: 'planning' }, ui_state: {} }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        id: 'trip-a', title: 'A', version: 1,
+        trip_state: { stage: 'planning', planner_state: { conversation_context: { awaiting: 'trip_duration' } } },
+        ui_state: {},
+      }));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    expect(result.current.currentTripId).toBe('trip-a');
+
+    const callsBefore = fetchMock.mock.calls.length;
+    act(() => { result.current.viewTrip('trip-a'); });
+
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBefore));
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-a', expect.not.objectContaining({ method: expect.anything() }));
+    await waitFor(() => expect(result.current.commandSnapshot.trip_state.planner_state?.conversation_context?.awaiting).toBe('trip_duration'));
+  });
+
+  it('viewTrip delegates to a full fetch when the already-current thin trip turns out itinerary-ready', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({
+        trips: [{ id: 'trip-a', title: 'A', version: 1, trip_state: { stage: 'planned', itinerary_state: { status: 'ready' } }, ui_state: {} }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        id: 'trip-a', title: 'A', version: 1,
+        trip_state: {
+          stage: 'planned',
+          planner_state: { frozen_plan: { guide_revision: 1 } },
+          itinerary_state: { status: 'ready', current_version: { version: 1, source_guide_revision: 1 } },
+        },
+        ui_state: {},
+      }));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    expect(result.current.currentTripId).toBe('trip-a');
+
+    let outcome;
+    await act(async () => { outcome = await result.current.viewTrip('trip-a'); });
+
+    expect(outcome.record.trip_state.planner_state.frozen_plan).toBeTruthy();
+    expect(result.current.commandSnapshot.trip_state.planner_state.frozen_plan).toBeTruthy();
+  });
+
   it('renameTrip renames a non-current trip without switching currentTripId', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({
