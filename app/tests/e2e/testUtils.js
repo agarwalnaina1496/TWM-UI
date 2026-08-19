@@ -65,6 +65,34 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
     if (itineraryVersionsMatch) {
       return route.fulfill({ json: { versions: itineraryVersions } });
     }
+    // TripDashboard lazily fetches the itinerary body from this endpoint
+    // (separate from the trip record's itinerary_state summary) once
+    // itinerary_state.status is 'ready' — unmocked, it falls through to a
+    // real network call that 404s to the Vite SPA fallback (200 + HTML),
+    // which request() then silently treats as an empty success payload.
+    const itineraryMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)\/itinerary$/);
+    if (itineraryMatch && records.has(itineraryMatch[1])) {
+      const currentVersion = records.get(itineraryMatch[1]).trip_state?.itinerary_state?.current_version;
+      if (!currentVersion) return route.fulfill({ status: 404, json: { detail: 'No itinerary yet.' } });
+      return route.fulfill({ json: currentVersion });
+    }
+    // Bookings tab (TWM-130/131/146) resolves each transport mode's CTA,
+    // per-route feasibility, and a live flight-offer search — all real
+    // network calls, unmocked by default. Fulfilled generically here
+    // (a resolved CTA to a placeholder URL, no feasibility data, no live
+    // offer) so any spec that reaches the Bookings tab gets deterministic,
+    // renderable options instead of the Vite SPA-fallback empty-object trick.
+    if (method === 'POST' && pathname.endsWith('/trusted-action/feasibility')) {
+      return route.fulfill({ json: null });
+    }
+    if (method === 'POST' && pathname.endsWith('/trusted-action')) {
+      return route.fulfill({
+        json: { status: 'resolved', action: { target: { target_url: 'https://example.com/booking' }, internal_capability: null, affiliate_disclosure: false } },
+      });
+    }
+    if (method === 'POST' && pathname.endsWith('/flight-search')) {
+      return route.fulfill({ json: { status: 'unavailable' } });
+    }
     const singleMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)$/);
     if (singleMatch && records.has(singleMatch[1])) {
       return route.fulfill({ json: records.get(singleMatch[1]) });
