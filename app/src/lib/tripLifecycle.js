@@ -99,3 +99,59 @@ export function stageCta(tripState) {
   if (stage === 'new' && hasTripContext(tripState)) return { label: 'Resume chat', to: '/scout-chat' };
   return STAGE_CTA[stage] || STAGE_CTA.new;
 }
+
+// A destination reads as "known" from either path: Discover ends with
+// trip_context.selected_option once a recommendation is chosen (TWM-153),
+// known-destination entry sets trip_context.destinations directly and never
+// touches selected_option (JourneyEntry.jsx). Mirrors dashboardTracks.js's
+// own routeDestinationName — kept as a separate, tiny copy here rather than
+// an import, since that module is Dashboard-track-board-specific and this
+// one is a general My Trips/landing helper; duplicating one three-line check
+// beats a cross-module coupling neither side otherwise needs.
+function knownDestinationName(tripContext) {
+  if (tripContext?.selected_option?.name) return tripContext.selected_option.name;
+  const destinations = tripContext?.destinations;
+  if (Array.isArray(destinations) && destinations.length > 0) return destinations.join(', ');
+  return null;
+}
+
+// TWM-184: an honest, one-line current-status string for a My Trips card —
+// deliberately prose, not a fixed-slot/track-dot indicator. A fixed-count
+// visual was built and explicitly rejected during mockup work for reading
+// like "step X of 4," the forced-pipeline framing this whole redesign exists
+// to avoid. Reads only the cheap list-summary fields already on every trip
+// record (`awaiting`/`has_day_plan`/`has_places`, added in TWM-182 Part C) —
+// never triggers a full per-trip fetch just to render a card.
+export function tripStatusLine(tripState) {
+  if (isItineraryReady(tripState)) return 'Itinerary ready — everything in one place.';
+  if (tripState?.stage === 'done') return 'Trip completed.';
+
+  const destination = knownDestinationName(tripState?.trip_context) || contextDestination(tripState?.trip_context);
+  if (!destination) {
+    return hasTripContext(tripState) ? "Still figuring out where you're headed." : 'Just getting started.';
+  }
+  if (tripState?.has_day_plan) return 'Day plan ready — sorting out bookings next.';
+  if (tripState?.has_places) return 'Places picked — building the day-by-day plan.';
+  if (tripState?.awaiting) return "Guide's working out the details with you.";
+  return 'Destination settled — planning not started yet.';
+}
+
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+// TWM-184: "updated Xh/Xd ago" for My Trips cards — relative for anything
+// recent enough to matter (under 30 days), falls back to an absolute date
+// beyond that rather than ballooning into "2 months ago"/"1 year ago" math.
+export function relativeUpdatedAt(dateStr) {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return null;
+  const diff = Date.now() - date.getTime();
+  if (diff < 0) return 'just now'; // clock skew guard
+  if (diff < HOUR_MS) return 'updated just now';
+  if (diff < DAY_MS) return `updated ${Math.floor(diff / HOUR_MS)}h ago`;
+  const days = Math.floor(diff / DAY_MS);
+  if (days < 30) return `updated ${days}d ago`;
+  return `updated ${date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`;
+}

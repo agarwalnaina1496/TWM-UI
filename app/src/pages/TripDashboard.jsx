@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import TripHero from '../components/TripHero.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
@@ -93,6 +93,17 @@ function AnchorList({ anchors }) {
   );
 }
 
+// TWM-184: there was previously no way back from a per-trip Dashboard to
+// the trips list — confirmed absent via grep across this file before this
+// fix. Reuses BackToTrip.jsx's existing `.back-to-trip` link style (every
+// Build screen already has an equivalent reversal link, just pointed at
+// Dashboard instead of Home), placed first inside the page per the mockup.
+function DashboardBackLink() {
+  return (
+    <Link className="back-to-trip" to="/">← Back to your trips</Link>
+  );
+}
+
 // TWM-182: every track CTA lands on a decision-making page (ScoutChat,
 // Destinations, TripPreview) that reads real planner_state/matcher_state to
 // decide what to do next — never safe to navigate there off ThinStateDashboard's
@@ -149,6 +160,7 @@ function ThinStateDashboard({ tripState, tripId }) {
   const primaryCta = dashboardPrimaryCta(tripState);
   return (
     <main className="wrap dashboard dashboard-wide">
+      <DashboardBackLink />
       <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">
         {TABS.map(({ name, icon }) => (
           <button type="button" aria-current={tab === name ? 'page' : undefined} className={tab === name ? 'active' : ''} key={name} onClick={() => setTab(name)}>
@@ -824,6 +836,7 @@ export default function TripDashboard() {
   if (bootStatus === 'error') {
     return (
       <main className="wrap dashboard dashboard-wide">
+        <DashboardBackLink />
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Itinerary unavailable</strong>
           <span>{bootError}</span>
@@ -835,6 +848,7 @@ export default function TripDashboard() {
   if (itineraryStatus === 'error') {
     return (
       <main className="wrap dashboard dashboard-wide">
+        <DashboardBackLink />
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Itinerary unavailable</strong>
           <span>{itineraryFetchError}</span>
@@ -846,6 +860,7 @@ export default function TripDashboard() {
   if (bootStatus === 'booting' && itineraryState?.status !== 'ready') {
     return (
       <main className="wrap dashboard dashboard-wide">
+        <DashboardBackLink />
         <HonestTransition steps={ARRIVAL_STEPS} label="Building your itinerary" stepDurationMs={ARRIVAL_STEP_DURATION_MS} />
       </main>
     );
@@ -854,6 +869,7 @@ export default function TripDashboard() {
   if (bootStatus !== 'ready' || itineraryState?.status !== 'ready' || itineraryStatus !== 'ready' || itineraryTripId !== tripId) {
     return (
       <main className="wrap dashboard dashboard-wide">
+        <DashboardBackLink />
         <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading your trip…</div>
       </main>
     );
@@ -903,6 +919,7 @@ export default function TripDashboard() {
 
   return (
     <main className="wrap dashboard dashboard-wide">
+      <DashboardBackLink />
       {showBookingPrompt && (
         <BookingPromptOverlay
           onResolveBookings={() => resolveBookingPrompt('bookings')}
