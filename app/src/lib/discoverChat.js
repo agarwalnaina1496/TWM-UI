@@ -12,12 +12,20 @@ function humanize(field) {
 // A refresh must not show Scout's cold-open greeting again once real
 // trip_context already exists — that reads as the product forgetting
 // everything the traveler already said, even though the facts survived.
-// Presentation-only: no raw transcript is persisted or reconstructed, just
-// a recap sentence built from the same persisted trip_context/awaiting
-// fields the rest of the app already reads. Returns null when there's
-// nothing to recap yet, so the caller falls back to the normal greeting.
+// Returns null when there's nothing to recap yet, so the caller falls back
+// to the normal greeting.
+//
+// TWM-183: prefers the real last exchange — matcher_state.conversation_
+// context.last_meridian_message is exactly what Meridian actually said last
+// turn (already phrased as a genuine follow-up, including whatever it's
+// still waiting on), so returning it verbatim beats synthesizing a generic
+// "Picking up where you left off" sentence from a fixed field whitelist.
+// Only falls back to that synthesized recap for older/known-destination
+// trips that never had a real last message saved.
 export function buildRecapTurn(tripState, { awaiting } = {}) {
   if (!hasTripContext(tripState)) return null;
+  const lastMessage = tripState?.matcher_state?.conversation_context?.last_meridian_message;
+  if (typeof lastMessage === 'string' && lastMessage.trim()) return lastMessage;
   const pills = contextRecapPills(tripState?.trip_context);
   let text = 'Picking up where you left off';
   text += pills.length > 0 ? ` — ${pills.join(', ')}.` : '.';

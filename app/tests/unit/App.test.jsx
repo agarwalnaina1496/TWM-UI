@@ -209,7 +209,9 @@ describe('App guest-first routing (TWM-140)', () => {
           },
         }),
       }));
-      await user.type(screen.getByPlaceholderText('e.g. Coorg, Karnataka'), "Nothing else{Enter}");
+      // TWM-183: the input's placeholder now correctly tracks the active
+      // question — awaiting is 'anything_else' at this point in the flow.
+      await user.type(screen.getByPlaceholderText("Anything else, or just say you're ready"), "Nothing else{Enter}");
 
       // The unified Plan Builder (TripPreview), not the chat, now shows the
       // generated plan — the known-destination path never lands on /dashboard.

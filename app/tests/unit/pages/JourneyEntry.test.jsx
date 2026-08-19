@@ -53,6 +53,43 @@ describe('JourneyEntry known-destination chat', () => {
     expect(openTrip).not.toHaveBeenCalled();
   });
 
+  // TWM-183: the input's accessible label/placeholder must track the
+  // active question across turns, not stay stuck on "Destination".
+  it('binds the input label/placeholder to the active question across a multi-turn sequence', () => {
+    commandSnapshot = null;
+    const { rerender } = render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(screen.getByRole('textbox', { name: 'Destination' })).toHaveAttribute('placeholder', 'e.g. Coorg, Karnataka');
+
+    commandSnapshot = { trip_state: { planner_state: { conversation_context: { awaiting: 'origin_city' }, places: [], day_plan: [] } } };
+    rerender(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(screen.getByRole('textbox', { name: 'Starting location' })).toHaveAttribute('placeholder', 'e.g. Delhi');
+
+    commandSnapshot = { trip_state: { planner_state: { conversation_context: { awaiting: 'budget' }, places: [], day_plan: [] } } };
+    rerender(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(screen.getByRole('textbox', { name: 'Budget' })).toHaveAttribute('placeholder', 'e.g. ₹1,00,000 total for both');
+  });
+
+  // TWM-183: submitDestination optimistically clears the input state before
+  // awaiting the network response — "Try again" must resend the value that
+  // was actually submitted, not the now-cleared input (which used to make
+  // its own `if (!value...) return;` guard silently no-op).
+  it('"Try again" resends the last submitted value after a failure, not the cleared input', async () => {
+    commandSnapshot = null;
+    sendTripCommand = vi.fn()
+      .mockRejectedValueOnce(new Error('The request timed out. Please try again.'))
+      .mockResolvedValueOnce({ message: 'Got it.', trip: { trip_state: { planner_state: { conversation_context: { awaiting: 'origin_city' }, places: [], day_plan: [] } } } });
+    const user = userEvent.setup();
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+
+    await user.type(screen.getByRole('textbox', { name: 'Destination' }), 'Goa{Enter}');
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(sendTripCommand).toHaveBeenCalledTimes(2);
+    expect(sendTripCommand).toHaveBeenNthCalledWith(2, 'known_destination_entry', { destination: 'Goa' });
+  });
+
   it('asks the sixth "anything else" question once the five fixed fields are answered', () => {
     commandSnapshot = {
       trip_state: {
@@ -71,7 +108,9 @@ describe('JourneyEntry known-destination chat', () => {
     }));
     const user = userEvent.setup();
     render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
-    const input = screen.getByRole('textbox', { name: 'Destination' });
+    // TWM-183: awaiting is 'anything_else' here, so the input's accessible
+    // label correctly tracks that question now, not a stuck "Destination".
+    const input = screen.getByRole('textbox', { name: 'Anything else to add' });
     await user.type(input, "Nothing else, let's plan");
     await user.click(screen.getByRole('button', { name: 'Start planning' }));
     expect(navigate).toHaveBeenCalledWith('/trip-preview', { state: { guideMessage: 'Here is your plan.' } });

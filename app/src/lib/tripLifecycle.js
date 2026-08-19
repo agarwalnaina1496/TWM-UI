@@ -32,6 +32,11 @@ export function isCompletedTrip(tripState) {
 // set of the field names Scout commonly uses, not a guaranteed schema.
 const RECAP_FIELDS = [
   ['origin', value => `From ${value}`],
+  // TWM-183: Meridian's own extraction sometimes lands here (not `origin`),
+  // e.g. the known-destination entry path — was previously invisible to
+  // every RECAP_FIELDS-based caller (My Trips cards, the fallback recap
+  // below) whenever a trip's origin only existed under this key.
+  ['origin_city', value => `From ${value}`],
   ['budget', value => String(value)],
   ['duration_days', value => `${value} day${value === 1 ? '' : 's'}`],
   ['travelers', value => `${value} traveler${value === 1 ? '' : 's'}`],
