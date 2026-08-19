@@ -161,7 +161,7 @@ function ThinStateDashboard({ tripState, tripId }) {
   const factRows = [...contextFactRows(tripContext), destinationFactRow(tripState)];
   const primaryCta = dashboardPrimaryCta(tripState);
   return (
-    <main className="wrap dashboard dashboard-wide">
+    <main className="wrap dashboard">
       <DashboardBackLink />
       <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">
         {TABS.map(({ name, icon }) => (
@@ -823,7 +823,7 @@ export default function TripDashboard() {
   // than falling through to an empty-looking thin state.
   if (tripLoadStatus === 'ready' && !commandSnapshot) {
     return (
-      <main className="wrap dashboard dashboard-wide">
+      <main className="wrap dashboard">
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Trip unavailable</strong>
           <span>This trip is no longer available.</span>
@@ -842,7 +842,7 @@ export default function TripDashboard() {
 
   if (bootStatus === 'error') {
     return (
-      <main className="wrap dashboard dashboard-wide">
+      <main className="wrap dashboard">
         <DashboardBackLink />
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Itinerary unavailable</strong>
@@ -854,7 +854,7 @@ export default function TripDashboard() {
 
   if (itineraryStatus === 'error') {
     return (
-      <main className="wrap dashboard dashboard-wide">
+      <main className="wrap dashboard">
         <DashboardBackLink />
         <div className="price-evidence state-unsafe" role="alert">
           <strong>Itinerary unavailable</strong>
@@ -866,7 +866,7 @@ export default function TripDashboard() {
 
   if (bootStatus === 'booting' && itineraryState?.status !== 'ready') {
     return (
-      <main className="wrap dashboard dashboard-wide">
+      <main className="wrap dashboard">
         <DashboardBackLink />
         <HonestTransition steps={ARRIVAL_STEPS} label="Building your itinerary" stepDurationMs={ARRIVAL_STEP_DURATION_MS} />
       </main>
@@ -875,7 +875,7 @@ export default function TripDashboard() {
 
   if (bootStatus !== 'ready' || itineraryState?.status !== 'ready' || itineraryStatus !== 'ready' || itineraryTripId !== tripId) {
     return (
-      <main className="wrap dashboard dashboard-wide">
+      <main className="wrap dashboard">
         <DashboardBackLink />
         <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading your trip…</div>
       </main>
@@ -925,7 +925,7 @@ export default function TripDashboard() {
   const orphanActivityAnchors = activityAnchors.filter(a => !activityLabels.has(a.label));
 
   return (
-    <main className="wrap dashboard dashboard-wide">
+    <main className="wrap dashboard">
       <DashboardBackLink />
       {showBookingPrompt && (
         <BookingPromptOverlay
