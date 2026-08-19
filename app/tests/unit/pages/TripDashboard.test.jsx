@@ -199,6 +199,16 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
+  // TWM-184: the full itinerary-ready Dashboard is a separate render branch
+  // from the thin state — needs its own back-link coverage.
+  it('shows a "Back to your trips" link on the full itinerary-ready Dashboard', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState());
+    sendTripCommand = vi.fn();
+    await readyDashboard();
+    const link = screen.getByRole('link', { name: '← Back to your trips' });
+    expect(link).toHaveAttribute('href', '/');
+  });
+
   it('shows an error state when itinerary generation fails', async () => {
     commandSnapshot = snapshotWith({});
     sendTripCommand = vi.fn().mockRejectedValue(new Error('The travel assistant returned an invalid response.'));
@@ -857,6 +867,19 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
       expect(screen.getByText('Available once your itinerary is ready.')).toBeInTheDocument();
       expect(screen.queryByText('Your trip so far')).not.toBeInTheDocument();
+    });
+
+    // TWM-184: there was previously no way back from a per-trip Dashboard to
+    // the trips list at all — confirmed absent via grep before this fix.
+    it('shows a "Back to your trips" link pointing at Home', async () => {
+      commandSnapshot = {
+        id: 'trip-1', version: 1,
+        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+      };
+      sendTripCommand = vi.fn();
+      renderDashboard();
+      const link = await screen.findByRole('link', { name: '← Back to your trips' });
+      expect(link).toHaveAttribute('href', '/');
     });
 
     it('shows budget as a row in "Your trip so far" when present, and omits it when absent', async () => {

@@ -24,6 +24,7 @@
 .trip-card .name input{font:inherit;border:1px solid var(--border);border-radius:6px;padding:2px 6px;}
 .trip-card-destination{font-size:12.5px;color:var(--ts);margin-top:2px;}
 .trip-card-timestamp{color:var(--tm);margin-left:8px;}
+.trip-card-status-line{font-size:12.5px;color:var(--ts);margin:6px 0 0;}
 .trip-card-recap{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 .trip-card-recap-pill{font-size:10.5px;font-weight:600;background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:3px 9px;color:var(--ts);}
 .trip-card .meta{display:flex;align-items:center;gap:8px;}
@@ -39,7 +40,7 @@
 .explore-card{flex:0 0 220px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);padding:14px 16px;}
 .explore-card .name{font-family:var(--font-display);font-size:14px;font-weight:600;margin-bottom:6px;}
 .explore-card .status-pill{margin-bottom:8px;}
-.explore-card-empty{font-size:12px;color:var(--tm);margin:0 0 10px;}
+.explore-card-status-line{font-size:12px;color:var(--tm);margin:0 0 10px;}
 .explore-card .btn{margin-top:10px;width:100%;}
 
 .past-trips .trip-card{opacity:.72;}

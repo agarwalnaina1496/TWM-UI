@@ -33,14 +33,25 @@ a{color:inherit;}
 .wrap{max-width:900px;margin:0 auto;padding:0 20px;}
 
 header{position:sticky;top:0;z-index:30;background:rgba(245,242,236,0.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);}
-.header-inner{max-width:900px;margin:0 auto;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;}
+.header-inner{max-width:900px;margin:0 auto;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:8px;}
 .brand{font-family:'Fraunces',serif;font-size:18px;font-weight:600;text-decoration:none;color:var(--tp);}
 .brand em{color:var(--accent);font-style:italic;font-weight:500;}
 
-.header-nav-tabs{display:inline-flex;align-items:center;gap:6px;}
+.header-nav-tabs{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px;}
 .nav-tab{font-size:12.5px;font-weight:600;color:var(--ts);text-decoration:none;cursor:pointer;padding:6px 12px;border-radius:10px;}
 .nav-tab:hover{color:var(--tp);background:var(--accent-bg);}
-.header-nav-group{display:inline-flex;align-items:center;gap:18px;}
+.header-nav-group{display:inline-flex;align-items:center;flex-wrap:wrap;gap:18px;}
+
+/* TWM-184: below ~640px the brand + 4 nav links (Plan a Trip / Discover
+   Destination / Support / Log out) no longer fit one unwrapping row —
+   previously caused real horizontal overflow (confirmed: scrollWidth >
+   client width at 375px). Wraps onto a second, centered row instead of a
+   hamburger menu — every link stays visible and tappable with no added
+   interaction state. */
+@media(max-width:640px){
+  .header-inner{justify-content:center;text-align:center;padding:12px 16px;}
+  .header-nav-tabs,.header-nav-group{justify-content:center;width:100%;}
+}
 .logout-link{font-size:12.5px;font-weight:600;color:var(--ts);cursor:pointer;}
 .logout-link:hover{color:var(--accent);}
 .login-link{font-size:12.5px;font-weight:600;color:var(--ts);cursor:pointer;}

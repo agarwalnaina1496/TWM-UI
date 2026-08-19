@@ -102,6 +102,24 @@ describe('DashboardHome (TWM-108/163)', () => {
     expect(screen.getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
   });
 
+  // TWM-184: honest one-line status per card, sourced from the cheap
+  // list-summary fields (awaiting/has_day_plan/has_places) — no fixed-slot
+  // track indicator, and a relative "updated" timestamp alongside the badge.
+  it('shows a status line and a relative "updated" timestamp on a trip card', async () => {
+    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      trips: [tripRecord({
+        title: 'Coorg',
+        trip_state: { stage: 'matched', trip_context: { destinations: ['Coorg'] }, has_places: true },
+        updated_at: fourHoursAgo,
+      })],
+    }));
+    renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
+    await screen.findByText('Coorg');
+    expect(screen.getByText('Places picked — building the day-by-day plan.')).toBeInTheDocument();
+    expect(screen.getByText('updated 4h ago')).toBeInTheDocument();
+  });
+
   it('shows the View trip CTA for an itinerary-ready trip', async () => {
     fetchMock = mockFetchWithGuestSession({ authenticatedAs: { id: 'u1', email: 't@example.com' } });
     fetchMock.mockResolvedValueOnce(jsonResponse({

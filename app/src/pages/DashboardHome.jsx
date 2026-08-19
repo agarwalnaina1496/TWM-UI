@@ -7,6 +7,7 @@ import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { trackEvent } from '../lib/analytics.js';
 import {
   isTripEmpty, isCompletedTrip, stageBadge, stageCta, contextRecapPills, contextDestination,
+  tripStatusLine, relativeUpdatedAt,
 } from '../lib/tripLifecycle.js';
 import { isDiscoverOnly, selectHeroTrip } from '../lib/tripHero.js';
 import '../styles/dashboard-home.css';
@@ -16,10 +17,7 @@ const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution
 // updated_at is set on every mutation, but a never-touched-since-creation
 // trip can still have it null — fall back to created_at rather than show nothing.
 function formatTripTimestamp(t) {
-  const raw = t.updated_at || t.created_at;
-  if (!raw) return null;
-  const date = new Date(raw);
-  return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return relativeUpdatedAt(t.updated_at || t.created_at);
 }
 
 function matchesSearch(t, query) {
@@ -161,6 +159,7 @@ export default function DashboardHome() {
     const destination = contextDestination(t.trip_state?.trip_context);
     const recapPills = contextRecapPills(t.trip_state?.trip_context);
     const timestamp = formatTripTimestamp(t);
+    const statusLine = tripStatusLine(t.trip_state);
     return (
       <div className="trip-card" key={t.id}>
         <div>
@@ -191,6 +190,7 @@ export default function DashboardHome() {
             <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
             {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
           </div>
+          {statusLine && <p className="trip-card-status-line">{statusLine}</p>}
           {recapPills.length > 0 && (
             <div className="trip-card-recap">
               {recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
@@ -208,6 +208,7 @@ export default function DashboardHome() {
     const cta = stageCta(t.trip_state);
     const badge = stageBadge(t.trip_state);
     const recapPills = contextRecapPills(t.trip_state?.trip_context);
+    const statusLine = tripStatusLine(t.trip_state);
     return (
       <div className="explore-card" key={t.id}>
         {renamingId === t.id ? (
@@ -231,12 +232,11 @@ export default function DashboardHome() {
           </div>
         )}
         <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
-        {recapPills.length > 0 ? (
+        {statusLine && <p className="explore-card-status-line">{statusLine}</p>}
+        {recapPills.length > 0 && (
           <div className="trip-card-recap">
             {recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
           </div>
-        ) : (
-          <p className="explore-card-empty">Just getting started.</p>
         )}
         <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => handleExploreRailOpen(t)}>
           {cta.label}
