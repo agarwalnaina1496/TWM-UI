@@ -9,9 +9,10 @@ let sendTripCommand;
 let tripLoadStatus;
 let uiState;
 let updateUiState;
+let openTrip;
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState, openTrip }),
 }));
 
 function generalReference() {
@@ -166,6 +167,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     tripLoadStatus = 'ready';
     uiState = {};
     updateUiState = vi.fn(async () => {});
+    openTrip = vi.fn(async () => ({ ok: true }));
     // Prior versions are fetched lazily via GET /trips/{id}/itinerary-versions
     // (TWM-155) — default to empty; individual tests override as needed.
     itineraryVersionsResponse = { versions: [] };
@@ -828,6 +830,39 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       renderDashboard();
       expect(await screen.findByText('From Delhi')).toBeInTheDocument();
       expect(sendTripCommand).not.toHaveBeenCalled();
+    });
+
+    // TWM-182: viewTrip's cache-only render can leave commandSnapshot null
+    // once its background existence check 404s while the traveler is
+    // already looking at this page — must not fall through to an
+    // empty-looking thin state.
+    it('shows a clear "trip unavailable" message instead of an empty thin state when commandSnapshot is null', async () => {
+      commandSnapshot = null;
+      sendTripCommand = vi.fn();
+      renderDashboard();
+      expect(await screen.findByRole('alert')).toHaveTextContent('This trip is no longer available.');
+      expect(screen.getByRole('button', { name: 'Back to your trips' })).toBeInTheDocument();
+    });
+
+    // TWM-182: every track CTA lands on a decision-making page (ScoutChat/
+    // Destinations/TripPreview) that needs real planner_state/matcher_state
+    // — never safe off ThinStateDashboard's possibly cache-only tripState.
+    // The click must ensure a full fetch first, regardless of how the
+    // Dashboard itself was reached.
+    it('a track CTA click ensures full detail (openTrip) before navigating', async () => {
+      commandSnapshot = {
+        id: 'trip-1', version: 1,
+        trip_state: { stage: 'planning', trip_context: { destinations: ['Udaipur'] }, planner_state: { conversation_context: { awaiting: 'trip_duration' }, places: [], day_plan: [] }, itinerary_state: {}, logistics_state: { anchors: [] } },
+      };
+      sendTripCommand = vi.fn();
+      renderDashboard();
+      const board = await screen.findByRole('region', { name: 'Trip tracks' });
+      const dayPlanCard = within(board).getByRole('article', { name: 'Day plan' });
+
+      const user = userEvent.setup();
+      await user.click(within(dayPlanCard).getByRole('button', { name: 'Continue chat →' }));
+
+      expect(openTrip).toHaveBeenCalledWith('trip-1');
     });
 
     it('never attempts to boot Atlas before a plan is frozen', async () => {

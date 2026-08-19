@@ -84,7 +84,14 @@ export function TripProvider({ children }) {
   // signal there). A command response's merge (sendTripCommand below) only
   // ever adds the branches that turn touched onto an already-complete base,
   // so it never un-sets this once a full fetch has happened for this id.
+  // Mirrored into reactive state (not just the ref) so consumers like
+  // TripPreview's boot effect can depend on it changing.
   const tripRecordIsFullRef = useRef(false);
+  const [tripDetailFull, setTripDetailFull] = useState(false);
+  function markTripDetailFull(isFull) {
+    tripRecordIsFullRef.current = isFull;
+    setTripDetailFull(isFull);
+  }
 
   // Updates tripRecordRef synchronously alongside the React state update —
   // a plain setTripRecord() only lands in tripRecordRef via the effect
@@ -108,7 +115,7 @@ export function TripProvider({ children }) {
       const record = records[0] ?? null;
       setTrips(records);
       updateTripRecord(record);
-      tripRecordIsFullRef.current = false;
+      markTripDetailFull(false);
       // The Backend-fetched record is the freshest truth for this trip's
       // state, so it must also become the readable commandSnapshot — pages
       // (e.g. Destinations) that resume mid-flow read commandSnapshot only,
@@ -183,7 +190,7 @@ export function TripProvider({ children }) {
         setTrips(prev => [created, ...prev]);
         updateTripRecord(created);
         // A brand-new trip has no branch data to be missing — trivially complete.
-        tripRecordIsFullRef.current = true;
+        markTripDetailFull(true);
         setCommandSnapshot(created);
         return created;
       })().finally(() => {
@@ -298,7 +305,7 @@ export function TripProvider({ children }) {
     try {
       const record = await getTrip(id);
       updateTripRecord(record);
-      tripRecordIsFullRef.current = true;
+      markTripDetailFull(true);
       setCommandSnapshot(record);
       setTrips(prev => (prev.some(t => t.id === id) ? prev.map(t => (t.id === id ? record : t)) : [...prev, record]));
       return { ok: true, record };
@@ -309,6 +316,41 @@ export function TripProvider({ children }) {
       }
       throw error;
     }
+  }
+
+  // TWM-182: the cheap counterpart to openTrip — used by DashboardHome's
+  // plain "Open trip →" card, which always lands on /dashboard. Renders
+  // straight from the already-cached list entry (zero network cost) instead
+  // of forcing a full single-trip GET just to show the thin-state track
+  // board, since GET /trips (TWM-182) now carries enough (awaiting/
+  // has_day_plan/has_places, plus trip_context) for TripDashboard's
+  // ThinStateDashboard to render correctly off it via dashboardTracks.js.
+  //
+  // Never safe for an itinerary-ready trip — the list summary has no
+  // frozen_plan/itinerary result, so those still fall through to the full
+  // openTrip fetch. And never used by any entry point that can navigate
+  // straight into a decision-making page (ScoutChat/Destinations/
+  // TripPreview) — those must always end up with a full fetch; see
+  // TripDashboard.jsx's track-CTA click handler, which calls openTrip
+  // before navigating regardless of how the Dashboard itself was reached.
+  //
+  // The cache-only render skips the one thing openTrip's round trip used to
+  // guarantee for free: confirming the trip still exists server-side (TWM-109
+  // — a trip deleted from another session/device). So this also kicks off a
+  // background openTrip for the same id, un-awaited: on success it seamlessly
+  // upgrades commandSnapshot to full detail once it arrives (nice bonus — the
+  // eventual track-CTA click likely no-ops instead of waiting); on a genuine
+  // 404 it already calls dropUnavailableTrip, which the Dashboard's own
+  // "trip not found" branch below reacts to.
+  function viewTrip(id) {
+    if (id === tripRecordRef.current?.id) return { ok: true, record: tripRecordRef.current };
+    const listed = trips.find(t => t.id === id);
+    if (!listed || listed.trip_state?.itinerary_state?.status === 'ready') return openTrip(id);
+    updateTripRecord(listed);
+    markTripDetailFull(false);
+    setCommandSnapshot(listed);
+    openTrip(id).catch(() => {});
+    return { ok: true, record: listed };
   }
 
   // The single browser mutation boundary (TWM-110): POST /api/trips/{id}/commands.
@@ -434,7 +476,7 @@ export function TripProvider({ children }) {
       claimNotice, dismissClaimNotice,
       commandSnapshot, sendTripCommand,
       currentTripId: tripRecord?.id ?? null, tripLoadStatus, tripLoadError, retryTripLoad, renameCurrentTrip,
-      trips, openTrip, renameTrip,
+      trips, openTrip, viewTrip, tripDetailFull, renameTrip,
       uiState: tripRecord?.ui_state ?? {}, updateUiState,
     }}>
       {children}

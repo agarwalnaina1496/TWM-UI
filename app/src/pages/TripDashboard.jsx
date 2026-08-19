@@ -104,9 +104,29 @@ const TRACK_META = {
 const TRACK_STATUS_TONE = { done: 'positive', progress: 'caution', pending: 'neutral' };
 const TRACK_STATUS_TEXT = { done: 'Done', progress: 'In progress', pending: 'Not started' };
 
-function TrackCard({ trackKey, track }) {
+// TWM-182: every track CTA lands on a decision-making page (ScoutChat,
+// Destinations, TripPreview) that reads real planner_state/matcher_state to
+// decide what to do next — never safe to navigate there off ThinStateDashboard's
+// possibly-cheap, list-cached tripState (see TripContext.viewTrip). Always
+// ensures a full single-trip fetch first, regardless of how the Dashboard
+// itself was reached; openTrip is already a no-op if one already happened.
+function TrackCard({ trackKey, track, tripId }) {
   const navigate = useNavigate();
+  const { openTrip } = useTrip();
+  const [pending, setPending] = useState(false);
   const meta = TRACK_META[trackKey];
+
+  async function goToCta() {
+    if (pending) return;
+    setPending(true);
+    try {
+      await openTrip(tripId);
+      navigate(track.cta.to);
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <article className="dashboard-card track-card" aria-label={meta.label}>
       <div className="track-card-head">
@@ -116,7 +136,7 @@ function TrackCard({ trackKey, track }) {
       </div>
       <p className="track-card-label">{track.label}</p>
       {track.cta && (
-        <button type="button" className="btn btn-ghost" onClick={() => navigate(track.cta.to)}>{track.cta.label} →</button>
+        <button type="button" className="btn btn-ghost" disabled={pending} onClick={goToCta}>{track.cta.label} →</button>
       )}
     </article>
   );
@@ -128,7 +148,7 @@ function TrackCard({ trackKey, track }) {
 // headline, filling in honestly as the trip matures. Never attempts to boot
 // Atlas before a plan is actually frozen (the Backend rejects start_itinerary
 // otherwise), which is what used to surface as a raw error on an early visit.
-function ThinStateDashboard({ tripState }) {
+function ThinStateDashboard({ tripState, tripId }) {
   const pills = contextRecapPills(tripState?.trip_context);
   const tracks = dashboardTrackStatuses(tripState);
   const overviewState = dashboardOverviewState(tripState);
@@ -145,7 +165,7 @@ function ThinStateDashboard({ tripState }) {
         )}
       </div>
       <div className="track-board" role="region" aria-label="Trip tracks">
-        {Object.entries(tracks).map(([trackKey, track]) => <TrackCard key={trackKey} trackKey={trackKey} track={track} />)}
+        {Object.entries(tracks).map(([trackKey, track]) => <TrackCard key={trackKey} trackKey={trackKey} track={track} tripId={tripId} />)}
       </div>
     </main>
   );
@@ -521,6 +541,7 @@ function ActivitySegment({ activity, anchor, onOpenConfirm }) {
 
 export default function TripDashboard() {
   const { commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState } = useTrip();
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const initialTab = TABS.some(t => t.name === params.get('tab')) ? params.get('tab') : 'Overview';
   const [tab, setTab] = useState(initialTab);
@@ -760,11 +781,30 @@ export default function TripDashboard() {
     if (destination === 'bookings') setTab('Bookings');
   }
 
+  // TWM-182: viewTrip's cache-only render (see TripContext.jsx) still fires
+  // a background openTrip to confirm the trip actually exists server-side —
+  // the one thing its cheap path skips that the full fetch used to guarantee
+  // for free (TWM-109, a trip deleted from another session/device). If that
+  // comes back 404, dropUnavailableTrip clears commandSnapshot to null while
+  // the traveler is already looking at this page — surface it plainly rather
+  // than falling through to an empty-looking thin state.
+  if (tripLoadStatus === 'ready' && !commandSnapshot) {
+    return (
+      <main className="wrap dashboard">
+        <div className="price-evidence state-unsafe" role="alert">
+          <strong>Trip unavailable</strong>
+          <span>This trip is no longer available.</span>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={() => navigate('/')}>Back to your trips</button>
+      </main>
+    );
+  }
+
   // TWM-175: reachable from message one — never attempts to boot Atlas
   // before a plan is frozen, so an early visit shows a real recap + CTA
   // instead of a crash or a blank page.
   if (tripLoadStatus === 'ready' && !frozenPlan) {
-    return <ThinStateDashboard tripState={tripState} />;
+    return <ThinStateDashboard tripState={tripState} tripId={tripId} />;
   }
 
   if (bootStatus === 'error') {

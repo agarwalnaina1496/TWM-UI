@@ -2,7 +2,37 @@
 // Budget explicitly excluded) and the per-state Overview split shown on any
 // trip that hasn't reached a frozen, itinerary-ready plan yet. Reads only
 // canonical trip_state fields, mirrors tripLifecycle.js's stage/CTA style.
-import { planReady } from '../hooks/useGuidePlanning.js';
+
+// Normalizes planner progress from either shape TripDashboard's tripState
+// can carry: the full single-trip fetch's nested planner_state
+// (conversation_context.awaiting, day_plan, places, frozen_plan — from
+// GET /trips/{id}), or the cheap list-summary's flat awaiting/has_day_plan/
+// has_places (from GET /trips — TWM-182's TripContext.viewTrip renders the
+// thin state straight off this, before any full fetch). A summary-shaped
+// trip never reaches `frozen` here — an itinerary-ready trip always gets a
+// full fetch first (see viewTrip), since the summary has no frozen_plan.
+function plannerProgress(tripState) {
+  const plannerState = tripState?.planner_state;
+  if (plannerState) {
+    return {
+      known: true,
+      awaiting: plannerState.conversation_context?.awaiting ?? null,
+      hasDayPlan: (plannerState.day_plan?.length || 0) > 0,
+      dayCount: plannerState.day_plan?.length || 0,
+      frozen: !!plannerState.frozen_plan,
+    };
+  }
+  if (tripState && ('awaiting' in tripState || 'has_day_plan' in tripState || 'has_places' in tripState)) {
+    return {
+      known: true,
+      awaiting: tripState.awaiting ?? null,
+      hasDayPlan: !!tripState.has_day_plan,
+      dayCount: null,
+      frozen: false,
+    };
+  }
+  return { known: false, awaiting: null, hasDayPlan: false, dayCount: 0, frozen: false };
+}
 
 // A destination reads as "known" from either path: Discover ends with
 // trip_context.selected_option once a recommendation is chosen (TWM-153),
@@ -34,15 +64,14 @@ function dayPlanTrack(tripState) {
   const destination = routeDestinationName(tripState?.trip_context);
   if (!destination) return { status: 'pending', label: 'Not started', cta: null };
 
-  const plannerState = tripState?.planner_state;
-  if (planReady(plannerState)) {
-    if (plannerState.frozen_plan) {
-      const days = plannerState.day_plan?.length || 0;
-      return { status: 'done', label: `${days}-day plan approved`, cta: null };
+  const progress = plannerProgress(tripState);
+  if (progress.hasDayPlan) {
+    if (progress.frozen) {
+      return { status: 'done', label: `${progress.dayCount}-day plan approved`, cta: null };
     }
     return { status: 'progress', label: 'Draft ready for review', cta: { label: 'Resume in Plan Builder', to: '/trip-preview' } };
   }
-  if (plannerState) {
+  if (progress.known) {
     return { status: 'progress', label: 'Guide is gathering trip details', cta: { label: 'Continue chat', to: '/trip-preview' } };
   }
   return { status: 'pending', label: 'Not started', cta: null };
@@ -72,10 +101,9 @@ export function dashboardOverviewState(tripState) {
   const destination = routeDestinationName(tripState?.trip_context);
   if (!destination) return 'unknown-destination-ongoing';
 
-  const plannerState = tripState?.planner_state;
-  const awaiting = plannerState?.conversation_context?.awaiting;
-  const guideEngaged = tripState?.active_agent === 'guide' || !!awaiting;
-  if (!planReady(plannerState) && !guideEngaged && plannerState) return 'conversation-ended';
+  const progress = plannerProgress(tripState);
+  const guideEngaged = tripState?.active_agent === 'guide' || !!progress.awaiting;
+  if (!progress.hasDayPlan && !guideEngaged && progress.known) return 'conversation-ended';
   return 'known-destination-ongoing';
 }
 
