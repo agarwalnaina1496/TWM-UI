@@ -267,8 +267,16 @@ export function TripProvider({ children }) {
   // mutating stage/active_agent — a plain read, never a command. Returns
   // { ok: true, record } on success, or { ok: false, reason: 'not_found' }
   // for a 404 (TWM-109) instead of throwing uncaught.
+  //
+  // TWM-182: always re-fetches, even when `id` already matches the current
+  // trip — the boot load's list response (loadTripsNow, GET /api/trips) omits
+  // planner_state entirely, so a trip that became "current" via that thin
+  // list load (rather than a prior openTrip) would otherwise short-circuit
+  // here and leave commandSnapshot permanently missing planner_state. That
+  // was confirmed live: TripPreview's boot effect then reads no awaiting/
+  // day_plan, wrongly re-fires start_planning on an already-started Guide
+  // session, and the Backend correctly 422s it.
   async function openTrip(id) {
-    if (id === tripRecordRef.current?.id) return { ok: true, record: tripRecordRef.current };
     try {
       const record = await getTrip(id);
       updateTripRecord(record);
