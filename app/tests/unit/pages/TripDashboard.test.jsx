@@ -828,7 +828,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       };
       sendTripCommand = vi.fn();
       renderDashboard();
-      await screen.findByText('Understanding your trip so far');
+      await screen.findByText('Your trip so far');
       expect(screen.getByText('Origin')).toBeInTheDocument();
       expect(screen.getByText('Delhi')).toBeInTheDocument();
       expect(sendTripCommand).not.toHaveBeenCalled();
@@ -856,20 +856,68 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(within(tabs).getByText('Docs'));
 
       expect(screen.getByText('Available once your itinerary is ready.')).toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'Trip tracks' })).not.toBeInTheDocument();
+      expect(screen.queryByText('Your trip so far')).not.toBeInTheDocument();
     });
 
-    it('shows the budget as a chip near the Overview heading, not as a track', async () => {
+    it('shows budget as a row in "Your trip so far" when present, and omits it when absent', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
         trip_state: { stage: 'matching', trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
-      await screen.findByText('₹1,00,000 total for both');
-      const board = await screen.findByRole('region', { name: 'Trip tracks' });
-      expect(within(board).queryByText('Budget')).not.toBeInTheDocument();
+      const facts = await screen.findByText('Your trip so far');
+      const budgetRow = within(facts.closest('.trip-facts')).getByText('Budget').closest('.trip-facts-row');
+      expect(within(budgetRow).getByText('₹1,00,000 total for both')).toBeInTheDocument();
     });
+
+    it('omits the Budget row entirely when trip_context has no budget', async () => {
+      commandSnapshot = {
+        id: 'trip-1', version: 1,
+        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+      };
+      sendTripCommand = vi.fn();
+      renderDashboard();
+      const facts = await screen.findByText('Your trip so far');
+      expect(within(facts.closest('.trip-facts')).queryByText('Budget')).not.toBeInTheDocument();
+    });
+
+    // TWM-182: mockup fidelity — a single bottom primary CTA, always
+    // pointing at whichever step is actually actionable right now.
+    it('shows a bottom primary CTA pointing at destination discovery when Route is not yet done', async () => {
+      commandSnapshot = {
+        id: 'trip-1', version: 1,
+        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+      };
+      sendTripCommand = vi.fn();
+      renderDashboard();
+      await screen.findByText('Your trip so far');
+      const buttons = screen.getAllByRole('button', { name: 'Continue chat →' });
+      expect(buttons).toHaveLength(2); // one as the Destination row's CTA, one as the bottom primary CTA
+    });
+
+    it('shows a bottom primary CTA pointing at Day plan once Route is done', async () => {
+      commandSnapshot = {
+        id: 'trip-1', version: 1,
+        trip_state: {
+          stage: 'planning',
+          trip_context: { destinations: ['Udaipur'] },
+          planner_state: { conversation_context: { awaiting: 'trip_duration' }, places: [], day_plan: [] },
+          itinerary_state: {}, logistics_state: { anchors: [] },
+        },
+      };
+      sendTripCommand = vi.fn();
+      renderDashboard();
+      await screen.findByRole('button', { name: 'Continue chat →' });
+      const buttons = screen.getAllByRole('button', { name: 'Continue chat →' });
+      expect(buttons).toHaveLength(1); // Destination is settled (no row CTA); only the bottom primary CTA remains
+    });
+
+    // Note: "both Route and Day plan done but still on the thin-state board"
+    // isn't reachable through this component — a frozen day plan graduates
+    // the page straight into the itinerary-boot flow (see the `frozenPlan`
+    // effect above). That "no primary CTA" case is covered as a pure unit
+    // test on dashboardPrimaryCta itself, in dashboardTracks.test.js.
 
     // TWM-182: viewTrip's cache-only render can leave commandSnapshot null
     // once its background existence check 404s while the traveler is
@@ -883,23 +931,22 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.getByRole('button', { name: 'Back to your trips' })).toBeInTheDocument();
     });
 
-    // TWM-182: every track CTA lands on a decision-making page (ScoutChat/
+    // TWM-182: every CTA lands on a decision-making page (ScoutChat/
     // Destinations/TripPreview) that needs real planner_state/matcher_state
     // — never safe off ThinStateDashboard's possibly cache-only tripState.
     // The click must ensure a full fetch first, regardless of how the
     // Dashboard itself was reached.
-    it('a track CTA click ensures full detail (openTrip) before navigating', async () => {
+    it('a CTA click ensures full detail (openTrip) before navigating', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
         trip_state: { stage: 'planning', trip_context: { destinations: ['Udaipur'] }, planner_state: { conversation_context: { awaiting: 'trip_duration' }, places: [], day_plan: [] }, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
-      const board = await screen.findByRole('region', { name: 'Trip tracks' });
-      const dayPlanCard = within(board).getByRole('article', { name: 'Day plan' });
+      const button = await screen.findByRole('button', { name: 'Continue chat →' });
 
       const user = userEvent.setup();
-      await user.click(within(dayPlanCard).getByRole('button', { name: 'Continue chat →' }));
+      await user.click(button);
 
       expect(openTrip).toHaveBeenCalledWith('trip-1');
     });
@@ -911,66 +958,35 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       };
       sendTripCommand = vi.fn();
       renderDashboard();
-      await screen.findByText(/Nothing saved yet/);
+      await screen.findByText('Your trip so far');
       expect(sendTripCommand).not.toHaveBeenCalled();
     });
 
-    // TWM-182: replaces the old single stage-derived CTA button with the
-    // 4-track board — each track carries its own status and CTA instead.
-    it('renders all 4 tracks (Route/Day plan/Bookings/Documents — Budget excluded)', async () => {
-      commandSnapshot = {
-        id: 'trip-1', version: 1,
-        trip_state: { stage: 'planning', trip_context: { origin: 'Delhi' }, planner_state: {}, itinerary_state: {}, logistics_state: { anchors: [] } },
-      };
-      sendTripCommand = vi.fn();
-      renderDashboard();
-      const board = await screen.findByRole('region', { name: 'Trip tracks' });
-      expect(within(board).getByText('Route')).toBeInTheDocument();
-      expect(within(board).getByText('Day plan')).toBeInTheDocument();
-      expect(within(board).getByText('Bookings')).toBeInTheDocument();
-      expect(within(board).getByText('Documents')).toBeInTheDocument();
-      expect(within(board).queryByText('Budget')).not.toBeInTheDocument();
-    });
-
-    it('unknown-destination Discover path (still gathering): Route shows "Continue chat"', async () => {
+    it('unknown-destination Discover path (still gathering): Destination row shows "Continue chat"', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
         trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
-      const board = await screen.findByRole('region', { name: 'Trip tracks' });
-      expect(await within(board).findByRole('button', { name: 'Continue chat →' })).toBeInTheDocument();
+      const facts = await screen.findByText('Your trip so far');
+      const destinationRow = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
+      expect(within(destinationRow).getByRole('button', { name: 'Continue chat →' })).toBeInTheDocument();
     });
 
-    it('unknown-destination Discover path (recommendations ready): Route shows "Review recommendations"', async () => {
+    it('unknown-destination Discover path (recommendations ready): Destination row shows "Review recommendations"', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
         trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
-      const board = await screen.findByRole('region', { name: 'Trip tracks' });
-      expect(await within(board).findByRole('button', { name: 'Review recommendations →' })).toBeInTheDocument();
+      const facts = await screen.findByText('Your trip so far');
+      const destinationRow = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
+      expect(within(destinationRow).getByRole('button', { name: 'Review recommendations →' })).toBeInTheDocument();
     });
 
-    it('conversation-ended state: Overview headline reflects a paused trip, not an actively ongoing one', async () => {
-      commandSnapshot = {
-        id: 'trip-1', version: 1,
-        trip_state: {
-          stage: 'planning',
-          active_agent: null,
-          trip_context: { destinations: ['Udaipur'] },
-          planner_state: { conversation_context: { awaiting: null }, places: [], day_plan: [] },
-          itinerary_state: {}, logistics_state: { anchors: [] },
-        },
-      };
-      sendTripCommand = vi.fn();
-      renderDashboard();
-      expect(await screen.findByText('Your trip is on pause')).toBeInTheDocument();
-    });
-
-    it('known-destination path: Route shows the stated destination with no CTA', async () => {
+    it('known-destination path: Destination row shows the stated destination with no CTA', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
         trip_state: {
@@ -982,44 +998,10 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       };
       sendTripCommand = vi.fn();
       renderDashboard();
-      const board = await screen.findByRole('region', { name: 'Trip tracks' });
-      expect(within(board).getByText('Udaipur')).toBeInTheDocument();
-      const routeCard = within(board).getByRole('article', { name: 'Route' });
-      expect(within(routeCard).queryByRole('button')).not.toBeInTheDocument();
-    });
-
-    it('Day plan track: "Continue chat" while Guide is still gathering context', async () => {
-      commandSnapshot = {
-        id: 'trip-1', version: 1,
-        trip_state: {
-          stage: 'planning',
-          trip_context: { destinations: ['Udaipur'] },
-          planner_state: { conversation_context: { awaiting: 'trip_duration' }, places: [], day_plan: [] },
-          itinerary_state: {}, logistics_state: { anchors: [] },
-        },
-      };
-      sendTripCommand = vi.fn();
-      renderDashboard();
-      const board = await screen.findByRole('region', { name: 'Trip tracks' });
-      const dayPlanCard = within(board).getByRole('article', { name: 'Day plan' });
-      expect(within(dayPlanCard).getByRole('button', { name: 'Continue chat →' })).toBeInTheDocument();
-    });
-
-    it('Day plan track: "Resume in Plan Builder" once a draft exists but isn\'t approved', async () => {
-      commandSnapshot = {
-        id: 'trip-1', version: 2,
-        trip_state: {
-          stage: 'planning',
-          trip_context: { destinations: ['Udaipur'] },
-          planner_state: { conversation_context: { awaiting: null }, places: [{ name: 'Lake Palace' }], day_plan: [{ day: 1 }] },
-          itinerary_state: {}, logistics_state: { anchors: [] },
-        },
-      };
-      sendTripCommand = vi.fn();
-      renderDashboard();
-      const board = await screen.findByRole('region', { name: 'Trip tracks' });
-      const dayPlanCard = within(board).getByRole('article', { name: 'Day plan' });
-      expect(within(dayPlanCard).getByRole('button', { name: 'Resume in Plan Builder →' })).toBeInTheDocument();
+      const facts = await screen.findByText('Your trip so far');
+      const destinationRow = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
+      expect(within(destinationRow).getByText('Udaipur')).toBeInTheDocument();
+      expect(within(destinationRow).queryByRole('button')).not.toBeInTheDocument();
     });
   });
 });

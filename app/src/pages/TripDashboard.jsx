@@ -14,7 +14,7 @@ import {
   transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
 } from '../lib/bookingCatalog.js';
-import { dashboardTrackStatuses, dashboardOverviewState, OVERVIEW_STATE_COPY, contextFactRows } from '../lib/dashboardTracks.js';
+import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import '../styles/dashboard.css';
@@ -93,51 +93,30 @@ function AnchorList({ anchors }) {
   );
 }
 
-const TRACK_META = {
-  route: { icon: '🧭', label: 'Route' },
-  dayPlan: { icon: '📅', label: 'Day plan' },
-  bookings: { icon: '🧳', label: 'Bookings' },
-  documents: { icon: '📁', label: 'Documents' },
-};
-
-const TRACK_STATUS_TONE = { done: 'positive', progress: 'caution', pending: 'neutral' };
-const TRACK_STATUS_TEXT = { done: 'Done', progress: 'In progress', pending: 'Not started' };
-
 // TWM-182: every track CTA lands on a decision-making page (ScoutChat,
 // Destinations, TripPreview) that reads real planner_state/matcher_state to
 // decide what to do next — never safe to navigate there off ThinStateDashboard's
 // possibly-cheap, list-cached tripState (see TripContext.viewTrip). Always
 // ensures a full single-trip fetch first, regardless of how the Dashboard
 // itself was reached; openTrip is already a no-op if one already happened.
-function TrackCard({ trackKey, track, tripId }) {
+function DashboardCtaButton({ cta, tripId, className }) {
   const navigate = useNavigate();
   const { openTrip } = useTrip();
   const [pending, setPending] = useState(false);
-  const meta = TRACK_META[trackKey];
 
-  async function goToCta() {
+  async function go() {
     if (pending) return;
     setPending(true);
     try {
       await openTrip(tripId);
-      navigate(track.cta.to);
+      navigate(cta.to);
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <article className="dashboard-card track-card" aria-label={meta.label}>
-      <div className="track-card-head">
-        <span className="track-card-icon" aria-hidden="true">{meta.icon}</span>
-        <h3>{meta.label}</h3>
-        <StatusPill tone={TRACK_STATUS_TONE[track.status]}>{TRACK_STATUS_TEXT[track.status]}</StatusPill>
-      </div>
-      <p className="track-card-label">{track.label}</p>
-      {track.cta && (
-        <button type="button" className="btn btn-ghost" disabled={pending} onClick={goToCta}>{track.cta.label} →</button>
-      )}
-    </article>
+    <button type="button" className={className} disabled={pending} onClick={go}>{cta.label} →</button>
   );
 }
 
@@ -166,11 +145,8 @@ function ThinStateTabPlaceholder({ tab }) {
 function ThinStateDashboard({ tripState, tripId }) {
   const [tab, setTab] = useState('Overview');
   const tripContext = tripState?.trip_context;
-  const factRows = contextFactRows(tripContext);
-  const budget = tripContext?.budget;
-  const tracks = dashboardTrackStatuses(tripState);
-  const overviewState = dashboardOverviewState(tripState);
-  const copy = OVERVIEW_STATE_COPY[overviewState];
+  const factRows = [...contextFactRows(tripContext), destinationFactRow(tripState)];
+  const primaryCta = dashboardPrimaryCta(tripState);
   return (
     <main className="wrap dashboard dashboard-wide">
       <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">
@@ -183,26 +159,23 @@ function ThinStateDashboard({ tripState, tripId }) {
 
       {tab === 'Overview' ? (
         <>
-          <div className="thin-state-card">
-            <h1 className="hero-title">{copy.heading}</h1>
-            <p className="thin-state-note">{copy.note}</p>
-            {budget && <span className="recap-pill">{budget}</span>}
-          </div>
-          <div className="track-board" role="region" aria-label="Trip tracks">
-            {Object.entries(tracks).map(([trackKey, track]) => <TrackCard key={trackKey} trackKey={trackKey} track={track} tripId={tripId} />)}
-          </div>
-          {factRows.length > 0 ? (
-            <div className="trip-facts">
-              <h2 className="trip-facts-heading">Understanding your trip so far</h2>
-              {factRows.map(row => (
-                <div className="trip-facts-row" key={row.label}>
-                  <span className="trip-facts-label">{row.label}</span>
+          <div className="trip-facts">
+            <h2 className="trip-facts-heading">Your trip so far</h2>
+            {factRows.map(row => (
+              <div className="trip-facts-row" key={row.label}>
+                <span className="trip-facts-label">{row.label}</span>
+                {row.cta ? (
+                  <DashboardCtaButton cta={row.cta} tripId={tripId} className="btn btn-ghost" />
+                ) : (
                   <span className="trip-facts-value">{row.value}</span>
-                </div>
-              ))}
+                )}
+              </div>
+            ))}
+          </div>
+          {primaryCta && (
+            <div className="thin-state-primary-cta">
+              <DashboardCtaButton cta={primaryCta} tripId={tripId} className="btn btn-primary" />
             </div>
-          ) : (
-            <p className="thin-state-empty">Nothing saved yet — this fills in as you go.</p>
           )}
         </>
       ) : (
