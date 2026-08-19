@@ -84,6 +84,16 @@ function unavailableTrack() {
   return { status: 'pending', label: 'Available once your itinerary is ready', cta: null };
 }
 
+// TWM-182: "Your trip so far"'s Destination row — a fixed row, always
+// first, that either shows the settled destination or a stage-aware CTA to
+// go pick one. Reuses routeTrack's own done/CTA split so this never drifts
+// from the (now-removed) Route track card's logic.
+export function destinationFactRow(tripState) {
+  const track = routeTrack(tripState);
+  if (track.status === 'done') return { label: 'Destination', value: track.label };
+  return { label: 'Destination', cta: track.cta };
+}
+
 export function dashboardTrackStatuses(tripState) {
   return {
     route: routeTrack(tripState),
@@ -93,27 +103,23 @@ export function dashboardTrackStatuses(tripState) {
   };
 }
 
-// Per-state Overview split (unknown-destination ongoing / known-destination
-// ongoing / conversation-ended / itinerary-ready — itinerary-ready is owned
-// by the full TripDashboard once frozen_plan exists, so it's never returned
-// here).
-export function dashboardOverviewState(tripState) {
-  const destination = routeDestinationName(tripState?.trip_context);
-  if (!destination) return 'unknown-destination-ongoing';
-
-  const progress = plannerProgress(tripState);
-  const guideEngaged = tripState?.active_agent === 'guide' || !!progress.awaiting;
-  if (!progress.hasDayPlan && !guideEngaged && progress.known) return 'conversation-ended';
-  return 'known-destination-ongoing';
+// TWM-182: the mockup's bottom unified CTA — whichever track is actually
+// actionable right now, so the traveler always has one obvious next step
+// regardless of which track it's on. Route takes priority (nothing else
+// can start until it's done); Bookings/Documents never have a CTA
+// pre-freeze, so they're never candidates here.
+export function dashboardPrimaryCta(tripState) {
+  const tracks = dashboardTrackStatuses(tripState);
+  return tracks.route.cta || tracks.dayPlan.cta || null;
 }
 
-// "Understanding your trip so far" — the mockup's data-table recap
-// (Origin/Dates/Duration/Travelers rows), distinct from Destinations'/My
-// Trips' pill-based contextRecapPills: labeled rows instead of bare
-// formatted strings, and budget deliberately excluded here (shown as its
-// own chip near the Overview heading instead, matching the mockup).
-// trip_context is free-form (Scout extracts whatever field names fit the
-// conversation), so a field simply doesn't appear as a row when absent.
+// "Your trip so far" — the data-table recap (Destination/Origin/Dates/
+// Duration/Travelers rows), distinct from Destinations'/My Trips' pill-based
+// contextRecapPills: labeled rows instead of bare formatted strings, and
+// budget deliberately excluded here (shown as its own chip instead, matching
+// the mockup). trip_context is free-form (Scout extracts whatever field
+// names fit the conversation), so a field simply doesn't appear as a row
+// when absent.
 const FACT_ROWS = [
   ['origin', 'Origin', value => String(value)],
   ['travel_window', 'Dates', value => String(value)],
@@ -135,18 +141,3 @@ export function contextFactRows(tripContext) {
   }
   return rows;
 }
-
-export const OVERVIEW_STATE_COPY = {
-  'unknown-destination-ongoing': {
-    heading: 'Still finding your destination',
-    note: 'Answer a few more questions and Meridian will line up your options.',
-  },
-  'known-destination-ongoing': {
-    heading: 'Your trip is taking shape',
-    note: 'Pick up where you left off on any track below.',
-  },
-  'conversation-ended': {
-    heading: 'Your trip is on pause',
-    note: "You stepped away mid-conversation — everything's saved, just continue when you're ready.",
-  },
-};

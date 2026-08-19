@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contextFactRows } from '../../../src/lib/dashboardTracks.js';
+import { contextFactRows, dashboardPrimaryCta } from '../../../src/lib/dashboardTracks.js';
 
 describe('contextFactRows (TWM-182)', () => {
   it('returns labeled Origin/Dates/Duration/Travelers rows in order, skipping absent fields', () => {
@@ -34,5 +34,30 @@ describe('contextFactRows (TWM-182)', () => {
   it('singularizes "1 day" but not "2 days"', () => {
     expect(contextFactRows({ duration_days: 1 })).toEqual([{ label: 'Duration', value: '1 day' }]);
     expect(contextFactRows({ duration_days: 2 })).toEqual([{ label: 'Duration', value: '2 days' }]);
+  });
+});
+
+describe('dashboardPrimaryCta (TWM-182)', () => {
+  it("returns Route's CTA when the destination isn't known yet", () => {
+    const cta = dashboardPrimaryCta({ stage: 'matching', trip_context: {}, planner_state: null });
+    expect(cta).toEqual({ label: 'Continue chat', to: '/scout-chat' });
+  });
+
+  it("falls through to Day plan's CTA once Route is done", () => {
+    const cta = dashboardPrimaryCta({
+      stage: 'planning',
+      trip_context: { destinations: ['Udaipur'] },
+      planner_state: { conversation_context: { awaiting: 'trip_duration' }, day_plan: [] },
+    });
+    expect(cta).toEqual({ label: 'Continue chat', to: '/trip-preview' });
+  });
+
+  it('returns null once both Route and Day plan are done (frozen)', () => {
+    const cta = dashboardPrimaryCta({
+      stage: 'planning',
+      trip_context: { destinations: ['Udaipur'] },
+      planner_state: { conversation_context: { awaiting: null }, day_plan: [{ day: 1 }], frozen_plan: { day: 1 } },
+    });
+    expect(cta).toBeNull();
   });
 });
