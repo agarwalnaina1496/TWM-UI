@@ -828,8 +828,47 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       };
       sendTripCommand = vi.fn();
       renderDashboard();
-      expect(await screen.findByText('From Delhi')).toBeInTheDocument();
+      await screen.findByText('Understanding your trip so far');
+      expect(screen.getByText('Origin')).toBeInTheDocument();
+      expect(screen.getByText('Delhi')).toBeInTheDocument();
       expect(sendTripCommand).not.toHaveBeenCalled();
+    });
+
+    // TWM-182: mockup fidelity — the tab bar is present even before a plan
+    // exists, not only once itinerary-ready. Tapping a non-Overview tab
+    // shows an honest "not ready yet" placeholder instead of navigating
+    // into the full tabbed dashboard's data-fetching logic.
+    it('shows the tab bar in the thin state, with non-Overview tabs rendering an honest placeholder', async () => {
+      commandSnapshot = {
+        id: 'trip-1', version: 1,
+        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+      };
+      sendTripCommand = vi.fn();
+      renderDashboard();
+      const tabs = await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
+      expect(within(tabs).getByText('Overview')).toBeInTheDocument();
+      expect(within(tabs).getByText('Itinerary')).toBeInTheDocument();
+      expect(within(tabs).getByText('Bookings')).toBeInTheDocument();
+      expect(within(tabs).getByText('Docs')).toBeInTheDocument();
+      expect(within(tabs).getByText('Support')).toBeInTheDocument();
+
+      const user = userEvent.setup();
+      await user.click(within(tabs).getByText('Docs'));
+
+      expect(screen.getByText('Available once your itinerary is ready.')).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Trip tracks' })).not.toBeInTheDocument();
+    });
+
+    it('shows the budget as a chip near the Overview heading, not as a track', async () => {
+      commandSnapshot = {
+        id: 'trip-1', version: 1,
+        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+      };
+      sendTripCommand = vi.fn();
+      renderDashboard();
+      await screen.findByText('₹1,00,000 total for both');
+      const board = await screen.findByRole('region', { name: 'Trip tracks' });
+      expect(within(board).queryByText('Budget')).not.toBeInTheDocument();
     });
 
     // TWM-182: viewTrip's cache-only render can leave commandSnapshot null

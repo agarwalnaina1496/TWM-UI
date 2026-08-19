@@ -342,13 +342,25 @@ export function TripProvider({ children }) {
   // eventual track-CTA click likely no-ops instead of waiting); on a genuine
   // 404 it already calls dropUnavailableTrip, which the Dashboard's own
   // "trip not found" branch below reacts to.
+  //
+  // The only early-return short-circuit is when this id is already current
+  // *and* already fully fetched — confirmed live to matter: without the
+  // itinerary-ready check running unconditionally (previously guarded by an
+  // "already current" short-circuit that skipped it entirely), an
+  // itinerary-ready trip that happened to already be the boot's default
+  // current trip stayed stuck on the thin track board indefinitely, and the
+  // background verify/upgrade never fired at all for that same case.
   function viewTrip(id) {
-    if (id === tripRecordRef.current?.id) return { ok: true, record: tripRecordRef.current };
-    const listed = trips.find(t => t.id === id);
+    if (id === tripRecordRef.current?.id && tripRecordIsFullRef.current) {
+      return { ok: true, record: tripRecordRef.current };
+    }
+    const listed = trips.find(t => t.id === id) ?? (id === tripRecordRef.current?.id ? tripRecordRef.current : null);
     if (!listed || listed.trip_state?.itinerary_state?.status === 'ready') return openTrip(id);
-    updateTripRecord(listed);
-    markTripDetailFull(false);
-    setCommandSnapshot(listed);
+    if (id !== tripRecordRef.current?.id) {
+      updateTripRecord(listed);
+      markTripDetailFull(false);
+      setCommandSnapshot(listed);
+    }
     openTrip(id).catch(() => {});
     return { ok: true, record: listed };
   }

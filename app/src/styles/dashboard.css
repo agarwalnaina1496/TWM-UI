@@ -1,4 +1,10 @@
 .atlas-preview,.dashboard{padding-bottom:70px}
+/* TWM-182: Dashboard needs more horizontal room than the app's default
+   900px .wrap (built for narrow chat-style pages) — the 4-track board
+   otherwise wraps awkwardly (3+1) and large screens show excess side
+   whitespace. Scoped to Dashboard only via this second class, not a
+   global .wrap change. */
+.wrap.dashboard-wide{max-width:1200px}
 .readiness-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center;background:var(--accent-bg);border:1px solid var(--accent-bg-strong);border-radius:14px;padding:14px 18px;margin:18px 0;color:var(--ts);font-size:14px}
 .readiness-row span{background:var(--bg);border-radius:999px;padding:8px 12px}
 .budget-panel,.revision-review{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;margin:18px 0}
@@ -154,19 +160,36 @@
 
 /* TWM-175: thin-state Dashboard — reachable from message one. */
 .thin-state-card{max-width:640px;margin:40px auto 0;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:36px 32px}
-.thin-state-card .trip-recap{justify-content:center;margin:14px 0}
 .thin-state-empty,.thin-state-note{color:var(--tm);font-size:13.5px;margin:10px 0 18px}
 .thin-state-card .btn{margin-top:6px}
 
 /* TWM-182: the 4-track board (Route/Day plan/Bookings/Documents) shown
-   alongside the per-state Overview headline for any not-yet-frozen trip. */
-.track-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;max-width:900px;margin:24px auto 0}
+   alongside the per-state Overview headline for any not-yet-frozen trip.
+   Fixed 4-column layout down to tablet width (fits comfortably inside
+   .dashboard-wide's 1200px), then collapses to 2 then 1 column — auto-fit's
+   own minmax previously caused an awkward 3+1 wrap at in-between widths. */
+.track-board{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:24px 0 0}
+@media(max-width:900px){.track-board{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.track-board{grid-template-columns:1fr}}
 .track-card{flex-direction:column;align-items:flex-start;gap:10px}
 .track-card-head{display:flex;align-items:center;gap:8px;width:100%}
 .track-card-icon{font-size:16px}
 .track-card-head h3{margin:0;font-size:14px;font-weight:700;flex:1}
 .track-card-label{color:var(--ts);font-size:13px;margin:0}
 .track-card .btn{align-self:flex-start}
+
+/* TWM-182: "Understanding your trip so far" — labeled data-table recap,
+   replacing the old bare recap-pill list per the Wayfinder mockup. */
+.trip-facts{max-width:640px;margin:32px auto 0}
+.trip-facts-heading{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);margin:0 0 8px}
+.trip-facts-row{display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid var(--border)}
+.trip-facts-row:last-child{border-bottom:none}
+.trip-facts-label{color:var(--ts);font-size:13.5px}
+.trip-facts-value{font-weight:600;font-size:13.5px}
+
+/* TWM-182: pre-freeze placeholder for a non-Overview tab, tapped from the
+   now-always-visible tab bar. */
+.thin-tab-placeholder{max-width:640px;margin:24px auto 0;text-align:center;color:var(--tm);padding:32px 24px}
 
 /* TWM-175: trip-shape day-strip on Overview — tappable, jumps into Itinerary. */
 .day-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 16px}
