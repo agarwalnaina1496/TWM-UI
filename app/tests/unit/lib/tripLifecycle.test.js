@@ -67,11 +67,11 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
 // (selected_option vs. destinations array).
 describe('tripStatusLine (TWM-184)', () => {
   it('itinerary ready always wins, regardless of stage', () => {
-    expect(tripStatusLine(state({ stage: 'planning', itinerary_state: { status: 'ready' } }))).toBe('Itinerary ready — everything in one place.');
+    expect(tripStatusLine(state({ stage: 'planning', itinerary_state: { status: 'ready' } }))).toBe('Your full trip plan is ready to book and go.');
   });
 
   it('stage done (no itinerary_state) reads as completed', () => {
-    expect(tripStatusLine(state({ stage: 'done' }))).toBe('Trip completed.');
+    expect(tripStatusLine(state({ stage: 'done' }))).toBe('This trip has wrapped up.');
   });
 
   it('no destination, no context at all: "Just getting started."', () => {
@@ -106,7 +106,7 @@ describe('tripStatusLine (TWM-184)', () => {
     const line = tripStatusLine(state({
       trip_context: { destinations: ['Udaipur'] }, awaiting: 'x', has_places: true, has_day_plan: true,
     }));
-    expect(line).toBe('Day plan ready — sorting out bookings next.');
+    expect(line).toBe('A full day-by-day plan is set — sorting out bookings next.');
   });
 });
 

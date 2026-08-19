@@ -122,15 +122,22 @@ function knownDestinationName(tripContext) {
 // to avoid. Reads only the cheap list-summary fields already on every trip
 // record (`awaiting`/`has_day_plan`/`has_places`, added in TWM-182 Part C) —
 // never triggers a full per-trip fetch just to render a card.
+//
+// Deliberately worded to never contain any STAGE_BADGES/isItineraryReady
+// badge text as a substring (Playwright's text matcher is case-insensitive
+// substring by default, and both the badge and this line render on the same
+// card) — confirmed the hard way: "Itinerary ready — everything in one
+// place." broke `getByText('Itinerary ready')` in the e2e suite by matching
+// both the badge and this line at once.
 export function tripStatusLine(tripState) {
-  if (isItineraryReady(tripState)) return 'Itinerary ready — everything in one place.';
-  if (tripState?.stage === 'done') return 'Trip completed.';
+  if (isItineraryReady(tripState)) return 'Your full trip plan is ready to book and go.';
+  if (tripState?.stage === 'done') return 'This trip has wrapped up.';
 
   const destination = knownDestinationName(tripState?.trip_context) || contextDestination(tripState?.trip_context);
   if (!destination) {
     return hasTripContext(tripState) ? "Still figuring out where you're headed." : 'Just getting started.';
   }
-  if (tripState?.has_day_plan) return 'Day plan ready — sorting out bookings next.';
+  if (tripState?.has_day_plan) return 'A full day-by-day plan is set — sorting out bookings next.';
   if (tripState?.has_places) return 'Places picked — building the day-by-day plan.';
   if (tripState?.awaiting) return "Guide's working out the details with you.";
   return 'Destination settled — planning not started yet.';
