@@ -47,6 +47,22 @@ describe('ScoutChat advice-entry chat', () => {
     expect(openTrip).toHaveBeenCalledWith('trip-1');
   });
 
+  // TWM-188: a deep-link/stale-tab to a trip with no trip_context yet is an
+  // orphan, not a real trip — must bounce home instead of showing the
+  // cold-open greeting for it.
+  it('redirects home when the URL trip resolves to an empty (no trip_context) trip', async () => {
+    searchParams = new URLSearchParams('tripId=trip-1');
+    commandSnapshot = { trip_state: { stage: 'new', trip_context: {} } };
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(navigate).toHaveBeenCalledWith('/', { replace: true });
+  });
+
+  it('does not redirect a fresh trip reached with no URL tripId, even if empty (the normal cold-open path)', () => {
+    commandSnapshot = { trip_state: { stage: 'new', trip_context: {} } };
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(navigate).not.toHaveBeenCalledWith('/', { replace: true });
+  });
+
   it('routes to the unified Plan Builder once a Guide-owned turn generates a complete plan, without throwing', async () => {
     commandSnapshot = { trip_state: { active_agent: 'guide', planner_state: { conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [] } } };
     sendTripCommand = vi.fn(async () => ({

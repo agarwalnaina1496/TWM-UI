@@ -15,6 +15,7 @@ import {
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
+import { isTripEmpty } from '../lib/tripLifecycle.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -575,7 +576,7 @@ export default function TripDashboard() {
   // ?tripId= names, cheaply (matches DashboardHome's own "Open trip →" cost
   // tradeoff: viewTrip renders off the cached list entry with zero network
   // cost for the common case, still fetches full detail in the background).
-  useTripFromUrl(viewTrip);
+  const urlTripId = useTripFromUrl(viewTrip);
   const initialTab = TABS.some(t => t.name === params.get('tab')) ? params.get('tab') : 'Overview';
   const [tab, setTab] = useState(initialTab);
   const [activeDay, setActiveDay] = useState(null);
@@ -631,6 +632,17 @@ export default function TripDashboard() {
   const bookingsFetchStarted = useRef(null); // tripId currently/last fetched, or null
 
   const tripId = commandSnapshot?.id;
+
+  // TWM-188: a direct/deep-link/stale-tab navigation to an empty
+  // (trip_context-less) trip has nothing real to render here — redirect
+  // home instead of rendering a blank/default dashboard. Gated on a URL
+  // tripId so a genuinely fresh, not-yet-created trip reached without one
+  // is unaffected.
+  useEffect(() => {
+    if (!urlTripId || tripLoadStatus !== 'ready' || !isTripEmpty(tripState)) return;
+    navigate('/', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTripId, tripLoadStatus, tripState, navigate]);
 
   useEffect(() => {
     if (tab !== 'Bookings' || itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
