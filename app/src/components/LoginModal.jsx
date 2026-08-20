@@ -64,6 +64,7 @@ export default function LoginModal() {
       } else {
         await login(trimmedEmail, password);
         trackEvent('login_completed');
+        setPassword('');
         closeLoginModal();
       }
     } catch (err) {
