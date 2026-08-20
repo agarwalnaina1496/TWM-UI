@@ -39,6 +39,7 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
     ['recommended', { stage: 'recommended' }, 'Recommendations ready'],
     ['matched', { stage: 'matched' }, 'Destination chosen'],
     ['planning', { stage: 'planning' }, 'Planning in progress'],
+    ['plan_ready', { stage: 'plan_ready' }, 'Plan drafted'],
     ['planned', { stage: 'planned' }, 'Plan ready'],
     ['booked', { stage: 'booked' }, 'Booked'],
     ['done', { stage: 'done' }, 'Completed'],
@@ -55,6 +56,7 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
     ['recommended', { stage: 'recommended' }, '/destinations'],
     ['matched', { stage: 'matched' }, '/destinations'],
     ['planning', { stage: 'planning' }, '/trip-preview'],
+    ['plan_ready', { stage: 'plan_ready' }, '/trip-preview'],
     ['planned', { stage: 'planned' }, '/dashboard'],
     ['itinerary ready overrides stage', { stage: 'matched', itinerary_state: { status: 'ready' } }, '/dashboard'],
   ])('stageCta: %s -> %s', (_label, overrides, expectedTo) => {
