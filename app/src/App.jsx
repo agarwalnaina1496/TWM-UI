@@ -28,7 +28,7 @@ export default function App() {
   }, []);
 
   return (
-    <>
+    <div className="app-shell">
       <Header />
       <LoginModal />
       <ClaimConfirmation />
@@ -49,6 +49,6 @@ export default function App() {
         <Route path="/dashboard" element={<TripDashboard />} />
         <Route path="/my-trips" element={<DashboardHome />} />
       </Routes>
-    </>
+    </div>
   );
 }

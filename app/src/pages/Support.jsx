@@ -1,3 +1,4 @@
+import Layout from '../components/Layout.jsx';
 import SupportContent from '../components/SupportContent.jsx';
 import '../styles/dashboard.css';
 
@@ -7,10 +8,9 @@ import '../styles/dashboard.css';
 // framing) reuses the same SupportContent.
 export default function Support() {
   return (
-    <main className="wrap dashboard">
+    <Layout className="dashboard" footer>
       <h1 className="hero-title">We're here to <em>help</em></h1>
       <SupportContent intro="Have a question about your account or how TravelWithMe works? Reach out any time, whether or not you have a trip open." />
-      <p className="footer-bottom">&copy; {new Date().getFullYear()} TravelWithMe. All rights reserved.</p>
-    </main>
+    </Layout>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Layout from '../components/Layout.jsx';
 import { useTrip } from '../context/TripContext.jsx';
 import { trackEvent } from '../lib/analytics.js';
 import '../styles/auth.css';
@@ -29,7 +30,7 @@ export default function RequestQuote() {
   }
 
   return (
-    <div className="wrap">
+    <Layout>
       <h1>Request a <em>quote</em></h1>
       <p className="lede" style={{ maxWidth: 'none', whiteSpace: 'nowrap' }}>TWM-Led pricing depends on your dates and group size, so a coordinator follows up directly rather than an instant charge here.</p>
 
@@ -69,6 +70,6 @@ export default function RequestQuote() {
           </>
         )}
       </div>
-    </div>
+    </Layout>
   );
 }

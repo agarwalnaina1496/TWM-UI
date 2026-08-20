@@ -1,0 +1,22 @@
+/* Structural layout mechanics shared by BOTH the marketing site (style.css)
+   and the product app (app/src/styles/tokens.css) — the sticky-footer flex
+   skeleton, uniform container width, and sticky header positioning. This
+   file is purely structural: no colors, no fonts. Brand VALUES live in
+   design-tokens.css. Edit only here for either side to stay in sync — the
+   app regenerates its local copy via `npm run sync-tokens`
+   (predev/prebuild), same mechanism as design-tokens.css.
+
+   The sticky-footer trick: body (marketing, which has no wrapping element)
+   and .app-shell (the app's root div, see App.jsx) are both flex columns
+   pinned to at least the full viewport height. .wrap (the main content
+   container) is flex:1 0 auto so it grows to fill the remaining space,
+   pushing anything after it — marketing's <footer>, or the app's optional
+   copyright line rendered by Layout.jsx as a sibling after <main> — down
+   to the bottom of the viewport on short pages, without needing position
+   tricks. */
+*{box-sizing:border-box;}
+body{margin:0;}
+body,.app-shell{display:flex;flex-direction:column;min-height:100vh;}
+.wrap{max-width:1200px;margin:0 auto;padding:0 20px;flex:1 0 auto;}
+header{position:sticky;top:0;z-index:30;border-bottom:1px solid var(--border);flex:none;}
+.header-inner{max-width:1200px;margin:0 auto;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;}
