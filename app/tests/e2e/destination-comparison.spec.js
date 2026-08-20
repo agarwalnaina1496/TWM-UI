@@ -66,7 +66,13 @@ test('loads real recommendations via the continue command, shows a disclosed tra
         },
       })),
     },
-  ]);
+  ], {
+    // TWM-189: a trip is never created out of thin air any more — this spec
+    // jumps straight to /destinations (skipping the entry flow), so it must
+    // seed an already-existing, pre-continue trip for that page's own
+    // sendTripCommand('continue') to act on.
+    initialTrip: tripRecord({ version: 1, trip_state: { stage: 'matching', active_agent: 'meridian', trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2 } } }),
+  });
 
   await page.goto('login');
   await page.getByText('Continue without login').click();
@@ -98,7 +104,11 @@ test('More like this refreshes recommendations through the real command without 
       ),
       recommendation: successOutcome({ message: 'Refreshed around Madhya Pradesh Heritage and Nature, while keeping your existing preferences.' }),
     },
-  ]);
+  ], {
+    // TWM-189: see the comment in the previous test — a pre-continue trip
+    // must be seeded since this spec never runs the entry flow.
+    initialTrip: tripRecord({ version: 1, trip_state: { stage: 'matching', active_agent: 'meridian', trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2 } } }),
+  });
 
   await page.goto('login');
   await page.getByText('Continue without login').click();

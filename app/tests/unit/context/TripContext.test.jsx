@@ -180,20 +180,34 @@ describe('TripContext Backend-authoritative trip record', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('creates a trip lazily on the first sendTripCommand (e.g. the traveler\'s first message)', async () => {
+  it('creates a trip via startTrip on the traveler\'s first message (TWM-189: no bare create beforehand)', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-      .mockResolvedValueOnce(jsonResponse({ id: 'trip-new', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ trip: { id: 'trip-new', title: 'Untitled Trip', version: 2, trip_state: {}, ui_state: {} } }));
+      .mockResolvedValueOnce(jsonResponse({
+        message: 'Got it.', agent_meta: null,
+        trip: { id: 'trip-new', title: 'Untitled Trip', version: 1, trip_state: {}, ui_state: {} },
+      }, { status: 201 }));
 
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
     expect(result.current.currentTripId).toBe(null);
 
-    await act(async () => { await result.current.sendTripCommand('scout_entry', { message: 'Plan my Coorg trip' }); });
+    await act(async () => { await result.current.startTrip('discover_entry', { message: 'Plan my Coorg trip' }); });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/trips', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/trips/first-message', expect.objectContaining({ method: 'POST' }));
     expect(result.current.currentTripId).toBe('trip-new');
+  });
+
+  it('sendTripCommand rejects when no trip exists yet — it never creates one itself (TWM-189)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
+
+    const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+
+    await expect(
+      act(async () => { await result.current.sendTripCommand('traveler_message', { message: 'hi' }); })
+    ).rejects.toThrow('No trip exists yet');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps an untouched trip_state branch after a command response omits it (TWM-154)', async () => {

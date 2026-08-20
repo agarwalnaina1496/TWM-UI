@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  createTrip, getTrip, listTrips, mergeCommandTripRecord, newIdempotencyKey, queueTripMutation,
-  renameTrip as renameTripApi, saveUiState as saveUiStateApi, sendTripCommand as sendTripCommandApi, TripApiError,
+  getTrip, listTrips, mergeCommandTripRecord, newIdempotencyKey, queueTripMutation,
+  renameTrip as renameTripApi, saveUiState as saveUiStateApi, sendTripCommand as sendTripCommandApi,
+  startTripFromFirstMessage, TripApiError,
 } from '../lib/tripApi.js';
 import {
   fetchCurrentUser, login as loginApi, logout as logoutApi, signup as signupApi,
@@ -187,31 +188,42 @@ export function TripProvider({ children }) {
     return promise;
   }
 
-  // Guarantees a Backend trip record exists before a mutation that needs
-  // one — this is the only place a trip is ever created on demand, so the
-  // first call a traveler makes (their first chat message, or an explicit
-  // "+ New Trip"/entry action) is what actually creates the Backend record.
-  // Serialized so concurrent callers await the same in-flight attempt.
+  // Waits for the boot trip-list load and returns the current Backend trip
+  // record. TWM-189: a trip is never created bare on demand any more — the
+  // only path that creates one is startTrip() below, driven by the
+  // traveler's actual first message (JourneyEntry.jsx). Every caller here
+  // (follow-up commands, rename, UI-state save) assumes a trip already
+  // exists; throwing instead of silently creating one surfaces a caller
+  // bug immediately rather than resurrecting an orphan-trip code path.
+  // Serialized so concurrent callers await the same in-flight boot wait.
   function ensureTrip() {
     if (tripRecordRef.current) return Promise.resolve(tripRecordRef.current);
     if (!ensureTripPromise.current) {
       ensureTripPromise.current = (async () => {
-        // Wait for the initial trips list so we don't race a fresh create
-        // against an existing trip the boot load is still fetching.
         await ensureBootStarted();
         if (tripRecordRef.current) return tripRecordRef.current;
-        const created = await createTrip();
-        setTrips(prev => [created, ...prev]);
-        updateTripRecord(created);
-        // A brand-new trip has no branch data to be missing — trivially complete.
-        markTripDetailFull(true);
-        setCommandSnapshot(created);
-        return created;
+        throw new Error('No trip exists yet — send a first message via startTrip() first.');
       })().finally(() => {
         ensureTripPromise.current = null;
       });
     }
     return ensureTripPromise.current;
+  }
+
+  // TWM-189: the only place a trip is ever created — runs the traveler's
+  // first message (discover_entry/known_destination_entry) and only ends
+  // up with a Backend trip record if that call succeeds, so a failure
+  // never leaves an orphan trip or a local trip pointer with nothing
+  // behind it. Not serialized like ensureTrip()/sendTripCommand — callers
+  // (JourneyEntry.jsx) already guard against a concurrent second send via
+  // their own `busy` state.
+  async function startTrip(command, { message, destination, title } = {}) {
+    const response = await startTripFromFirstMessage(command, { message, destination, title });
+    setTrips(prev => [response.trip, ...prev]);
+    updateTripRecord(response.trip);
+    markTripDetailFull(true);
+    setCommandSnapshot(response.trip);
+    return response;
   }
 
   // Merges a patch into the Backend-persisted, per-trip ui_state (e.g. which
@@ -500,7 +512,7 @@ export function TripProvider({ children }) {
       setAuthDirect,
       loginModalOpen, openLoginModal, closeLoginModal,
       claimNotice, dismissClaimNotice,
-      commandSnapshot, sendTripCommand,
+      commandSnapshot, sendTripCommand, startTrip,
       currentTripId: tripRecord?.id ?? null, tripLoadStatus, tripLoadError, retryTripLoad, renameCurrentTrip,
       trips, openTrip, viewTrip, tripDetailFull, renameTrip,
       uiState: tripRecord?.ui_state ?? {}, updateUiState,

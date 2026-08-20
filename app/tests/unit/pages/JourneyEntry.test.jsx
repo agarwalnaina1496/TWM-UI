@@ -7,12 +7,14 @@ import JourneyEntry from '../../../src/pages/JourneyEntry.jsx';
 const navigate = vi.fn();
 let commandSnapshot;
 let sendTripCommand;
+let startTrip;
+let currentTripId;
 let tripLoadStatus;
 let openTrip;
 let searchParams = new URLSearchParams();
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, openTrip }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, startTrip, currentTripId, tripLoadStatus, openTrip }),
 }));
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
@@ -33,6 +35,8 @@ describe('JourneyEntry known-destination chat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     commandSnapshot = null;
+    startTrip = vi.fn();
+    currentTripId = null;
     openTrip = vi.fn();
     searchParams = new URLSearchParams();
   });
@@ -75,7 +79,11 @@ describe('JourneyEntry known-destination chat', () => {
   // its own `if (!value...) return;` guard silently no-op).
   it('"Try again" resends the last submitted value after a failure, not the cleared input', async () => {
     commandSnapshot = null;
-    sendTripCommand = vi.fn()
+    // TWM-189: a genuinely new trip's first send goes through startTrip(),
+    // not sendTripCommand() — no bare create happens before it, so a
+    // failure here leaves no trip at all and "Try again" simply retries
+    // the same startTrip() call.
+    startTrip = vi.fn()
       .mockRejectedValueOnce(new Error('The request timed out. Please try again.'))
       .mockResolvedValueOnce({ message: 'Got it.', trip: { trip_state: { planner_state: { conversation_context: { awaiting: 'origin_city' }, places: [], day_plan: [] } } } });
     const user = userEvent.setup();
@@ -86,8 +94,8 @@ describe('JourneyEntry known-destination chat', () => {
 
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
-    expect(sendTripCommand).toHaveBeenCalledTimes(2);
-    expect(sendTripCommand).toHaveBeenNthCalledWith(2, 'known_destination_entry', { destination: 'Goa' });
+    expect(startTrip).toHaveBeenCalledTimes(2);
+    expect(startTrip).toHaveBeenNthCalledWith(2, 'known_destination_entry', { destination: 'Goa' });
   });
 
   it('asks the sixth "anything else" question once the five fixed fields are answered', () => {
@@ -102,6 +110,10 @@ describe('JourneyEntry known-destination chat', () => {
 
   it('routes straight to the unified Plan Builder once Guide generates places and a day plan together, never /dashboard', async () => {
     commandSnapshot = { trip_state: { planner_state: { conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [] } } };
+    // Already at the gate's final question implies the trip and its earlier
+    // turns already exist — this send is a traveler_message, not a first
+    // send, so a trip id must already be current.
+    currentTripId = 'trip-1';
     sendTripCommand = vi.fn(async () => ({
       message: 'Here is your plan.',
       trip: { trip_state: { planner_state: readyPlannerState() } },
@@ -122,6 +134,8 @@ describe('JourneyEntry Discover refresh recap and facts panel (TWM-173)', () => 
   beforeEach(() => {
     vi.clearAllMocks();
     commandSnapshot = null;
+    startTrip = vi.fn();
+    currentTripId = null;
     tripLoadStatus = 'ready';
     searchParams = new URLSearchParams('intent=discover_destination');
   });
