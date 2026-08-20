@@ -618,7 +618,13 @@ export default function Destinations() {
     setClarifyInput(suggestion);
   }
 
-  const thinking = tripLoadStatus === 'loading' || recoStatus === 'loading' || triggering
+  // recoStatus starts 'idle' before the lazy recommendations fetch effect
+  // has even fired — treating it as equivalent to "settled" here let
+  // awaiting-driven content (e.g. a clarification question, already known
+  // from trip_state's own matcher_state) render before that fetch was even
+  // dispatched, a real race exposed by a flaky CI assertion on fetch count.
+  const recoSettled = recoStatus === 'ready' || recoStatus === 'error';
+  const thinking = tripLoadStatus === 'loading' || !recoSettled || triggering
     || (tripLoadStatus === 'ready' && recoStatus === 'ready' && !latest && !awaiting && !triggerError);
 
   // TWM-173: this trigger point is the initial Discover entry. The Direct-

@@ -91,6 +91,10 @@ export default function TripPreview() {
   const [replacement, setReplacement] = useState('');
   const [reversing, setReversing] = useState(false);
   const [reversalError, setReversalError] = useState(null);
+  // TWM-188 item 3: set once the reopen request comes back asking the
+  // traveler to choose revisit-existing vs. start-fresh, instead of the
+  // backend silently picking one for a trip that already has recommendations.
+  const [reopenChoicePending, setReopenChoicePending] = useState(false);
   const bootStarted = useRef(false);
   const trackedPlanBuilderView = useRef(false);
   const initializedRecap = useRef(false);
@@ -210,8 +214,20 @@ export default function TripPreview() {
     try {
       const response = await sendTripCommand('traveler_message', { message: REOPEN_DESTINATION_MESSAGE });
       const nextState = response.trip?.trip_state;
-      if (nextState?.active_agent === 'meridian' && nextState?.stage === 'matching') {
-        navigate(withTripId('/destinations', response.trip?.id ?? commandSnapshot?.id));
+      const awaiting = nextState?.planner_state?.conversation_context?.awaiting;
+      // TWM-188 item 3: a trip with an existing recommendation list gets a
+      // choice prompt instead of an immediate reversal — stage/active_agent
+      // don't change yet, so route on `awaiting`, not on stage.
+      if (awaiting === 'destination_reopen_choice') {
+        setReopenChoicePending(true);
+        setMessage(response.message || '');
+        return;
+      }
+      // No prior recommendations existed — the reversal already happened in
+      // this same command. Navigate off the stage actually returned rather
+      // than assuming /destinations for every reversal (matching -> /scout-chat).
+      if (nextState?.stage === 'matching') {
+        navigate(withTripId('/scout-chat', response.trip?.id ?? commandSnapshot?.id));
         return;
       }
       setMessage(response.message || '');
@@ -219,6 +235,28 @@ export default function TripPreview() {
       setReversalError(error.message || 'Could not reconsider the destination.');
     } finally {
       setReversing(false);
+    }
+  }
+
+  // TWM-188 item 3: resolves the traveler's revisit-vs-fresh choice once
+  // prompted above. "fresh" reuses the same full-page transition as an
+  // immediate reversal (a new Meridian conversation is genuinely starting);
+  // "revisit" is a near-instant stage flip back to the existing list, so it
+  // doesn't borrow that "Finding new matches" framing.
+  async function resolveReopenChoice(command) {
+    setReversalError(null);
+    if (command === 'reopen_destination_fresh') setReversing(true);
+    else setPending(true);
+    try {
+      const response = await sendTripCommand(command);
+      const nextState = response.trip?.trip_state;
+      const destination = nextState?.stage === 'recommended' ? '/destinations' : '/scout-chat';
+      navigate(withTripId(destination, response.trip?.id ?? commandSnapshot?.id));
+    } catch (error) {
+      setReversalError(error.message || 'Could not reconsider the destination.');
+    } finally {
+      setReversing(false);
+      setPending(false);
     }
   }
 
@@ -293,6 +331,16 @@ export default function TripPreview() {
 
       {message && <div className="revision-message" role="status">{message}</div>}
       {reversalError && <div className="price-evidence state-unsafe" role="alert">{reversalError}</div>}
+      {reopenChoicePending && (
+        <div className="reversal-choice" role="group" aria-label="Choose how to reopen destination discovery">
+          <button type="button" className="btn btn-ghost" disabled={pending || reversing} onClick={() => resolveReopenChoice('reopen_destination_revisit')}>
+            Revisit my existing options
+          </button>
+          <button type="button" className="btn btn-ghost" disabled={pending || reversing} onClick={() => resolveReopenChoice('reopen_destination_fresh')}>
+            Start a fresh search
+          </button>
+        </div>
+      )}
 
       <section aria-label="Day plan">
         {dayPlan.map(dayEntry => (
@@ -386,11 +434,13 @@ export default function TripPreview() {
         <button type="button" className="btn btn-primary" disabled={pending} onClick={generate}>Approve this plan →</button>
       </footer>
 
-      <p className="reversal-link">
-        <button type="button" className="link-button" onClick={reopenDestinationDiscovery} disabled={pending}>
-          Not the right destination? Let's explore other options →
-        </button>
-      </p>
+      {!reopenChoicePending && (
+        <p className="reversal-link">
+          <button type="button" className="link-button" onClick={reopenDestinationDiscovery} disabled={pending}>
+            Not the right destination? Let's explore other options →
+          </button>
+        </p>
+      )}
     </main>
   );
 }
