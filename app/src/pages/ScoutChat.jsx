@@ -33,6 +33,13 @@ export default function ScoutChat() {
   const lastCommand = useRef(null);
   // The very first turn is a typed scout_entry (Scout entry, no rediscovery);
   // once a specialist owns the trip, follow-ups are plain traveler_message.
+  // TWM-188 item 4: entered.current alone only tracked whether *this
+  // component mount* had sent a message yet — a fresh mount landing on an
+  // already-owned trip (resumed via a stage-based CTA into /scout-chat)
+  // would still send scout_entry for its first message here, letting
+  // Scout silently re-decide an already-Meridian/Guide-owned trip's agent.
+  // Also check the trip's own active_agent so a genuine resume never
+  // re-enters Scout.
   const entered = useRef(false);
   const previousAgent = useRef(null);
 
@@ -49,7 +56,11 @@ export default function ScoutChat() {
     setBusy(true);
     setError(null);
     try {
-      const command = entered.current ? 'traveler_message' : 'scout_entry';
+      // "scout" is the canonical default active_agent for every trip
+      // (canonical_state()) — only "meridian"/"guide" mean a specialist has
+      // actually taken ownership and Scout must not re-run intent detection.
+      const alreadyOwned = ['meridian', 'guide'].includes(commandSnapshot?.trip_state?.active_agent);
+      const command = (entered.current || alreadyOwned) ? 'traveler_message' : 'scout_entry';
       const response = await sendTripCommand(command, { message: text, idempotencyKey });
       entered.current = true;
       const plannerState = response.trip.trip_state.planner_state;
