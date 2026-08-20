@@ -156,7 +156,7 @@
    Dates or Month+Duration, No. of travelers, Budget, Destination last —
    each conditional on the field actually being present), replacing the old
    4-track board and separate budget chip per the Wayfinder mockup. */
-.trip-facts{max-width:640px;margin:24px auto 0}
+.trip-facts{margin:24px 0 0}
 .trip-facts-heading{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);margin:0 0 8px}
 .trip-facts-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:11px 0;border-bottom:1px solid var(--border)}
 .trip-facts-row:last-child{border-bottom:none}
@@ -165,12 +165,12 @@
 
 /* TWM-182: pre-freeze placeholder for a non-Overview tab, tapped from the
    now-always-visible tab bar. */
-.thin-tab-placeholder{max-width:640px;margin:24px auto 0;text-align:center;color:var(--tm);padding:32px 24px}
+.thin-tab-placeholder{margin:24px auto 0;text-align:center;color:var(--tm);padding:32px 24px}
 
 /* TWM-182: bottom unified CTA — whichever track is actually actionable
    right now (Route, else Day plan), so there's always one obvious next
    step regardless of which track it's on. */
-.thin-state-primary-cta{max-width:640px;margin:24px auto 0;text-align:center}
+.thin-state-primary-cta{margin:24px auto 0;text-align:center}
 
 /* TWM-175: trip-shape day-strip on Overview — tappable, jumps into Itinerary. */
 .day-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 16px}
