@@ -76,6 +76,46 @@ describe('ScoutChat advice-entry chat', () => {
     expect(navigate).toHaveBeenCalledWith('/trip-preview', { state: { guideMessage: 'Here is your plan.' } });
   });
 
+  // TWM-188 item 4: a fresh mount landing on a trip already owned by a
+  // specialist (resumed via a stage-based CTA into /scout-chat) must send
+  // traveler_message immediately, not scout_entry — sending scout_entry
+  // would let Scout silently re-run intent detection and could flip the
+  // trip's active_agent away from the specialist that already owns it.
+  it.each(['meridian', 'guide'])(
+    'sends traveler_message, not scout_entry, on the first message of a fresh mount already owned by %s',
+    async agent => {
+      commandSnapshot = { trip_state: { active_agent: agent, trip_context: { origin: 'Delhi' } } };
+      sendTripCommand = vi.fn(async () => ({
+        message: 'Got it.',
+        trip: { trip_state: { active_agent: agent, planner_state: null } },
+      }));
+      const user = userEvent.setup();
+      render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+      const input = screen.getByPlaceholderText('Ask Scout a travel question…');
+      await user.type(input, 'Actually, change of plans{Enter}');
+      expect(sendTripCommand).toHaveBeenCalledWith(
+        'traveler_message',
+        expect.objectContaining({ message: 'Actually, change of plans' })
+      );
+    }
+  );
+
+  it('still sends scout_entry for a genuinely new trip (active_agent defaults to scout)', async () => {
+    commandSnapshot = { trip_state: { active_agent: 'scout', trip_context: {} } };
+    sendTripCommand = vi.fn(async () => ({
+      message: 'Tell me more.',
+      trip: { trip_state: { active_agent: 'scout', planner_state: null } },
+    }));
+    const user = userEvent.setup();
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    const input = screen.getByPlaceholderText('Ask Scout a travel question…');
+    await user.type(input, 'A relaxed beach trip{Enter}');
+    expect(sendTripCommand).toHaveBeenCalledWith(
+      'scout_entry',
+      expect.objectContaining({ message: 'A relaxed beach trip' })
+    );
+  });
+
   it('shows the assistant reply in chat when Guide has not yet completed the plan', async () => {
     commandSnapshot = { trip_state: { active_agent: 'guide', planner_state: { conversation_context: { awaiting: 'budget' }, places: [], day_plan: [] } } };
     sendTripCommand = vi.fn(async () => ({
