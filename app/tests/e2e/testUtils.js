@@ -122,6 +122,24 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
       if (step.itineraryVersions !== undefined) itineraryVersions = step.itineraryVersions;
       return route.fulfill({ json: step.response });
     }
+    // TWM-189: the traveler's first message (discover_entry/known_destination_entry
+    // from a trip-less JourneyEntry) now creates the trip and sends the message in
+    // one request — POST /api/trips/first-message — instead of a bare create
+    // followed by a /commands call. Same scripted-step consumption as /commands
+    // above, but always the step that actually creates `current`.
+    if (method === 'POST' && pathname.endsWith('/first-message')) {
+      const body = request.postDataJSON();
+      const step = pending.shift();
+      if (!step) throw new Error(`Unexpected first-message command: ${JSON.stringify(body)} (no more scripted steps).`);
+      if (step.command !== body.command) {
+        throw new Error(`Expected command "${step.command}" but got "${body.command}".`);
+      }
+      current = step.response.trip;
+      records.set(current.id, current);
+      if (step.recommendation !== undefined) latestRecommendation = step.recommendation;
+      if (step.itineraryVersions !== undefined) itineraryVersions = step.itineraryVersions;
+      return route.fulfill({ status: 201, json: step.response });
+    }
     return route.continue();
   });
 }
