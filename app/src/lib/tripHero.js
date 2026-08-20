@@ -39,7 +39,7 @@ function isSameMonth(date, now) {
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
 }
 
-const DISCOVER_ONLY_STAGES = new Set(['matching', 'recommendation_ready', 'recommended']);
+const DISCOVER_ONLY_STAGES = new Set(['matching', 'recommended']);
 
 // A trip "counts" for hero ranking (and the regular committed list) only
 // once a destination has actually been chosen — stage 'matched' and beyond

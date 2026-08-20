@@ -35,7 +35,6 @@ describe('isDiscoverOnly', () => {
 
   it('is true while still matching/recommending, before a destination is chosen', () => {
     expect(isDiscoverOnly({ stage: 'matching', trip_context: { origin: 'Delhi' } })).toBe(true);
-    expect(isDiscoverOnly({ stage: 'recommendation_ready', trip_context: { origin: 'Delhi' } })).toBe(true);
     expect(isDiscoverOnly({ stage: 'recommended', trip_context: { origin: 'Delhi' } })).toBe(true);
   });
 

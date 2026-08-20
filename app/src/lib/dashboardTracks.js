@@ -2,6 +2,11 @@
 // Budget explicitly excluded) and the per-state Overview split shown on any
 // trip that hasn't reached a frozen, itinerary-ready plan yet. Reads only
 // canonical trip_state fields, mirrors tripLifecycle.js's stage/CTA style.
+// TWM-188 item 5: the route track's stage grouping is imported from
+// tripLifecycle.js rather than duplicated here as a second hardcoded
+// literal-string check.
+
+import { RECOMMENDATIONS_READY_STAGES } from './tripLifecycle.js';
 
 // Normalizes planner progress from either shape TripDashboard's tripState
 // can carry: the full single-trip fetch's nested planner_state
@@ -54,7 +59,7 @@ function routeTrack(tripState) {
   // Unknown-destination path: still gathering vs. recommendations already
   // in hand — mirrors STAGE_CTA's own recommended/matched vs. earlier split.
   const stage = tripState?.stage ?? 'new';
-  if (stage === 'recommended' || stage === 'matched') {
+  if (RECOMMENDATIONS_READY_STAGES.has(stage)) {
     return { status: 'progress', label: 'Recommendations ready', cta: { label: 'Review recommendations', to: '/destinations' } };
   }
   return { status: 'progress', label: 'Discovering your destination', cta: { label: 'Continue chat', to: '/scout-chat' } };
