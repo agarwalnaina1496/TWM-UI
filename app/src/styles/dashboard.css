@@ -284,3 +284,18 @@
 .dashboard-day-pill.active .label,.dashboard-day-pill.active .base{color:#fff}
 .dashboard-days-main .atlas-day{margin-top:0}
 @media(max-width:820px){.dashboard-days-wrap{grid-template-columns:1fr}.dashboard-day-nav{position:static;flex-direction:row;overflow-x:auto;gap:6px;height:auto!important}.dashboard-day-pill{flex-shrink:0}}
+
+/* Small-mobile pass (<480px): tighter padding/type on Dashboard's denser
+   panels (hero, support box, atlas day cards, map placeholder) so nothing
+   feels cramped on true small phones. */
+@media (max-width:480px){
+  .hero-title{font-size:22px;}
+  .hero-stats{gap:10px;}
+  .support-box{padding:18px 16px;}
+  .support-faq{padding:6px 16px;}
+  .map-placeholder{padding:18px;gap:10px;}
+  .atlas-day header{padding:18px 16px 14px;}
+  .atlas-timeline{padding:16px 16px 16px;}
+  .atlas-timeline::before{left:37px;}
+  .atlas-day-footer>div{padding:14px 16px;}
+}

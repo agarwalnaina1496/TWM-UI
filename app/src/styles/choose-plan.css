@@ -1,5 +1,6 @@
 .plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch;margin-top:24px;}
 @media (max-width:640px){ .plan-grid{grid-template-columns:1fr;} }
+@media (max-width:480px){ .plan-card{padding:20px 18px;} }
 .plan-card{background:var(--surface);border:1.5px solid var(--border);border-radius:18px;padding:26px 24px;display:flex;flex-direction:column;}
 .plan-card.hi{border-color:var(--accent);box-shadow:0 12px 30px rgba(156,90,52,.1);}
 .plan-name{font-family:'Fraunces',serif;font-size:19px;font-weight:600;}

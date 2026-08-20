@@ -158,3 +158,16 @@
 .plan-chat .eyebrow{color:var(--accent);}
 
 @media(max-width:700px){.plan-summary{grid-template-columns:1fr 1fr}.builder-controls{grid-template-columns:1fr}.builder-footer{align-items:stretch;flex-direction:column}.day-card-head{align-items:flex-start;flex-direction:column;gap:10px}.route-actions{flex-wrap:wrap}.item-row{align-items:flex-start}.item-actions{flex-wrap:wrap;justify-content:flex-end}.reasoned-suggestion{align-items:flex-start;flex-direction:column}}
+
+/* Small-mobile pass (<480px): tighter padding/type on Plan Builder's
+   denser panels so nothing feels cramped on true small phones. */
+@media (max-width:480px){
+  .plan-summary{gap:8px;padding:14px 0;}
+  .plan-summary strong{font-size:18px;}
+  .day-card{padding:14px;}
+  .side-panel{padding:16px;}
+  .route-block .day-card-head{padding:14px 16px;}
+  .plan-list{padding:4px 16px;}
+  .add-place-row{margin:14px 16px 18px;}
+  .reasoned-suggestion{padding:14px 16px;}
+}
