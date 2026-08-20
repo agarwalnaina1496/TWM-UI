@@ -1,0 +1,14 @@
+/* Single source of truth for brand-level design tokens shared by the
+   marketing site (style.css) and the product app (app/src/styles/tokens.css).
+   Edit only here — the app copy is regenerated from this file by
+   `npm run sync-tokens` (wired into app's predev/prebuild), and the
+   marketing site loads it directly via @import, so there is nothing to
+   manually keep in sync anymore. */
+:root{
+  --bg:#F5F2EC; --surface:#FFFFFF; --border:#E4DED4;
+  --tp:#211C16; --ts:#7C7268; --tm:#AFA593;
+  --accent:#9C5A34; --accent-bg:#F3E7DB; --accent-bg-strong:#EBD8C4;
+  --sage:#5B6E5A; --sage-bg:#EAEFE6;
+  --blue:#3E5C76; --blue-bg:#E7EDF3;
+  --radius:14px;
+}

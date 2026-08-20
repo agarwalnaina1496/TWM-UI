@@ -22,7 +22,10 @@ test('guest can reach Dashboard-home with no Log out link', async ({ page }) => 
   await page.getByText('Continue without login').click();
   await page.goto('my-trips');
 
-  await expect(page.getByRole('heading', { name: /your trips/i })).toBeVisible();
+  // "Your trips" heading is intentionally hidden in the zero-trips empty
+  // state — assert the empty state itself as proof we landed on
+  // Dashboard-home.
+  await expect(page.getByText('No trips yet')).toBeVisible();
   await expect(page.getByText('Log out')).toHaveCount(0);
 });
 
@@ -46,6 +49,6 @@ test('logged-in user can reach Dashboard-home and sees Log out', async ({ page }
   await page.getByText('Continue →', { exact: true }).click();
   await page.goto('my-trips');
 
-  await expect(page.getByRole('heading', { name: /your trips/i })).toBeVisible();
+  await expect(page.getByText('No trips yet')).toBeVisible();
   await expect(page.getByText('Log out')).toBeVisible();
 });

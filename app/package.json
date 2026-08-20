@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "sync-tokens": "node scripts/sync-tokens.js",
+    "predev": "npm run sync-tokens",
+    "prebuild": "npm run sync-tokens",
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",

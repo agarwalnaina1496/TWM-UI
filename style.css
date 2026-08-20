@@ -1,11 +1,4 @@
-:root{
-  --bg:#F5F2EC; --surface:#FFFFFF; --border:#E4DED4;
-  --tp:#211C16; --ts:#7C7268; --tm:#AFA593;
-  --accent:#9C5A34; --accent-bg:#F3E7DB; --accent-bg-strong:#EBD8C4;
-  --sage:#5B6E5A; --sage-bg:#EAEFE6;
-  --blue:#3E5C76; --blue-bg:#E7EDF3;
-  --radius:14px;
-}
+@import url('design-tokens.css');
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--tp);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;padding-bottom:40px;display:flex;flex-direction:column;min-height:100vh;}
 .wrap{max-width:1200px;margin:0 auto;padding:0 20px;flex:1 0 auto;}
