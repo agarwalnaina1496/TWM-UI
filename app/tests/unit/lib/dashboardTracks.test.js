@@ -76,4 +76,16 @@ describe('dashboardPrimaryCta (TWM-182)', () => {
     });
     expect(cta).toBeNull();
   });
+
+  // TWM-188 item 5: the route track's recommended/matched grouping is now
+  // imported from tripLifecycle.js's RECOMMENDATIONS_READY_STAGES rather
+  // than a second hardcoded literal-string check — confirm both stages
+  // still resolve to the destinations-review CTA with no known destination.
+  it.each(['recommended', 'matched'])(
+    "returns Route's review-recommendations CTA for stage %s with no destination chosen yet",
+    stage => {
+      const cta = dashboardPrimaryCta({ stage, trip_context: {}, planner_state: null });
+      expect(cta).toEqual({ label: 'Review recommendations', to: '/destinations' });
+    }
+  );
 });

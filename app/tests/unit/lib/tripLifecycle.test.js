@@ -35,7 +35,10 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
     ['new, no context', {}, 'New'],
     ['new, has context', { trip_context: { origin: 'Delhi' } }, 'In conversation'],
     ['matching', { stage: 'matching' }, 'In conversation'],
-    ['recommendation_ready', { stage: 'recommendation_ready' }, 'Ready to generate'],
+    // TWM-188 item 2: recommendation_ready was removed from the canonical
+    // stage enum — an unrecognized/removed stage value now falls back to
+    // the same badge as any other unknown stage, not a dedicated entry.
+    ['recommendation_ready (removed, TWM-188)', { stage: 'recommendation_ready' }, 'New'],
     ['recommended', { stage: 'recommended' }, 'Recommendations ready'],
     ['matched', { stage: 'matched' }, 'Destination chosen'],
     ['planning', { stage: 'planning' }, 'Planning in progress'],
@@ -52,7 +55,7 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
     ['new, no context', {}, '/'],
     ['new, has context', { trip_context: { origin: 'Delhi' } }, '/scout-chat'],
     ['matching', { stage: 'matching' }, '/scout-chat'],
-    ['recommendation_ready', { stage: 'recommendation_ready' }, '/scout-chat'],
+    ['recommendation_ready (removed, TWM-188)', { stage: 'recommendation_ready' }, '/'],
     ['recommended', { stage: 'recommended' }, '/destinations'],
     ['matched', { stage: 'matched' }, '/destinations'],
     ['planning', { stage: 'planning' }, '/trip-preview'],

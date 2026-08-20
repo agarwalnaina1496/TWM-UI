@@ -64,7 +64,6 @@ export function contextDestination(tripContext) {
 const STAGE_BADGES = {
   new: { cls: 'b-new', text: 'New' },
   matching: { cls: 'b-chat', text: 'In conversation' },
-  recommendation_ready: { cls: 'b-chat', text: 'Ready to generate' },
   recommended: { cls: 'b-reco', text: 'Recommendations ready' },
   matched: { cls: 'b-matched', text: 'Destination chosen' },
   planning: { cls: 'b-matched', text: 'Planning in progress' },
@@ -84,7 +83,6 @@ export function stageBadge(tripState) {
 const STAGE_CTA = {
   new: { label: 'Start planning', to: '/' },
   matching: { label: 'Resume matching', to: '/scout-chat' },
-  recommendation_ready: { label: 'Generate recommendations', to: '/scout-chat' },
   recommended: { label: 'Review recommendations', to: '/destinations' },
   matched: { label: 'Review recommendations', to: '/destinations' },
   planning: { label: 'Resume planning', to: '/trip-preview' },
@@ -93,6 +91,12 @@ const STAGE_CTA = {
   booked: { label: 'View trip', to: '/dashboard' },
   done: { label: 'View trip', to: '/dashboard' },
 };
+
+// Stages where a recommendation list already exists and is ready to review
+// (STAGE_CTA's own recommended/matched -> /destinations grouping) — shared
+// so dashboardTracks.js's route track doesn't hardcode this stage set a
+// second time (TWM-188 item 5).
+export const RECOMMENDATIONS_READY_STAGES = new Set(['recommended', 'matched']);
 
 // Stage-aware CTA for the landing resolver's single-trip resume path and any
 // other stage-derived link. NOTE: Dashboard-home's own trip card (TWM-171)
