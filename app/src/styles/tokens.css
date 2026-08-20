@@ -58,6 +58,7 @@ header{position:sticky;top:0;z-index:30;background:rgba(245,242,236,0.94);backdr
 .login-link:hover{color:var(--accent);}
 
 .eyebrow{margin-top:24px;font-size:11px;font-weight:700;letter-spacing:0.07em;color:var(--tm);text-transform:uppercase;}
+.footer-bottom{margin-top:32px;padding-top:16px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--tm);}
 h1{font-family:'Fraunces',serif;font-size:28px;font-weight:600;margin:8px 0 6px;letter-spacing:-0.01em;}
 h1 em{font-style:italic;color:var(--accent);font-weight:500;}
 .lede{font-size:13.5px;color:var(--ts);line-height:1.55;margin:0 0 18px;max-width:52ch;}

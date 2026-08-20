@@ -15,6 +15,6 @@ document.write(`
       <a href="terms.html">Terms</a>
     </div>
   </div>
-  <div class="footer-bottom">© TravelWithMe</div>
+  <div class="footer-bottom">&copy; ${new Date().getFullYear()} TravelWithMe. All rights reserved.</div>
 </footer>
 `);
