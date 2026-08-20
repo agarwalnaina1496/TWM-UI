@@ -6,6 +6,7 @@ import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
 import { planReady } from '../hooks/useGuidePlanning.js';
 import { buildRecapTurn, didHandoffOccur } from '../lib/discoverChat.js';
+import { isTripEmpty } from '../lib/tripLifecycle.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import FactsPanel from '../components/FactsPanel.jsx';
 import { withTripId } from '../lib/tripUrl.js';
@@ -23,7 +24,7 @@ export default function ScoutChat() {
   // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this page
   // reads matcher_state/planner_state to decide what to do next and can't
   // safely act on a possibly-thin cached record.
-  useTripFromUrl(openTrip);
+  const urlTripId = useTripFromUrl(openTrip);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -87,6 +88,17 @@ export default function ScoutChat() {
     if (message) runAdvice(message);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripLoadStatus]);
+
+  // TWM-188: a direct/deep-link/stale-tab navigation to an empty
+  // (trip_context-less) trip has nothing real to render here — redirect
+  // home instead of showing the cold-open greeting for an orphan record.
+  // Gated on a URL tripId so a genuinely fresh, not-yet-created trip
+  // reached without one (the normal cold-open path) is unaffected.
+  useEffect(() => {
+    if (!urlTripId || tripLoadStatus !== 'ready' || !isTripEmpty(commandSnapshot?.trip_state)) return;
+    navigate('/', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTripId, tripLoadStatus, commandSnapshot?.trip_state, navigate]);
 
   // Hand-off note fires exactly once, only on the real scout->meridian
   // transition — never on initial load of an already-meridian-owned trip.

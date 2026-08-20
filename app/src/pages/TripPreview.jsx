@@ -6,6 +6,7 @@ import {
 } from '../lib/guidePlanAdapter.js';
 import { buildPlanRecapTurn } from '../lib/planChat.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
+import { isTripEmpty } from '../lib/tripLifecycle.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
 import PaceMeter from '../components/ui/PaceMeter.jsx';
@@ -61,7 +62,7 @@ export default function TripPreview() {
   // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this
   // page's boot effect below decides whether to fire start_planning off
   // real planner_state and must never act on a possibly-thin cached record.
-  useTripFromUrl(openTrip);
+  const urlTripId = useTripFromUrl(openTrip);
 
   const tripState = commandSnapshot?.trip_state;
   const tripContext = tripState?.trip_context;
@@ -106,6 +107,17 @@ export default function TripPreview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frozenPlan, navigate]);
 
+  // TWM-188: a direct/deep-link/stale-tab navigation to an empty
+  // (trip_context-less) trip has nothing real to render here — redirect
+  // home instead of booting Guide against a trip that's really an orphan.
+  // Gated on a URL tripId so a genuinely fresh, not-yet-created trip
+  // reached without one is unaffected.
+  useEffect(() => {
+    if (!urlTripId || tripLoadStatus !== 'ready' || !isTripEmpty(tripState)) return;
+    navigate('/', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTripId, tripLoadStatus, tripState, navigate]);
+
   // Bootstraps the real Guide session for the discover path (the
   // known-destination path already starts Guide from JourneyEntry's chat
   // before navigating here). Must wait for the Backend-authoritative trip
@@ -114,7 +126,9 @@ export default function TripPreview() {
   // state would wrongly restart an already-in-progress Guide session.
   useEffect(() => {
     if (tripLoadStatus !== 'ready') return;
-    if (frozenPlan || bootStarted.current) return;
+    // TWM-188: when the guard above is about to redirect this exact trip
+    // home, don't also boot Guide against it in the same commit.
+    if (frozenPlan || bootStarted.current || (urlTripId && isTripEmpty(tripState))) return;
     if (plannerState && (places.length || dayPlan.length || awaiting)) {
       setBootStatus('ready');
       return;

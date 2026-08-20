@@ -69,6 +69,23 @@ describe('TripPreview real Guide Plan Builder', () => {
     expect(screen.queryByText(/Approve places|Approve itinerary/)).not.toBeInTheDocument();
   });
 
+  // TWM-188: a deep-link/stale-tab to a trip with no trip_context yet is an
+  // orphan, not a real trip — must bounce home instead of booting Guide.
+  it('redirects home when the URL trip resolves to an empty (no trip_context) trip', async () => {
+    commandSnapshot = { version: 1, trip_state: { stage: 'new', trip_context: {} } };
+    sendTripCommand = vi.fn();
+    render(<MemoryRouter initialEntries={['/trip-preview?tripId=trip-1']}><TripPreview /></MemoryRouter>);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+    expect(sendTripCommand).not.toHaveBeenCalled();
+  });
+
+  it('does not redirect a fresh trip reached with no URL tripId, even if empty', () => {
+    commandSnapshot = { version: 1, trip_state: { stage: 'new', trip_context: {} } };
+    sendTripCommand = vi.fn();
+    render(<MemoryRouter initialEntries={['/trip-preview']}><TripPreview /></MemoryRouter>);
+    expect(navigate).not.toHaveBeenCalledWith('/', { replace: true });
+  });
+
   it('does not re-call start_planning when the known-destination path already has a ready plan', () => {
     commandSnapshot = snapshotWith(readyPlannerState());
     sendTripCommand = vi.fn();

@@ -16,6 +16,9 @@ vi.mock('../../../src/context/TripContext.jsx', () => ({
   useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState, openTrip, viewTrip }),
 }));
 
+const navigate = vi.fn();
+vi.mock('react-router-dom', async () => ({ ...(await vi.importActual('react-router-dom')), useNavigate: () => navigate }));
+
 function generalReference() {
   return { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
 }
@@ -177,6 +180,22 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     // (TWM-159/160) — default to a ready single-version result.
     itineraryFetchResponse = { version: 1, source_guide_revision: 3, result: atlasResult(), created_at: '2026-01-01T00:00:00.000Z' };
     global.fetch = defaultFetchMock();
+  });
+
+  // TWM-188: a deep-link/stale-tab to a trip with no trip_context yet is an
+  // orphan, not a real trip — must bounce home instead of rendering blank.
+  it('redirects home when the URL trip resolves to an empty (no trip_context) trip', async () => {
+    commandSnapshot = { version: 1, trip_state: { stage: 'new', trip_context: {} } };
+    sendTripCommand = vi.fn();
+    renderDashboard(['/dashboard?tripId=trip-1']);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+  });
+
+  it('does not redirect a trip reached with no URL tripId, even if empty', () => {
+    commandSnapshot = { version: 1, trip_state: { stage: 'new', trip_context: {} } };
+    sendTripCommand = vi.fn();
+    renderDashboard(['/dashboard']);
+    expect(navigate).not.toHaveBeenCalledWith('/', { replace: true });
   });
 
   it('calls start_itinerary once when no saved result exists, then renders it', async () => {
