@@ -246,7 +246,11 @@ describe('TripPreview real Guide Plan Builder', () => {
       expect(link).toHaveClass('link-button');
     });
 
-    it('shows the honest-transition screen while reversing, then navigates to Destinations once Guide reverses to Meridian', async () => {
+    // TWM-188 item 3: matching -> /scout-chat, not /destinations — the
+    // original navigation assumed /destinations for every reversal, which
+    // was itself a stage/page mismatch (matching means a fresh Meridian
+    // conversation, which lives on /scout-chat).
+    it('shows the honest-transition screen while reversing, then navigates to /scout-chat once Guide reverses to Meridian directly (no prior recommendations)', async () => {
       commandSnapshot = snapshotWith(readyPlannerState());
       let resolveCommand;
       sendTripCommand = vi.fn(() => new Promise(resolve => { resolveCommand = resolve; }));
@@ -259,9 +263,9 @@ describe('TripPreview real Guide Plan Builder', () => {
 
       resolveCommand({
         message: "Let's look at other destinations.",
-        trip: { trip_state: { active_agent: 'meridian', stage: 'matching' } },
+        trip: { trip_state: { active_agent: 'meridian', stage: 'matching', planner_state: null } },
       });
-      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/destinations'));
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/scout-chat'));
     });
 
     it('shows Guide\'s clarifying question inline, without navigating, when Guide treats the request as ambiguous', async () => {
@@ -276,6 +280,73 @@ describe('TripPreview real Guide Plan Builder', () => {
 
       expect(await screen.findByText('Do you want to adjust this trip, or pick a different destination?')).toBeInTheDocument();
       expect(navigate).not.toHaveBeenCalledWith('/destinations');
+      expect(navigate).not.toHaveBeenCalledWith('/scout-chat');
+    });
+
+    // TWM-188 item 3: a trip with an existing recommendation list gets a
+    // choice prompt instead of an immediate reversal.
+    it('shows a revisit-vs-fresh choice, not the honest-transition screen, when the backend asks for one', async () => {
+      commandSnapshot = snapshotWith(readyPlannerState());
+      sendTripCommand = vi.fn(async () => ({
+        message: 'You already have destination recommendations from earlier — want to revisit that list, or start a fresh search?',
+        trip: {
+          trip_state: {
+            active_agent: 'guide',
+            stage: 'planning',
+            planner_state: { ...readyPlannerState(), conversation_context: { awaiting: 'destination_reopen_choice' } },
+          },
+        },
+      }));
+      const user = userEvent.setup();
+      render(<MemoryRouter><TripPreview /></MemoryRouter>);
+      await user.click(screen.getByText(/Not the right destination\?/));
+
+      expect(await screen.findByText(/want to revisit that list, or start a fresh search/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Revisit my existing options' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Start a fresh search' })).toBeInTheDocument();
+      // The low-key reversal link is replaced by the choice while it's pending.
+      expect(screen.queryByText(/Not the right destination\?/)).not.toBeInTheDocument();
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('sends reopen_destination_revisit and navigates to /destinations when the traveler picks revisit', async () => {
+      commandSnapshot = snapshotWith(readyPlannerState());
+      sendTripCommand = vi.fn()
+        .mockResolvedValueOnce({
+          message: 'Want to revisit that list, or start a fresh search?',
+          trip: { trip_state: { active_agent: 'guide', planner_state: { conversation_context: { awaiting: 'destination_reopen_choice' } } } },
+        })
+        .mockResolvedValueOnce({
+          message: 'Here are the destinations Meridian already found for you.',
+          trip: { trip_state: { active_agent: null, stage: 'recommended' } },
+        });
+      const user = userEvent.setup();
+      render(<MemoryRouter><TripPreview /></MemoryRouter>);
+      await user.click(screen.getByText(/Not the right destination\?/));
+      await user.click(await screen.findByRole('button', { name: 'Revisit my existing options' }));
+
+      expect(sendTripCommand).toHaveBeenLastCalledWith('reopen_destination_revisit');
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/destinations'));
+    });
+
+    it('sends reopen_destination_fresh and navigates to /scout-chat when the traveler picks fresh discovery', async () => {
+      commandSnapshot = snapshotWith(readyPlannerState());
+      sendTripCommand = vi.fn()
+        .mockResolvedValueOnce({
+          message: 'Want to revisit that list, or start a fresh search?',
+          trip: { trip_state: { active_agent: 'guide', planner_state: { conversation_context: { awaiting: 'destination_reopen_choice' } } } },
+        })
+        .mockResolvedValueOnce({
+          message: null,
+          trip: { trip_state: { active_agent: 'meridian', stage: 'matching' } },
+        });
+      const user = userEvent.setup();
+      render(<MemoryRouter><TripPreview /></MemoryRouter>);
+      await user.click(screen.getByText(/Not the right destination\?/));
+      await user.click(await screen.findByRole('button', { name: 'Start a fresh search' }));
+
+      expect(sendTripCommand).toHaveBeenLastCalledWith('reopen_destination_fresh');
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/scout-chat'));
     });
   });
 });

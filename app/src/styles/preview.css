@@ -154,6 +154,10 @@
 /* TWM-174: low-key reversal link, wired to Guide's reopen_destination_discovery. */
 .reversal-link{text-align:center;margin:14px 0 0;}
 
+/* TWM-188 item 3: revisit-vs-fresh-discovery choice, shown in place of the
+   revision message once a trip with existing recommendations reopens. */
+.reversal-choice{display:flex;justify-content:center;gap:10px;margin:14px 0 0;flex-wrap:wrap;}
+
 /* TWM-174: Plan chat reads as its own screen, not embedded Plan Builder filler. */
 .plan-chat .eyebrow{color:var(--accent);}
 
