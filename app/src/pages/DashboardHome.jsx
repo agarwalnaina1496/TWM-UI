@@ -255,7 +255,7 @@ export default function DashboardHome() {
   return (
     <div className="wrap">
       <div className="my-trips-header">
-        <h1>Your <em>trips</em></h1>
+        {!trueEmpty && <h1>Your <em>trips</em></h1>}
         {auth.loggedIn ? (
           <span className="account-status">Signed in as {auth.name}</span>
         ) : (
