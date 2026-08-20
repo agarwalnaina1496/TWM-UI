@@ -1,12 +1,12 @@
-/* Design tokens ported from the marketing site's style.css, kept in sync deliberately (not auto-synced) */
+/* Brand-level tokens (--bg, --accent, --radius, etc.) live in
+   ../../../design-tokens.css, the single source of truth shared with the
+   marketing site's style.css. This file only adds app-only tokens below;
+   `npm run sync-tokens` (auto-run via predev/prebuild) regenerates
+   _design-tokens.generated.css from that root file — never edit the
+   generated file by hand. */
+@import '/src/styles/_design-tokens.generated.css';
 
 :root{
-  --bg:#F5F2EC; --surface:#FFFFFF; --border:#E4DED4;
-  --tp:#211C16; --ts:#7C7268; --tm:#AFA593;
-  --accent:#9C5A34; --accent-bg:#F3E7DB; --accent-bg-strong:#EBD8C4;
-  --sage:#5B6E5A; --sage-bg:#EAEFE6;
-  --blue:#3E5C76; --blue-bg:#E7EDF3;
-  --radius:14px;
   /* Type scale (TWM-165): new/touched CSS should reach for these instead of
      hardcoding another near-duplicate px value — that drift is how the app
      ended up with 6+ font-sizes all doing "secondary body text" duty. */
@@ -58,6 +58,7 @@ header{position:sticky;top:0;z-index:30;background:rgba(245,242,236,0.94);backdr
 .login-link:hover{color:var(--accent);}
 
 .eyebrow{margin-top:24px;font-size:11px;font-weight:700;letter-spacing:0.07em;color:var(--tm);text-transform:uppercase;}
+.footer-bottom{margin-top:32px;padding-top:16px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--tm);}
 h1{font-family:'Fraunces',serif;font-size:28px;font-weight:600;margin:8px 0 6px;letter-spacing:-0.01em;}
 h1 em{font-style:italic;color:var(--accent);font-weight:500;}
 .lede{font-size:13.5px;color:var(--ts);line-height:1.55;margin:0 0 18px;max-width:52ch;}

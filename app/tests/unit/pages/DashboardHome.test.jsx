@@ -357,7 +357,10 @@ describe('DashboardHome (TWM-108/163)', () => {
     await screen.findByText('No trips yet');
     await userEvent.click(screen.getByText("Log in so you don't lose this"));
     await userEvent.click(screen.getByRole('button', { name: 'Continue without login' }));
-    expect(screen.getByRole('heading', { name: /your trips/i })).toBeInTheDocument();
+    // "Your trips" heading is intentionally hidden in the zero-trips empty
+    // state (redundant above "No trips yet") — assert the empty state itself
+    // instead of the heading.
+    expect(screen.getByText('No trips yet')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText("Log in so you don't lose this")).toBeInTheDocument();
   });
