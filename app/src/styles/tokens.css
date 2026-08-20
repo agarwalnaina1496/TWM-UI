@@ -1,10 +1,12 @@
 /* Brand-level tokens (--bg, --accent, --radius, etc.) live in
-   ../../../design-tokens.css, the single source of truth shared with the
-   marketing site's style.css. This file only adds app-only tokens below;
-   `npm run sync-tokens` (auto-run via predev/prebuild) regenerates
-   _design-tokens.generated.css from that root file — never edit the
-   generated file by hand. */
+   ../../../design-tokens.css, and structural layout mechanics (sticky-footer
+   flex, container width, sticky header) live in ../../../shared-layout.css —
+   both single sources of truth shared with the marketing site's style.css.
+   This file only adds app-only tokens/overrides below; `npm run sync-tokens`
+   (auto-run via predev/prebuild) regenerates the local copies from those
+   root files — never edit the generated files by hand. */
 @import '/src/styles/_design-tokens.generated.css';
+@import '/src/styles/_shared-layout.generated.css';
 
 :root{
   /* Type scale (TWM-165): new/touched CSS should reach for these instead of
@@ -26,14 +28,11 @@
   --tone-neutral:#7C7268; --tone-neutral-bg:#EDEAE4;
   --chart-1:#7C7268; --chart-2:#AFA593; --chart-3:#5B6E5A; --chart-4:#3E5C76;
 }
-*{box-sizing:border-box;}
-body{margin:0;background:var(--bg);color:var(--tp);font-family:var(--font-body);-webkit-font-smoothing:antialiased;}
+body{background:var(--bg);color:var(--tp);font-family:var(--font-body);-webkit-font-smoothing:antialiased;}
 a{color:inherit;}
 
-.wrap{max-width:1200px;margin:0 auto;padding:0 20px;}
-
-header{position:sticky;top:0;z-index:30;background:rgba(245,242,236,0.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);}
-.header-inner{max-width:1200px;margin:0 auto;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:8px;}
+header{background:rgba(245,242,236,0.94);backdrop-filter:blur(8px);}
+.header-inner{flex-wrap:wrap;row-gap:8px;}
 .brand{font-family:'Fraunces',serif;font-size:18px;font-weight:600;text-decoration:none;color:var(--tp);}
 .brand em{color:var(--accent);font-style:italic;font-weight:500;}
 

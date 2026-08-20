@@ -9,6 +9,7 @@ import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { isFixedFieldGap } from '../lib/planChat.js';
 import { planReady } from '../hooks/useGuidePlanning.js';
 import BackToTrip from '../components/BackToTrip.jsx';
+import Layout from '../components/Layout.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
 import { withTripId } from '../lib/tripUrl.js';
@@ -639,7 +640,7 @@ export default function Destinations() {
     && selectedOption.type === focusedOption.type && selectedOption.id === focusedOption.key;
 
   return (
-    <div className="wrap">
+    <Layout>
       {checkpointAwaiting && (
         <CheckpointOverlay
           knownFacts={pills}
@@ -759,6 +760,6 @@ export default function Destinations() {
           busy={refinementBusy}
         />
       )}
-    </div>
+    </Layout>
   );
 }

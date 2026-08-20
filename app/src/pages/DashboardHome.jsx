@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Layout from '../components/Layout.jsx';
 import { useTrip } from '../context/TripContext.jsx';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
@@ -253,7 +254,7 @@ export default function DashboardHome() {
   const trueEmpty = !stillLoading && visibleTrips.length === 0;
 
   return (
-    <div className="wrap">
+    <Layout>
       <div className="my-trips-header">
         {!trueEmpty && <h1>Your <em>trips</em></h1>}
         {auth.loggedIn ? (
@@ -357,6 +358,6 @@ export default function DashboardHome() {
           )}
         </>
       )}
-    </div>
+    </Layout>
   );
 }
