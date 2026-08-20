@@ -101,9 +101,23 @@ export async function listTrips() {
   return (list.trips || []).map(normalizeTripRecord).sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 }
 
-export async function createTrip({ title = 'Untitled Trip', product_mode = 'self_led' } = {}) {
-  const created = await request('', { method: 'POST', body: JSON.stringify({ title, product_mode }) });
-  return normalizeTripRecord(created);
+// TWM-189: the traveler's first message and trip creation are now one
+// logical request — POST /trips/first-message runs the agent turn before
+// any row exists and only persists a row if that turn succeeds, so a
+// failed first send never leaves an orphan trip. Restricted to
+// discover_entry/known_destination_entry (JourneyEntry.jsx's two entry
+// paths) — every other command assumes a trip already exists.
+export async function startTripFromFirstMessage(command, { message, destination, title } = {}) {
+  const payload = { command };
+  if (title !== undefined) payload.title = title;
+  if (message !== undefined) payload.message = message;
+  if (destination !== undefined) payload.destination = destination;
+  const saved = await request('/first-message', { method: 'POST', body: JSON.stringify(payload) });
+  return {
+    message: saved.message ?? null,
+    agent_meta: saved.agent_meta ?? null,
+    trip: normalizeTripRecord(saved.trip),
+  };
 }
 
 export async function getTrip(id) {

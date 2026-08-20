@@ -64,18 +64,19 @@ describe('App guest-first routing (TWM-140)', () => {
       const user = userEvent.setup();
       fetchMock
         // TripContext boot: list (empty, no trip yet) — the trip itself is
-        // created lazily below, by the traveler's first sent message.
+        // created below, atomically with the traveler's first message
+        // (TWM-189: no bare create beforehand).
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-        .mockResolvedValueOnce(jsonResponse(tripRecord()))
-        // discover_entry: Meridian needs clarification, no Scout call
+        // discover_entry via POST /trips/first-message: Meridian needs
+        // clarification, no Scout call, and this single request both
+        // creates the trip and returns its first response.
         .mockResolvedValueOnce(jsonResponse({
           message: 'What is your rough budget?',
           agent_meta: null,
           trip: tripRecord({
-            version: 2,
             trip_state: { stage: 'matching', active_agent: 'meridian', matcher_state: { conversation_context: { awaiting: 'budget' } } },
           }),
-        }))
+        }, { status: 201 }))
         // traveler_message follow-up: Meridian recommends
         .mockResolvedValueOnce(jsonResponse({
           message: 'Here are a few options.',
@@ -91,13 +92,13 @@ describe('App guest-first routing (TWM-140)', () => {
       await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'Somewhere relaxing{Enter}');
 
       expect(await screen.findByText('What is your rough budget?')).toBeInTheDocument();
-      expect(fetchMock.mock.calls[2][0]).toBe('/api/trips/trip-1/commands');
-      expect(JSON.parse(fetchMock.mock.calls[2][1].body).command).toBe('discover_entry');
+      expect(fetchMock.mock.calls[1][0]).toBe('/api/trips/first-message');
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body).command).toBe('discover_entry');
 
       await user.click(screen.getByRole('button', { name: '₹1,00,000 total for both' }));
 
       expect(await screen.findByRole('button', { name: 'See destinations →' })).toBeInTheDocument();
-      expect(JSON.parse(fetchMock.mock.calls[3][1].body).command).toBe('traveler_message');
+      expect(JSON.parse(fetchMock.mock.calls[2][1].body).command).toBe('traveler_message');
     });
   });
 
@@ -111,45 +112,16 @@ describe('App guest-first routing (TWM-140)', () => {
     expect(screen.getByPlaceholderText('e.g. Coorg, Karnataka')).toBeInTheDocument();
   });
 
-  describe('Scout entry (own words) against real trip commands', () => {
-    let fetchMock;
-
-    beforeEach(() => {
-      fetchMock = mockFetchWithGuestSession();
-    });
-
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
-    it('sends the first turn as scout_entry, then plain traveler_message on follow-ups', async () => {
-      const user = userEvent.setup();
-      fetchMock
-        .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-        .mockResolvedValueOnce(jsonResponse(tripRecord()))
-        .mockResolvedValueOnce(jsonResponse({
-          message: 'Where will you be travelling from?',
-          agent_meta: null,
-          trip: tripRecord({ version: 2, trip_state: { stage: 'new', active_agent: 'scout' } }),
-        }))
-        .mockResolvedValueOnce(jsonResponse({
-          message: 'Got it, one moment.',
-          agent_meta: null,
-          trip: tripRecord({ version: 3, trip_state: { stage: 'matching', active_agent: 'meridian' } }),
-        }));
-
-      renderApp(['/scout-chat?entry=advice']);
-      await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), 'Plan my Coorg trip{Enter}');
-
-      expect(await screen.findByText('Where will you be travelling from?')).toBeInTheDocument();
-      expect(JSON.parse(fetchMock.mock.calls[2][1].body).command).toBe('scout_entry');
-
-      await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), 'Delhi{Enter}');
-
-      expect(await screen.findByText('Got it, one moment.')).toBeInTheDocument();
-      expect(JSON.parse(fetchMock.mock.calls[3][1].body).command).toBe('traveler_message');
-    });
-  });
+  // TWM-188/189: /scout-chat is only ever reached as a resume of an
+  // already-existing trip (via a Dashboard/My Trips resume CTA) — no live
+  // navigation ever lands here trip-less. The removed test here exercised
+  // ScoutChat.jsx sending a bare scout_entry against no trip at all, a
+  // scenario TWM-188 explicitly stops any live caller from producing and
+  // TWM-189's stricter POST /trips contract can no longer support via
+  // lazy ensureTrip() creation. ScoutChat.jsx's resume-path behavior
+  // (traveler_message/continue against an existing trip) is unchanged and
+  // untested here since this repo's ScoutChat resume coverage lives
+  // elsewhere.
 
   describe('Known Destination entry against real trip commands', () => {
     let fetchMock;
@@ -166,12 +138,13 @@ describe('App guest-first routing (TWM-140)', () => {
       const user = userEvent.setup();
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-        .mockResolvedValueOnce(jsonResponse(tripRecord()))
+        // known_destination_entry via POST /trips/first-message — one
+        // request both creates the trip and returns Guide's first turn
+        // (TWM-189: no bare create beforehand).
         .mockResolvedValueOnce(jsonResponse({
           message: "Anything else you'd like to add? Any other preferences?",
           agent_meta: null,
           trip: tripRecord({
-            version: 2,
             trip_state: {
               stage: 'planning',
               active_agent: 'guide',
@@ -183,14 +156,15 @@ describe('App guest-first routing (TWM-140)', () => {
               },
             },
           }),
-        }));
+        }, { status: 201 }));
 
       renderApp(['/journey-entry?intent=known_destination']);
       await user.type(screen.getByPlaceholderText('e.g. Coorg, Karnataka'), 'Coorg{Enter}');
 
       expect(await screen.findByText("Anything else you'd like to add? Any other preferences?")).toBeInTheDocument();
       expect(screen.getByText('Coorg', { selector: '.chat-bub-user' })).toBeInTheDocument();
-      expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ command: 'known_destination_entry', destination: 'Coorg' });
+      expect(fetchMock.mock.calls[1][0]).toBe('/api/trips/first-message');
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ command: 'known_destination_entry', destination: 'Coorg' });
 
       fetchMock.mockResolvedValueOnce(jsonResponse({
         message: 'Here is your plan.',

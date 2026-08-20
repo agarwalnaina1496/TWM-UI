@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  createTrip, getTrip, listTrips, normalizeTripRecord, queueTripMutation, renameTrip, saveUiState, TripApiError,
-  resolveTrustedAction, getTripFeasibility, searchFlights,
+  getTrip, listTrips, normalizeTripRecord, queueTripMutation, renameTrip, saveUiState, TripApiError,
+  resolveTrustedAction, getTripFeasibility, searchFlights, startTripFromFirstMessage,
 } from '../../../src/lib/tripApi.js';
 
 function jsonResponse(body, { status = 200 } = {}) {
@@ -27,15 +27,20 @@ describe('tripApi', () => {
     expect(normalized.ui_state).toEqual({});
   });
 
-  it('createTrip posts to /api/trips with credentials included', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Untitled Trip', product_mode: 'self_led', version: 1, trip_state: {}, ui_state: {} }));
-    const record = await createTrip();
-    expect(fetchMock).toHaveBeenCalledWith('/api/trips', expect.objectContaining({
+  it('startTripFromFirstMessage posts to /api/trips/first-message with credentials included', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      message: 'Got it.',
+      agent_meta: null,
+      trip: { id: 'trip-1', title: 'Untitled Trip', product_mode: 'self_led', version: 1, trip_state: {}, ui_state: {} },
+    }));
+    const response = await startTripFromFirstMessage('discover_entry', { message: 'Suggest mountains' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/first-message', expect.objectContaining({
       credentials: 'include',
       method: 'POST',
-      body: JSON.stringify({ title: 'Untitled Trip', product_mode: 'self_led' }),
+      body: JSON.stringify({ command: 'discover_entry', message: 'Suggest mountains' }),
     }));
-    expect(record.id).toBe('trip-1');
+    expect(response.trip.id).toBe('trip-1');
+    expect(response.message).toBe('Got it.');
   });
 
   it('listTrips fetches the list in a single request (trip_state travels with the summary), sorted by updated_at descending', async () => {

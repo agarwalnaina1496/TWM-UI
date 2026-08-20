@@ -24,7 +24,7 @@ const KNOWN_DESTINATION_PROMPT = 'Where are you headed?';
 export default function JourneyEntry() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { commandSnapshot, sendTripCommand, tripLoadStatus, openTrip } = useTrip();
+  const { commandSnapshot, sendTripCommand, startTrip, currentTripId, tripLoadStatus, openTrip } = useTrip();
   // TWM-185: reload/bookmark/deep-link safe for the "resuming a
   // mid-conversation trip" case. The normal fresh-entry path (via Header/
   // DashboardHome's startNewTrip()) has no ?tripId= at all — this simply
@@ -95,16 +95,26 @@ export default function JourneyEntry() {
   async function sendDiscover(reply = input) {
     const value = (typeof reply === 'string' ? reply : reply.value).trim();
     if (!value || busy) return;
+    // A trip can already exist here without entered.current being true yet
+    // (a resumed trip via ?tripId=, TWM-185) — only route through startTrip
+    // when no trip exists at all, never merely because this component
+    // instance hasn't sent a message yet.
+    const isFirstSend = !entered.current && !currentTripId;
     const idempotencyKey = lastCommand.current?.message === value ? lastCommand.current.idempotencyKey : newIdempotencyKey();
     lastCommand.current = { message: value, idempotencyKey };
-    const isFirstSend = !entered.current;
     setInput('');
     setBusy(true);
     setError(null);
     setMessages(previous => [...previous, { id: nextMessageId++, role: 'user', text: value }]);
     try {
-      const command = entered.current ? 'traveler_message' : 'discover_entry';
-      const response = await sendTripCommand(command, { message: value, idempotencyKey });
+      // TWM-189: the first send creates the trip and sends the message in
+      // one call (startTrip) — no bare create happens before it, and a
+      // failure here leaves no trip at all, ready for "Try again" to
+      // simply retry the same call. Every send after that is a plain
+      // traveler_message against the now-existing trip.
+      const response = isFirstSend
+        ? await startTrip('discover_entry', { message: value })
+        : await sendTripCommand('traveler_message', { message: value, idempotencyKey });
       entered.current = true;
       if (isFirstSend) trackEvent('discovery_started', { entry_method: 'journey_entry' });
       if (response.message) setMessages(previous => [...previous, { id: nextMessageId++, role: 'assistant', text: response.message }]);
@@ -125,16 +135,20 @@ export default function JourneyEntry() {
   async function submitDestination(override) {
     const value = (override ?? destination).trim();
     if (!value || busy) return;
-    const isFirstSend = !entered.current;
+    // See sendDiscover's comment above — a resumed trip (?tripId=) already
+    // has currentTripId set even before entered.current flips true here.
+    const isFirstSend = !entered.current && !currentTripId;
     lastDestinationValue.current = value;
     setDestination('');
     setBusy(true);
     setError(null);
     setMessages(previous => [...previous, { id: nextMessageId++, role: 'user', text: value }]);
     try {
-      const response = entered.current
-        ? await sendTripCommand('traveler_message', { message: value })
-        : await sendTripCommand('known_destination_entry', { destination: value });
+      // TWM-189: the first send creates the trip via startTrip() — see
+      // sendDiscover's comment above for why no bare create happens first.
+      const response = isFirstSend
+        ? await startTrip('known_destination_entry', { destination: value })
+        : await sendTripCommand('traveler_message', { message: value });
       entered.current = true;
       if (isFirstSend) trackEvent('destination_provided', { destination_source: 'user_input' });
       const plannerState = response.trip.trip_state.planner_state;
