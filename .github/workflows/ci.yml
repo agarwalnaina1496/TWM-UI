@@ -1,4 +1,4 @@
-name: UI CI
+name: CI
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
 
 # Cancels a superseded run when a new commit lands on the same PR.
 concurrency:
-  group: ui-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -19,7 +19,7 @@ defaults:
 
 jobs:
   lint-test-build:
-    name: UI / lint, unit tests, build
+    name: Lint, unit tests, build
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -44,7 +44,7 @@ jobs:
         run: npm run build
 
   e2e:
-    name: UI / Playwright e2e
+    name: Playwright e2e
     runs-on: ubuntu-latest
     # Recurring failure mode this guards against: "Install Playwright
     # browsers" hanging on a flaky download/apt mirror with no caching to
