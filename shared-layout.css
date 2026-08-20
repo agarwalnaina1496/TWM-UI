@@ -17,6 +17,6 @@
 *{box-sizing:border-box;}
 body{margin:0;}
 body,.app-shell{display:flex;flex-direction:column;min-height:100vh;}
-.wrap{max-width:1200px;margin:0 auto;padding:0 20px;flex:1 0 auto;}
+.wrap{width:100%;max-width:1200px;margin:0 auto;padding:0 20px;flex:1 0 auto;}
 header{position:sticky;top:0;z-index:30;border-bottom:1px solid var(--border);flex:none;}
 .header-inner{max-width:1200px;margin:0 auto;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;}
