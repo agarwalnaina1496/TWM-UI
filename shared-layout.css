@@ -20,3 +20,22 @@ body,.app-shell{display:flex;flex-direction:column;min-height:100vh;}
 .wrap{width:100%;max-width:1200px;margin:0 auto;padding:0 20px;flex:1 0 auto;}
 header{position:sticky;top:0;z-index:30;border-bottom:1px solid var(--border);flex:none;}
 .header-inner{max-width:1200px;margin:0 auto;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;}
+
+/* Shared 640px reading-width value for any narrower content block inside
+   .wrap — a data table, a form card, a centered empty-state/CTA. Sets
+   ONLY max-width, nothing about margin/alignment, so every component
+   using it decides its own alignment on top:
+     - left-aligned content that continues the page's left-aligned flow
+       (a data table, a form) — add no margin, or margin:Xpx 0 0 — so it
+       stays flush with .wrap's left edge instead of centering itself
+       within it (that "max-width:640px;margin:Xpx auto 0" pattern is
+       exactly how .trip-facts and .auth-card silently drifted out of
+       alignment with left-aligned siblings like tabs/headings twice
+       independently — the value was never the bug, the auto-centering was)
+     - deliberately CENTERED standalone widgets (a CTA button, an
+       empty-state placeholder) — keep adding their own
+       margin:Xpx auto 0 + text-align:center alongside this class, that's
+       still the right pattern for those, e.g. .thin-tab-placeholder /
+       .thin-state-primary-cta.
+   Either way, the 640px VALUE itself now lives in exactly one place. */
+.content-narrow{max-width:640px;}

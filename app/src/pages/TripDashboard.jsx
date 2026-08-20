@@ -142,7 +142,7 @@ function ThinStateTabPlaceholder({ tab }) {
     ? 'Your day-by-day plan will appear here once Guide finishes it.'
     : 'Available once your itinerary is ready.';
   return (
-    <div className="dashboard-card thin-tab-placeholder">
+    <div className="dashboard-card thin-tab-placeholder content-narrow">
       <p>{note}</p>
     </div>
   );
@@ -173,7 +173,7 @@ function ThinStateDashboard({ tripState, tripId }) {
 
       {tab === 'Overview' ? (
         <>
-          <div className="trip-facts">
+          <div className="trip-facts content-narrow">
             <h2 className="trip-facts-heading">Your trip so far</h2>
             {factRows.map(row => (
               <div className="trip-facts-row" key={row.label}>
@@ -187,7 +187,7 @@ function ThinStateDashboard({ tripState, tripId }) {
             ))}
           </div>
           {primaryCta && (
-            <div className="thin-state-primary-cta">
+            <div className="thin-state-primary-cta content-narrow">
               <DashboardCtaButton cta={primaryCta} tripId={tripId} className="btn btn-primary" />
             </div>
           )}
