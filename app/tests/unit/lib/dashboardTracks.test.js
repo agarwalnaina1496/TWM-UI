@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { contextFactRows, dashboardPrimaryCta } from '../../../src/lib/dashboardTracks.js';
 
-describe('contextFactRows (TWM-182)', () => {
+describe('contextFactRows (TWM-182, TWM-190 canonical fields)', () => {
   it('returns labeled Origin/Duration/No. of travelers rows in order, skipping absent fields', () => {
-    const rows = contextFactRows({ origin: 'Bengaluru', duration_days: 5, travelers: 2 });
+    const rows = contextFactRows({ origin_city: 'Bengaluru', trip_duration: 5, num_travelers: 2 });
     expect(rows).toEqual([
       { label: 'Origin', value: 'Bengaluru' },
       { label: 'Duration', value: '5 days' },
@@ -12,34 +12,27 @@ describe('contextFactRows (TWM-182)', () => {
   });
 
   it('includes a Budget row when present, and omits it when absent', () => {
-    expect(contextFactRows({ origin: 'Delhi', budget: '₹1,00,000 total for both' })).toEqual([
+    expect(contextFactRows({ origin_city: 'Delhi', budget: '₹1,00,000 total for both' })).toEqual([
       { label: 'Origin', value: 'Delhi' },
       { label: 'Budget', value: '₹1,00,000 total for both' },
     ]);
-    expect(contextFactRows({ origin: 'Delhi' }).some(row => row.label === 'Budget')).toBe(false);
+    expect(contextFactRows({ origin_city: 'Delhi' }).some(row => row.label === 'Budget')).toBe(false);
   });
 
-  it('shows only Dates (no Duration) when exact dates are known, even if duration_days is also present', () => {
-    const rows = contextFactRows({ travel_window: 'Dec–Jan', month: 'December', duration_days: 20 });
-    expect(rows).toEqual([{ label: 'Dates', value: 'Dec–Jan' }]);
-  });
-
-  it('prefers travel_window over a bare dates string when both are present', () => {
-    const rows = contextFactRows({ travel_window: 'Dec–Jan', dates: '5-10 Dec' });
-    expect(rows).toEqual([{ label: 'Dates', value: 'Dec–Jan' }]);
-  });
-
-  it('a bare dates string alone also counts as exact dates — no Duration row alongside it', () => {
-    const rows = contextFactRows({ dates: 'Early Dec', duration_days: 5 });
-    expect(rows).toEqual([{ label: 'Dates', value: 'Early Dec' }]);
-  });
-
-  it('falls back to Month + Duration together when no exact dates are known', () => {
-    const rows = contextFactRows({ month: 'September', duration_days: 5 });
+  // travel_dates accepts any verbatim form (a month, a range, "flexible") —
+  // Duration and Dates are independent facts now, never mutually exclusive
+  // the way the old travel_window/month/dates/duration_days split was.
+  it('shows Duration and Dates together when both are known', () => {
+    const rows = contextFactRows({ travel_dates: 'Dec–Jan', trip_duration: 20 });
     expect(rows).toEqual([
-      { label: 'Month', value: 'September' },
-      { label: 'Duration', value: '5 days' },
+      { label: 'Duration', value: '20 days' },
+      { label: 'Dates', value: 'Dec–Jan' },
     ]);
+  });
+
+  it('shows Dates alone when only travel_dates is known', () => {
+    const rows = contextFactRows({ travel_dates: 'Early Dec' });
+    expect(rows).toEqual([{ label: 'Dates', value: 'Early Dec' }]);
   });
 
   it('returns an empty array for an empty or missing trip_context', () => {
@@ -48,8 +41,8 @@ describe('contextFactRows (TWM-182)', () => {
   });
 
   it('singularizes "1 day" but not "2 days"', () => {
-    expect(contextFactRows({ duration_days: 1 })).toEqual([{ label: 'Duration', value: '1 day' }]);
-    expect(contextFactRows({ duration_days: 2 })).toEqual([{ label: 'Duration', value: '2 days' }]);
+    expect(contextFactRows({ trip_duration: 1 })).toEqual([{ label: 'Duration', value: '1 day' }]);
+    expect(contextFactRows({ trip_duration: 2 })).toEqual([{ label: 'Duration', value: '2 days' }]);
   });
 });
 

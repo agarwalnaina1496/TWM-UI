@@ -47,7 +47,7 @@ const DISCOVER_ONLY_STAGES = new Set(['matching', 'recommended']);
 // stageBadge/stageCta already use for "Destination chosen"). Earlier stages
 // (a fresh chat with some context, still matching, or still browsing
 // recommendations) are browsing-only and belong in the explore rail.
-// Deliberately stage-based, not trip_context.selected_option presence — that
+// Deliberately stage-based, not trip_state.selected_option presence — that
 // field isn't reliably populated across every path that reaches these
 // stages, where stage-based classification is.
 export function isDiscoverOnly(tripState) {

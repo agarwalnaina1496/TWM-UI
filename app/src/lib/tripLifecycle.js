@@ -23,42 +23,51 @@ export function isCompletedTrip(tripState) {
   return tripState?.stage === 'done';
 }
 
-// Verbatim, top-level trip_context fields worth showing as a quick recap
-// (Destinations' pre-recommendation pills, My Trips cards). Never bucketed
-// into a generic label — an exact persisted value or nothing, so
-// "₹1,00,000 total for both" never degrades to "Flexible budget".
-// trip_context is free-form (Scout extracts whatever field names fit the
-// conversation — see TWM_Docs/TRIP_STATE.md), so this list is a best-effort
-// set of the field names Scout commonly uses, not a guaranteed schema.
-const RECAP_FIELDS = [
-  ['origin', value => `From ${value}`],
-  // TWM-183: Meridian's own extraction sometimes lands here (not `origin`),
-  // e.g. the known-destination entry path — was previously invisible to
-  // every RECAP_FIELDS-based caller (My Trips cards, the fallback recap
-  // below) whenever a trip's origin only existed under this key.
-  ['origin_city', value => `From ${value}`],
+// The single canonical list of trip_context field names every recap/fact
+// surface in this repo reads from — must mirror twm/schemas/trip_context.py's
+// FIXED_KEYS + destinations exactly (name-for-name, not just conceptually).
+// Renaming or adding a trip_context field means touching this list, not
+// hunting down every screen that happens to render one. `format` returns
+// the raw value formatted for display — never bucketed into a generic
+// label, an exact persisted value or nothing, so "₹1,00,000 total for
+// both" never degrades to "Flexible budget". Each consumer (My Trips
+// cards, Destinations' fact panel, ScoutChat's live panel) applies its
+// own label/wrapping on top of these raw values — that's legitimate
+// per-screen presentation, not the duplication this list eliminates.
+export const TRIP_CONTEXT_FIELDS = [
+  ['destinations', value => (Array.isArray(value) ? value.join(', ') : String(value))],
+  ['origin_city', value => String(value)],
+  ['trip_duration', value => `${value} day${value === 1 ? '' : 's'}`],
+  ['travel_dates', value => String(value)],
+  ['num_travelers', value => `${value} traveler${value === 1 ? '' : 's'}`],
   ['budget', value => String(value)],
-  ['duration_days', value => `${value} day${value === 1 ? '' : 's'}`],
-  ['travelers', value => `${value} traveler${value === 1 ? '' : 's'}`],
-  ['travel_window', value => String(value)],
-  ['month', value => String(value)],
-  ['dates', value => String(value)],
 ];
 
-export function contextRecapPills(tripContext) {
-  return RECAP_FIELDS
+// {key, value}[] of every known trip_context field currently set — a
+// field simply isn't included until it's actually known, never rendered
+// empty/placeholder.
+export function tripContextFacts(tripContext) {
+  return TRIP_CONTEXT_FIELDS
     .map(([key, format]) => {
       const value = tripContext?.[key];
-      return value === undefined || value === null || value === '' ? null : format(value);
+      return value === undefined || value === null || value === '' ? null : { key, value: format(value) };
     })
     .filter(Boolean);
 }
 
-// The traveler's confirmed destination, once one exists — UI-owned
-// (trip_context.selected_option), not a Meridian recommendation guess.
+export function contextRecapPills(tripContext) {
+  return tripContextFacts(tripContext)
+    .filter(fact => fact.key !== 'destinations')
+    .map(fact => (fact.key === 'origin_city' ? `From ${fact.value}` : fact.value));
+}
+
+// The traveler's confirmed destination, once one exists — the one
+// canonical trip_context.destinations signal, written by Backend for the
+// Discover path (select_destination) and extracted by Guide itself for
+// the known-destination path (twm/schemas/trip_context.py).
 export function contextDestination(tripContext) {
-  const name = tripContext?.selected_option?.name;
-  return typeof name === 'string' && name.trim() ? name : null;
+  const destinations = tripContext?.destinations;
+  return Array.isArray(destinations) && destinations.length > 0 ? destinations.join(', ') : null;
 }
 
 const STAGE_BADGES = {
@@ -123,21 +132,6 @@ export function stageCta(tripState) {
   return STAGE_CTA[stage] || STAGE_CTA.new;
 }
 
-// A destination reads as "known" from either path: Discover ends with
-// trip_context.selected_option once a recommendation is chosen (TWM-153),
-// known-destination entry sets trip_context.destinations directly and never
-// touches selected_option (JourneyEntry.jsx). Mirrors dashboardTracks.js's
-// own routeDestinationName — kept as a separate, tiny copy here rather than
-// an import, since that module is Dashboard-track-board-specific and this
-// one is a general My Trips/landing helper; duplicating one three-line check
-// beats a cross-module coupling neither side otherwise needs.
-function knownDestinationName(tripContext) {
-  if (tripContext?.selected_option?.name) return tripContext.selected_option.name;
-  const destinations = tripContext?.destinations;
-  if (Array.isArray(destinations) && destinations.length > 0) return destinations.join(', ');
-  return null;
-}
-
 // TWM-184: an honest, one-line current-status string for a My Trips card —
 // deliberately prose, not a fixed-slot/track-dot indicator. A fixed-count
 // visual was built and explicitly rejected during mockup work for reading
@@ -156,7 +150,7 @@ export function tripStatusLine(tripState) {
   if (isItineraryReady(tripState)) return 'Your full trip plan is ready to book and go.';
   if (tripState?.stage === 'done') return 'This trip has wrapped up.';
 
-  const destination = knownDestinationName(tripState?.trip_context) || contextDestination(tripState?.trip_context);
+  const destination = contextDestination(tripState?.trip_context);
   if (!destination) {
     return hasTripContext(tripState) ? "Still figuring out where you're headed." : 'Just getting started.';
   }

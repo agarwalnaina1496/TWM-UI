@@ -457,7 +457,7 @@ export default function Destinations() {
   }, [outcome]);
 
   const pills = contextRecapPills(tripState?.trip_context);
-  const selectedOption = tripState?.trip_context?.selected_option ?? null;
+  const selectedOption = tripState?.selected_option ?? null;
 
   function focusOption(key) {
     if (key === focusedKey) return;

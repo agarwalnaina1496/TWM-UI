@@ -8,7 +8,7 @@ describe('buildRecapTurn', () => {
   });
 
   it('recaps known facts instead of a generic greeting', () => {
-    const text = buildRecapTurn({ trip_context: { origin: 'Delhi', travelers: 2 } });
+    const text = buildRecapTurn({ trip_context: { origin_city: 'Delhi', num_travelers: 2 } });
     expect(text).toContain('Picking up where you left off');
     expect(text).toContain('From Delhi');
     expect(text).toContain('2 travelers');
@@ -50,10 +50,10 @@ describe('buildRecapTurn', () => {
 
 describe('buildFactsPanel', () => {
   it('renders only known fields, no placeholder rows for missing ones', () => {
-    const panel = buildFactsPanel({ origin: 'Delhi', travelers: 2 });
+    const panel = buildFactsPanel({ origin_city: 'Delhi', num_travelers: 2 });
     expect(panel).toEqual([
-      { key: 'origin', label: 'From', value: 'Delhi' },
-      { key: 'travelers', label: 'Travelers', value: '2 travelers' },
+      { key: 'origin_city', label: 'From', value: 'Delhi' },
+      { key: 'num_travelers', label: 'Travelers', value: '2 travelers' },
     ]);
   });
 
@@ -62,11 +62,11 @@ describe('buildFactsPanel', () => {
     expect(buildFactsPanel(undefined)).toEqual([]);
   });
 
-  it('pluralizes duration_days and travelers correctly at 1', () => {
-    const panel = buildFactsPanel({ duration_days: 1, travelers: 1 });
+  it('pluralizes trip_duration and num_travelers correctly at 1', () => {
+    const panel = buildFactsPanel({ trip_duration: 1, num_travelers: 1 });
     expect(panel).toEqual([
-      { key: 'duration_days', label: 'Duration', value: '1 day' },
-      { key: 'travelers', label: 'Travelers', value: '1 traveler' },
+      { key: 'trip_duration', label: 'Duration', value: '1 day' },
+      { key: 'num_travelers', label: 'Travelers', value: '1 traveler' },
     ]);
   });
 });

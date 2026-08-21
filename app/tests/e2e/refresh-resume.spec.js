@@ -62,7 +62,7 @@ test('refreshing mid-Discover-conversation shows a recap turn, not the cold-open
     version: 2,
     trip_state: {
       stage: 'matching', active_agent: 'meridian',
-      trip_context: { origin: 'Delhi', travelers: 2 },
+      trip_context: { origin_city: 'Delhi', num_travelers: 2 },
       matcher_state: { conversation_context: { last_meridian_message: null, awaiting: null } },
     },
   });

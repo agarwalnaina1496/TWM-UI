@@ -97,7 +97,7 @@ export default function TripPreview() {
   const trackedPlanBuilderView = useRef(false);
   // Best-effort distinction for planning_entry — a selected recommendation
   // means Discover led here; otherwise it's a known-destination entry.
-  const planningEntry = tripContext?.selected_option ? 'discovered_destination' : 'known_destination';
+  const planningEntry = tripState?.selected_option ? 'discovered_destination' : 'known_destination';
 
   // Already frozen (e.g. the traveler navigated back after approving) — Guide
   // never reruns, so skip straight to the dashboard. TripDashboard.jsx owns

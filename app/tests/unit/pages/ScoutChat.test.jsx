@@ -131,7 +131,7 @@ describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
   });
 
   it('shows a recap turn instead of the cold-open greeting once real trip_context is already saved', () => {
-    commandSnapshot = { trip_state: { trip_context: { origin: 'Delhi', travelers: 2 } } };
+    commandSnapshot = { trip_state: { trip_context: { origin_city: 'Delhi', num_travelers: 2 } } };
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.queryByText(/Hey there! I'm Scout/)).not.toBeInTheDocument();
     expect(screen.getByText(/Picking up where you left off/)).toBeInTheDocument();
@@ -140,21 +140,21 @@ describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
 
   it('waits for the trip to finish loading before deciding which greeting to show', () => {
     tripLoadStatus = 'loading';
-    commandSnapshot = { trip_state: { trip_context: { origin: 'Delhi' } } };
+    commandSnapshot = { trip_state: { trip_context: { origin_city: 'Delhi' } } };
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.queryByText(/Hey there! I'm Scout/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Picking up where you left off/)).not.toBeInTheDocument();
   });
 
   it('shows the live facts panel for known trip_context fields', () => {
-    commandSnapshot = { trip_state: { trip_context: { origin: 'Delhi', travelers: 2 } } };
+    commandSnapshot = { trip_state: { trip_context: { origin_city: 'Delhi', num_travelers: 2 } } };
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.getByLabelText('What we know so far')).toBeInTheDocument();
     expect(screen.getByText('Delhi')).toBeInTheDocument();
   });
 
   it('shows the hand-off note exactly once, on the real scout -> meridian transition', async () => {
-    commandSnapshot = { trip_state: { active_agent: 'scout', trip_context: { origin: 'Delhi' } } };
+    commandSnapshot = { trip_state: { active_agent: 'scout', trip_context: { origin_city: 'Delhi' } } };
     sendTripCommand = vi.fn(async () => ({
       message: 'Here are some matches.',
       trip: { trip_state: { active_agent: 'meridian', planner_state: null } },
@@ -163,7 +163,7 @@ describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
     expect(screen.queryByText(/Bringing in Meridian/)).not.toBeInTheDocument();
 
     // Simulate the trip snapshot updating to meridian ownership after a turn.
-    commandSnapshot = { trip_state: { active_agent: 'meridian', trip_context: { origin: 'Delhi' } } };
+    commandSnapshot = { trip_state: { active_agent: 'meridian', trip_context: { origin_city: 'Delhi' } } };
     rerender(<MemoryRouter><ScoutChat /></MemoryRouter>);
 
     expect(await screen.findByText(/Bringing in Meridian, who handles destination matching/)).toBeInTheDocument();

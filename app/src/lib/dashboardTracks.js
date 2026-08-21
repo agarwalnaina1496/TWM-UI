@@ -6,7 +6,7 @@
 // tripLifecycle.js rather than duplicated here as a second hardcoded
 // literal-string check.
 
-import { RECOMMENDATIONS_READY_STAGES } from './tripLifecycle.js';
+import { RECOMMENDATIONS_READY_STAGES, contextDestination, tripContextFacts } from './tripLifecycle.js';
 
 // Normalizes planner progress from either shape TripDashboard's tripState
 // can carry: the full single-trip fetch's nested planner_state
@@ -39,21 +39,9 @@ function plannerProgress(tripState) {
   return { known: false, awaiting: null, hasDayPlan: false, dayCount: 0, frozen: false };
 }
 
-// A destination reads as "known" from either path: Discover ends with
-// trip_context.selected_option once a recommendation is chosen (TWM-153),
-// known-destination entry sets trip_context.destinations directly and never
-// touches selected_option (JourneyEntry.jsx) — same distinction TripPreview
-// already uses for planningEntry.
-export function routeDestinationName(tripContext) {
-  if (tripContext?.selected_option?.name) return tripContext.selected_option.name;
-  const destinations = tripContext?.destinations;
-  if (Array.isArray(destinations) && destinations.length > 0) return destinations.join(', ');
-  return null;
-}
-
 function routeTrack(tripState) {
   const tripContext = tripState?.trip_context;
-  const destination = routeDestinationName(tripContext);
+  const destination = contextDestination(tripContext);
   if (destination) return { status: 'done', label: destination, cta: null };
 
   // Unknown-destination path: still gathering vs. recommendations already
@@ -81,7 +69,7 @@ function routeTrack(tripState) {
 }
 
 function dayPlanTrack(tripState) {
-  const destination = routeDestinationName(tripState?.trip_context);
+  const destination = contextDestination(tripState?.trip_context);
   if (!destination) return { status: 'pending', label: 'Not started', cta: null };
 
   const progress = plannerProgress(tripState);
@@ -135,36 +123,30 @@ export function dashboardPrimaryCta(tripState) {
   return tracks.route.cta || tracks.dayPlan.cta || null;
 }
 
-// "Your trip so far" — the data-table recap (Origin/Dates-or-Month+Duration/
-// No. of travelers/Budget rows, Destination last), distinct from
-// Destinations'/My Trips' pill-based contextRecapPills: labeled rows
-// instead of bare formatted strings. trip_context is free-form (Scout
-// extracts whatever field names fit the conversation), so a field simply
-// doesn't appear as a row when absent.
-const dayLabel = value => `${value} day${value === 1 ? '' : 's'}`;
-
-function dateRows(tripContext) {
-  // Exact dates known (travel_window preferred over a bare dates string):
-  // show only Dates — duration is redundant once the actual dates are given.
-  // Otherwise, fall back to Month + Duration together, since neither alone
-  // pins down the trip on its own.
-  const exactDates = tripContext?.travel_window ?? tripContext?.dates;
-  if (exactDates !== undefined && exactDates !== null && exactDates !== '') {
-    return [{ label: 'Dates', value: String(exactDates) }];
-  }
-  const rows = [];
-  if (tripContext?.month) rows.push({ label: 'Month', value: String(tripContext.month) });
-  const duration = tripContext?.duration_days;
-  if (duration !== undefined && duration !== null && duration !== '') rows.push({ label: 'Duration', value: dayLabel(duration) });
-  return rows;
-}
+// "Your trip so far" — the data-table recap (Origin/Dates/Duration/No. of
+// travelers/Budget rows), distinct from Destinations'/My Trips' pill-based
+// contextRecapPills: labeled rows instead of bare formatted strings.
+// Label order/wording is this screen's own presentation choice; the field
+// names and raw-value formatting come from tripContextFacts (the one
+// canonical trip_context list) — travel_dates already accepts any verbatim
+// form (a month, a range, "flexible"), so Duration and Dates are just two
+// independent facts now, never mutually exclusive.
+const FACT_LABELS = {
+  origin_city: 'Origin',
+  travel_dates: 'Dates',
+  trip_duration: 'Duration',
+  num_travelers: 'No. of travelers',
+  budget: 'Budget',
+};
 
 export function contextFactRows(tripContext) {
-  const rows = [];
-  if (tripContext?.origin) rows.push({ label: 'Origin', value: String(tripContext.origin) });
-  rows.push(...dateRows(tripContext));
-  const travelers = tripContext?.travelers;
-  if (travelers !== undefined && travelers !== null && travelers !== '') rows.push({ label: 'No. of travelers', value: String(travelers) });
-  if (tripContext?.budget) rows.push({ label: 'Budget', value: String(tripContext.budget) });
-  return rows;
+  return tripContextFacts(tripContext)
+    .filter(fact => fact.key !== 'destinations')
+    .map(fact => ({
+      label: FACT_LABELS[fact.key],
+      // The "No. of travelers" label already says what the number counts —
+      // unlike the pill/facts-panel formats (no separate label), this row
+      // doesn't repeat "traveler(s)" in the value too.
+      value: fact.key === 'num_travelers' ? String(tripContext[fact.key]) : fact.value,
+    }));
 }

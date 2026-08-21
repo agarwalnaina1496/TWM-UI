@@ -24,7 +24,7 @@ describe('buildPlanRecapTurn', () => {
   });
 
   it('recaps the destination and known facts', () => {
-    const text = buildPlanRecapTurn({ destinations: ['Coorg'], origin: 'Delhi' });
+    const text = buildPlanRecapTurn({ destinations: ['Coorg'], origin_city: 'Delhi' });
     expect(text).toContain('Picking up where you left off');
     expect(text).toContain('Coorg');
     expect(text).toContain('From Delhi');
