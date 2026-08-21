@@ -297,27 +297,6 @@ export function feasibleTransportOptions(options, feasibility) {
   return { feasible, excluded };
 }
 
-// "Recommended mode" selection (TWM-132 — no explicit ranking rule was
-// specified in the Linear description beyond "clearly best" or "only one
-// feasible"). Judgement call, documented here: fixed priority order
-// flight > drive > train > bus among feasible modes — flight and drive are
-// Backend-computed (never an LLM estimate) and are generally the fastest
-// practical options for a multi-city trip; train/bus are only preferred
-// when neither faster mode is feasible. A mode only counts as
-// recommendable when it actually has something actionable to show (a
-// resolved trusted action, or drive's feasibility-only no_action state —
-// never a missing_input/unsupported_partner/disabled/error mode, which has
-// no safe CTA to recommend).
-const MODE_PRIORITY = ['flight', 'drive', 'train', 'bus'];
-export function recommendedMode(feasibleOptions) {
-  const actionable = (feasibleOptions || []).filter(option => option.status === 'resolved' || option.status === 'no_action');
-  for (const mode of MODE_PRIORITY) {
-    const found = actionable.find(option => option.mode === mode);
-    if (found) return found;
-  }
-  return null;
-}
-
 // Transport legs: consecutive primary_location changes across days, PLUS
 // the origin<->destination bookend legs — the old Logistics page showed
 // only local transfers between stops and dropped the actual origin leg

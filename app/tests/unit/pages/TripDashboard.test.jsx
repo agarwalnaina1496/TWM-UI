@@ -375,7 +375,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.getAllByText(/Bus excluded/).length).toBeGreaterThan(0);
     });
 
-    it('shows a recommended-mode card and the "why other modes aren\'t shown" feasibility row, with a GENERAL_GUIDANCE tag for the llm_estimated train mode', async () => {
+    it('shows the "why other modes aren\'t shown" feasibility row, with a GENERAL_GUIDANCE tag for the llm_estimated train mode', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
@@ -399,9 +399,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
       await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
-      await waitFor(() => expect(screen.getByLabelText('Recommended mode')).toBeInTheDocument());
-      expect(within(screen.getByLabelText('Recommended mode')).getByText('Fastest option.')).toBeInTheDocument();
-
+      await waitFor(() => expect(screen.getByText("Why other modes aren't shown")).toBeInTheDocument());
       await user.click(screen.getByText("Why other modes aren't shown"));
       const disclosure = screen.getByText("Why other modes aren't shown").closest('details');
       expect(within(disclosure).getByText('Not practical for this trip.')).toBeInTheDocument();

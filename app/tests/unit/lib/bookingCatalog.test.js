@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   transportOptionsFor, feasibleTransportOptions, transportLegs, bundleRoundTrip,
-  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
+  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel,
   fetchLegFeasibility,
 } from '../../../src/lib/bookingCatalog.js';
 
@@ -278,29 +278,6 @@ describe('feasibleTransportOptions', () => {
   it('every option carries a real mode label, not a raw enum', () => {
     expect(modeLabel('flight')).toBe('Flight');
     expect(modeLabel('unknown')).toBe('unknown');
-  });
-});
-
-describe('recommendedMode', () => {
-  it('picks the highest-priority actionable mode: flight > drive > train > bus', () => {
-    const options = [
-      { mode: 'bus', status: 'resolved' },
-      { mode: 'train', status: 'resolved' },
-      { mode: 'drive', status: 'no_action' },
-    ];
-    expect(recommendedMode(options).mode).toBe('drive');
-  });
-
-  it('skips a mode with no safe CTA (missing_input) even if higher priority', () => {
-    const options = [
-      { mode: 'flight', status: 'missing_input' },
-      { mode: 'train', status: 'resolved' },
-    ];
-    expect(recommendedMode(options).mode).toBe('train');
-  });
-
-  it('returns null when nothing is actionable', () => {
-    expect(recommendedMode([{ mode: 'flight', status: 'missing_input' }])).toBeNull();
   });
 });
 
