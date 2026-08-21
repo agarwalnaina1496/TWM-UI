@@ -86,12 +86,19 @@ describe('App guest-first routing (TWM-140)', () => {
 
       renderApp(['/journey-entry?intent=discover_destination']);
 
-      expect(await screen.findByText(/tell me about the trip you have in mind/i)).toBeInTheDocument();
+      // TWM-190: JourneyEntry.jsx now only sends the first message — the
+      // welcome/prompt shown here is its own, not a chat transcript entry.
+      expect(await screen.findByText(/tell Scout what matters to you/i)).toBeInTheDocument();
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1)); // boot list only — no trip yet, no command sent
 
       await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'Somewhere relaxing{Enter}');
 
+      // JourneyEntry navigates to /scout-chat once the first command
+      // resolves — the exchange renders there, not inline. openTrip's
+      // own fetch short-circuits (startTrip already marked the record
+      // full), so no extra call is needed for the route change itself.
       expect(await screen.findByText('What is your rough budget?')).toBeInTheDocument();
+      expect(screen.getByText('Somewhere relaxing', { selector: '.chat-bub-user' })).toBeInTheDocument();
       expect(fetchMock.mock.calls[1][0]).toBe('/api/trips/first-message');
       expect(JSON.parse(fetchMock.mock.calls[1][1].body).command).toBe('discover_entry');
 
@@ -161,6 +168,8 @@ describe('App guest-first routing (TWM-140)', () => {
       renderApp(['/journey-entry?intent=known_destination']);
       await user.type(screen.getByPlaceholderText('e.g. Coorg, Karnataka'), 'Coorg{Enter}');
 
+      // TWM-190: JourneyEntry redirects to /scout-chat after the first
+      // command resolves — the exchange renders there, not inline.
       expect(await screen.findByText("Anything else you'd like to add? Any other preferences?")).toBeInTheDocument();
       expect(screen.getByText('Coorg', { selector: '.chat-bub-user' })).toBeInTheDocument();
       expect(fetchMock.mock.calls[1][0]).toBe('/api/trips/first-message');
@@ -183,9 +192,9 @@ describe('App guest-first routing (TWM-140)', () => {
           },
         }),
       }));
-      // TWM-183: the input's placeholder now correctly tracks the active
-      // question — awaiting is 'anything_else' at this point in the flow.
-      await user.type(screen.getByPlaceholderText("Anything else, or just say you're ready"), "Nothing else{Enter}");
+      // TWM-190: the follow-up is now sent from ScoutChat's own composer,
+      // which uses a static placeholder (no per-question tracking there).
+      await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), "Nothing else{Enter}");
 
       // The unified Plan Builder (TripPreview), not the chat, now shows the
       // generated plan — the known-destination path never lands on /dashboard.

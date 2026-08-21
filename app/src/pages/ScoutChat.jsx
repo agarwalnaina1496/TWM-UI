@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
@@ -26,6 +26,7 @@ const HANDOFF_NOTES = {
 
 export default function ScoutChat() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [params] = useSearchParams();
   const { commandSnapshot, sendTripCommand, tripLoadStatus, openTrip } = useTrip();
   // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this page
@@ -100,6 +101,17 @@ export default function ScoutChat() {
   useEffect(() => {
     if (initialized.current || tripLoadStatus !== 'ready') return;
     initialized.current = true;
+    // TWM-190: JourneyEntry.jsx sends the trip's first command itself
+    // (discover_entry/known_destination_entry) and redirects here with the
+    // already-completed exchange, rather than this page re-sending it as a
+    // fresh scout_entry — render it directly instead of a cold-open/recap.
+    const firstTurn = location.state?.firstTurn;
+    if (firstTurn) {
+      entered.current = true;
+      say('user', firstTurn.userMessage);
+      if (firstTurn.responseMessage) say('assistant', firstTurn.responseMessage);
+      return;
+    }
     // TWM-190: Guide's recap is phrased for its planning context
     // (buildPlanRecapTurn, already built for TripPreview's now-retired
     // gating-chat branch) — Guide's conversation_context has no verbatim
