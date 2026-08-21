@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   transportOptionsFor, feasibleTransportOptions, transportLegs, bundleRoundTrip,
-  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
+  stayLegs, stayOptionsFor, activityBookings, modeLabel, partnerLabel,
   fetchLegFeasibility,
 } from '../../../src/lib/bookingCatalog.js';
 
@@ -116,6 +116,12 @@ describe('transportOptionsFor', () => {
     const options = await transportOptionsFor('trip-1', leg);
     expect(options.map(o => o.mode)).toEqual(['flight', 'train', 'bus', 'drive']);
     expect(options.find(o => o.mode === 'flight')).toMatchObject({ status: 'resolved', url: 'https://www.ixigo.com/search?domain=flight', affiliateDisclosure: true });
+  });
+
+  it('carries the resolved partner (target.partner) onto option.partner for train/bus — no data API, so the CTA names the partner directly', async () => {
+    const options = await transportOptionsFor('trip-1', leg);
+    expect(options.find(o => o.mode === 'train')).toMatchObject({ status: 'resolved', partner: 'ixigo' });
+    expect(options.find(o => o.mode === 'bus')).toMatchObject({ status: 'resolved', partner: 'ixigo' });
   });
 
   it('drive has no trusted-action domain — feasibility-only, no network call, no CTA', async () => {
@@ -281,26 +287,15 @@ describe('feasibleTransportOptions', () => {
   });
 });
 
-describe('recommendedMode', () => {
-  it('picks the highest-priority actionable mode: flight > drive > train > bus', () => {
-    const options = [
-      { mode: 'bus', status: 'resolved' },
-      { mode: 'train', status: 'resolved' },
-      { mode: 'drive', status: 'no_action' },
-    ];
-    expect(recommendedMode(options).mode).toBe('drive');
+describe('partnerLabel', () => {
+  it('maps a known partner to its display name', () => {
+    expect(partnerLabel('ixigo')).toBe('ixigo');
+    expect(partnerLabel('redbus')).toBe('redBus');
+    expect(partnerLabel('booking_com')).toBe('Booking.com');
   });
 
-  it('skips a mode with no safe CTA (missing_input) even if higher priority', () => {
-    const options = [
-      { mode: 'flight', status: 'missing_input' },
-      { mode: 'train', status: 'resolved' },
-    ];
-    expect(recommendedMode(options).mode).toBe('train');
-  });
-
-  it('returns null when nothing is actionable', () => {
-    expect(recommendedMode([{ mode: 'flight', status: 'missing_input' }])).toBeNull();
+  it('falls back to the raw partner value when unmapped', () => {
+    expect(partnerLabel('some_new_partner')).toBe('some_new_partner');
   });
 });
 
@@ -360,12 +355,5 @@ describe('activityBookings', () => {
   it('is empty when nothing requires advance booking — never renders as an empty section', () => {
     const days = [{ day_number: 1, timeline: [{ kind: 'ACTIVITY', title: 'Walk', requires_advance_booking: false }] }];
     expect(activityBookings(days)).toEqual([]);
-  });
-});
-
-describe('notBookedYetLabel', () => {
-  it('names the specific segment, never a bare generic label', () => {
-    expect(notBookedYetLabel('Delhi → Gwalior')).toBe('Delhi → Gwalior not booked yet');
-    expect(notBookedYetLabel('Gwalior stay')).toBe('Gwalior stay not booked yet');
   });
 });

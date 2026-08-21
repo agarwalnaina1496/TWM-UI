@@ -235,6 +235,19 @@ async function resolveTransportOption(tripId, leg, mode, travelerCount) {
   }
 }
 
+// Partner display names — twm/schemas/trusted_action.py's PartnerName
+// allowlist. Surfaced on the CTA for redirect-only modes (train/bus) so the
+// button is honest about what it actually does: a prefilled search handoff
+// to a named partner, not a TWM-ranked result — distinct from flight, which
+// has a real priced live-offer (see FlightLiveOfferInfo) to show instead.
+const PARTNER_LABEL = {
+  hotellook: 'Hotellook', booking_com: 'Booking.com', agoda: 'Agoda', hostelworld: 'Hostelworld',
+  ixigo: 'ixigo', redbus: 'redBus',
+};
+export function partnerLabel(partner) {
+  return PARTNER_LABEL[partner] || partner;
+}
+
 function toTransportOption(mode, name, result) {
   if (result.status === 'resolved') {
     const action = result.action;
@@ -243,6 +256,7 @@ function toTransportOption(mode, name, result) {
       name,
       status: 'resolved',
       url: action.target?.target_url ?? null,
+      partner: action.target?.partner ?? null,
       internalCapability: action.internal_capability ?? null,
       affiliateDisclosure: !!action.affiliate_disclosure,
     };
@@ -297,27 +311,6 @@ export function feasibleTransportOptions(options, feasibility) {
   return { feasible, excluded };
 }
 
-// "Recommended mode" selection (TWM-132 — no explicit ranking rule was
-// specified in the Linear description beyond "clearly best" or "only one
-// feasible"). Judgement call, documented here: fixed priority order
-// flight > drive > train > bus among feasible modes — flight and drive are
-// Backend-computed (never an LLM estimate) and are generally the fastest
-// practical options for a multi-city trip; train/bus are only preferred
-// when neither faster mode is feasible. A mode only counts as
-// recommendable when it actually has something actionable to show (a
-// resolved trusted action, or drive's feasibility-only no_action state —
-// never a missing_input/unsupported_partner/disabled/error mode, which has
-// no safe CTA to recommend).
-const MODE_PRIORITY = ['flight', 'drive', 'train', 'bus'];
-export function recommendedMode(feasibleOptions) {
-  const actionable = (feasibleOptions || []).filter(option => option.status === 'resolved' || option.status === 'no_action');
-  for (const mode of MODE_PRIORITY) {
-    const found = actionable.find(option => option.mode === mode);
-    if (found) return found;
-  }
-  return null;
-}
-
 // Transport legs: consecutive primary_location changes across days, PLUS
 // the origin<->destination bookend legs — the old Logistics page showed
 // only local transfers between stops and dropped the actual origin leg
@@ -344,6 +337,35 @@ export function transportLegs(days, origin) {
   return legs;
 }
 
+// Maps each day_number to the transport leg(s) whose transition happens
+// that day, in the same chronological order transportLegs() itself builds
+// them (outbound-origin, then each inner leg, then return-origin) — used to
+// line legs up against a day's TRAVEL timeline items index-for-index (the
+// timeline is already time-ordered). A day can carry more than one leg
+// (e.g. Atlas combines two stops into one primary_location like "Konark &
+// Bhubaneswar" on the final day, so that day's inner leg and its
+// return-origin leg both land here) or zero. The caller must verify a
+// day's leg count matches its TRAVEL-item count before zipping them
+// together — this function only supplies the legs, not the pairing
+// guarantee.
+export function transportLegsByDay(days, origin) {
+  const stops = routeStops(days);
+  const byDay = new Map();
+  if (stops.length === 0) return byDay;
+  const legs = transportLegs(days, origin);
+  const addLeg = (dayNumber, leg) => {
+    if (!byDay.has(dayNumber)) byDay.set(dayNumber, []);
+    byDay.get(dayNumber).push(leg);
+  };
+  addLeg(stops[0].dayNumbers[0], legs[0]); // outbound-origin
+  for (let i = 0; i < stops.length - 1; i++) {
+    addLeg(stops[i + 1].dayNumbers[0], legs[i + 1]); // leg-i, into stops[i+1]
+  }
+  const lastStop = stops[stops.length - 1];
+  addLeg(lastStop.dayNumbers[lastStop.dayNumbers.length - 1], legs[legs.length - 1]); // return-origin
+  return byDay;
+}
+
 // A round trip bundles as one priced decision, not two separate one-way
 // resolves — true whenever the traveler ends up back where they started
 // (the first leg's origin equals the last leg's destination), regardless
@@ -366,12 +388,9 @@ export function stayLegs(days) {
 // _ALLOWED_PARTNERS_BY_DOMAIN["stay"]), capped to 3 so the Bookings tab
 // still shows a tiered comparison rather than every approved partner.
 const STAY_PARTNERS = ['hotellook', 'booking_com', 'agoda'];
-const PARTNER_LABEL = {
-  hotellook: 'Hotellook', booking_com: 'Booking.com', agoda: 'Agoda', hostelworld: 'Hostelworld', ixigo: 'ixigo',
-};
 
 async function resolveStayOption(tripId, stay, partner) {
-  const name = `${stay.location} — ${PARTNER_LABEL[partner] || partner}`;
+  const name = `${stay.location} — ${partnerLabel(partner)}`;
   try {
     const result = await resolveTrustedAction(tripId, {
       action_type: 'SEARCH_REDIRECT',
@@ -404,9 +423,4 @@ export function activityBookings(days) {
       .filter(item => item.kind === 'ACTIVITY' && item.requires_advance_booking)
       .map(item => ({ id: `activity-${day.day_number}-${item.title}`, dayNumber: day.day_number, title: item.title, detail: item.detail }))
   );
-}
-
-// Never a bare status word — states exactly what's missing.
-export function notBookedYetLabel(name) {
-  return `${name} not booked yet`;
 }

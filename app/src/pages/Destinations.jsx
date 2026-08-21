@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
 import { getRecommendations, TripApiError } from '../lib/tripApi.js';
 import { safeMatcherOutcomeViewModel, rollupSummary } from '../lib/recommendationViewModel.js';
-import { contextRecapPills } from '../lib/tripLifecycle.js';
+import { contextRecapPills, tripContextFacts } from '../lib/tripLifecycle.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { isFixedFieldGap } from '../lib/planChat.js';
@@ -763,7 +763,7 @@ export default function Destinations() {
               moreLikeThisBusy={moreLikeThisId === focusedOption.key}
               beenBefore={beenBefore[focusedOption.key] ?? null}
               onToggleBeenBefore={id => setBeenBefore(previous => ({ ...previous, [focusedOption.key]: previous[focusedOption.key] === id ? null : id }))}
-              travelers={tripState?.trip_context?.travelers}
+              travelers={tripContextFacts(tripState?.trip_context).find(fact => fact.key === 'num_travelers')?.value}
             />
           )}
         </div>

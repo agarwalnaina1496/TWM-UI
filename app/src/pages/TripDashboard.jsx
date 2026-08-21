@@ -7,15 +7,15 @@ import HonestTransition from '../components/ui/HonestTransition.jsx';
 import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary } from '../lib/tripApi.js';
 import {
-  anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange,
-  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
+  anchorsByType, anchorsForDay, dayCostRange,
+  verificationTone, travelerCount,
 } from '../lib/atlasView.js';
 import {
-  transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
-  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
+  transportLegs, transportLegsByDay, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
+  stayLegs, stayOptionsFor, activityBookings, modeLabel, partnerLabel,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
-import { isTripEmpty } from '../lib/tripLifecycle.js';
+import { isTripEmpty, tripContextFacts } from '../lib/tripLifecycle.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -26,11 +26,17 @@ import '../styles/dashboard.css';
 // was never a real map, just route order), Stays+Transport merge into the
 // Bookings story that lands next (this story only adds an inert placeholder
 // for that tab, not its real content).
+//
+// Docs (was always just a "coming soon" placeholder, nothing to preserve)
+// is folded into Bookings — a future single read-only "confirmed bookings +
+// documents" view — rather than kept as its own tab. Bookings itself is
+// temporarily hidden from nav while booking options move inline into the
+// Itinerary tab; its section/data-fetching code is left intact underneath
+// (reachable via setTab('Bookings')) so this is a nav-visibility change,
+// not a functionality removal.
 const TABS = [
   { name: 'Overview', icon: '📊' },
   { name: 'Itinerary', icon: '📅' },
-  { name: 'Bookings', icon: '🧳' },
-  { name: 'Docs', icon: '📁' },
   { name: 'Support', icon: '💬' },
 ];
 
@@ -54,17 +60,6 @@ function BudgetBar({ low, high, min, max }) {
   const left = ((low - min) / span) * 100;
   const width = Math.max(((high - low) / span) * 100, 3);
   return <div className="budget-track"><div className="budget-fill" style={{ left: `${left}%`, width: `${width}%` }} /></div>;
-}
-
-const READINESS_TONE = { suggested: 'positive', needs_advance_booking: 'caution', unresolved: 'negative' };
-
-// Filled shape — deliberately distinct from VerificationTag's outline shape
-// so a timeline item carrying both axes (verified/guidance + booking
-// readiness) reads as two different kinds of status at a glance, not just
-// two different colors.
-function BookingReadinessBadge({ status }) {
-  if (!status) return null;
-  return <StatusPill tone={READINESS_TONE[status] || 'neutral'}>{bookingReadinessLabel(status)}</StatusPill>;
 }
 
 // Outline shape — AtlasReference.status (VERIFIED/GENERAL_GUIDANCE) was
@@ -255,19 +250,6 @@ function DayStrip({ days, activeDayNumber, onSelectDay }) {
   );
 }
 
-function TrustStrip({ counts }) {
-  const ratioLabel = counts.verifiedCount + counts.generalGuidanceCount === 0
-    ? 'No sourced details yet'
-    : `${counts.verifiedCount} verified · ${counts.generalGuidanceCount} general guidance`;
-  return (
-    <div className="trust-strip" aria-label="Trip trust summary">
-      <div className="trust-strip-item"><strong>{counts.assumptionsCount}</strong><span>Assumptions made</span></div>
-      <div className="trust-strip-item"><strong>{counts.unresolvedCount}</strong><span>Open items</span></div>
-      <div className="trust-strip-item"><strong className="trust-strip-ratio">{ratioLabel}</strong><span>Evidence basis</span></div>
-    </div>
-  );
-}
-
 const EMPTY_CONFIRM_FIELDS = { label: '', detail: '', dayNumber: '', reference: '', notes: '' };
 
 function ConfirmationForm({ dayOptions, fields, setFields, onSubmit, onCancel, pending, error }) {
@@ -323,11 +305,11 @@ function ModeTag({ mode }) {
 // shows an inert note instead of linking to nothing. The affiliate
 // disclosure line is a hard requirement carried straight off
 // TrustedAction.affiliate_disclosure — never silently dropped.
-function TrustedActionCta({ option, label, best }) {
+function TrustedActionCta({ option, label }) {
   if (option.status === 'resolved' && option.url) {
     return (
       <>
-        <a className={`btn ${best ? 'btn-primary' : 'btn-ghost'}`} href={option.url} target="_blank" rel="noreferrer">{label}</a>
+        <a className="btn btn-ghost" href={option.url} target="_blank" rel="noreferrer">{label}</a>
         {option.affiliateDisclosure && <p className="affiliate-disclosure">This is an affiliate link — TWM may earn a commission.</p>}
       </>
     );
@@ -406,12 +388,21 @@ function FlightLiveOfferInfo({ liveOffer }) {
   return null;
 }
 
-function TransportOptionCard({ option, best }) {
+// Flight has a real priced live-offer (Aviasales) to show — its CTA is a
+// plain "search elsewhere to book" handoff alongside that data. Train/bus
+// have no data API, only an affiliate prefilled-search redirect — their
+// CTA names the partner directly ("Search on ixigo ↗") so the button is
+// honest about what it is: a search link, not a TWM result.
+function TransportOptionCard({ option }) {
   const durationDistance = durationDistanceLabel(option);
   const isFlight = option.mode === 'flight';
+  const ctaLabel = isFlight
+    ? 'Search flights ↗'
+    : option.partner
+      ? `Search on ${partnerLabel(option.partner)} ↗`
+      : 'Check ↗';
   return (
-    <article className={`stay-option-card${best ? ' picked' : ''}`}>
-      {best && <span className="pick-badge">Our pick</span>}
+    <article className="stay-option-card">
       <ModeTag mode={option.mode} />
       <strong>{option.name}</strong>
       {durationDistance && (
@@ -428,34 +419,16 @@ function TransportOptionCard({ option, best }) {
             : 'Search elsewhere (no TWM-resolved price)'}
         </span>
       )}
-      <TrustedActionCta option={option} label={isFlight ? 'Search flights ↗' : 'Check ↗'} best={best} />
+      <TrustedActionCta option={option} label={ctaLabel} />
     </article>
   );
 }
 
-function StayOptionCard({ option, best }) {
+function StayOptionCard({ option }) {
   return (
-    <article className={`stay-option-card${best ? ' picked' : ''}`}>
-      {best && <span className="pick-badge">Our pick</span>}
+    <article className="stay-option-card">
       <strong>{option.name}</strong>
-      <TrustedActionCta option={option} label="Check stay ↗" best={best} />
-    </article>
-  );
-}
-
-// TWM-132: a "recommended mode" card — shown when at least one feasible
-// mode has something actionable (see bookingCatalog.recommendedMode's
-// documented selection: fixed priority flight > drive > train > bus among
-// feasible, actionable modes).
-function RecommendedModeCard({ option }) {
-  if (!option) return null;
-  return (
-    <article className="dashboard-card recommended-mode-card" aria-label="Recommended mode">
-      <span className="pick-badge">Recommended</span>
-      <ModeTag mode={option.mode} />
-      <strong>{modeLabel(option.mode)}</strong>
-      {option.reason && <p>{option.reason}</p>}
-      <TrustedActionCta option={option} label="Check ↗" best />
+      <TrustedActionCta option={option} label="Check stay ↗" />
     </article>
   );
 }
@@ -492,8 +465,8 @@ function FeasibilityDisclosure({ modes }) {
 // navigation, no separate Logistics page. Confirmed segments (an anchor
 // already exists) skip straight to the 🔒-confirmed treatment.
 function BookingSegment({
-  label, anchor, expanded, onToggleExpand, loading, loadError, options, excluded, renderOption, onOpenConfirm,
-  recommended, feasibilityModes,
+  label, anchor, expanded, onToggleExpand, loading, loadError, options, excluded, renderOption, onOpenConfirm: _onOpenConfirm,
+  feasibilityModes, toggleLabel = 'See options',
 }) {
   if (anchor) {
     return (
@@ -511,10 +484,9 @@ function BookingSegment({
     <div className="stay-block">
       <div className="stay-block-head">
         <div>
-          <span className="state suggested">{notBookedYetLabel(label)}</span>
           <h3 className="route-title">{label}</h3>
         </div>
-        <button type="button" className="btn btn-ghost" onClick={onToggleExpand} aria-expanded={expanded}>{expanded ? 'Hide options ▴' : 'Resolve ▾'}</button>
+        <button type="button" className="btn btn-ghost" onClick={onToggleExpand} aria-expanded={expanded}>{expanded ? 'Hide options ▴' : `${toggleLabel} ▾`}</button>
       </div>
       {expanded && (
         <>
@@ -522,15 +494,13 @@ function BookingSegment({
           {loadError && <p className="already-booked-note" role="alert">{loadError}</p>}
           {!loading && !loadError && (
             <>
-              {recommended !== undefined && <RecommendedModeCard option={recommended} />}
-              <div className="stay-options-grid">{(options || []).map((option, index) => renderOption(option, recommended ? option === recommended : index === 0))}</div>
+              <div className="stay-options-grid">{(options || []).map(option => renderOption(option))}</div>
               {excluded?.length > 0 && (
                 <p className="already-booked-note">{excluded.map(item => item.reason).filter(Boolean).join(' ')}</p>
               )}
               {feasibilityModes && <FeasibilityDisclosure modes={feasibilityModes} />}
             </>
           )}
-          <p className="already-booked-note">Already booked this yourself? <button type="button" className="link-button" onClick={onOpenConfirm}>Add a confirmation →</button></p>
         </>
       )}
     </div>
@@ -541,7 +511,7 @@ function BookingSegment({
 // requires_advance_booking items — no mock options catalog, since there's
 // no realistic "shop for an activity" search to fabricate. Just a
 // self-confirm affordance, framed as the exception for that day.
-function ActivitySegment({ activity, anchor, onOpenConfirm }) {
+function ActivitySegment({ activity, anchor, onOpenConfirm: _onOpenConfirm }) {
   if (anchor) {
     return (
       <article className="dashboard-card anchor-card">
@@ -558,12 +528,10 @@ function ActivitySegment({ activity, anchor, onOpenConfirm }) {
     <div className="stay-block">
       <div className="stay-block-head">
         <div>
-          <span className="state suggested">{notBookedYetLabel(activity.title)}</span>
           <h3 className="route-title">{activity.title} · Day {activity.dayNumber}</h3>
           <p>{activity.detail}</p>
         </div>
       </div>
-      <p className="already-booked-note">Already booked this yourself? <button type="button" className="link-button" onClick={onOpenConfirm}>Add a confirmation →</button></p>
     </div>
   );
 }
@@ -645,17 +613,18 @@ export default function TripDashboard() {
   }, [urlTripId, tripLoadStatus, tripState, navigate]);
 
   useEffect(() => {
-    if (tab !== 'Bookings' || itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
+    if (tab !== 'Itinerary' || itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
     if (bookingsFetchStarted.current === tripId) return;
     bookingsFetchStarted.current = tripId;
     setBookingsStatus('loading');
     setBookingsError(null);
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
-    const bookingOrigin = tripState?.trip_context?.origin;
-    const legs = transportLegs(bookingDays, bookingOrigin);
-    const { bundle, rest } = bundleRoundTrip(legs);
-    const legsToFetch = [...(bundle ? [bundle.outbound] : []), ...rest];
+    const bookingOrigin = tripContextFacts(tripState?.trip_context).find(fact => fact.key === 'origin_city')?.value;
+    // Inline (Itinerary tab) shows each leg on its own matching TRAVEL item —
+    // no round-trip bundling — so every leg needs its own fetched options,
+    // not just the outbound half of a bundle.
+    const legsToFetch = transportLegs(bookingDays, bookingOrigin);
     const stays = stayLegs(bookingDays);
     // TWM-146: threaded through to flight's live-offer search so
     // FlightSearchRequest.travelers is populated whenever Atlas has it,
@@ -689,7 +658,7 @@ export default function TripDashboard() {
       }
     })();
     return () => { cancelled = true; };
-  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin]);
+  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city]);
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -903,11 +872,9 @@ export default function TripDashboard() {
   const costMin = Math.min(...allCosts, 0);
   const costMax = Math.max(...allCosts, 1);
   const proposedRevision = itineraryState.proposed_revision;
-  const trustCounts = trustStripCounts(finalItinerary, result);
-  const readiness = bookingReadinessRollup(days, anchors);
 
   const dayNumbers = days.map(day => day.day_number);
-  const bookingOrigin = tripState?.trip_context?.origin;
+  const bookingOrigin = tripContextFacts(tripState?.trip_context).find(fact => fact.key === 'origin_city')?.value;
   const transportAnchors = anchorsByType(anchors, 'transport');
   const stayAnchors = anchorsByType(anchors, 'stay');
   const activityAnchors = anchorsByType(anchors, 'activity');
@@ -920,6 +887,13 @@ export default function TripDashboard() {
   const transportLegList = transportLegs(days, bookingOrigin);
   const { bundle: roundTripBundle, rest: soloLegs } = bundleRoundTrip(transportLegList);
   const stayLegList = stayLegs(days);
+  const legsByDayNumber = transportLegsByDay(days, bookingOrigin);
+  // Inline (Itinerary tab): each TRAVEL item shows its own leg, plain
+  // from -> to — no round-trip bundling (that grouping only applies to the
+  // separate, currently-hidden Bookings tab below).
+  const resolveTimelineLeg = rawLeg => {
+    return { id: rawLeg.id, label: `${rawLeg.from} → ${rawLeg.to}`, dataLeg: rawLeg };
+  };
   const activityList = activityBookings(days);
 
   // Orphan anchors: confirmations left over from a route the current
@@ -949,7 +923,6 @@ export default function TripDashboard() {
         finalItinerary={finalItinerary}
         actions={<>
           <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
-          <button className="btn btn-ghost" type="button" onClick={() => alert('Sharing is not available yet.')}>🔗 Share</button>
         </>}
       />
 
@@ -975,20 +948,11 @@ export default function TripDashboard() {
           <div className="route-rationale"><span className="hero-why-label">Why this route</span><p>{finalItinerary.trip_summary.route_rationale}</p></div>
         )}
 
-        <TrustStrip counts={trustCounts} />
-
         <div className="tab-intro"><div><h2>💰 Estimated budget</h2><p>{finalItinerary.budget_summary.budget_fit}</p></div></div>
         <BudgetBar low={finalItinerary.budget_summary.total_low} high={finalItinerary.budget_summary.total_high} min={0} max={Math.max(finalItinerary.budget_summary.total_high, 1)} />
         <div className="budget-summary-card">
           {finalItinerary.budget_summary.lines.map((line, index) => <div className="budget-summary-row" key={index}><span>{line.category}</span><strong>{moneyRange(line.amount_low, line.amount_high)}</strong><p>{line.note}</p></div>)}
           <div className="budget-summary-row total"><span>Estimated total</span><strong>{moneyRange(finalItinerary.budget_summary.total_low, finalItinerary.budget_summary.total_high)}</strong></div>
-        </div>
-
-        <div className="readiness-row">
-          <span>{readiness.ready} of {readiness.total} bookable items ready</span>
-          {readiness.total > readiness.ready && (
-            <button type="button" className="btn btn-ghost" onClick={() => setTab('Bookings')}>Resolve bookings →</button>
-          )}
         </div>
 
         <div className="sources-list">
@@ -1030,15 +994,6 @@ export default function TripDashboard() {
         )}
       </section>}
 
-      {tab === 'Docs' && <section aria-label="Trip documents">
-        <div className="tab-intro"><div><h2>📁 Documents</h2><p>Flight tickets, hotel confirmations, and other trip documents.</p></div></div>
-        <div className="docs-placeholder">
-          <span className="docs-placeholder-icon">📁</span>
-          <strong>Coming soon</strong>
-          <p>Once this is ready, you'll be able to collect everything for this trip in one place — flight and train tickets, hotel confirmations, and copies of IDs you'll need on the road.</p>
-        </div>
-      </section>}
-
       {tab === 'Itinerary' && selectedDay && <section aria-label="Detailed days" className="dashboard-days-wrap">
         <nav className="dashboard-day-nav" aria-label="Select a day">
           {days.map(day => <button type="button" key={day.day_number} className={`dashboard-day-pill${day.day_number === selectedDay.day_number ? ' active' : ''}`} aria-current={day.day_number === selectedDay.day_number ? 'page' : undefined} onClick={() => setActiveDay(day.day_number)}>
@@ -1055,22 +1010,62 @@ export default function TripDashboard() {
               <p>{selectedDay.summary}</p>
             </header>
             <AnchorList anchors={anchorsForDay(anchors, selectedDay.day_number)} />
-            <div className="atlas-timeline">
-              {selectedDay.timeline.map((item, index) => <div className="atlas-item" key={index}>
-                <span className="atlas-dot">{item.kind === 'TRAVEL' ? '🚗' : item.kind === 'STAY' ? '🏨' : item.kind === 'MEAL' ? '🍽️' : item.kind === 'FREE_TIME' ? '🕒' : '📍'}</span>
-                <div>
-                  <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
-                  <div className="item-summary-row">
-                    <strong>{item.title}</strong>
-                    {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
-                    <VerificationTag status={item.reference?.status} />
-                    <BookingReadinessBadge status={item.booking_readiness} />
-                  </div>
-                  <p>{item.detail}</p>
-                  {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
+            {(() => {
+              // Only pair TRAVEL items with legs when the day's leg count
+              // exactly matches its TRAVEL-item count — Atlas sometimes
+              // combines two stops into one primary_location (e.g. "Konark
+              // & Bhubaneswar" on a final travel-and-depart day), putting
+              // two legs on one day; zipping by chronological index is only
+              // safe when both lists are the same length, otherwise skip
+              // (no options shown) rather than guess.
+              const dayLegs = legsByDayNumber.get(selectedDay.day_number) || [];
+              const travelIndices = selectedDay.timeline
+                .map((item, index) => (item.kind === 'TRAVEL' ? index : null))
+                .filter(index => index !== null);
+              const legForIndex = travelIndices.length === dayLegs.length
+                ? Object.fromEntries(travelIndices.map((index, i) => [index, dayLegs[i]]))
+                : {};
+              return (
+                <div className="atlas-timeline">
+                  {selectedDay.timeline.map((item, index) => {
+                    const rawLeg = legForIndex[index];
+                    const resolved = rawLeg ? resolveTimelineLeg(rawLeg) : null;
+                    const entry = resolved ? transportData[legKey(resolved.dataLeg)] : null;
+                    const { feasible, excluded } = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : { feasible: [], excluded: [] };
+                    return (
+                      <div className="atlas-item" key={index}>
+                        <span className="atlas-dot">{item.kind === 'TRAVEL' ? '🚗' : item.kind === 'STAY' ? '🏨' : item.kind === 'MEAL' ? '🍽️' : item.kind === 'FREE_TIME' ? '🕒' : '📍'}</span>
+                        <div>
+                          <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
+                          <div className="item-summary-row">
+                            <strong>{item.title}</strong>
+                            {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
+                          </div>
+                          <p>{item.detail}</p>
+                          {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
+                          {resolved && (
+                            <BookingSegment
+                              label={resolved.label}
+                              anchor={findAnchor(transportAnchors, resolved.label)}
+                              expanded={expandedBookingId === resolved.id}
+                              onToggleExpand={() => toggleExpandedBooking(resolved.id, 'transport', { excludedOptions: excluded })}
+                              loading={expandedBookingId === resolved.id && bookingsStatus === 'loading'}
+                              loadError={expandedBookingId === resolved.id ? bookingsError : null}
+                              options={feasible}
+                              excluded={excluded}
+                              feasibilityModes={entry?.feasibility?.modes}
+                              renderOption={option => <TransportOptionCard key={option.mode} option={option} />}
+                              onOpenConfirm={() => {}}
+                              toggleLabel="Check transport options"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>)}
-            </div>
+              );
+            })()}
             <div className="atlas-day-footer">
               <div className="footer-budget">
                 <span className="footer-label">💰 Estimated for this day</span>
@@ -1098,7 +1093,6 @@ export default function TripDashboard() {
           const label = `${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`;
           const entry = transportData[legKey(roundTripBundle.outbound)];
           const { feasible, excluded } = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : { feasible: [], excluded: [] };
-          const recommended = entry ? recommendedMode(feasible) : undefined;
           return (
             <BookingSegment
               label={label}
@@ -1109,10 +1103,10 @@ export default function TripDashboard() {
               loadError={expandedBookingId === roundTripBundle.id ? bookingsError : null}
               options={feasible}
               excluded={excluded}
-              recommended={recommended}
               feasibilityModes={entry?.feasibility?.modes}
-              renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
+              renderOption={option => <TransportOptionCard key={option.mode} option={option} />}
               onOpenConfirm={() => openConfirmForm('transport', label)}
+              toggleLabel="Check transport options"
             />
           );
         })()}
@@ -1120,7 +1114,6 @@ export default function TripDashboard() {
           const label = `${leg.from} → ${leg.to}`;
           const entry = transportData[legKey(leg)];
           const { feasible, excluded } = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : { feasible: [], excluded: [] };
-          const recommended = entry ? recommendedMode(feasible) : undefined;
           return (
             <BookingSegment
               key={leg.id}
@@ -1132,9 +1125,8 @@ export default function TripDashboard() {
               loadError={expandedBookingId === leg.id ? bookingsError : null}
               options={feasible}
               excluded={excluded}
-              recommended={recommended}
               feasibilityModes={entry?.feasibility?.modes}
-              renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
+              renderOption={option => <TransportOptionCard key={option.mode} option={option} />}
               onOpenConfirm={() => openConfirmForm('transport', label)}
             />
           );
@@ -1158,7 +1150,7 @@ export default function TripDashboard() {
               loadError={expandedBookingId === stay.id ? bookingsError : null}
               options={entry?.options || []}
               excluded={[]}
-              renderOption={(option, best) => <StayOptionCard key={option.name} option={option} best={best} />}
+              renderOption={option => <StayOptionCard key={option.name} option={option} />}
               onOpenConfirm={() => openConfirmForm('stay', `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`)}
             />
           );

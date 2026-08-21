@@ -333,9 +333,17 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // underlying confirm_logistics command is unchanged and untested here on
   // purpose; that coverage returns with the real Bookings tab.
   // TWM-176: real Bookings content, replacing TWM-175's inert placeholder.
-  describe('Bookings tab (TWM-176)', () => {
+  //
+  // Skipped: the Bookings tab is temporarily removed from nav (TABS) while
+  // booking options move inline into the Itinerary tab — these tests all
+  // navigate via the "Bookings" nav button, which no longer renders. The
+  // underlying BookingSegment/TransportOptionCard/etc. rendering code these
+  // tests exercise is unchanged; re-enable (updating navigation to whatever
+  // replaces the nav-button click, or once Bookings returns to nav) once
+  // that follow-up lands.
+  describe.skip('Bookings tab (TWM-176)', () => {
     it('shows the origin<->destination transport leg, not just local transfers, bundled as one round-trip decision', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
@@ -345,7 +353,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('expanding a segment shows mode-tagged options; an infeasible mode is genuinely absent, with the Backend-provided explanatory note', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -375,8 +383,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.getAllByText(/Bus excluded/).length).toBeGreaterThan(0);
     });
 
-    it('shows a recommended-mode card and the "why other modes aren\'t shown" feasibility row, with a GENERAL_GUIDANCE tag for the llm_estimated train mode', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+    it('shows the "why other modes aren\'t shown" feasibility row, with a GENERAL_GUIDANCE tag for the llm_estimated train mode', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -399,9 +407,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
       await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
-      await waitFor(() => expect(screen.getByLabelText('Recommended mode')).toBeInTheDocument());
-      expect(within(screen.getByLabelText('Recommended mode')).getByText('Fastest option.')).toBeInTheDocument();
-
+      await waitFor(() => expect(screen.getByText("Why other modes aren't shown")).toBeInTheDocument());
       await user.click(screen.getByText("Why other modes aren't shown"));
       const disclosure = screen.getByText("Why other modes aren't shown").closest('details');
       expect(within(disclosure).getByText('Not practical for this trip.')).toBeInTheDocument();
@@ -409,7 +415,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('shows a specific "not booked yet" label per segment, never a bare generic one', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       await readyDashboard();
       const user = userEvent.setup();
@@ -421,7 +427,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows a confirmed segment with the 🔒-confirmed treatment — property/service name, price/detail, and confirmation number, never a bare status word', async () => {
       commandSnapshot = snapshotWith(
         readyItineraryState(), { anchors: [anchor({ type: 'stay', label: 'Rishikesh · 2 nights', detail: 'Riverside Cottage, ₹4,200/night', reference: 'CONF-9921' })] },
-        { trip_context: { origin: 'Delhi' } },
+        { trip_context: { origin_city: 'Delhi' } },
       );
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
@@ -472,7 +478,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('renders the affiliate disclosure line when the resolved trusted action carries it, never dropping it', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
@@ -482,7 +488,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('shows an inert note, no broken link, when a trusted action resolves to missing_input', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -499,8 +505,12 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(document.querySelector('a[href*="ixigo"]')).toBeNull();
     });
 
-    it('the confirm-it-yourself flow is reachable per segment, and submits a real confirm_logistics command', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+    // Skipped: the "Already booked this yourself? Add a confirmation" entry
+    // point is temporarily removed from BookingSegment/ActivitySegment.
+    // Re-enable once that affordance returns — the underlying
+    // confirm_logistics command wiring this test exercises is unchanged.
+    it.skip('the confirm-it-yourself flow is reachable per segment, and submits a real confirm_logistics command', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn(async () => ({ message: 'Noted.', agent_meta: null, trip: commandSnapshot }));
       const user = userEvent.setup();
       await readyDashboard();
@@ -519,7 +529,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     // distinct from the plain redirect-only cards train/bus still use.
     describe('flight live-offer card (TWM-146)', () => {
       it('renders a specific clarification prompt (not a generic error) when flight-search needs more info', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
         global.fetch = defaultFetchMock(); // flight-search defaults to clarification_needed
         const user = userEvent.setup();
@@ -530,7 +540,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       });
 
       it('renders live-offer price/airline/stops distinctly from the plain redirect-only cards, and still keeps the CTA link separate', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -569,7 +579,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       });
 
       it('renders the Backend-authored unavailable message safely for a flight card', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -657,17 +667,21 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   });
 
   // TWM-175: the Map tab is gone — it was never a real map, just route
-  // order, which now folds into Overview's day-strip instead.
-  it('shows all 5 tabs, never the old Stays/Transport/Map ones', async () => {
+  // order, which now folds into Overview's day-strip instead. Bookings and
+  // Docs are temporarily out of nav (merged/hidden) while booking options
+  // move inline into Itinerary.
+  it('shows the 3 active tabs, never the old Stays/Transport/Map/Bookings/Docs ones', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     await readyDashboard();
-    for (const name of ['Overview', 'Itinerary', 'Bookings', 'Docs', 'Support']) {
+    for (const name of ['Overview', 'Itinerary', 'Support']) {
       expect(screen.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: /Stays/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Transport/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Map/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Bookings/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Docs/ })).not.toBeInTheDocument();
   });
 
   it('Overview\'s day-strip jumps into that day on the Itinerary tab', async () => {
@@ -743,7 +757,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.queryAllByText('2').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
   });
 
-  it('trust strip is visible without any user action — no closed-by-default disclosure', async () => {
+  // Skipped: the TrustStrip (Assumptions/Open items/Evidence basis) is
+  // temporarily removed from Overview's render. trustStripCounts() itself
+  // (exercised in atlasView.test.js) is unchanged — re-enable if/when this
+  // strip returns to the UI.
+  it.skip('trust strip is visible without any user action — no closed-by-default disclosure', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     await readyDashboard();
@@ -769,10 +787,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.getByText('No external sources cited.')).toBeInTheDocument();
   });
 
-  // TWM-175: verified/general-guidance (outline) and booking-readiness
-  // (filled) are visually distinct axes — a timeline item carrying both
-  // must render both, not collapse to one.
-  it('renders both an outline verification tag and a filled booking-readiness tag on the same item', async () => {
+  // Skipped: the timeline's verification tag (General guidance/Verified) is
+  // temporarily removed — only the booking-readiness tag renders now, so
+  // this "renders both" case no longer applies. Re-enable if the
+  // verification tag returns to the timeline.
+  it.skip('renders both an outline verification tag and a filled booking-readiness tag on the same item', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
@@ -784,6 +803,84 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     const readiness = within(item).getByText('Readiness unresolved');
     expect(verification.className).toContain('status-pill-outline');
     expect(readiness.className).toContain('status-pill-filled');
+  });
+
+  // Inline transport options: TRAVEL timeline items now show their own
+  // "Resolve" affordance directly in the Itinerary tab (booking options
+  // moved out of the removed-from-nav Bookings tab), matched by
+  // transportLegsByDay's day-boundary + chronological-index zip.
+  describe('inline transport options on the Itinerary tab', () => {
+    function odishaTimelineFixture() {
+      return {
+        final_itinerary: {
+          days: [
+            {
+              day_number: 1, date: null, title: 'Day 1', primary_location: 'Bhubaneswar', summary: 'x',
+              timeline: [
+                { start_time: '09:00', end_time: '10:30', kind: 'TRAVEL', title: 'Arrival at Bhubaneswar (BBI) & Hotel Transfer', location: 'Bhubaneswar Airport', detail: 'Arrive from Bangalore.', reference: generalReference(), requires_advance_booking: true, booking_readiness: 'suggested' },
+              ],
+              seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+            },
+            {
+              day_number: 2, date: null, title: 'Day 2', primary_location: 'Puri', summary: 'x',
+              timeline: [
+                { start_time: '08:00', end_time: '09:30', kind: 'TRAVEL', title: 'Drive from Bhubaneswar to Puri', location: 'Highway', detail: 'x', reference: generalReference(), requires_advance_booking: true, booking_readiness: 'suggested' },
+              ],
+              seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+            },
+            {
+              // Mirrors the real Atlas response's day 3: two TRAVEL legs
+              // (Puri->Konark, then Konark->origin-airport) collapsed into
+              // one combined primary_location.
+              day_number: 3, date: null, title: 'Day 3', primary_location: 'Konark & Bhubaneswar', summary: 'x',
+              timeline: [
+                { start_time: '08:00', end_time: '09:00', kind: 'TRAVEL', title: 'Puri-Konark Marine Drive', location: 'Marine Drive', detail: 'x', reference: generalReference(), requires_advance_booking: true, booking_readiness: 'suggested' },
+                { start_time: '10:30', end_time: '13:00', kind: 'ACTIVITY', title: 'Sun Temple, Konark', location: 'Konark', detail: 'x', reference: generalReference(), requires_advance_booking: true, booking_readiness: 'suggested' },
+                { start_time: '14:30', end_time: '16:30', kind: 'TRAVEL', title: 'Transfer Konark to Bhubaneswar Airport', location: 'Konark to Bhubaneswar', detail: 'x', reference: generalReference(), requires_advance_booking: true, booking_readiness: 'suggested' },
+              ],
+              seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+            },
+          ],
+        },
+      };
+    }
+
+    it('shows a Resolve affordance under the day-1 arrival TRAVEL item, matched to the origin leg', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Bangalore' } });
+      itineraryFetchResponse.result = atlasResult(odishaTimelineFixture());
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      const item = screen.getByText('Arrival at Bhubaneswar (BBI) & Hotel Transfer').closest('.atlas-item');
+      expect(within(item).getByRole('button', { name: 'Check transport options ▾' })).toBeInTheDocument();
+      expect(within(item).getByText('Bangalore → Bhubaneswar')).toBeInTheDocument();
+      await user.click(within(item).getByRole('button', { name: 'Check transport options ▾' }));
+      await waitFor(() => expect(within(item).getByRole('button', { name: 'Hide options ▴' })).toBeInTheDocument());
+      // Train/bus have no data API, only an affiliate prefilled-search
+      // redirect — the CTA names the partner directly instead of a generic
+      // "Check ↗", distinct from flight's real live-offer data.
+      await waitFor(() => expect(within(item).getAllByRole('link', { name: 'Search on ixigo ↗' }).length).toBeGreaterThan(0));
+    });
+
+    it('shows two independent Resolve affordances on a day combining two TRAVEL legs, without crashing', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Bangalore' } });
+      itineraryFetchResponse.result = atlasResult(odishaTimelineFixture());
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await user.click(screen.getByRole('button', { name: /Day 3/ }));
+
+      const marineDrive = screen.getByText('Puri-Konark Marine Drive').closest('.atlas-item');
+      const transfer = screen.getByText('Transfer Konark to Bhubaneswar Airport').closest('.atlas-item');
+      expect(within(marineDrive).getByText('Puri → Konark & Bhubaneswar')).toBeInTheDocument();
+      expect(within(transfer).getByText('Konark & Bhubaneswar → Bangalore')).toBeInTheDocument();
+      // The ACTIVITY item between them carries no leg match — no affordance.
+      const sunTemple = screen.getByText('Sun Temple, Konark').closest('.atlas-item');
+      expect(within(sunTemple).queryByRole('button', { name: 'Check transport options ▾' })).not.toBeInTheDocument();
+    });
   });
 
   describe('arrival transition and one-time booking prompt (TWM-175)', () => {
@@ -827,8 +924,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(updateUiState).toHaveBeenCalledWith({ 'dashboardOverview.bookingPromptShown': true }));
 
       await user.click(within(prompt).getByText('Sort out bookings now'));
+      // Bookings is temporarily out of TABS (nav) — the prompt still sets
+      // tab state to 'Bookings' internally, just with no nav button to
+      // assert "active" against until Bookings returns to nav or this CTA
+      // is repointed at Itinerary's inline booking options.
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Bookings/ })).toHaveClass('active');
     });
 
     it('never shows the booking prompt again once ui_state already recorded it as shown', async () => {
@@ -879,14 +979,12 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const tabs = await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
       expect(within(tabs).getByText('Overview')).toBeInTheDocument();
       expect(within(tabs).getByText('Itinerary')).toBeInTheDocument();
-      expect(within(tabs).getByText('Bookings')).toBeInTheDocument();
-      expect(within(tabs).getByText('Docs')).toBeInTheDocument();
       expect(within(tabs).getByText('Support')).toBeInTheDocument();
 
       const user = userEvent.setup();
-      await user.click(within(tabs).getByText('Docs'));
+      await user.click(within(tabs).getByText('Itinerary'));
 
-      expect(screen.getByText('Available once your itinerary is ready.')).toBeInTheDocument();
+      expect(screen.getByText('Your day-by-day plan will appear here once Guide finishes it.')).toBeInTheDocument();
       expect(screen.queryByText('Your trip so far')).not.toBeInTheDocument();
     });
 
