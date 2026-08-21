@@ -6,6 +6,7 @@ import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
 import { planReady } from '../hooks/useGuidePlanning.js';
 import { buildRecapTurn, didHandoffOccur } from '../lib/discoverChat.js';
+import { buildPlanRecapTurn } from '../lib/planChat.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import FactsPanel from '../components/FactsPanel.jsx';
@@ -15,7 +16,13 @@ import '../styles/chat.css';
 
 let nextId = 1;
 const COLD_OPEN = "Hey there! I'm Scout. Tell me about the trip you have in mind — a question, a rough idea, or the whole plan — and I'll take it from there.";
-const HANDOFF_NOTE = '→ Bringing in Meridian, who handles destination matching.';
+// TWM-190: ScoutChat.jsx is the single conversational surface for both
+// specialists now — the note names whichever one the trip actually handed
+// off to, not always Meridian.
+const HANDOFF_NOTES = {
+  meridian: '→ Bringing in Meridian, who handles destination matching.',
+  guide: '→ Bringing in Guide, who builds your day-by-day plan.',
+};
 
 export default function ScoutChat() {
   const navigate = useNavigate();
@@ -93,7 +100,14 @@ export default function ScoutChat() {
   useEffect(() => {
     if (initialized.current || tripLoadStatus !== 'ready') return;
     initialized.current = true;
-    const recap = buildRecapTurn(commandSnapshot?.trip_state, { awaiting });
+    // TWM-190: Guide's recap is phrased for its planning context
+    // (buildPlanRecapTurn, already built for TripPreview's now-retired
+    // gating-chat branch) — Guide's conversation_context has no verbatim
+    // last-message field the way Meridian's does, so this is a synthesized
+    // recap rather than Guide's own last question echoed back.
+    const recap = activeAgent === 'guide'
+      ? buildPlanRecapTurn(commandSnapshot?.trip_state?.trip_context, { awaiting })
+      : buildRecapTurn(commandSnapshot?.trip_state, { awaiting });
     say('assistant', recap || COLD_OPEN);
     const message = params.get('msg')?.trim();
     if (message) runAdvice(message);
@@ -111,11 +125,11 @@ export default function ScoutChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlTripId, tripLoadStatus, commandSnapshot?.trip_state, navigate]);
 
-  // Hand-off note fires exactly once, only on the real scout->meridian
-  // transition — never on initial load of an already-meridian-owned trip.
+  // Hand-off note fires exactly once, only on a real scout->specialist
+  // transition — never on initial load of an already-owned trip.
   useEffect(() => {
     if (tripLoadStatus !== 'ready') return;
-    if (didHandoffOccur(previousAgent.current, activeAgent)) say('system', HANDOFF_NOTE);
+    if (didHandoffOccur(previousAgent.current, activeAgent)) say('system', HANDOFF_NOTES[activeAgent]);
     previousAgent.current = activeAgent;
   }, [tripLoadStatus, activeAgent]);
 
