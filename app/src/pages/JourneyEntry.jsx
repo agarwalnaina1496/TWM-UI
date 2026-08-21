@@ -108,9 +108,16 @@ export default function JourneyEntry() {
       <div className="chat-context-bar" role="status">
         <span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.
       </div>
-      <span className="eyebrow">{isDiscover ? '✦ Scout' : 'Trip setup'}</span>
-      <h1>{isDiscover ? <>Let's find <em>your destination</em></> : <>Start with <em>your destination</em></>}</h1>
-      <p className="lede">{isDiscover ? DISCOVER_PROMPT : KNOWN_DESTINATION_PROMPT}</p>
+      {/* .chat-screen>.eyebrow/h1/.lede are hidden by chat.css — that rule
+          exists for ScoutChat.jsx, where the chat-log/messages replace this
+          framing once a conversation exists. This screen has no log yet, so
+          this is its only framing — wrapped so it isn't a direct child and
+          stays visible. */}
+      <div className="journey-entry-intro">
+        <span className="eyebrow">{isDiscover ? '✦ Scout' : 'Trip setup'}</span>
+        <h1>{isDiscover ? <>Let's find <em>your destination</em></> : <>Start with <em>your destination</em></>}</h1>
+        <p className="lede">{isDiscover ? DISCOVER_PROMPT : KNOWN_DESTINATION_PROMPT}</p>
+      </div>
       {busy && <div className="think" role="status">{thinkingMessage}</div>}
       {error && (
         <div className="price-evidence state-unsafe" role="alert">
