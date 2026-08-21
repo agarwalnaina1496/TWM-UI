@@ -855,7 +855,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('opens successfully with only trip_context populated and no itinerary — no crash, no blank page', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();

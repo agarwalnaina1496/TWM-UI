@@ -1,4 +1,4 @@
-import { contextRecapPills, hasTripContext } from './tripLifecycle.js';
+import { contextRecapPills, hasTripContext, tripContextFacts } from './tripLifecycle.js';
 
 // TWM-173: shared helpers for the Discover entry chat (JourneyEntry's
 // discover branch, and ScoutChat's resume path) — both need the same
@@ -35,28 +35,20 @@ export function buildRecapTurn(tripState, { awaiting } = {}) {
 
 // Known-fields-only facts panel — no null/pending placeholder rows, matching
 // trip_context's free-form philosophy (a field simply isn't shown until
-// it's actually known, never rendered empty).
-const FACT_LABELS = [
-  ['origin', 'From'],
-  ['budget', 'Budget'],
-  ['duration_days', 'Duration'],
-  ['travelers', 'Travelers'],
-  ['travel_window', 'When'],
-  ['month', 'Month'],
-  ['dates', 'Dates'],
-];
+// it's actually known, never rendered empty). Label order/wording is this
+// panel's own presentation choice; the field names and raw-value
+// formatting come from tripContextFacts (the one canonical trip_context list).
+const FACT_LABELS = {
+  destinations: 'Destination',
+  origin_city: 'From',
+  trip_duration: 'Duration',
+  travel_dates: 'When',
+  num_travelers: 'Travelers',
+  budget: 'Budget',
+};
 
 export function buildFactsPanel(tripContext) {
-  return FACT_LABELS
-    .map(([key, label]) => {
-      const value = tripContext?.[key];
-      if (value === undefined || value === null || value === '') return null;
-      const display = key === 'duration_days' ? `${value} day${value === 1 ? '' : 's'}`
-        : key === 'travelers' ? `${value} traveler${value === 1 ? '' : 's'}`
-        : String(value);
-      return { key, label, value: display };
-    })
-    .filter(Boolean);
+  return tripContextFacts(tripContext).map(fact => ({ ...fact, label: FACT_LABELS[fact.key] }));
 }
 
 // A hand-off note fires exactly once, only on the actual scout->specialist

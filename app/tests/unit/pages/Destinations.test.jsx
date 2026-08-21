@@ -46,7 +46,7 @@ function tripState(extra = {}) {
   return {
     stage: 'recommended',
     active_agent: null,
-    trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2 },
+    trip_context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both', num_travelers: 2 },
     advisor_state: { conversation_context: { last_advisor_message: null } },
     matcher_state: { conversation_context: { last_meridian_message: null, awaiting: null } },
     planner_state: null,
@@ -442,7 +442,7 @@ describe('Destinations (real Meridian integration)', () => {
   it('shows the exact persisted travel window instead of omitting it', async () => {
     const server = createServer({
       recommendation: successOutcome(),
-      tripState: tripState({ trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2, travel_window: 'Dec–Jan' } }),
+      tripState: tripState({ trip_context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both', num_travelers: 2, travel_dates: 'Dec–Jan' } }),
     });
     fetchMock = createFetchMock(server);
     global.fetch = wrapFetchMockWithGuestSession(fetchMock);
@@ -486,10 +486,8 @@ describe('Destinations (real Meridian integration)', () => {
     const server = createServer({
       recommendation: successOutcome(),
       tripState: tripState({
-        trip_context: {
-          origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2,
-          selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
-        },
+        trip_context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both', num_travelers: 2 },
+        selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
         planner_state: { conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [] },
       }),
     });
@@ -509,10 +507,8 @@ describe('Destinations (real Meridian integration)', () => {
     const server = createServer({
       recommendation: successOutcome(),
       tripState: tripState({
-        trip_context: {
-          origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2,
-          selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
-        },
+        trip_context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both', num_travelers: 2 },
+        selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
         planner_state: {
           conversation_context: { awaiting: null }, places: ['Gwalior Fort'],
           day_plan: [{ day_number: 1, date: null, places: ['Gwalior Fort'], pace: 'balanced', buffer_note: null }],
@@ -533,10 +529,8 @@ describe('Destinations (real Meridian integration)', () => {
     const server = createServer({
       recommendation: successOutcome(),
       tripState: tripState({
-        trip_context: {
-          origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2,
-          selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
-        },
+        trip_context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both', num_travelers: 2 },
+        selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
       }),
     });
     fetchMock = createFetchMock(server);
@@ -923,10 +917,8 @@ describe('Destinations (real Meridian integration)', () => {
       const server = createServer({
         recommendation: successOutcome(),
         tripState: tripState({
-          trip_context: {
-            origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2,
-            selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
-          },
+          trip_context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both', num_travelers: 2 },
+          selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
         }),
       });
       fetchMock = createFetchMock(server);

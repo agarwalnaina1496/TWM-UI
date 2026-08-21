@@ -109,13 +109,18 @@ describe('DashboardHome (TWM-108/163)', () => {
     const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
     fetchMock.mockResolvedValueOnce(jsonResponse({
       trips: [tripRecord({
-        title: 'Coorg',
+        title: 'Coorg Getaway',
         trip_state: { stage: 'matched', trip_context: { destinations: ['Coorg'] }, has_places: true },
         updated_at: fourHoursAgo,
       })],
     }));
     renderDashboardHome({ loggedIn: false, isGuest: true, name: 'Guest', email: '' });
-    await screen.findByText('Coorg');
+    // Distinct card title vs. destination name (both render, TWM-190's
+    // contextDestination now reads trip_context.destinations) — asserted
+    // separately so a coincidental title/destination match elsewhere can't
+    // make this an ambiguous multi-match query again.
+    await screen.findByText('Coorg Getaway');
+    expect(screen.getByText('Coorg', { selector: '.trip-card-destination' })).toBeInTheDocument();
     expect(screen.getByText('Places picked — building the day-by-day plan.')).toBeInTheDocument();
     expect(screen.getByText('updated 4h ago')).toBeInTheDocument();
   });

@@ -81,8 +81,8 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
 
 // TWM-184: My Trips card status line — deliberately prose, not a fixed-slot
 // indicator. Covers both list-summary shape (awaiting/has_day_plan/
-// has_places flat on trip_state) and the destination-resolution paths
-// (selected_option vs. destinations array).
+// has_places flat on trip_state) and destination resolution via
+// trip_context.destinations.
 describe('tripStatusLine (TWM-184)', () => {
   it('itinerary ready always wins, regardless of stage', () => {
     expect(tripStatusLine(state({ stage: 'planning', itinerary_state: { status: 'ready' } }))).toBe('Your full trip plan is ready to book and go.');
@@ -97,15 +97,16 @@ describe('tripStatusLine (TWM-184)', () => {
   });
 
   it('no destination, but some context exists: "still figuring out"', () => {
-    expect(tripStatusLine(state({ trip_context: { origin: 'Delhi' } }))).toBe("Still figuring out where you're headed.");
+    expect(tripStatusLine(state({ trip_context: { origin_city: 'Delhi' } }))).toBe("Still figuring out where you're headed.");
   });
 
-  it('destination known via selected_option', () => {
-    const line = tripStatusLine(state({ trip_context: { selected_option: { name: 'Coorg' } } }));
-    expect(line).toBe('Destination settled — planning not started yet.');
-  });
-
-  it('destination known via destinations array (known-destination entry path)', () => {
+  // TWM-190: trip_context.destinations is the one canonical "destination
+  // known" signal for both entry paths now (Backend writes it directly at
+  // select_destination for Discover, same as Guide's own extraction for
+  // known-destination) — selected_option is no longer read for this at
+  // all, and lives outside trip_context entirely (twm/services/
+  // trip_commands/state.py).
+  it('destination known via destinations array (both entry paths)', () => {
     const line = tripStatusLine(state({ trip_context: { destinations: ['Udaipur'] } }));
     expect(line).toBe('Destination settled — planning not started yet.');
   });
@@ -158,18 +159,12 @@ describe('relativeUpdatedAt (TWM-184)', () => {
   });
 });
 
-describe('contextRecapPills (TWM-183)', () => {
-  // origin_city is where Meridian's own extraction (and the known-
-  // destination entry path) sometimes lands the origin — was previously
-  // invisible to every RECAP_FIELDS-based caller (My Trips cards, the
-  // Discover-chat fallback recap) whenever a trip's origin only existed
-  // under this key instead of the plain `origin` field.
-  it('recognizes origin_city, not just origin', () => {
+describe('contextRecapPills (TWM-183, TWM-190 canonical fields)', () => {
+  // origin_city is the one canonical key every agent actually writes
+  // (twm/schemas/trip_context.py's FIXED_KEYS) — no more `origin` fallback,
+  // since nothing ever wrote that key in the first place.
+  it('recognizes origin_city', () => {
     expect(contextRecapPills({ origin_city: 'Bengaluru' })).toContain('From Bengaluru');
-  });
-
-  it('still recognizes the plain origin field', () => {
-    expect(contextRecapPills({ origin: 'Delhi' })).toContain('From Delhi');
   });
 });
 
