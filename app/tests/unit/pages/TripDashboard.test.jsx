@@ -854,9 +854,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Itinerary/ }));
 
       const item = screen.getByText('Arrival at Bhubaneswar (BBI) & Hotel Transfer').closest('.atlas-item');
-      expect(within(item).getByRole('button', { name: 'Resolve ▾' })).toBeInTheDocument();
+      expect(within(item).getByRole('button', { name: 'Check transport options ▾' })).toBeInTheDocument();
       expect(within(item).getByText('Bangalore ⇄ Bhubaneswar round trip')).toBeInTheDocument();
-      await user.click(within(item).getByRole('button', { name: 'Resolve ▾' }));
+      await user.click(within(item).getByRole('button', { name: 'Check transport options ▾' }));
       await waitFor(() => expect(within(item).getByRole('button', { name: 'Hide options ▴' })).toBeInTheDocument());
     });
 
@@ -877,7 +877,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(within(transfer).getByText('Bangalore ⇄ Bhubaneswar round trip')).toBeInTheDocument();
       // The ACTIVITY item between them carries no leg match — no affordance.
       const sunTemple = screen.getByText('Sun Temple, Konark').closest('.atlas-item');
-      expect(within(sunTemple).queryByRole('button', { name: 'Resolve ▾' })).not.toBeInTheDocument();
+      expect(within(sunTemple).queryByRole('button', { name: 'Check transport options ▾' })).not.toBeInTheDocument();
     });
   });
 

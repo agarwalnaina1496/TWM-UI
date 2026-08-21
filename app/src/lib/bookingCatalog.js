@@ -413,8 +413,3 @@ export function activityBookings(days) {
       .map(item => ({ id: `activity-${day.day_number}-${item.title}`, dayNumber: day.day_number, title: item.title, detail: item.detail }))
   );
 }
-
-// Never a bare status word — states exactly what's missing.
-export function notBookedYetLabel(name) {
-  return `${name} not booked yet`;
-}

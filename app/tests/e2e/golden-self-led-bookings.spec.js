@@ -2,10 +2,15 @@ import { test, expect } from '@playwright/test';
 import { GOLDEN_QUERY } from '../../src/data/entryCommandFixtures.js';
 import { commandResponse, mockTripCommandFlow, tripRecord } from './testUtils.js';
 
-// TWM-176: Dashboard Bookings tab replaces the standalone /logistics route
-// with inline resolve for Transport/Stay/Activity. This spec exercises a
-// two-stop trip (so a real transport leg exists) with one Atlas-flagged
-// requires_advance_booking activity, and the trip-independent Support link.
+// Booking options are now shown inline on the Itinerary tab, matched to
+// each day's TRAVEL timeline item(s) (transportLegsByDay + BookingSegment
+// on TripDashboard.jsx) — the standalone Bookings tab this spec used to
+// exercise is temporarily hidden from nav. This spec exercises a two-stop
+// trip (so a real transport leg exists, matched to day 1's arrival TRAVEL
+// item) and the trip-independent Support link. Inline activity-booking
+// options don't exist yet (out of scope for now) — the Atlas-flagged
+// requires_advance_booking activity below is present in the fixture only
+// as a realistic sibling item, not asserted on.
 function twoStopAtlasResult() {
   const reference = { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
   return {
@@ -18,11 +23,18 @@ function twoStopAtlasResult() {
         {
           day_number: 1, date: null, title: 'Coorg base', primary_location: 'Coorg',
           summary: 'Settle into Coorg.',
-          timeline: [{
-            start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Abbey Falls', location: 'Coorg',
-            detail: 'Visit at a relaxed pace.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
-            reference, requires_advance_booking: false, booking_readiness: null,
-          }],
+          timeline: [
+            {
+              start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Arrival in Coorg', location: 'Coorg',
+              detail: 'Fly or drive in from Delhi.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
+              reference, requires_advance_booking: true, booking_readiness: 'suggested',
+            },
+            {
+              start_time: 'Afternoon', end_time: null, kind: 'ACTIVITY', title: 'Abbey Falls', location: 'Coorg',
+              detail: 'Visit at a relaxed pace.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
+              reference, requires_advance_booking: false, booking_readiness: null,
+            },
+          ],
           seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'None required.', backup_plan: null,
         },
         {
@@ -47,7 +59,7 @@ function twoStopAtlasResult() {
   };
 }
 
-test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and Support is reachable with no trip open', async ({ page }) => {
+test('Itinerary tab resolves a transport leg inline, and Support is reachable with no trip open', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
       // A real entry_intent="discover" response always carries at least the
@@ -114,7 +126,7 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
         version: 7,
         trip_state: {
           stage: 'planning', active_agent: 'guide',
-          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin: 'Delhi' },
+          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin_city: 'Delhi' },
           planner_state: {
             conversation_context: { awaiting: null },
             places: ['Abbey Falls'],
@@ -133,7 +145,7 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
         version: 8,
         trip_state: {
           stage: 'planned', active_agent: null,
-          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin: 'Delhi' },
+          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin_city: 'Delhi' },
           planner_state: {
             conversation_context: { awaiting: null },
             places: ['Abbey Falls'],
@@ -153,7 +165,7 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
         version: 9,
         trip_state: {
           stage: 'planned', active_agent: null,
-          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin: 'Delhi' },
+          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin_city: 'Delhi' },
           planner_state: {
             conversation_context: { awaiting: null },
             places: ['Abbey Falls'],
@@ -196,20 +208,16 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
   // TWM-175: a one-time "itinerary ready" prompt covers the tab nav the
   // first time a trip's itinerary is generated — dismiss it first.
   await page.getByRole('button', { name: 'Take a look at the trip first' }).click();
-  await page.getByRole('navigation', { name: 'Trip Dashboard tabs' }).getByRole('button', { name: 'Bookings' }).click();
+  await page.getByRole('navigation', { name: 'Trip Dashboard tabs' }).getByRole('button', { name: 'Itinerary' }).click();
 
   // Transport: the Delhi -> Coorg -> Wayanad -> Delhi route is a round trip
-  // (returns to origin), so it bundles as one priced decision, not per-leg.
-  await expect(page.getByText('🚗 Transport')).toBeVisible();
-  const roundTripLabel = page.getByRole('heading', { name: /Delhi ⇄ Coorg round trip|Delhi ⇄ Wayanad round trip/ });
+  // (returns to origin), so it bundles as one priced decision, not per-leg —
+  // shown inline under day 1's arrival TRAVEL item.
+  const arrivalItem = page.locator('.atlas-item', { has: page.getByText('Arrival in Coorg') });
+  const roundTripLabel = arrivalItem.getByRole('heading', { name: /Delhi ⇄ Coorg round trip|Delhi ⇄ Wayanad round trip/ });
   await expect(roundTripLabel).toBeVisible();
-  await page.getByRole('button', { name: /Resolve/ }).first().click();
-  await expect(page.getByRole('link', { name: 'Check ↗' }).first()).toBeVisible();
-
-  // Activity: only the Atlas-flagged Wayanad safari appears, framed as the exception.
-  await expect(page.getByText(/the exception, not the norm/)).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Wildlife safari/ })).toBeVisible();
-  await expect(page.getByText('Abbey Falls')).toHaveCount(0);
+  await arrivalItem.getByRole('button', { name: /Check transport options/ }).click();
+  await expect(arrivalItem.getByRole('link', { name: 'Check ↗' }).first()).toBeVisible();
 
   // Support: no TWM-Led upsell language anywhere on the tab.
   await page.getByRole('button', { name: 'Support' }).click();

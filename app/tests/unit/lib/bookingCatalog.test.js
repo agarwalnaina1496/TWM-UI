@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   transportOptionsFor, feasibleTransportOptions, transportLegs, bundleRoundTrip,
-  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel,
+  stayLegs, stayOptionsFor, activityBookings, modeLabel,
   fetchLegFeasibility,
 } from '../../../src/lib/bookingCatalog.js';
 
@@ -337,12 +337,5 @@ describe('activityBookings', () => {
   it('is empty when nothing requires advance booking — never renders as an empty section', () => {
     const days = [{ day_number: 1, timeline: [{ kind: 'ACTIVITY', title: 'Walk', requires_advance_booking: false }] }];
     expect(activityBookings(days)).toEqual([]);
-  });
-});
-
-describe('notBookedYetLabel', () => {
-  it('names the specific segment, never a bare generic label', () => {
-    expect(notBookedYetLabel('Delhi → Gwalior')).toBe('Delhi → Gwalior not booked yet');
-    expect(notBookedYetLabel('Gwalior stay')).toBe('Gwalior stay not booked yet');
   });
 });

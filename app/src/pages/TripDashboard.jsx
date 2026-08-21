@@ -12,7 +12,7 @@ import {
 } from '../lib/atlasView.js';
 import {
   transportLegs, transportLegsByDay, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
-  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel,
+  stayLegs, stayOptionsFor, activityBookings, modeLabel,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty, tripContextFacts } from '../lib/tripLifecycle.js';
@@ -467,7 +467,7 @@ function FeasibilityDisclosure({ modes }) {
 // already exists) skip straight to the 🔒-confirmed treatment.
 function BookingSegment({
   label, anchor, expanded, onToggleExpand, loading, loadError, options, excluded, renderOption, onOpenConfirm: _onOpenConfirm,
-  feasibilityModes,
+  feasibilityModes, toggleLabel = 'See options',
 }) {
   if (anchor) {
     return (
@@ -485,10 +485,9 @@ function BookingSegment({
     <div className="stay-block">
       <div className="stay-block-head">
         <div>
-          <span className="state suggested">{notBookedYetLabel(label)}</span>
           <h3 className="route-title">{label}</h3>
         </div>
-        <button type="button" className="btn btn-ghost" onClick={onToggleExpand} aria-expanded={expanded}>{expanded ? 'Hide options ▴' : 'Resolve ▾'}</button>
+        <button type="button" className="btn btn-ghost" onClick={onToggleExpand} aria-expanded={expanded}>{expanded ? 'Hide options ▴' : `${toggleLabel} ▾`}</button>
       </div>
       {expanded && (
         <>
@@ -530,7 +529,6 @@ function ActivitySegment({ activity, anchor, onOpenConfirm: _onOpenConfirm }) {
     <div className="stay-block">
       <div className="stay-block-head">
         <div>
-          <span className="state suggested">{notBookedYetLabel(activity.title)}</span>
           <h3 className="route-title">{activity.title} · Day {activity.dayNumber}</h3>
           <p>{activity.detail}</p>
         </div>
@@ -1062,6 +1060,7 @@ export default function TripDashboard() {
                               feasibilityModes={entry?.feasibility?.modes}
                               renderOption={option => <TransportOptionCard key={option.mode} option={option} />}
                               onOpenConfirm={() => {}}
+                              toggleLabel="Check transport options"
                             />
                           )}
                         </div>
@@ -1111,6 +1110,7 @@ export default function TripDashboard() {
               feasibilityModes={entry?.feasibility?.modes}
               renderOption={option => <TransportOptionCard key={option.mode} option={option} />}
               onOpenConfirm={() => openConfirmForm('transport', label)}
+              toggleLabel="Check transport options"
             />
           );
         })()}
