@@ -8,14 +8,14 @@ import { commandResponse, mockTripCommandFlow, readyItineraryState, tripRecord }
 test('advice journey reaches destination match, Choose Plan and Self-Led Dashboard', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
-      // A real discover_entry response always carries at least the
+      // A real entry_intent="discover" response always carries at least the
       // traveler's original request in trip_context (Scout extracts what it
       // can from the very first turn) — a trip_context-less "new" trip
       // reads as an empty/orphan trip and (TWM-190) now routes straight
       // through ScoutChat's own deep-link empty-trip guard, which would
       // otherwise bounce this fixture home before Delhi's quick-reply chip
       // ever renders.
-      command: 'discover_entry',
+      entryIntent: 'discover',
       response: commandResponse('Where will you be travelling from?', tripRecord({
         version: 2,
         trip_state: {
@@ -27,7 +27,7 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
     },
     {
       // Still stage: 'new' — must keep carrying trip_context for the same
-      // reason as the discover_entry step above, or the empty-trip guard
+      // reason as the entry_intent="discover" step above, or the empty-trip guard
       // fires again on this very turn.
       command: 'traveler_message',
       response: commandResponse('And roughly what total budget would you like to stay within?', tripRecord({

@@ -16,7 +16,7 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
 
   await mockTripCommandFlow(page, [
     {
-      command: 'discover_entry',
+      entryIntent: 'discover',
       response: commandResponse(ASK_ORIGIN, tripRecord({
         version: 2,
         trip_state: {

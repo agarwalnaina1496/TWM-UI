@@ -16,7 +16,7 @@ function successOutcome() {
 test('full flow: header nav entry through Dashboard', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
-      command: 'discover_entry',
+      entryIntent: 'discover',
       response: commandResponse('And roughly what total budget would you like to stay within?', tripRecord({
         version: 2,
         trip_state: { stage: 'matching', active_agent: 'meridian', matcher_state: { conversation_context: { awaiting: 'budget' } } },
@@ -107,7 +107,7 @@ test('full flow: header nav entry through Dashboard', async ({ page }) => {
   // Root shows Dashboard-home's empty state (zero trips); the persistent
   // header nav (TWM-164) is the entry point into a journey, no intermediate
   // GetStarted screen. "Discover Destination" -> shows a hardcoded welcome
-  // with no Backend call, then discover_entry fires only once the traveler
+  // with no Backend call, then entry_intent="discover" fires only once the traveler
   // sends their first message.
   await page.getByText('Discover Destination').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);

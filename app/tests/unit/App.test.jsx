@@ -60,15 +60,15 @@ describe('App guest-first routing (TWM-140)', () => {
       vi.restoreAllMocks();
     });
 
-    it('shows a hardcoded welcome with no Backend call until the traveler sends their first message, then fires discover_entry', async () => {
+    it('shows a hardcoded welcome with no Backend call until the traveler sends their first message, then sends entry_intent="discover"', async () => {
       const user = userEvent.setup();
       fetchMock
         // TripContext boot: list (empty, no trip yet) — the trip itself is
         // created below, atomically with the traveler's first message
         // (TWM-189: no bare create beforehand).
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-        // discover_entry via POST /trips/first-message: Meridian needs
-        // clarification, no Scout call, and this single request both
+        // entry_intent="discover" via POST /trips/first-message: Meridian
+        // needs clarification, no Scout call, and this single request both
         // creates the trip and returns its first response.
         .mockResolvedValueOnce(jsonResponse({
           message: 'What is your rough budget?',
@@ -100,7 +100,7 @@ describe('App guest-first routing (TWM-140)', () => {
       expect(await screen.findByText('What is your rough budget?')).toBeInTheDocument();
       expect(screen.getByText('Somewhere relaxing', { selector: '.chat-bub-user' })).toBeInTheDocument();
       expect(fetchMock.mock.calls[1][0]).toBe('/api/trips/first-message');
-      expect(JSON.parse(fetchMock.mock.calls[1][1].body).command).toBe('discover_entry');
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body).entry_intent).toBe('discover');
 
       await user.click(screen.getByRole('button', { name: '₹1,00,000 total for both' }));
 
@@ -141,13 +141,18 @@ describe('App guest-first routing (TWM-140)', () => {
       vi.restoreAllMocks();
     });
 
-    it('sends known_destination_entry and, once Guide generates places and a day plan together, lands on the unified Plan Builder — never /dashboard', async () => {
+    it('sends entry_intent="known_destination" with the raw message and, once Guide generates places and a day plan together, lands on the unified Plan Builder — never /dashboard', async () => {
       const user = userEvent.setup();
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))
-        // known_destination_entry via POST /trips/first-message — one
-        // request both creates the trip and returns Guide's first turn
-        // (TWM-189: no bare create beforehand).
+        // entry_intent="known_destination" via POST /trips/first-message —
+        // one request both creates the trip and returns Guide's first turn
+        // (TWM-189: no bare create beforehand). The traveler's raw message
+        // goes straight to Guide as `message`, same as every other turn —
+        // Guide's own extraction (guide.md) is what determines
+        // `destinations`, never this command itself (the original Ladakh
+        // bug: a handler pre-writing trip_context.destinations verbatim
+        // from unparsed traveler text, bypassing Guide's extraction).
         .mockResolvedValueOnce(jsonResponse({
           message: "Anything else you'd like to add? Any other preferences?",
           agent_meta: null,
@@ -173,7 +178,7 @@ describe('App guest-first routing (TWM-140)', () => {
       expect(await screen.findByText("Anything else you'd like to add? Any other preferences?")).toBeInTheDocument();
       expect(screen.getByText('Coorg', { selector: '.chat-bub-user' })).toBeInTheDocument();
       expect(fetchMock.mock.calls[1][0]).toBe('/api/trips/first-message');
-      expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ command: 'known_destination_entry', destination: 'Coorg' });
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ entry_intent: 'known_destination', message: 'Coorg' });
 
       fetchMock.mockResolvedValueOnce(jsonResponse({
         message: 'Here is your plan.',

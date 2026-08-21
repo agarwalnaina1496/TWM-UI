@@ -33,11 +33,11 @@ describe('tripApi', () => {
       agent_meta: null,
       trip: { id: 'trip-1', title: 'Untitled Trip', product_mode: 'self_led', version: 1, trip_state: {}, ui_state: {} },
     }));
-    const response = await startTripFromFirstMessage('discover_entry', { message: 'Suggest mountains' });
+    const response = await startTripFromFirstMessage({ entryIntent: 'discover', message: 'Suggest mountains' });
     expect(fetchMock).toHaveBeenCalledWith('/api/trips/first-message', expect.objectContaining({
       credentials: 'include',
       method: 'POST',
-      body: JSON.stringify({ command: 'discover_entry', message: 'Suggest mountains' }),
+      body: JSON.stringify({ entry_intent: 'discover', message: 'Suggest mountains' }),
     }));
     expect(response.trip.id).toBe('trip-1');
     expect(response.message).toBe('Got it.');
