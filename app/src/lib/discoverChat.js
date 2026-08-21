@@ -59,8 +59,10 @@ export function buildFactsPanel(tripContext) {
     .filter(Boolean);
 }
 
-// A hand-off note fires exactly once, only on the actual scout->meridian
-// transition — not on every render where meridian already owns the trip.
+// A hand-off note fires exactly once, only on the actual scout->specialist
+// transition — not on every render where the specialist already owns the
+// trip. TWM-190: covers scout->guide too, now that ScoutChat.jsx is the
+// single conversational surface for both specialists.
 export function didHandoffOccur(previousAgent, nextAgent) {
-  return previousAgent === 'scout' && nextAgent === 'meridian';
+  return previousAgent === 'scout' && (nextAgent === 'meridian' || nextAgent === 'guide');
 }

@@ -5,8 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import JourneyEntry from '../../../src/pages/JourneyEntry.jsx';
 
 const navigate = vi.fn();
-let commandSnapshot;
-let sendTripCommand;
 let startTrip;
 let currentTripId;
 let tripLoadStatus;
@@ -14,7 +12,7 @@ let openTrip;
 let searchParams = new URLSearchParams();
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand, startTrip, currentTripId, tripLoadStatus, openTrip }),
+  useTrip: () => ({ startTrip, currentTripId, tripLoadStatus, openTrip }),
 }));
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
@@ -27,65 +25,112 @@ function readyPlannerState() {
     conversation_context: { awaiting: null },
     places: ['Triveni Ghat'],
     day_plan: [{ day_number: 1, date: null, places: ['Triveni Ghat'], pace: 'relaxed', buffer_note: null }],
-    revision: 3,
+    revision: 1,
   };
 }
 
-describe('JourneyEntry known-destination chat', () => {
+// TWM-190: JourneyEntry.jsx now only owns the traveler's first message —
+// everything after that lives on ScoutChat.jsx. These tests replace the
+// old inline-chat coverage with the new send-then-redirect behavior.
+describe('JourneyEntry first-message entry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    commandSnapshot = null;
     startTrip = vi.fn();
     currentTripId = null;
+    tripLoadStatus = 'ready';
     openTrip = vi.fn();
-    searchParams = new URLSearchParams();
+    searchParams = new URLSearchParams('intent=known_destination');
   });
 
-  // TWM-185: a hard reload/bookmark on /journey-entry?tripId=... (resuming a
-  // mid-conversation trip) must resolve that trip via a full fetch. The
-  // normal fresh-entry path (startNewTrip() first, no ?tripId=) is
-  // untouched — the hook simply no-ops when the param is absent.
-  it('resolves the trip named by ?tripId= via openTrip when landing fresh', () => {
+  it('resolves the trip named by ?tripId= via openTrip when landing on a resumed URL', () => {
     searchParams = new URLSearchParams('intent=known_destination&tripId=trip-1');
     render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
     expect(openTrip).toHaveBeenCalledWith('trip-1');
   });
 
   it('does not call openTrip for a genuinely new trip (no ?tripId=)', () => {
-    searchParams = new URLSearchParams('intent=known_destination');
     render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
     expect(openTrip).not.toHaveBeenCalled();
   });
 
-  // TWM-183: the input's accessible label/placeholder must track the
-  // active question across turns, not stay stuck on "Destination".
-  it('binds the input label/placeholder to the active question across a multi-turn sequence', () => {
-    commandSnapshot = null;
-    const { rerender } = render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
-    expect(screen.getByRole('textbox', { name: 'Destination' })).toHaveAttribute('placeholder', 'e.g. Coorg, Karnataka');
-
-    commandSnapshot = { trip_state: { planner_state: { conversation_context: { awaiting: 'origin_city' }, places: [], day_plan: [] } } };
-    rerender(<MemoryRouter><JourneyEntry /></MemoryRouter>);
-    expect(screen.getByRole('textbox', { name: 'Starting location' })).toHaveAttribute('placeholder', 'e.g. Delhi');
-
-    commandSnapshot = { trip_state: { planner_state: { conversation_context: { awaiting: 'budget' }, places: [], day_plan: [] } } };
-    rerender(<MemoryRouter><JourneyEntry /></MemoryRouter>);
-    expect(screen.getByRole('textbox', { name: 'Budget' })).toHaveAttribute('placeholder', 'e.g. ₹1,00,000 total for both');
+  it('redirects straight to /scout-chat when a trip already exists for this URL', () => {
+    searchParams = new URLSearchParams('intent=known_destination&tripId=trip-1');
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(navigate).toHaveBeenCalledWith('/scout-chat?tripId=trip-1', { replace: true });
+    expect(startTrip).not.toHaveBeenCalled();
   });
 
-  // TWM-183: submitDestination optimistically clears the input state before
-  // awaiting the network response — "Try again" must resend the value that
-  // was actually submitted, not the now-cleared input (which used to make
-  // its own `if (!value...) return;` guard silently no-op).
-  it('"Try again" resends the last submitted value after a failure, not the cleared input', async () => {
-    commandSnapshot = null;
-    // TWM-189: a genuinely new trip's first send goes through startTrip(),
-    // not sendTripCommand() — no bare create happens before it, so a
-    // failure here leaves no trip at all and "Try again" simply retries
-    // the same startTrip() call.
+  it('redirects straight to /scout-chat when currentTripId is already set (same-session re-render)', () => {
+    currentTripId = 'trip-2';
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(navigate).toHaveBeenCalledWith('/scout-chat?tripId=trip-2', { replace: true });
+  });
+
+  it('does not redirect a genuinely fresh entry (no tripId anywhere)', () => {
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('renders the known-destination "Trip setup" framing, Discover renders "✦ Scout"', () => {
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(screen.getByText('Trip setup')).toBeInTheDocument();
+
+    searchParams = new URLSearchParams('intent=discover_destination');
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    expect(screen.getByText('✦ Scout')).toBeInTheDocument();
+  });
+
+  it('known-destination: sends known_destination_entry and redirects to /scout-chat carrying the exchange forward', async () => {
+    startTrip = vi.fn(async () => ({
+      message: 'Great — how many travelers?',
+      trip: { id: 'trip-1', trip_state: { planner_state: { conversation_context: { awaiting: 'num_travelers' }, places: [], day_plan: [] } } },
+    }));
+    const user = userEvent.setup();
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    await user.type(screen.getByRole('textbox', { name: 'Destination' }), 'Goa{Enter}');
+
+    expect(startTrip).toHaveBeenCalledWith('known_destination_entry', { destination: 'Goa' });
+    expect(navigate).toHaveBeenCalledWith('/scout-chat?tripId=trip-1', {
+      state: { firstTurn: { userMessage: 'Goa', responseMessage: 'Great — how many travelers?' } },
+    });
+  });
+
+  it('discover: sends discover_entry and redirects to /scout-chat carrying the exchange forward', async () => {
+    searchParams = new URLSearchParams('intent=discover_destination');
+    startTrip = vi.fn(async () => ({
+      message: 'To start, where will you be traveling from?',
+      trip: { id: 'trip-1', trip_state: { trip_context: {} } },
+    }));
+    const user = userEvent.setup();
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    await user.type(screen.getByRole('textbox', { name: 'Message Scout' }), 'Somewhere relaxing{Enter}');
+
+    expect(startTrip).toHaveBeenCalledWith('discover_entry', { message: 'Somewhere relaxing' });
+    expect(navigate).toHaveBeenCalledWith('/scout-chat?tripId=trip-1', {
+      state: { firstTurn: { userMessage: 'Somewhere relaxing', responseMessage: 'To start, where will you be traveling from?' } },
+    });
+  });
+
+  it('routes straight to the unified Plan Builder, never ScoutChat, when Guide generates the plan on this very first turn', async () => {
+    startTrip = vi.fn(async () => ({
+      message: 'Here is your plan.',
+      trip: { id: 'trip-1', trip_state: { planner_state: readyPlannerState() } },
+    }));
+    const user = userEvent.setup();
+    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
+    await user.type(screen.getByRole('textbox', { name: 'Destination' }), 'Goa{Enter}');
+
+    expect(navigate).toHaveBeenCalledWith('/trip-preview?tripId=trip-1', { state: { guideMessage: 'Here is your plan.' } });
+    expect(navigate).not.toHaveBeenCalledWith(expect.stringContaining('/scout-chat'), expect.anything());
+  });
+
+  // TWM-183 (carried over): submit optimistically clears the input before
+  // awaiting the response — "Try again" must resend the value that was
+  // actually submitted, not the now-cleared input.
+  it('"Try again" resends the last submitted value after a failure', async () => {
     startTrip = vi.fn()
       .mockRejectedValueOnce(new Error('The request timed out. Please try again.'))
-      .mockResolvedValueOnce({ message: 'Got it.', trip: { trip_state: { planner_state: { conversation_context: { awaiting: 'origin_city' }, places: [], day_plan: [] } } } });
+      .mockResolvedValueOnce({ message: 'Got it.', trip: { id: 'trip-1', trip_state: { planner_state: { conversation_context: { awaiting: 'origin_city' }, places: [], day_plan: [] } } } });
     const user = userEvent.setup();
     render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
 
@@ -96,67 +141,5 @@ describe('JourneyEntry known-destination chat', () => {
 
     expect(startTrip).toHaveBeenCalledTimes(2);
     expect(startTrip).toHaveBeenNthCalledWith(2, 'known_destination_entry', { destination: 'Goa' });
-  });
-
-  it('asks the sixth "anything else" question once the five fixed fields are answered', () => {
-    commandSnapshot = {
-      trip_state: {
-        planner_state: { conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [] },
-      },
-    };
-    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
-    expect(screen.getByRole('button', { name: "Nothing else, let's plan" })).toBeInTheDocument();
-  });
-
-  it('routes straight to the unified Plan Builder once Guide generates places and a day plan together, never /dashboard', async () => {
-    commandSnapshot = { trip_state: { planner_state: { conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [] } } };
-    // Already at the gate's final question implies the trip and its earlier
-    // turns already exist — this send is a traveler_message, not a first
-    // send, so a trip id must already be current.
-    currentTripId = 'trip-1';
-    sendTripCommand = vi.fn(async () => ({
-      message: 'Here is your plan.',
-      trip: { trip_state: { planner_state: readyPlannerState() } },
-    }));
-    const user = userEvent.setup();
-    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
-    // TWM-183: awaiting is 'anything_else' here, so the input's accessible
-    // label correctly tracks that question now, not a stuck "Destination".
-    const input = screen.getByRole('textbox', { name: 'Anything else to add' });
-    await user.type(input, "Nothing else, let's plan");
-    await user.click(screen.getByRole('button', { name: 'Start planning' }));
-    expect(navigate).toHaveBeenCalledWith('/trip-preview', { state: { guideMessage: 'Here is your plan.' } });
-    expect(navigate).not.toHaveBeenCalledWith('/dashboard');
-  });
-});
-
-describe('JourneyEntry Discover refresh recap and facts panel (TWM-173)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    commandSnapshot = null;
-    startTrip = vi.fn();
-    currentTripId = null;
-    tripLoadStatus = 'ready';
-    searchParams = new URLSearchParams('intent=discover_destination');
-  });
-
-  it('shows the cold-open greeting for a fresh Discover session with no saved context', () => {
-    commandSnapshot = { trip_state: {} };
-    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
-    expect(screen.getByText(/Hey there! I'm Scout/)).toBeInTheDocument();
-    expect(screen.getByText('To start, where will you be traveling from?')).toBeInTheDocument();
-  });
-
-  it('shows a recap turn instead of the cold-open greeting after a refresh mid-conversation', () => {
-    commandSnapshot = { trip_state: { trip_context: { origin: 'Delhi' } } };
-    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
-    expect(screen.queryByText(/Hey there! I'm Scout/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Picking up where you left off/)).toBeInTheDocument();
-  });
-
-  it('shows the live facts panel for known trip_context fields', () => {
-    commandSnapshot = { trip_state: { trip_context: { origin: 'Delhi', travelers: 2 } } };
-    render(<MemoryRouter><JourneyEntry /></MemoryRouter>);
-    expect(screen.getByLabelText('What we know so far')).toBeInTheDocument();
   });
 });

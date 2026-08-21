@@ -72,14 +72,19 @@ describe('buildFactsPanel', () => {
 });
 
 describe('didHandoffOccur', () => {
-  it('is true only for the exact scout -> meridian transition', () => {
+  // TWM-190: ScoutChat.jsx is now the single conversational surface for
+  // both specialists, so a live scout->guide handoff (Scout detects
+  // planner intent) needs its own note too, not just scout->meridian.
+  it('is true for the scout -> meridian and scout -> guide transitions', () => {
     expect(didHandoffOccur('scout', 'meridian')).toBe(true);
+    expect(didHandoffOccur('scout', 'guide')).toBe(true);
   });
 
   it('is false for every other transition, including no-op re-renders', () => {
     expect(didHandoffOccur('meridian', 'meridian')).toBe(false);
+    expect(didHandoffOccur('guide', 'guide')).toBe(false);
     expect(didHandoffOccur(null, 'scout')).toBe(false);
-    expect(didHandoffOccur('scout', 'guide')).toBe(false);
+    expect(didHandoffOccur('meridian', 'guide')).toBe(false);
     expect(didHandoffOccur(undefined, undefined)).toBe(false);
   });
 });

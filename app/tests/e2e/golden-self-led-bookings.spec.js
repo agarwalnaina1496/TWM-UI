@@ -50,17 +50,35 @@ function twoStopAtlasResult() {
 test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and Support is reachable with no trip open', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
+      // A real discover_entry response always carries at least the
+      // traveler's original request in trip_context (Scout extracts what it
+      // can from the very first turn) — a trip_context-less "new" trip
+      // reads as an empty/orphan trip and (TWM-190) now routes straight
+      // through ScoutChat's own deep-link empty-trip guard, which would
+      // otherwise bounce this fixture home before Delhi's quick-reply chip
+      // ever renders.
       command: 'discover_entry',
       response: commandResponse('Where will you be travelling from?', tripRecord({
         version: 2,
-        trip_state: { stage: 'new', active_agent: 'scout', matcher_state: { conversation_context: { awaiting: 'origin_city' } } },
+        trip_state: {
+          stage: 'new', active_agent: 'scout',
+          trip_context: { original_traveler_request: GOLDEN_QUERY },
+          matcher_state: { conversation_context: { awaiting: 'origin_city' } },
+        },
       })),
     },
     {
+      // Still stage: 'new' — must keep carrying trip_context for the same
+      // reason as the discover_entry step above, or the empty-trip guard
+      // fires again on this very turn.
       command: 'traveler_message',
       response: commandResponse('And roughly what total budget would you like to stay within?', tripRecord({
         version: 3,
-        trip_state: { stage: 'new', active_agent: 'scout', matcher_state: { conversation_context: { awaiting: 'budget' } } },
+        trip_state: {
+          stage: 'new', active_agent: 'scout',
+          trip_context: { original_traveler_request: GOLDEN_QUERY },
+          matcher_state: { conversation_context: { awaiting: 'budget' } },
+        },
       })),
     },
     {
@@ -162,6 +180,9 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
   await expect(page).toHaveURL(/\/app\/journey-entry/);
   await page.getByPlaceholder('Tell Scout about your trip…').fill(GOLDEN_QUERY);
   await page.getByLabel('Send').click();
+  // TWM-190: JourneyEntry only sends the first message and redirects to
+  // ScoutChat — the rest of the conversation happens there, not inline.
+  await expect(page).toHaveURL(/\/app\/scout-chat/);
   await page.getByRole('button', { name: 'Delhi' }).click();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
   await page.getByRole('button', { name: 'See destinations →' }).click();

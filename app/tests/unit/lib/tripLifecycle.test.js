@@ -54,15 +54,27 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
   it.each([
     ['new, no context', {}, '/'],
     ['new, has context', { trip_context: { origin: 'Delhi' } }, '/scout-chat'],
-    ['matching', { stage: 'matching' }, '/scout-chat'],
+    ['matching, no recommendation yet', { stage: 'matching' }, '/scout-chat'],
     ['recommendation_ready (removed, TWM-188)', { stage: 'recommendation_ready' }, '/'],
     ['recommended', { stage: 'recommended' }, '/destinations'],
     ['matched', { stage: 'matched' }, '/destinations'],
-    ['planning', { stage: 'planning' }, '/trip-preview'],
-    ['plan_ready', { stage: 'plan_ready' }, '/trip-preview'],
+    ['planning, no day_plan yet', { stage: 'planning' }, '/scout-chat'],
+    ['plan_ready', { stage: 'plan_ready', has_day_plan: true }, '/trip-preview'],
     ['planned', { stage: 'planned' }, '/dashboard'],
     ['itinerary ready overrides stage', { stage: 'matched', itinerary_state: { status: 'ready' } }, '/dashboard'],
   ])('stageCta: %s -> %s', (_label, overrides, expectedTo) => {
+    expect(stageCta(state(overrides)).to).toBe(expectedTo);
+  });
+
+  // TWM-190: planning/matching route by whether the stage's defining
+  // artifact actually exists (day_plan / a recommendation round), not by
+  // stage string alone.
+  it.each([
+    ['planning with a day_plan already (in substance plan_ready)', { stage: 'planning', has_day_plan: true }, '/trip-preview'],
+    ['plan_ready without has_day_plan set (inconsistent summary, falls back)', { stage: 'plan_ready' }, '/trip-preview'],
+    ['matching with an existing recommendation (refinement awaiting clarification)', { stage: 'matching', has_recommendation: true }, '/destinations'],
+    ['matching with no recommendation', { stage: 'matching', has_recommendation: false }, '/scout-chat'],
+  ])('stageCta artifact-based routing: %s -> %s', (_label, overrides, expectedTo) => {
     expect(stageCta(state(overrides)).to).toBe(expectedTo);
   });
 });

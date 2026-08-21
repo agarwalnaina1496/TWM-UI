@@ -191,4 +191,43 @@ describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.queryByText(/Bringing in Meridian/)).not.toBeInTheDocument();
   });
+
+  // TWM-190: ScoutChat.jsx is now the single conversational surface for
+  // Guide too — its recap and hand-off note must be agent-aware, not
+  // hardcoded to Meridian's phrasing/data shape.
+  it('shows a Guide-phrased recap turn (not Meridian\'s) when resuming a Guide-owned trip', () => {
+    commandSnapshot = {
+      trip_state: {
+        active_agent: 'guide',
+        trip_context: { destinations: ['Coorg'], origin: 'Delhi' },
+        planner_state: { conversation_context: { awaiting: 'budget' } },
+      },
+    };
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.queryByText(/Hey there! I'm Scout/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Picking up where you left off — planning Coorg/)).toBeInTheDocument();
+    expect(screen.getByText(/I still need to know about budget/)).toBeInTheDocument();
+  });
+
+  it('shows the hand-off note exactly once, on the real scout -> guide transition', async () => {
+    commandSnapshot = { trip_state: { active_agent: 'scout', trip_context: { origin: 'Delhi' } } };
+    sendTripCommand = vi.fn(async () => ({
+      message: 'Let\'s get your plan started.',
+      trip: { trip_state: { active_agent: 'guide', planner_state: { conversation_context: { awaiting: null }, places: [], day_plan: [] } } },
+    }));
+    const { rerender } = render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.queryByText(/Bringing in Guide/)).not.toBeInTheDocument();
+
+    commandSnapshot = { trip_state: { active_agent: 'guide', trip_context: { origin: 'Delhi' } } };
+    rerender(<MemoryRouter><ScoutChat /></MemoryRouter>);
+
+    expect(await screen.findByText(/Bringing in Guide, who builds your day-by-day plan/)).toBeInTheDocument();
+    expect(sendTripCommand).not.toHaveBeenCalled();
+  });
+
+  it('shows no hand-off note when a trip loads already owned by guide', () => {
+    commandSnapshot = { trip_state: { active_agent: 'guide', trip_context: { origin: 'Delhi' } } };
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.queryByText(/Bringing in Guide/)).not.toBeInTheDocument();
+  });
 });

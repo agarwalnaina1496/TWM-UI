@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Destinations from '../../../src/pages/Destinations.jsx';
 import { TripProvider } from '../../../src/context/TripContext.jsx';
 import { wrapFetchMockWithGuestSession } from '../testUtils.js';
@@ -92,6 +92,24 @@ function renderDestinations(initialEntries = ['/destinations?next=preview']) {
     <MemoryRouter initialEntries={initialEntries}>
       <TripProvider>
         <Destinations />
+      </TripProvider>
+    </MemoryRouter>
+  );
+}
+
+// TWM-190: routes with real stub destinations for /trip-preview and
+// /scout-chat, so artifact-based routing (day_plan present vs. still
+// gating) can be verified by what actually renders after navigation,
+// not just by mocking useNavigate.
+function renderDestinationsWithRouting(initialEntries = ['/destinations?next=preview']) {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <TripProvider>
+        <Routes>
+          <Route path="/destinations" element={<Destinations />} />
+          <Route path="/trip-preview" element={<div>Trip Preview screen</div>} />
+          <Route path="/scout-chat" element={<div>Scout Chat screen</div>} />
+        </Routes>
       </TripProvider>
     </MemoryRouter>
   );
@@ -303,6 +321,66 @@ describe('Destinations (real Meridian integration)', () => {
     })));
   });
 
+  // TWM-190: artifact-based routing — start_planning finishing the plan on
+  // this very turn lands on Trip Preview.
+  it('lands on Trip Preview when start_planning completes the plan (day_plan present) with no checkpoint gap', async () => {
+    const server = createServer({ recommendation: successOutcome() });
+    server.queueCommand(() => jsonResponse({
+      message: 'Madhya Pradesh Heritage and Nature is confirmed.', agent_meta: null,
+      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
+    }));
+    server.queueCommand(() => jsonResponse({
+      message: 'Here is your plan.', agent_meta: null,
+      trip: {
+        id: 'trip-1', title: 'Trip', version: 5,
+        trip_state: {
+          ...server.tripState,
+          planner_state: {
+            conversation_context: { awaiting: null }, places: ['Gwalior Fort'],
+            day_plan: [{ day_number: 1, date: null, places: ['Gwalior Fort'], pace: 'balanced', buffer_note: null }],
+          },
+        },
+      },
+    }));
+    fetchMock = createFetchMock(server);
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
+
+    renderDestinationsWithRouting();
+    await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Plan this trip →'));
+
+    expect(await screen.findByText('Trip Preview screen')).toBeInTheDocument();
+  });
+
+  // TWM-190: when start_planning instead leaves Guide still gating (no
+  // checkpoint gap, but no day_plan yet either — e.g. the "anything else?"
+  // question), the conversation belongs on ScoutChat, not Trip Preview.
+  it('lands on Scout Chat instead of Trip Preview when start_planning leaves Guide still gating with no day_plan yet', async () => {
+    const server = createServer({ recommendation: successOutcome() });
+    server.queueCommand(() => jsonResponse({
+      message: 'Madhya Pradesh Heritage and Nature is confirmed.', agent_meta: null,
+      trip: { id: 'trip-1', title: 'Trip', version: 4, trip_state: server.tripState, ui_state: {} },
+    }));
+    server.queueCommand(() => jsonResponse({
+      message: 'Anything else you would like to add?', agent_meta: null,
+      trip: {
+        id: 'trip-1', title: 'Trip', version: 5,
+        trip_state: {
+          ...server.tripState,
+          planner_state: { conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [] },
+        },
+      },
+    }));
+    fetchMock = createFetchMock(server);
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
+
+    renderDestinationsWithRouting();
+    await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Plan this trip →'));
+
+    expect(await screen.findByText('Scout Chat screen')).toBeInTheDocument();
+  });
+
   it('More like this sends the structured reference without committing selection', async () => {
     const server = createServer({ recommendation: successOutcome() });
     server.queueCommand(() => {
@@ -399,6 +477,56 @@ describe('Destinations (real Meridian integration)', () => {
 
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
     expect(screen.getByText('Overnight train, four multi-night bases')).toBeInTheDocument();
+  });
+
+  // TWM-190: the already-selected shortcut (no start_planning re-call) must
+  // still route by artifact existence — a prior planning session with no
+  // day_plan yet belongs on Scout Chat, not Trip Preview.
+  it('routes the already-selected shortcut to Scout Chat when a planning session exists with no day_plan yet', async () => {
+    const server = createServer({
+      recommendation: successOutcome(),
+      tripState: tripState({
+        trip_context: {
+          origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2,
+          selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
+        },
+        planner_state: { conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [] },
+      }),
+    });
+    fetchMock = createFetchMock(server);
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
+    renderDestinationsWithRouting();
+
+    await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Plan this trip →'));
+
+    expect(await screen.findByText('Scout Chat screen')).toBeInTheDocument();
+  });
+
+  // TWM-190: the same shortcut routes to Trip Preview when a day_plan
+  // already exists.
+  it('routes the already-selected shortcut to Trip Preview when a day_plan already exists', async () => {
+    const server = createServer({
+      recommendation: successOutcome(),
+      tripState: tripState({
+        trip_context: {
+          origin: 'Delhi', budget: '₹1,00,000 total for both', travelers: 2,
+          selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' },
+        },
+        planner_state: {
+          conversation_context: { awaiting: null }, places: ['Gwalior Fort'],
+          day_plan: [{ day_number: 1, date: null, places: ['Gwalior Fort'], pace: 'balanced', buffer_note: null }],
+        },
+      }),
+    });
+    fetchMock = createFetchMock(server);
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
+    renderDestinationsWithRouting();
+
+    await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Plan this trip →'));
+
+    expect(await screen.findByText('Trip Preview screen')).toBeInTheDocument();
   });
 
   it('shows a Selected badge and the same "Plan this trip →" CTA for an option already chosen on the Backend', async () => {

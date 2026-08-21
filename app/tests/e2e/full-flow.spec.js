@@ -111,9 +111,13 @@ test('full flow: header nav entry through Dashboard', async ({ page }) => {
   // sends their first message.
   await page.getByText('Discover Destination').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
-  await expect(page.getByText(/tell me about the trip you have in mind/i)).toBeVisible();
+  await expect(page.getByText(/tell Scout what matters to you/i)).toBeVisible();
   await page.getByPlaceholder('Tell Scout about your trip…').fill('Somewhere relaxing');
   await page.getByLabel('Send').click();
+
+  // TWM-190: JourneyEntry only sends the first message and redirects to
+  // ScoutChat — the exchange renders there, not inline.
+  await expect(page).toHaveURL(/\/app\/scout-chat/);
   await expect(page.getByText('And roughly what total budget would you like to stay within?')).toBeVisible();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
   await expect(page.getByRole('button', { name: 'See destinations →' })).toBeVisible();
