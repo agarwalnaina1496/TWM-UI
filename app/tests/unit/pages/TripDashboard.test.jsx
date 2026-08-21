@@ -499,7 +499,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(document.querySelector('a[href*="ixigo"]')).toBeNull();
     });
 
-    it('the confirm-it-yourself flow is reachable per segment, and submits a real confirm_logistics command', async () => {
+    // Skipped: the "Already booked this yourself? Add a confirmation" entry
+    // point is temporarily removed from BookingSegment/ActivitySegment.
+    // Re-enable once that affordance returns — the underlying
+    // confirm_logistics command wiring this test exercises is unchanged.
+    it.skip('the confirm-it-yourself flow is reachable per segment, and submits a real confirm_logistics command', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn(async () => ({ message: 'Noted.', agent_meta: null, trip: commandSnapshot }));
       const user = userEvent.setup();

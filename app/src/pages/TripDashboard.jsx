@@ -492,7 +492,7 @@ function FeasibilityDisclosure({ modes }) {
 // navigation, no separate Logistics page. Confirmed segments (an anchor
 // already exists) skip straight to the 🔒-confirmed treatment.
 function BookingSegment({
-  label, anchor, expanded, onToggleExpand, loading, loadError, options, excluded, renderOption, onOpenConfirm,
+  label, anchor, expanded, onToggleExpand, loading, loadError, options, excluded, renderOption, onOpenConfirm: _onOpenConfirm,
   recommended, feasibilityModes,
 }) {
   if (anchor) {
@@ -530,7 +530,6 @@ function BookingSegment({
               {feasibilityModes && <FeasibilityDisclosure modes={feasibilityModes} />}
             </>
           )}
-          <p className="already-booked-note">Already booked this yourself? <button type="button" className="link-button" onClick={onOpenConfirm}>Add a confirmation →</button></p>
         </>
       )}
     </div>
@@ -541,7 +540,7 @@ function BookingSegment({
 // requires_advance_booking items — no mock options catalog, since there's
 // no realistic "shop for an activity" search to fabricate. Just a
 // self-confirm affordance, framed as the exception for that day.
-function ActivitySegment({ activity, anchor, onOpenConfirm }) {
+function ActivitySegment({ activity, anchor, onOpenConfirm: _onOpenConfirm }) {
   if (anchor) {
     return (
       <article className="dashboard-card anchor-card">
@@ -563,7 +562,6 @@ function ActivitySegment({ activity, anchor, onOpenConfirm }) {
           <p>{activity.detail}</p>
         </div>
       </div>
-      <p className="already-booked-note">Already booked this yourself? <button type="button" className="link-button" onClick={onOpenConfirm}>Add a confirmation →</button></p>
     </div>
   );
 }
