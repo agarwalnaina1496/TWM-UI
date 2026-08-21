@@ -787,10 +787,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.getByText('No external sources cited.')).toBeInTheDocument();
   });
 
-  // TWM-175: verified/general-guidance (outline) and booking-readiness
-  // (filled) are visually distinct axes — a timeline item carrying both
-  // must render both, not collapse to one.
-  it('renders both an outline verification tag and a filled booking-readiness tag on the same item', async () => {
+  // Skipped: the timeline's verification tag (General guidance/Verified) is
+  // temporarily removed — only the booking-readiness tag renders now, so
+  // this "renders both" case no longer applies. Re-enable if the
+  // verification tag returns to the timeline.
+  it.skip('renders both an outline verification tag and a filled booking-readiness tag on the same item', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     const user = userEvent.setup();

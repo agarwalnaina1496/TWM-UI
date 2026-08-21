@@ -1014,7 +1014,6 @@ export default function TripDashboard() {
                   <div className="item-summary-row">
                     <strong>{item.title}</strong>
                     {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
-                    <VerificationTag status={item.reference?.status} />
                     <BookingReadinessBadge status={item.booking_readiness} />
                   </div>
                   <p>{item.detail}</p>
