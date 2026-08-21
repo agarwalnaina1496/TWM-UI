@@ -39,16 +39,6 @@ export default function ScoutChat() {
   const [error, setError] = useState(null);
   const initialized = useRef(false);
   const lastCommand = useRef(null);
-  // The very first turn is a typed scout_entry (Scout entry, no rediscovery);
-  // once a specialist owns the trip, follow-ups are plain traveler_message.
-  // TWM-188 item 4: entered.current alone only tracked whether *this
-  // component mount* had sent a message yet — a fresh mount landing on an
-  // already-owned trip (resumed via a stage-based CTA into /scout-chat)
-  // would still send scout_entry for its first message here, letting
-  // Scout silently re-decide an already-Meridian/Guide-owned trip's agent.
-  // Also check the trip's own active_agent so a genuine resume never
-  // re-enters Scout.
-  const entered = useRef(false);
   const previousAgent = useRef(null);
 
   function say(role, text) {
@@ -64,13 +54,7 @@ export default function ScoutChat() {
     setBusy(true);
     setError(null);
     try {
-      // "scout" is the canonical default active_agent for every trip
-      // (canonical_state()) — only "meridian"/"guide" mean a specialist has
-      // actually taken ownership and Scout must not re-run intent detection.
-      const alreadyOwned = ['meridian', 'guide'].includes(commandSnapshot?.trip_state?.active_agent);
-      const command = (entered.current || alreadyOwned) ? 'traveler_message' : 'scout_entry';
-      const response = await sendTripCommand(command, { message: text, idempotencyKey });
-      entered.current = true;
+      const response = await sendTripCommand('traveler_message', { message: text, idempotencyKey });
       const plannerState = response.trip.trip_state.planner_state;
       if (planReady(plannerState)) {
         // Guide generated the complete plan in this turn — go straight to
@@ -103,11 +87,10 @@ export default function ScoutChat() {
     initialized.current = true;
     // TWM-190: JourneyEntry.jsx sends the trip's first command itself
     // (discover_entry/known_destination_entry) and redirects here with the
-    // already-completed exchange, rather than this page re-sending it as a
-    // fresh scout_entry — render it directly instead of a cold-open/recap.
+    // already-completed exchange, rather than this page re-sending it —
+    // render it directly instead of a cold-open/recap.
     const firstTurn = location.state?.firstTurn;
     if (firstTurn) {
-      entered.current = true;
       say('user', firstTurn.userMessage);
       if (firstTurn.responseMessage) say('assistant', firstTurn.responseMessage);
       return;
