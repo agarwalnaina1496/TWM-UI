@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   transportOptionsFor, feasibleTransportOptions, transportLegs, bundleRoundTrip,
-  stayLegs, stayOptionsFor, activityBookings, modeLabel,
+  stayLegs, stayOptionsFor, activityBookings, modeLabel, partnerLabel,
   fetchLegFeasibility,
 } from '../../../src/lib/bookingCatalog.js';
 
@@ -116,6 +116,12 @@ describe('transportOptionsFor', () => {
     const options = await transportOptionsFor('trip-1', leg);
     expect(options.map(o => o.mode)).toEqual(['flight', 'train', 'bus', 'drive']);
     expect(options.find(o => o.mode === 'flight')).toMatchObject({ status: 'resolved', url: 'https://www.ixigo.com/search?domain=flight', affiliateDisclosure: true });
+  });
+
+  it('carries the resolved partner (target.partner) onto option.partner for train/bus — no data API, so the CTA names the partner directly', async () => {
+    const options = await transportOptionsFor('trip-1', leg);
+    expect(options.find(o => o.mode === 'train')).toMatchObject({ status: 'resolved', partner: 'ixigo' });
+    expect(options.find(o => o.mode === 'bus')).toMatchObject({ status: 'resolved', partner: 'ixigo' });
   });
 
   it('drive has no trusted-action domain — feasibility-only, no network call, no CTA', async () => {
@@ -278,6 +284,18 @@ describe('feasibleTransportOptions', () => {
   it('every option carries a real mode label, not a raw enum', () => {
     expect(modeLabel('flight')).toBe('Flight');
     expect(modeLabel('unknown')).toBe('unknown');
+  });
+});
+
+describe('partnerLabel', () => {
+  it('maps a known partner to its display name', () => {
+    expect(partnerLabel('ixigo')).toBe('ixigo');
+    expect(partnerLabel('redbus')).toBe('redBus');
+    expect(partnerLabel('booking_com')).toBe('Booking.com');
+  });
+
+  it('falls back to the raw partner value when unmapped', () => {
+    expect(partnerLabel('some_new_partner')).toBe('some_new_partner');
   });
 });
 

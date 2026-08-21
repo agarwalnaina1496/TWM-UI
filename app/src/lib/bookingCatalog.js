@@ -235,6 +235,19 @@ async function resolveTransportOption(tripId, leg, mode, travelerCount) {
   }
 }
 
+// Partner display names — twm/schemas/trusted_action.py's PartnerName
+// allowlist. Surfaced on the CTA for redirect-only modes (train/bus) so the
+// button is honest about what it actually does: a prefilled search handoff
+// to a named partner, not a TWM-ranked result — distinct from flight, which
+// has a real priced live-offer (see FlightLiveOfferInfo) to show instead.
+const PARTNER_LABEL = {
+  hotellook: 'Hotellook', booking_com: 'Booking.com', agoda: 'Agoda', hostelworld: 'Hostelworld',
+  ixigo: 'ixigo', redbus: 'redBus',
+};
+export function partnerLabel(partner) {
+  return PARTNER_LABEL[partner] || partner;
+}
+
 function toTransportOption(mode, name, result) {
   if (result.status === 'resolved') {
     const action = result.action;
@@ -243,6 +256,7 @@ function toTransportOption(mode, name, result) {
       name,
       status: 'resolved',
       url: action.target?.target_url ?? null,
+      partner: action.target?.partner ?? null,
       internalCapability: action.internal_capability ?? null,
       affiliateDisclosure: !!action.affiliate_disclosure,
     };
@@ -374,12 +388,9 @@ export function stayLegs(days) {
 // _ALLOWED_PARTNERS_BY_DOMAIN["stay"]), capped to 3 so the Bookings tab
 // still shows a tiered comparison rather than every approved partner.
 const STAY_PARTNERS = ['hotellook', 'booking_com', 'agoda'];
-const PARTNER_LABEL = {
-  hotellook: 'Hotellook', booking_com: 'Booking.com', agoda: 'Agoda', hostelworld: 'Hostelworld', ixigo: 'ixigo',
-};
 
 async function resolveStayOption(tripId, stay, partner) {
-  const name = `${stay.location} — ${PARTNER_LABEL[partner] || partner}`;
+  const name = `${stay.location} — ${partnerLabel(partner)}`;
   try {
     const result = await resolveTrustedAction(tripId, {
       action_type: 'SEARCH_REDIRECT',

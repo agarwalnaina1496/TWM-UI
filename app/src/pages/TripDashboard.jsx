@@ -12,7 +12,7 @@ import {
 } from '../lib/atlasView.js';
 import {
   transportLegs, transportLegsByDay, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
-  stayLegs, stayOptionsFor, activityBookings, modeLabel,
+  stayLegs, stayOptionsFor, activityBookings, modeLabel, partnerLabel,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty, tripContextFacts } from '../lib/tripLifecycle.js';
@@ -388,9 +388,19 @@ function FlightLiveOfferInfo({ liveOffer }) {
   return null;
 }
 
+// Flight has a real priced live-offer (Aviasales) to show — its CTA is a
+// plain "search elsewhere to book" handoff alongside that data. Train/bus
+// have no data API, only an affiliate prefilled-search redirect — their
+// CTA names the partner directly ("Search on ixigo ↗") so the button is
+// honest about what it is: a search link, not a TWM result.
 function TransportOptionCard({ option }) {
   const durationDistance = durationDistanceLabel(option);
   const isFlight = option.mode === 'flight';
+  const ctaLabel = isFlight
+    ? 'Search flights ↗'
+    : option.partner
+      ? `Search on ${partnerLabel(option.partner)} ↗`
+      : 'Check ↗';
   return (
     <article className="stay-option-card">
       <ModeTag mode={option.mode} />
@@ -409,7 +419,7 @@ function TransportOptionCard({ option }) {
             : 'Search elsewhere (no TWM-resolved price)'}
         </span>
       )}
-      <TrustedActionCta option={option} label={isFlight ? 'Search flights ↗' : 'Check ↗'} />
+      <TrustedActionCta option={option} label={ctaLabel} />
     </article>
   );
 }

@@ -858,6 +858,10 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(within(item).getByText('Bangalore → Bhubaneswar')).toBeInTheDocument();
       await user.click(within(item).getByRole('button', { name: 'Check transport options ▾' }));
       await waitFor(() => expect(within(item).getByRole('button', { name: 'Hide options ▴' })).toBeInTheDocument());
+      // Train/bus have no data API, only an affiliate prefilled-search
+      // redirect — the CTA names the partner directly instead of a generic
+      // "Check ↗", distinct from flight's real live-offer data.
+      await waitFor(() => expect(within(item).getAllByRole('link', { name: 'Search on ixigo ↗' }).length).toBeGreaterThan(0));
     });
 
     it('shows two independent Resolve affordances on a day combining two TRAVEL legs, without crashing', async () => {
