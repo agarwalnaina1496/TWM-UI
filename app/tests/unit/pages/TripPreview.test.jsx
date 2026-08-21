@@ -135,26 +135,15 @@ describe('TripPreview real Guide Plan Builder', () => {
     expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', { message: 'Make it more adventurous' });
   });
 
-  it('asks Guide\'s pending gating question instead of the day plan when there is no plan yet', () => {
-    // No saved trip_context — a genuinely fresh gating conversation, not a
-    // refresh — so the generic filler shows, not a recap turn.
+  // TWM-190: Guide already owns this trip but hasn't produced a day_plan yet
+  // — that gating conversation now lives on ScoutChat.jsx, not a second
+  // inline chat implementation here.
+  it('redirects to /scout-chat instead of rendering a gating chat when there is an existing conversation but no plan yet', () => {
     commandSnapshot = snapshotWith({ conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [], revision: 1 }, {});
     sendTripCommand = vi.fn();
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
-    expect(screen.getByText(/Guide needs a bit more/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Approve this plan/ })).not.toBeInTheDocument();
-  });
-
-  // TWM-174: Plan chat's refresh-recap variant, mirroring Discover's
-  // pattern — a refresh mid-gating-conversation must not read as a blank
-  // slate. No BackToTrip on this screen, matching Discover's entry-chat.
-  it('shows a recap turn instead of generic filler when trip_context already exists (refresh mid-conversation)', () => {
-    commandSnapshot = snapshotWith({ conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [], revision: 1 });
-    sendTripCommand = vi.fn();
-    render(<MemoryRouter><TripPreview /></MemoryRouter>);
-    expect(screen.getAllByText(/Picking up where you left off/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Rishikesh/).length).toBeGreaterThan(0);
-    expect(screen.queryByText('← Back to trip')).not.toBeInTheDocument();
+    expect(navigate).toHaveBeenCalledWith('/scout-chat', { replace: true });
+    expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
   it('finalizes the plan on Approve this plan', async () => {
@@ -194,14 +183,18 @@ describe('TripPreview real Guide Plan Builder', () => {
     expect(screen.getByText('Here is your three-day plan.')).toBeInTheDocument();
   });
 
-  it('shows Guide\'s actual gating question from the start_planning response, not generic filler text', async () => {
+  // TWM-190: start_planning can itself return a gating question instead of
+  // a finished plan — redirects to ScoutChat rather than rendering the
+  // retired inline gating branch.
+  it('redirects to /scout-chat when start_planning itself returns a gating question, not a finished plan', async () => {
     commandSnapshot = snapshotWith(null);
     sendTripCommand = vi.fn(async () => {
       commandSnapshot = snapshotWith({ conversation_context: { awaiting: 'origin_city' }, places: [], day_plan: [], revision: 1 });
       return { message: 'Where will you be travelling from?', agent_meta: null, trip: commandSnapshot };
     });
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
-    expect(await screen.findAllByText('Where will you be travelling from?')).toHaveLength(2);
+    expect(sendTripCommand).toHaveBeenCalledWith('start_planning');
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/scout-chat', { replace: true }));
   });
 
   it('scopes the Replace-in-progress row to a single day, not every day sharing the same place name', async () => {

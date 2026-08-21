@@ -485,7 +485,11 @@ export default function Destinations() {
   function planThis(option) {
     const isSelected = selectedOption && selectedOption.type === option.type && selectedOption.id === option.key;
     if (isSelected) {
-      navigate(withTripId('/trip-preview', commandSnapshot?.id));
+      // TWM-190: route by artifact existence — a prior planning session with
+      // no day_plan yet still belongs on ScoutChat's chat window, not the
+      // (now day_plan-only) Plan Builder.
+      const destination = planReady(tripState?.planner_state) ? '/trip-preview' : '/scout-chat';
+      navigate(withTripId(destination, commandSnapshot?.id));
       return;
     }
     doPlanThis(option);
@@ -535,7 +539,16 @@ export default function Destinations() {
     }
     if (checkpointWasShown.current) trackEvent('checkpoint_resolved', {});
     setCheckpointAwaiting(null);
-    navigate(withTripId('/trip-preview', response.trip?.id ?? commandSnapshot?.id), { state: { guideMessage: response.message } });
+    const tripId = response.trip?.id ?? commandSnapshot?.id;
+    if (planReady(plannerState)) {
+      navigate(withTripId('/trip-preview', tripId), { state: { guideMessage: response.message } });
+      return;
+    }
+    // TWM-190: Guide still needs more before it can propose a plan — that
+    // conversation now lives on ScoutChat (its own recap picks up the
+    // current awaiting question from trip_state), not TripPreview's
+    // retired inline gating branch.
+    navigate(withTripId('/scout-chat', tripId));
   }
 
   async function submitCheckpoint() {

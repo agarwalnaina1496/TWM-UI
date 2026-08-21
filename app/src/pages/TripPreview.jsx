@@ -4,7 +4,6 @@ import { useTrip } from '../context/TripContext.jsx';
 import {
   buildRemovePlaceMessage, buildReplacePlaceMessage, buildSetPaceMessage, planBuilderSummary,
 } from '../lib/guidePlanAdapter.js';
-import { buildPlanRecapTurn } from '../lib/planChat.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
 import BackToTrip from '../components/BackToTrip.jsx';
@@ -48,13 +47,12 @@ function FreeTextComposer({ value, onChange, onSubmit, placeholder, pending }) {
 // point, and this screen is the real destination for both paths (the
 // known-destination path used to bypass it entirely and land on /dashboard).
 //
-// TWM-174: kept as a single route rather than splitting Plan chat onto its
-// own URL — the gating (!planReady) branch is restyled to read as its own
-// distinct screen (no BackToTrip, its own refresh-recap variant, matching
-// Discover's pattern), while the ready branch is Plan Builder proper. Both
-// entry-path navigate() calls (ScoutChat.jsx:48, JourneyEntry.jsx:112,
-// owned by the Discover & Destinations story) are unchanged by this
-// decision — they still land here regardless of gating/ready state.
+// TWM-190: reached only once Guide has produced a day_plan — the still-
+// gating conversation (previously this page's own inline !planReady chat
+// branch) now lives on ScoutChat.jsx, the single conversational surface for
+// both specialists. The boot effect below redirects there instead of
+// rendering a second chat implementation whenever it finds Guide still
+// gating on trip context.
 export default function TripPreview() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -97,7 +95,6 @@ export default function TripPreview() {
   const [reopenChoicePending, setReopenChoicePending] = useState(false);
   const bootStarted = useRef(false);
   const trackedPlanBuilderView = useRef(false);
-  const initializedRecap = useRef(false);
   // Best-effort distinction for planning_entry — a selected recommendation
   // means Discover led here; otherwise it's a known-destination entry.
   const planningEntry = tripContext?.selected_option ? 'discovered_destination' : 'known_destination';
@@ -133,8 +130,15 @@ export default function TripPreview() {
     // TWM-188: when the guard above is about to redirect this exact trip
     // home, don't also boot Guide against it in the same commit.
     if (frozenPlan || bootStarted.current || (urlTripId && isTripEmpty(tripState))) return;
-    if (plannerState && (places.length || dayPlan.length || awaiting)) {
+    if (plannerState && dayPlan.length > 0) {
       setBootStatus('ready');
+      return;
+    }
+    if (plannerState && (places.length || awaiting)) {
+      // TWM-190: Guide already owns this trip but hasn't produced a
+      // day_plan yet — that gating conversation lives on ScoutChat now,
+      // not this page's retired inline chat branch.
+      navigate(withTripId('/scout-chat', commandSnapshot?.id), { replace: true });
       return;
     }
     bootStarted.current = true;
@@ -142,6 +146,14 @@ export default function TripPreview() {
     (async () => {
       try {
         const response = await sendTripCommand('start_planning');
+        const nextPlannerState = response.trip?.trip_state?.planner_state;
+        if (!nextPlannerState?.day_plan?.length) {
+          // Guide asked a gating question instead of generating the plan on
+          // this turn — hand off to ScoutChat rather than rendering a
+          // second, retired chat implementation here.
+          navigate(withTripId('/scout-chat', response.trip?.id ?? commandSnapshot?.id), { replace: true });
+          return;
+        }
         if (response.message) setMessage(response.message);
         setBootStatus('ready');
       } catch (error) {
@@ -152,19 +164,6 @@ export default function TripPreview() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripLoadStatus, frozenPlan]);
-
-  // TWM-174: Plan chat's refresh-recap — a refresh mid-gating-conversation
-  // must not read as a blank slate. Only fires when there's no message
-  // already in hand (a fresh navigation from ScoutChat/JourneyEntry already
-  // carries one via location.state) and the plan isn't ready yet.
-  useEffect(() => {
-    if (initializedRecap.current || tripLoadStatus !== 'ready') return;
-    initializedRecap.current = true;
-    if (location.state?.guideMessage || planReady || message) return;
-    const recap = buildPlanRecapTurn(tripContext, { awaiting });
-    if (recap) setMessage(recap);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripLoadStatus]);
 
   useEffect(() => {
     if (trackedPlanBuilderView.current || bootStatus !== 'ready' || !planReady) return;
@@ -289,31 +288,10 @@ export default function TripPreview() {
     );
   }
 
-  // Guide is still gating on trip context (the five fixed facts, or the
-  // sixth "anything else?" question) — no places/day_plan yet. This reads
-  // as its own screen (Plan chat) per TWM-174, not embedded Plan Builder
-  // filler: no BackToTrip here (matches Discover's entry-chat pattern of no
-  // back-link until results exist, per the mockup).
-  if (!planReady) {
-    return (
-      <main className="wrap plan-builder plan-chat">
-        <span className="eyebrow">Guide</span>
-        <h1>Let's shape <em>your plan</em></h1>
-        <p className="lede">{message || (awaiting ? 'Guide needs a bit more before it can propose a plan.' : 'Setting up your plan…')}</p>
-        {message && <div className="revision-message" role="status">{message}</div>}
-        <div className="builder-controls" aria-label="Answer Guide">
-          <FreeTextComposer
-            value={freeText}
-            onChange={setFreeText}
-            pending={pending}
-            placeholder="Your answer…"
-            onSubmit={value => { setFreeText(''); sendEdit(value); }}
-          />
-        </div>
-      </main>
-    );
-  }
-
+  // TWM-190: this page is only ever reached once Guide has produced a
+  // day_plan (see the boot effect above and its upstream callers in
+  // Destinations.jsx/ScoutChat.jsx/JourneyEntry.jsx) — the still-gating
+  // case now redirects to ScoutChat instead of rendering here.
   const summary = planBuilderSummary(tripContext, plannerState);
 
   return (
