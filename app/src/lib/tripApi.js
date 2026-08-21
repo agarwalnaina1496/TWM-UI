@@ -104,14 +104,17 @@ export async function listTrips() {
 // TWM-189: the traveler's first message and trip creation are now one
 // logical request — POST /trips/first-message runs the agent turn before
 // any row exists and only persists a row if that turn succeeds, so a
-// failed first send never leaves an orphan trip. Restricted to
-// discover_entry/known_destination_entry (JourneyEntry.jsx's two entry
-// paths) — every other command assumes a trip already exists.
-export async function startTripFromFirstMessage(command, { message, destination, title } = {}) {
-  const payload = { command };
+// failed first send never leaves an orphan trip. Every other command
+// assumes a trip already exists.
+// Entry-command-collapse: always a traveler_message-shaped turn — entryIntent
+// (Discover vs. Plan a Trip) decides which specialist receives it, carried
+// as data rather than as two separate command names. Both flavors send the
+// traveler's own raw message; known-destination no longer pre-parses a
+// `destination` field itself — Guide's own extraction is the only thing
+// that ever determines `destinations`.
+export async function startTripFromFirstMessage({ entryIntent, message, title } = {}) {
+  const payload = { entry_intent: entryIntent, message };
   if (title !== undefined) payload.title = title;
-  if (message !== undefined) payload.message = message;
-  if (destination !== undefined) payload.destination = destination;
   const saved = await request('/first-message', { method: 'POST', body: JSON.stringify(payload) });
   return {
     message: saved.message ?? null,

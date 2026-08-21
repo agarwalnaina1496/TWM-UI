@@ -79,8 +79,9 @@ describe('ScoutChat advice-entry chat', () => {
   // The scout_entry command (a typed "first turn, let Scout decide the
   // agent" signal) has been removed entirely — it had no live caller, since
   // every fresh entry already arrives here with ownership pre-decided by
-  // JourneyEntry.jsx's discover_entry/known_destination_entry. Every send
-  // from this page is a plain traveler_message, regardless of active_agent.
+  // this page's own entry_intent (discover/known_destination), sent only on
+  // a trip's genuine first send. Every send once a trip exists is a plain
+  // traveler_message, regardless of active_agent.
   it.each(['meridian', 'guide', 'scout'])(
     'always sends traveler_message, regardless of active_agent (%s)',
     async agent => {

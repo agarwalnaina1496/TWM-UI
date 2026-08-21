@@ -34,7 +34,7 @@ function commandResponse(message, trip) {
 // latest matcher round is served from GET /api/trips/{id}/recommendations,
 // not from trip_state — set it once via the option, or update it from a
 // scripted step whose command produced a new round (continue/traveler_message
-// /discover_entry/more_like_this), 404 otherwise.
+// /more_like_this), 404 otherwise.
 //
 // `initialItineraryVersions` / a step's `itineraryVersions` field (TWM-155):
 // archived itinerary revisions are served from
@@ -122,17 +122,20 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
       if (step.itineraryVersions !== undefined) itineraryVersions = step.itineraryVersions;
       return route.fulfill({ json: step.response });
     }
-    // TWM-189: the traveler's first message (discover_entry/known_destination_entry
-    // from a trip-less JourneyEntry) now creates the trip and sends the message in
-    // one request — POST /api/trips/first-message — instead of a bare create
-    // followed by a /commands call. Same scripted-step consumption as /commands
-    // above, but always the step that actually creates `current`.
+    // TWM-189: the traveler's first message (entry_intent: discover/
+    // known_destination, from a trip-less fresh entry) now creates the trip
+    // and sends the message in one request — POST /api/trips/first-message —
+    // instead of a bare create followed by a /commands call. Same
+    // scripted-step consumption as /commands above (keyed by entryIntent
+    // instead of command, since a first-message step carries no command
+    // name — TWM-192's entry-command collapse), but always the step that
+    // actually creates `current`.
     if (method === 'POST' && pathname.endsWith('/first-message')) {
       const body = request.postDataJSON();
       const step = pending.shift();
       if (!step) throw new Error(`Unexpected first-message command: ${JSON.stringify(body)} (no more scripted steps).`);
-      if (step.command !== body.command) {
-        throw new Error(`Expected command "${step.command}" but got "${body.command}".`);
+      if (step.entryIntent !== body.entry_intent) {
+        throw new Error(`Expected entry_intent "${step.entryIntent}" but got "${body.entry_intent}".`);
       }
       current = step.response.trip;
       records.set(current.id, current);

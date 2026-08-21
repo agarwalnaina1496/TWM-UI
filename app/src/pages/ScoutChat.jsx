@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { QUICK_REPLIES } from '../data/entryCommandFixtures.js';
+import { AWAITING_INPUT_LABELS, DESTINATION_INPUT_LABEL, ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
 import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
 import { planReady } from '../hooks/useGuidePlanning.js';
+import { trackEvent } from '../lib/analytics.js';
 import { buildRecapTurn, didHandoffOccur } from '../lib/discoverChat.js';
 import { buildPlanRecapTurn } from '../lib/planChat.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
@@ -23,16 +24,40 @@ const HANDOFF_NOTES = {
   meridian: '→ Bringing in Meridian, who handles destination matching.',
   guide: '→ Bringing in Guide, who builds your day-by-day plan.',
 };
+// TWM-190 (regression fix): a live, trip-less entry (via Header/DashboardHome's
+// "Discover Destination"/"Plan a Trip") lands here directly with ?intent= and
+// no trip yet — this used to be JourneyEntry.jsx's own separate chat
+// implementation. Merged into this single conversational surface instead of
+// a second one, per the shared opener/copy JourneyEntry.jsx used to own.
+const SCOUT_WELCOME = "Hey there! I'm Scout. Tell me about the trip you have in mind.";
+const DISCOVER_WELCOME = `${SCOUT_WELCOME} I can help you find destinations that fit and explain why.`;
+const DISCOVER_ORIGIN_PROMPT = 'To start, where will you be traveling from?';
+const KNOWN_DESTINATION_WELCOME = `${SCOUT_WELCOME} I can help you plan your trip.`;
+const KNOWN_DESTINATION_PROMPT = 'Where are you headed?';
 
 export default function ScoutChat() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [params] = useSearchParams();
-  const { commandSnapshot, sendTripCommand, tripLoadStatus, openTrip } = useTrip();
+  const { commandSnapshot, sendTripCommand, startTrip, currentTripId, tripLoadStatus, openTrip } = useTrip();
   // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this page
   // reads matcher_state/planner_state to decide what to do next and can't
   // safely act on a possibly-thin cached record.
   const urlTripId = useTripFromUrl(openTrip);
+  const intent = params.get('intent');
+  // No trip anywhere yet (not on the URL, not already tracked this
+  // session) — a genuine live entry, not a resume. Only ever paired with an
+  // ?intent= (Discover/Known Destination); ScoutChat's other trip-less
+  // entry point (?entry=advice) has no intent and falls through to the
+  // existing generic cold-open below, unchanged.
+  const isFreshEntry = !urlTripId && !currentTripId;
+  // Session-wide flavor — intent stays on the URL for this whole live-entry
+  // conversation (a genuine resume via /scout-chat carries no intent at
+  // all), unlike isFreshEntry which flips false right after the first send
+  // creates the trip.
+  const isDiscoverEntry = intent === ENTRY_INTENTS.DISCOVER;
+  const isKnownDestinationEntry = intent === ENTRY_INTENTS.KNOWN_DESTINATION;
+  const isFreshDiscover = isFreshEntry && isDiscoverEntry;
+  const isFreshKnownDestination = isFreshEntry && isKnownDestinationEntry;
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -40,6 +65,10 @@ export default function ScoutChat() {
   const initialized = useRef(false);
   const lastCommand = useRef(null);
   const previousAgent = useRef(null);
+  // Guards the very first send of a genuinely fresh entry — only that one
+  // send uses startTrip(); every send after (including this same mount's
+  // second message) is a plain traveler_message on the now-existing trip.
+  const entered = useRef(false);
 
   function say(role, text) {
     if (text) setMessages(previous => [...previous, { id: nextId++, role, text }]);
@@ -54,7 +83,28 @@ export default function ScoutChat() {
     setBusy(true);
     setError(null);
     try {
-      const response = await sendTripCommand('traveler_message', { message: text, idempotencyKey });
+      let response;
+      if (!entered.current && (isFreshDiscover || isFreshKnownDestination)) {
+        // TWM-189/190: the very first send of a genuinely fresh entry
+        // creates the trip and sends the message in one call — same
+        // startTrip contract JourneyEntry.jsx used to own, merged into this
+        // single chat surface instead of a second implementation.
+        // Entry-command-collapse: both flavors now send the traveler's own
+        // raw message under one entry_intent — known-destination no longer
+        // pre-parses a `destination` field itself; Guide's own extraction
+        // (guide.md) is the only thing that ever determines `destinations`.
+        response = await startTrip({
+          entryIntent: intent === ENTRY_INTENTS.DISCOVER ? 'discover' : 'known_destination',
+          message: text,
+        });
+        trackEvent(
+          intent === ENTRY_INTENTS.DISCOVER ? 'discovery_started' : 'destination_provided',
+          intent === ENTRY_INTENTS.DISCOVER ? { entry_method: 'journey_entry' } : { destination_source: 'user_input' }
+        );
+      } else {
+        response = await sendTripCommand('traveler_message', { message: text, idempotencyKey });
+      }
+      entered.current = true;
       const plannerState = response.trip.trip_state.planner_state;
       if (planReady(plannerState)) {
         // Guide generated the complete plan in this turn — go straight to
@@ -85,14 +135,18 @@ export default function ScoutChat() {
   useEffect(() => {
     if (initialized.current || tripLoadStatus !== 'ready') return;
     initialized.current = true;
-    // TWM-190: JourneyEntry.jsx sends the trip's first command itself
-    // (discover_entry/known_destination_entry) and redirects here with the
-    // already-completed exchange, rather than this page re-sending it —
-    // render it directly instead of a cold-open/recap.
-    const firstTurn = location.state?.firstTurn;
-    if (firstTurn) {
-      say('user', firstTurn.userMessage);
-      if (firstTurn.responseMessage) say('assistant', firstTurn.responseMessage);
+    // TWM-190 (regression fix): a genuinely fresh entry shows the
+    // intent-specific greeting instead of the generic cold-open/recap —
+    // matches JourneyEntry.jsx's old copy, now owned by this single chat
+    // surface rather than a second implementation.
+    if (isFreshDiscover) {
+      say('assistant', DISCOVER_WELCOME);
+      say('assistant', DISCOVER_ORIGIN_PROMPT);
+      return;
+    }
+    if (isFreshKnownDestination) {
+      say('assistant', KNOWN_DESTINATION_WELCOME);
+      say('assistant', KNOWN_DESTINATION_PROMPT);
       return;
     }
     // TWM-190: Guide's recap is phrased for its planning context
@@ -108,6 +162,15 @@ export default function ScoutChat() {
     if (message) runAdvice(message);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripLoadStatus]);
+
+  // planning_started fires once, right as the known-destination journey
+  // actually begins (mounting this screen with that intent) — this path has
+  // no separate "first message" gate the way Discover does.
+  useEffect(() => {
+    if (!isFreshKnownDestination) return;
+    trackEvent('planning_started', { planning_entry: 'known_destination' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // TWM-188: a direct/deep-link/stale-tab navigation to an empty
   // (trip_context-less) trip has nothing real to render here — redirect
@@ -137,13 +200,42 @@ export default function ScoutChat() {
 
   const quickReplies = QUICK_REPLIES[awaiting] || [];
   const thinkingMessage = useThinkingMessage(busy);
+  // TWM-190 (regression fix): a known-destination *entry* session (the
+  // whole live conversation up to Guide completing the plan, not just its
+  // first turn — intent stays on the URL the entire time, unlike
+  // isFreshKnownDestination which flips false right after the first send)
+  // gets the per-question destination composer JourneyEntry.jsx used to own
+  // (TWM-183) instead of the generic one. A genuine resume (/scout-chat, no
+  // intent) never gets this — matches JourneyEntry.jsx's old scope exactly.
+  const isGuideFlavored = isKnownDestinationEntry;
+  const destinationInputLabel = (guideAwaiting && AWAITING_INPUT_LABELS[guideAwaiting]) || DESTINATION_INPUT_LABEL;
   return (
     <div className="chat-page chat-screen">
-      <BackToTrip />
+      {!isDiscoverEntry && !isKnownDestinationEntry && <BackToTrip />}
       <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
-      <span className="eyebrow">✦ Scout</span>
-      <h1>Tell Scout <em>in your own words</em></h1>
-      <p className="lede">Scout keeps the nuance in what you say, asks only for material gaps, and hands the trip to the right specialist.</p>
+      {isKnownDestinationEntry ? (
+        <>
+          <span className="eyebrow">Trip setup</span>
+          <h1>Start with <em>your destination</em></h1>
+        </>
+      ) : isDiscoverEntry ? (
+        <>
+          <span className="eyebrow">✦ Scout</span>
+          <h1>Let's find <em>your destination</em></h1>
+        </>
+      ) : (
+        <>
+          <span className="eyebrow">✦ Scout</span>
+          <h1>Tell Scout <em>in your own words</em></h1>
+        </>
+      )}
+      <p className="lede">
+        {isKnownDestinationEntry
+          ? "Tell us where you are going. We'll take you straight to planning — no matching needed."
+          : isDiscoverEntry
+            ? "Tell Scout what matters to you, and it'll narrow down destinations that fit."
+            : 'Scout keeps the nuance in what you say, asks only for material gaps, and hands the trip to the right specialist.'}
+      </p>
       <FactsPanel tripContext={commandSnapshot?.trip_state?.trip_context} />
 
       <div className="chat-log" aria-live="polite">
@@ -169,8 +261,16 @@ export default function ScoutChat() {
       </div>
 
       <div className="chat-input-bar">
-        <input type="text" className="chat-input" placeholder="Ask Scout a travel question…" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') send(); }} />
-        <button type="button" className="chat-send" onClick={send} disabled={busy} aria-label="Send">→</button>
+        <input
+          type="text"
+          className="chat-input"
+          aria-label={isGuideFlavored ? destinationInputLabel.label : (isDiscoverEntry ? 'Message Scout' : undefined)}
+          placeholder={isGuideFlavored ? destinationInputLabel.placeholder : (isDiscoverEntry ? 'Tell Scout about your trip…' : 'Ask Scout a travel question…')}
+          value={input}
+          onChange={event => setInput(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter') send(); }}
+        />
+        <button type="button" className="chat-send" onClick={send} disabled={busy} aria-label={isGuideFlavored ? 'Start planning' : 'Send'}>→</button>
       </div>
     </div>
   );

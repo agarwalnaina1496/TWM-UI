@@ -192,7 +192,7 @@ describe('TripContext Backend-authoritative trip record', () => {
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
     expect(result.current.currentTripId).toBe(null);
 
-    await act(async () => { await result.current.startTrip('discover_entry', { message: 'Plan my Coorg trip' }); });
+    await act(async () => { await result.current.startTrip({ entryIntent: 'discover', message: 'Plan my Coorg trip' }); });
 
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/trips/first-message', expect.objectContaining({ method: 'POST' }));
     expect(result.current.currentTripId).toBe('trip-new');

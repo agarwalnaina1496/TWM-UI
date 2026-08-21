@@ -9,7 +9,7 @@ const HANDOFF = 'I’ll look for a comfortable 14-day trip within budget.';
 test('exact natural-language journey preserves nuance and hands off after two quick replies', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
-      command: 'discover_entry',
+      entryIntent: 'discover',
       response: commandResponse(ASK_ORIGIN, tripRecord({
         version: 2,
         trip_state: {

@@ -148,7 +148,7 @@ export function TripProvider({ children }) {
     }
   }
 
-  // Idempotent: a page's own effect (e.g. auto-firing discover_entry) can
+  // Idempotent: a page's own effect (e.g. auto-firing startTrip) can
   // mount and race ensureTrip() below before this component's own boot
   // effect has run — React fires child effects before parent effects in the
   // same commit — so whichever caller gets here first must be the one that
@@ -211,14 +211,14 @@ export function TripProvider({ children }) {
   }
 
   // TWM-189: the only place a trip is ever created — runs the traveler's
-  // first message (discover_entry/known_destination_entry) and only ends
-  // up with a Backend trip record if that call succeeds, so a failure
+  // first message (entryIntent: 'discover' | 'known_destination') and only
+  // ends up with a Backend trip record if that call succeeds, so a failure
   // never leaves an orphan trip or a local trip pointer with nothing
   // behind it. Not serialized like ensureTrip()/sendTripCommand — callers
-  // (JourneyEntry.jsx) already guard against a concurrent second send via
-  // their own `busy` state.
-  async function startTrip(command, { message, destination, title } = {}) {
-    const response = await startTripFromFirstMessage(command, { message, destination, title });
+  // (ScoutChat.jsx's fresh-entry path) already guard against a concurrent
+  // second send via their own `busy` state.
+  async function startTrip({ entryIntent, message, title } = {}) {
+    const response = await startTripFromFirstMessage({ entryIntent, message, title });
     setTrips(prev => [response.trip, ...prev]);
     updateTripRecord(response.trip);
     markTripDetailFull(true);

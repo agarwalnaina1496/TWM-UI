@@ -16,7 +16,7 @@ function successOutcome() {
 test('full flow: header nav entry through Dashboard', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
-      command: 'discover_entry',
+      entryIntent: 'discover',
       response: commandResponse('And roughly what total budget would you like to stay within?', tripRecord({
         version: 2,
         trip_state: { stage: 'matching', active_agent: 'meridian', matcher_state: { conversation_context: { awaiting: 'budget' } } },
@@ -107,17 +107,16 @@ test('full flow: header nav entry through Dashboard', async ({ page }) => {
   // Root shows Dashboard-home's empty state (zero trips); the persistent
   // header nav (TWM-164) is the entry point into a journey, no intermediate
   // GetStarted screen. "Discover Destination" -> shows a hardcoded welcome
-  // with no Backend call, then discover_entry fires only once the traveler
+  // with no Backend call, then entry_intent="discover" fires only once the traveler
   // sends their first message.
   await page.getByText('Discover Destination').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
-  await expect(page.getByText(/tell Scout what matters to you/i)).toBeVisible();
+  // TWM-190 (regression fix): /journey-entry is ScoutChat.jsx itself — the
+  // real chat window (cold-open greeting) shows immediately, no separate
+  // screen, no redirect.
+  await expect(page.getByText(/Hey there! I'm Scout\. Tell me about the trip you have in mind\. I can help you find destinations that fit/)).toBeVisible();
   await page.getByPlaceholder('Tell Scout about your trip…').fill('Somewhere relaxing');
   await page.getByLabel('Send').click();
-
-  // TWM-190: JourneyEntry only sends the first message and redirects to
-  // ScoutChat — the exchange renders there, not inline.
-  await expect(page).toHaveURL(/\/app\/scout-chat/);
   await expect(page.getByText('And roughly what total budget would you like to stay within?')).toBeVisible();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
   await expect(page.getByRole('button', { name: 'See destinations →' })).toBeVisible();
