@@ -9,7 +9,6 @@ import TripPreview from './pages/TripPreview.jsx';
 import RequestQuote from './pages/RequestQuote.jsx';
 import Support from './pages/Support.jsx';
 import DashboardHome from './pages/DashboardHome.jsx';
-import JourneyEntry from './pages/JourneyEntry.jsx';
 import TripDashboard from './pages/TripDashboard.jsx';
 import { trackEvent } from './lib/analytics.js';
 
@@ -36,12 +35,15 @@ export default function App() {
         <Route path="/login" element={<LoginRouteRedirect />} />
         <Route path="/" element={<DashboardHome />} />
         <Route path="/scout-chat" element={<ScoutChat />} />
-        {/* keyed by search: switching intent (Plan a Trip <-> Discover
+        {/* TWM-190 (regression fix): /journey-entry is ScoutChat.jsx itself
+            now, not a second chat implementation — it's the single
+            conversational surface for both a live entry and a resume.
+            Keyed by search: switching intent (Plan a Trip <-> Discover
             Destination) while already on this route must fully remount —
-            JourneyEntry's message history and entry-guard refs are only
-            reset on mount, so without a key change React Router keeps the
-            same instance and the screen silently shows stale intent state. */}
-        <Route path="/journey-entry" element={<JourneyEntry key={location.search} />} />
+            ScoutChat's message history and entry-guard refs are only reset
+            on mount, so without a key change React Router keeps the same
+            instance and the screen silently shows stale intent state. */}
+        <Route path="/journey-entry" element={<ScoutChat key={location.search} />} />
         <Route path="/destinations" element={<Destinations />} />
         <Route path="/trip-preview" element={<TripPreview />} />
         <Route path="/request-quote" element={<RequestQuote />} />

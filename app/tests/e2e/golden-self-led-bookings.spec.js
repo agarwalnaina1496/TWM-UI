@@ -180,9 +180,8 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
   await expect(page).toHaveURL(/\/app\/journey-entry/);
   await page.getByPlaceholder('Tell Scout about your trip…').fill(GOLDEN_QUERY);
   await page.getByLabel('Send').click();
-  // TWM-190: JourneyEntry only sends the first message and redirects to
-  // ScoutChat — the rest of the conversation happens there, not inline.
-  await expect(page).toHaveURL(/\/app\/scout-chat/);
+  // TWM-190 (regression fix): /journey-entry is ScoutChat.jsx itself — the
+  // conversation continues on the same page, no redirect.
   await page.getByRole('button', { name: 'Delhi' }).click();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
   await page.getByRole('button', { name: 'See destinations →' }).click();

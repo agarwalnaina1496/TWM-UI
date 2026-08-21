@@ -86,17 +86,17 @@ describe('App guest-first routing (TWM-140)', () => {
 
       renderApp(['/journey-entry?intent=discover_destination']);
 
-      // TWM-190: JourneyEntry.jsx now only sends the first message — the
-      // welcome/prompt shown here is its own, not a chat transcript entry.
-      expect(await screen.findByText(/tell Scout what matters to you/i)).toBeInTheDocument();
+      // TWM-190 (regression fix): /journey-entry is ScoutChat.jsx itself —
+      // the real chat window (cold-open greeting) shows immediately, no
+      // separate collect-then-redirect screen, no Backend call yet.
+      expect(await screen.findByText(/Hey there! I'm Scout\. Tell me about the trip you have in mind\. I can help you find destinations that fit/)).toBeInTheDocument();
+      expect(screen.getByText('To start, where will you be traveling from?')).toBeInTheDocument();
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1)); // boot list only — no trip yet, no command sent
 
       await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'Somewhere relaxing{Enter}');
 
-      // JourneyEntry navigates to /scout-chat once the first command
-      // resolves — the exchange renders there, not inline. openTrip's
-      // own fetch short-circuits (startTrip already marked the record
-      // full), so no extra call is needed for the route change itself.
+      // The first send creates the trip (POST /trips/first-message) and the
+      // exchange renders right here — same page, no navigation.
       expect(await screen.findByText('What is your rough budget?')).toBeInTheDocument();
       expect(screen.getByText('Somewhere relaxing', { selector: '.chat-bub-user' })).toBeInTheDocument();
       expect(fetchMock.mock.calls[1][0]).toBe('/api/trips/first-message');
@@ -168,8 +168,8 @@ describe('App guest-first routing (TWM-140)', () => {
       renderApp(['/journey-entry?intent=known_destination']);
       await user.type(screen.getByPlaceholderText('e.g. Coorg, Karnataka'), 'Coorg{Enter}');
 
-      // TWM-190: JourneyEntry redirects to /scout-chat after the first
-      // command resolves — the exchange renders there, not inline.
+      // TWM-190 (regression fix): /journey-entry is ScoutChat.jsx itself —
+      // no separate screen, no redirect, the exchange renders right here.
       expect(await screen.findByText("Anything else you'd like to add? Any other preferences?")).toBeInTheDocument();
       expect(screen.getByText('Coorg', { selector: '.chat-bub-user' })).toBeInTheDocument();
       expect(fetchMock.mock.calls[1][0]).toBe('/api/trips/first-message');
@@ -192,9 +192,9 @@ describe('App guest-first routing (TWM-140)', () => {
           },
         }),
       }));
-      // TWM-190: the follow-up is now sent from ScoutChat's own composer,
-      // which uses a static placeholder (no per-question tracking there).
-      await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), "Nothing else{Enter}");
+      // TWM-183 (restored): the known-destination composer's placeholder
+      // still tracks the active question — awaiting is 'anything_else' here.
+      await user.type(screen.getByPlaceholderText("Anything else, or just say you're ready"), "Nothing else{Enter}");
 
       // The unified Plan Builder (TripPreview), not the chat, now shows the
       // generated plan — the known-destination path never lands on /dashboard.
