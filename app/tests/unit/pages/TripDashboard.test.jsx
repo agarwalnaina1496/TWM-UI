@@ -333,7 +333,15 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // underlying confirm_logistics command is unchanged and untested here on
   // purpose; that coverage returns with the real Bookings tab.
   // TWM-176: real Bookings content, replacing TWM-175's inert placeholder.
-  describe('Bookings tab (TWM-176)', () => {
+  //
+  // Skipped: the Bookings tab is temporarily removed from nav (TABS) while
+  // booking options move inline into the Itinerary tab — these tests all
+  // navigate via the "Bookings" nav button, which no longer renders. The
+  // underlying BookingSegment/TransportOptionCard/etc. rendering code these
+  // tests exercise is unchanged; re-enable (updating navigation to whatever
+  // replaces the nav-button click, or once Bookings returns to nav) once
+  // that follow-up lands.
+  describe.skip('Bookings tab (TWM-176)', () => {
     it('shows the origin<->destination transport leg, not just local transfers, bundled as one round-trip decision', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
@@ -659,17 +667,21 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   });
 
   // TWM-175: the Map tab is gone — it was never a real map, just route
-  // order, which now folds into Overview's day-strip instead.
-  it('shows all 5 tabs, never the old Stays/Transport/Map ones', async () => {
+  // order, which now folds into Overview's day-strip instead. Bookings and
+  // Docs are temporarily out of nav (merged/hidden) while booking options
+  // move inline into Itinerary.
+  it('shows the 3 active tabs, never the old Stays/Transport/Map/Bookings/Docs ones', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     await readyDashboard();
-    for (const name of ['Overview', 'Itinerary', 'Bookings', 'Docs', 'Support']) {
+    for (const name of ['Overview', 'Itinerary', 'Support']) {
       expect(screen.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: /Stays/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Transport/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Map/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Bookings/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Docs/ })).not.toBeInTheDocument();
   });
 
   it('Overview\'s day-strip jumps into that day on the Itinerary tab', async () => {
@@ -745,7 +757,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.queryAllByText('2').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
   });
 
-  it('trust strip is visible without any user action — no closed-by-default disclosure', async () => {
+  // Skipped: the TrustStrip (Assumptions/Open items/Evidence basis) is
+  // temporarily removed from Overview's render. trustStripCounts() itself
+  // (exercised in atlasView.test.js) is unchanged — re-enable if/when this
+  // strip returns to the UI.
+  it.skip('trust strip is visible without any user action — no closed-by-default disclosure', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     await readyDashboard();
@@ -829,8 +845,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(updateUiState).toHaveBeenCalledWith({ 'dashboardOverview.bookingPromptShown': true }));
 
       await user.click(within(prompt).getByText('Sort out bookings now'));
+      // Bookings is temporarily out of TABS (nav) — the prompt still sets
+      // tab state to 'Bookings' internally, just with no nav button to
+      // assert "active" against until Bookings returns to nav or this CTA
+      // is repointed at Itinerary's inline booking options.
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Bookings/ })).toHaveClass('active');
     });
 
     it('never shows the booking prompt again once ui_state already recorded it as shown', async () => {
@@ -881,14 +900,12 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const tabs = await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
       expect(within(tabs).getByText('Overview')).toBeInTheDocument();
       expect(within(tabs).getByText('Itinerary')).toBeInTheDocument();
-      expect(within(tabs).getByText('Bookings')).toBeInTheDocument();
-      expect(within(tabs).getByText('Docs')).toBeInTheDocument();
       expect(within(tabs).getByText('Support')).toBeInTheDocument();
 
       const user = userEvent.setup();
-      await user.click(within(tabs).getByText('Docs'));
+      await user.click(within(tabs).getByText('Itinerary'));
 
-      expect(screen.getByText('Available once your itinerary is ready.')).toBeInTheDocument();
+      expect(screen.getByText('Your day-by-day plan will appear here once Guide finishes it.')).toBeInTheDocument();
       expect(screen.queryByText('Your trip so far')).not.toBeInTheDocument();
     });
 

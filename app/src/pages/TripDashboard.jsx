@@ -8,7 +8,7 @@ import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary } from '../lib/tripApi.js';
 import {
   anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange,
-  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
+  verificationTone, travelerCount,
 } from '../lib/atlasView.js';
 import {
   transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
@@ -26,11 +26,17 @@ import '../styles/dashboard.css';
 // was never a real map, just route order), Stays+Transport merge into the
 // Bookings story that lands next (this story only adds an inert placeholder
 // for that tab, not its real content).
+//
+// Docs (was always just a "coming soon" placeholder, nothing to preserve)
+// is folded into Bookings — a future single read-only "confirmed bookings +
+// documents" view — rather than kept as its own tab. Bookings itself is
+// temporarily hidden from nav while booking options move inline into the
+// Itinerary tab; its section/data-fetching code is left intact underneath
+// (reachable via setTab('Bookings')) so this is a nav-visibility change,
+// not a functionality removal.
 const TABS = [
   { name: 'Overview', icon: '📊' },
   { name: 'Itinerary', icon: '📅' },
-  { name: 'Bookings', icon: '🧳' },
-  { name: 'Docs', icon: '📁' },
   { name: 'Support', icon: '💬' },
 ];
 
@@ -252,19 +258,6 @@ function DayStrip({ days, activeDayNumber, onSelectDay }) {
         </button>
       ))}
     </nav>
-  );
-}
-
-function TrustStrip({ counts }) {
-  const ratioLabel = counts.verifiedCount + counts.generalGuidanceCount === 0
-    ? 'No sourced details yet'
-    : `${counts.verifiedCount} verified · ${counts.generalGuidanceCount} general guidance`;
-  return (
-    <div className="trust-strip" aria-label="Trip trust summary">
-      <div className="trust-strip-item"><strong>{counts.assumptionsCount}</strong><span>Assumptions made</span></div>
-      <div className="trust-strip-item"><strong>{counts.unresolvedCount}</strong><span>Open items</span></div>
-      <div className="trust-strip-item"><strong className="trust-strip-ratio">{ratioLabel}</strong><span>Evidence basis</span></div>
-    </div>
   );
 }
 
@@ -881,8 +874,6 @@ export default function TripDashboard() {
   const costMin = Math.min(...allCosts, 0);
   const costMax = Math.max(...allCosts, 1);
   const proposedRevision = itineraryState.proposed_revision;
-  const trustCounts = trustStripCounts(finalItinerary, result);
-  const readiness = bookingReadinessRollup(days, anchors);
 
   const dayNumbers = days.map(day => day.day_number);
   const bookingOrigin = tripContextFacts(tripState?.trip_context).find(fact => fact.key === 'origin_city')?.value;
@@ -953,20 +944,11 @@ export default function TripDashboard() {
           <div className="route-rationale"><span className="hero-why-label">Why this route</span><p>{finalItinerary.trip_summary.route_rationale}</p></div>
         )}
 
-        <TrustStrip counts={trustCounts} />
-
         <div className="tab-intro"><div><h2>💰 Estimated budget</h2><p>{finalItinerary.budget_summary.budget_fit}</p></div></div>
         <BudgetBar low={finalItinerary.budget_summary.total_low} high={finalItinerary.budget_summary.total_high} min={0} max={Math.max(finalItinerary.budget_summary.total_high, 1)} />
         <div className="budget-summary-card">
           {finalItinerary.budget_summary.lines.map((line, index) => <div className="budget-summary-row" key={index}><span>{line.category}</span><strong>{moneyRange(line.amount_low, line.amount_high)}</strong><p>{line.note}</p></div>)}
           <div className="budget-summary-row total"><span>Estimated total</span><strong>{moneyRange(finalItinerary.budget_summary.total_low, finalItinerary.budget_summary.total_high)}</strong></div>
-        </div>
-
-        <div className="readiness-row">
-          <span>{readiness.ready} of {readiness.total} bookable items ready</span>
-          {readiness.total > readiness.ready && (
-            <button type="button" className="btn btn-ghost" onClick={() => setTab('Bookings')}>Resolve bookings →</button>
-          )}
         </div>
 
         <div className="sources-list">
@@ -1006,15 +988,6 @@ export default function TripDashboard() {
             )}
           </details>
         )}
-      </section>}
-
-      {tab === 'Docs' && <section aria-label="Trip documents">
-        <div className="tab-intro"><div><h2>📁 Documents</h2><p>Flight tickets, hotel confirmations, and other trip documents.</p></div></div>
-        <div className="docs-placeholder">
-          <span className="docs-placeholder-icon">📁</span>
-          <strong>Coming soon</strong>
-          <p>Once this is ready, you'll be able to collect everything for this trip in one place — flight and train tickets, hotel confirmations, and copies of IDs you'll need on the road.</p>
-        </div>
       </section>}
 
       {tab === 'Itinerary' && selectedDay && <section aria-label="Detailed days" className="dashboard-days-wrap">
