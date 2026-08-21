@@ -323,6 +323,35 @@ export function transportLegs(days, origin) {
   return legs;
 }
 
+// Maps each day_number to the transport leg(s) whose transition happens
+// that day, in the same chronological order transportLegs() itself builds
+// them (outbound-origin, then each inner leg, then return-origin) — used to
+// line legs up against a day's TRAVEL timeline items index-for-index (the
+// timeline is already time-ordered). A day can carry more than one leg
+// (e.g. Atlas combines two stops into one primary_location like "Konark &
+// Bhubaneswar" on the final day, so that day's inner leg and its
+// return-origin leg both land here) or zero. The caller must verify a
+// day's leg count matches its TRAVEL-item count before zipping them
+// together — this function only supplies the legs, not the pairing
+// guarantee.
+export function transportLegsByDay(days, origin) {
+  const stops = routeStops(days);
+  const byDay = new Map();
+  if (stops.length === 0) return byDay;
+  const legs = transportLegs(days, origin);
+  const addLeg = (dayNumber, leg) => {
+    if (!byDay.has(dayNumber)) byDay.set(dayNumber, []);
+    byDay.get(dayNumber).push(leg);
+  };
+  addLeg(stops[0].dayNumbers[0], legs[0]); // outbound-origin
+  for (let i = 0; i < stops.length - 1; i++) {
+    addLeg(stops[i + 1].dayNumbers[0], legs[i + 1]); // leg-i, into stops[i+1]
+  }
+  const lastStop = stops[stops.length - 1];
+  addLeg(lastStop.dayNumbers[lastStop.dayNumbers.length - 1], legs[legs.length - 1]); // return-origin
+  return byDay;
+}
+
 // A round trip bundles as one priced decision, not two separate one-way
 // resolves — true whenever the traveler ends up back where they started
 // (the first leg's origin equals the last leg's destination), regardless

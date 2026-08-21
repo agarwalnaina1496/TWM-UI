@@ -805,6 +805,82 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(readiness.className).toContain('status-pill-filled');
   });
 
+  // Inline transport options: TRAVEL timeline items now show their own
+  // "Resolve" affordance directly in the Itinerary tab (booking options
+  // moved out of the removed-from-nav Bookings tab), matched by
+  // transportLegsByDay's day-boundary + chronological-index zip.
+  describe('inline transport options on the Itinerary tab', () => {
+    function odishaTimelineFixture() {
+      return {
+        final_itinerary: {
+          days: [
+            {
+              day_number: 1, date: null, title: 'Day 1', primary_location: 'Bhubaneswar', summary: 'x',
+              timeline: [
+                { start_time: '09:00', end_time: '10:30', kind: 'TRAVEL', title: 'Arrival at Bhubaneswar (BBI) & Hotel Transfer', location: 'Bhubaneswar Airport', detail: 'Arrive from Bangalore.', reference: generalReference(), requires_advance_booking: true, booking_readiness: 'suggested' },
+              ],
+              seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+            },
+            {
+              day_number: 2, date: null, title: 'Day 2', primary_location: 'Puri', summary: 'x',
+              timeline: [
+                { start_time: '08:00', end_time: '09:30', kind: 'TRAVEL', title: 'Drive from Bhubaneswar to Puri', location: 'Highway', detail: 'x', reference: generalReference(), requires_advance_booking: true, booking_readiness: 'suggested' },
+              ],
+              seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+            },
+            {
+              // Mirrors the real Atlas response's day 3: two TRAVEL legs
+              // (Puri->Konark, then Konark->origin-airport) collapsed into
+              // one combined primary_location.
+              day_number: 3, date: null, title: 'Day 3', primary_location: 'Konark & Bhubaneswar', summary: 'x',
+              timeline: [
+                { start_time: '08:00', end_time: '09:00', kind: 'TRAVEL', title: 'Puri-Konark Marine Drive', location: 'Marine Drive', detail: 'x', reference: generalReference(), requires_advance_booking: true, booking_readiness: 'suggested' },
+                { start_time: '10:30', end_time: '13:00', kind: 'ACTIVITY', title: 'Sun Temple, Konark', location: 'Konark', detail: 'x', reference: generalReference(), requires_advance_booking: true, booking_readiness: 'suggested' },
+                { start_time: '14:30', end_time: '16:30', kind: 'TRAVEL', title: 'Transfer Konark to Bhubaneswar Airport', location: 'Konark to Bhubaneswar', detail: 'x', reference: generalReference(), requires_advance_booking: true, booking_readiness: 'suggested' },
+              ],
+              seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+            },
+          ],
+        },
+      };
+    }
+
+    it('shows a Resolve affordance under the day-1 arrival TRAVEL item, matched to the origin round trip', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Bangalore' } });
+      itineraryFetchResponse.result = atlasResult(odishaTimelineFixture());
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      const item = screen.getByText('Arrival at Bhubaneswar (BBI) & Hotel Transfer').closest('.atlas-item');
+      expect(within(item).getByRole('button', { name: 'Resolve ▾' })).toBeInTheDocument();
+      expect(within(item).getByText('Bangalore ⇄ Bhubaneswar round trip')).toBeInTheDocument();
+      await user.click(within(item).getByRole('button', { name: 'Resolve ▾' }));
+      await waitFor(() => expect(within(item).getByRole('button', { name: 'Hide options ▴' })).toBeInTheDocument());
+    });
+
+    it('shows two independent Resolve affordances on a day combining two TRAVEL legs, without crashing', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Bangalore' } });
+      itineraryFetchResponse.result = atlasResult(odishaTimelineFixture());
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await user.click(screen.getByRole('button', { name: /Day 3/ }));
+
+      const marineDrive = screen.getByText('Puri-Konark Marine Drive').closest('.atlas-item');
+      const transfer = screen.getByText('Transfer Konark to Bhubaneswar Airport').closest('.atlas-item');
+      expect(within(marineDrive).getByText('Puri → Konark & Bhubaneswar')).toBeInTheDocument();
+      // Shares the same bundled round-trip label as day 1's arrival item —
+      // it's the return half of the same origin round-trip decision.
+      expect(within(transfer).getByText('Bangalore ⇄ Bhubaneswar round trip')).toBeInTheDocument();
+      // The ACTIVITY item between them carries no leg match — no affordance.
+      const sunTemple = screen.getByText('Sun Temple, Konark').closest('.atlas-item');
+      expect(within(sunTemple).queryByRole('button', { name: 'Resolve ▾' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('arrival transition and one-time booking prompt (TWM-175)', () => {
     it('shows the honest-transition screen while the itinerary is generating, calibrated to a long wait', async () => {
       commandSnapshot = snapshotWith({});

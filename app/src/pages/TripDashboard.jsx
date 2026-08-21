@@ -11,7 +11,7 @@ import {
   verificationTone, travelerCount,
 } from '../lib/atlasView.js';
 import {
-  transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
+  transportLegs, transportLegsByDay, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
@@ -616,7 +616,7 @@ export default function TripDashboard() {
   }, [urlTripId, tripLoadStatus, tripState, navigate]);
 
   useEffect(() => {
-    if (tab !== 'Bookings' || itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
+    if (tab !== 'Itinerary' || itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
     if (bookingsFetchStarted.current === tripId) return;
     bookingsFetchStarted.current = tripId;
     setBookingsStatus('loading');
@@ -889,6 +889,16 @@ export default function TripDashboard() {
   const transportLegList = transportLegs(days, bookingOrigin);
   const { bundle: roundTripBundle, rest: soloLegs } = bundleRoundTrip(transportLegList);
   const stayLegList = stayLegs(days);
+  const legsByDayNumber = transportLegsByDay(days, bookingOrigin);
+  // A leg that's one half of the round-trip bundle renders under its own
+  // bundled id/label (matching the round-trip decision both its arrival
+  // and departure timeline items share) instead of as a standalone leg.
+  const resolveTimelineLeg = rawLeg => {
+    if (roundTripBundle && (rawLeg.id === roundTripBundle.outbound.id || rawLeg.id === roundTripBundle.inbound.id)) {
+      return { id: roundTripBundle.id, label: `${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`, dataLeg: roundTripBundle.outbound };
+    }
+    return { id: rawLeg.id, label: `${rawLeg.from} → ${rawLeg.to}`, dataLeg: rawLeg };
+  };
   const activityList = activityBookings(days);
 
   // Orphan anchors: confirmations left over from a route the current
@@ -1006,21 +1016,62 @@ export default function TripDashboard() {
               <p>{selectedDay.summary}</p>
             </header>
             <AnchorList anchors={anchorsForDay(anchors, selectedDay.day_number)} />
-            <div className="atlas-timeline">
-              {selectedDay.timeline.map((item, index) => <div className="atlas-item" key={index}>
-                <span className="atlas-dot">{item.kind === 'TRAVEL' ? '🚗' : item.kind === 'STAY' ? '🏨' : item.kind === 'MEAL' ? '🍽️' : item.kind === 'FREE_TIME' ? '🕒' : '📍'}</span>
-                <div>
-                  <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
-                  <div className="item-summary-row">
-                    <strong>{item.title}</strong>
-                    {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
-                    <BookingReadinessBadge status={item.booking_readiness} />
-                  </div>
-                  <p>{item.detail}</p>
-                  {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
+            {(() => {
+              // Only pair TRAVEL items with legs when the day's leg count
+              // exactly matches its TRAVEL-item count — Atlas sometimes
+              // combines two stops into one primary_location (e.g. "Konark
+              // & Bhubaneswar" on a final travel-and-depart day), putting
+              // two legs on one day; zipping by chronological index is only
+              // safe when both lists are the same length, otherwise skip
+              // (no options shown) rather than guess.
+              const dayLegs = legsByDayNumber.get(selectedDay.day_number) || [];
+              const travelIndices = selectedDay.timeline
+                .map((item, index) => (item.kind === 'TRAVEL' ? index : null))
+                .filter(index => index !== null);
+              const legForIndex = travelIndices.length === dayLegs.length
+                ? Object.fromEntries(travelIndices.map((index, i) => [index, dayLegs[i]]))
+                : {};
+              return (
+                <div className="atlas-timeline">
+                  {selectedDay.timeline.map((item, index) => {
+                    const rawLeg = legForIndex[index];
+                    const resolved = rawLeg ? resolveTimelineLeg(rawLeg) : null;
+                    const entry = resolved ? transportData[legKey(resolved.dataLeg)] : null;
+                    const { feasible, excluded } = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : { feasible: [], excluded: [] };
+                    return (
+                      <div className="atlas-item" key={index}>
+                        <span className="atlas-dot">{item.kind === 'TRAVEL' ? '🚗' : item.kind === 'STAY' ? '🏨' : item.kind === 'MEAL' ? '🍽️' : item.kind === 'FREE_TIME' ? '🕒' : '📍'}</span>
+                        <div>
+                          <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
+                          <div className="item-summary-row">
+                            <strong>{item.title}</strong>
+                            {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
+                            <BookingReadinessBadge status={item.booking_readiness} />
+                          </div>
+                          <p>{item.detail}</p>
+                          {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
+                          {resolved && (
+                            <BookingSegment
+                              label={resolved.label}
+                              anchor={findAnchor(transportAnchors, resolved.label)}
+                              expanded={expandedBookingId === resolved.id}
+                              onToggleExpand={() => toggleExpandedBooking(resolved.id, 'transport', { excludedOptions: excluded })}
+                              loading={expandedBookingId === resolved.id && bookingsStatus === 'loading'}
+                              loadError={expandedBookingId === resolved.id ? bookingsError : null}
+                              options={feasible}
+                              excluded={excluded}
+                              feasibilityModes={entry?.feasibility?.modes}
+                              renderOption={option => <TransportOptionCard key={option.mode} option={option} />}
+                              onOpenConfirm={() => {}}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>)}
-            </div>
+              );
+            })()}
             <div className="atlas-day-footer">
               <div className="footer-budget">
                 <span className="footer-label">💰 Estimated for this day</span>
