@@ -845,7 +845,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       };
     }
 
-    it('shows a Resolve affordance under the day-1 arrival TRAVEL item, matched to the origin round trip', async () => {
+    it('shows a Resolve affordance under the day-1 arrival TRAVEL item, matched to the origin leg', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Bangalore' } });
       itineraryFetchResponse.result = atlasResult(odishaTimelineFixture());
       sendTripCommand = vi.fn();
@@ -855,7 +855,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
       const item = screen.getByText('Arrival at Bhubaneswar (BBI) & Hotel Transfer').closest('.atlas-item');
       expect(within(item).getByRole('button', { name: 'Check transport options ▾' })).toBeInTheDocument();
-      expect(within(item).getByText('Bangalore ⇄ Bhubaneswar round trip')).toBeInTheDocument();
+      expect(within(item).getByText('Bangalore → Bhubaneswar')).toBeInTheDocument();
       await user.click(within(item).getByRole('button', { name: 'Check transport options ▾' }));
       await waitFor(() => expect(within(item).getByRole('button', { name: 'Hide options ▴' })).toBeInTheDocument());
     });
@@ -872,9 +872,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const marineDrive = screen.getByText('Puri-Konark Marine Drive').closest('.atlas-item');
       const transfer = screen.getByText('Transfer Konark to Bhubaneswar Airport').closest('.atlas-item');
       expect(within(marineDrive).getByText('Puri → Konark & Bhubaneswar')).toBeInTheDocument();
-      // Shares the same bundled round-trip label as day 1's arrival item —
-      // it's the return half of the same origin round-trip decision.
-      expect(within(transfer).getByText('Bangalore ⇄ Bhubaneswar round trip')).toBeInTheDocument();
+      expect(within(transfer).getByText('Konark & Bhubaneswar → Bangalore')).toBeInTheDocument();
       // The ACTIVITY item between them carries no leg match — no affordance.
       const sunTemple = screen.getByText('Sun Temple, Konark').closest('.atlas-item');
       expect(within(sunTemple).queryByRole('button', { name: 'Check transport options ▾' })).not.toBeInTheDocument();

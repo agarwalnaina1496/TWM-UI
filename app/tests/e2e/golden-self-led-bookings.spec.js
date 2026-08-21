@@ -210,12 +210,10 @@ test('Itinerary tab resolves a transport leg inline, and Support is reachable wi
   await page.getByRole('button', { name: 'Take a look at the trip first' }).click();
   await page.getByRole('navigation', { name: 'Trip Dashboard tabs' }).getByRole('button', { name: 'Itinerary' }).click();
 
-  // Transport: the Delhi -> Coorg -> Wayanad -> Delhi route is a round trip
-  // (returns to origin), so it bundles as one priced decision, not per-leg —
-  // shown inline under day 1's arrival TRAVEL item.
+  // Transport: shown inline under day 1's arrival TRAVEL item, plain
+  // origin -> destination (no round-trip bundling inline).
   const arrivalItem = page.locator('.atlas-item', { has: page.getByText('Arrival in Coorg') });
-  const roundTripLabel = arrivalItem.getByRole('heading', { name: /Delhi ⇄ Coorg round trip|Delhi ⇄ Wayanad round trip/ });
-  await expect(roundTripLabel).toBeVisible();
+  await expect(arrivalItem.getByRole('heading', { name: 'Delhi → Coorg' })).toBeVisible();
   await arrivalItem.getByRole('button', { name: /Check transport options/ }).click();
   await expect(arrivalItem.getByRole('link', { name: 'Check ↗' }).first()).toBeVisible();
 

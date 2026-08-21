@@ -7,7 +7,7 @@ import HonestTransition from '../components/ui/HonestTransition.jsx';
 import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary } from '../lib/tripApi.js';
 import {
-  anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange,
+  anchorsByType, anchorsForDay, dayCostRange,
   verificationTone, travelerCount,
 } from '../lib/atlasView.js';
 import {
@@ -60,17 +60,6 @@ function BudgetBar({ low, high, min, max }) {
   const left = ((low - min) / span) * 100;
   const width = Math.max(((high - low) / span) * 100, 3);
   return <div className="budget-track"><div className="budget-fill" style={{ left: `${left}%`, width: `${width}%` }} /></div>;
-}
-
-const READINESS_TONE = { suggested: 'positive', needs_advance_booking: 'caution', unresolved: 'negative' };
-
-// Filled shape — deliberately distinct from VerificationTag's outline shape
-// so a timeline item carrying both axes (verified/guidance + booking
-// readiness) reads as two different kinds of status at a glance, not just
-// two different colors.
-function BookingReadinessBadge({ status }) {
-  if (!status) return null;
-  return <StatusPill tone={READINESS_TONE[status] || 'neutral'}>{bookingReadinessLabel(status)}</StatusPill>;
 }
 
 // Outline shape — AtlasReference.status (VERIFIED/GENERAL_GUIDANCE) was
@@ -622,9 +611,10 @@ export default function TripDashboard() {
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
     const bookingOrigin = tripContextFacts(tripState?.trip_context).find(fact => fact.key === 'origin_city')?.value;
-    const legs = transportLegs(bookingDays, bookingOrigin);
-    const { bundle, rest } = bundleRoundTrip(legs);
-    const legsToFetch = [...(bundle ? [bundle.outbound] : []), ...rest];
+    // Inline (Itinerary tab) shows each leg on its own matching TRAVEL item —
+    // no round-trip bundling — so every leg needs its own fetched options,
+    // not just the outbound half of a bundle.
+    const legsToFetch = transportLegs(bookingDays, bookingOrigin);
     const stays = stayLegs(bookingDays);
     // TWM-146: threaded through to flight's live-offer search so
     // FlightSearchRequest.travelers is populated whenever Atlas has it,
@@ -888,13 +878,10 @@ export default function TripDashboard() {
   const { bundle: roundTripBundle, rest: soloLegs } = bundleRoundTrip(transportLegList);
   const stayLegList = stayLegs(days);
   const legsByDayNumber = transportLegsByDay(days, bookingOrigin);
-  // A leg that's one half of the round-trip bundle renders under its own
-  // bundled id/label (matching the round-trip decision both its arrival
-  // and departure timeline items share) instead of as a standalone leg.
+  // Inline (Itinerary tab): each TRAVEL item shows its own leg, plain
+  // from -> to — no round-trip bundling (that grouping only applies to the
+  // separate, currently-hidden Bookings tab below).
   const resolveTimelineLeg = rawLeg => {
-    if (roundTripBundle && (rawLeg.id === roundTripBundle.outbound.id || rawLeg.id === roundTripBundle.inbound.id)) {
-      return { id: roundTripBundle.id, label: `${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`, dataLeg: roundTripBundle.outbound };
-    }
     return { id: rawLeg.id, label: `${rawLeg.from} → ${rawLeg.to}`, dataLeg: rawLeg };
   };
   const activityList = activityBookings(days);
@@ -1043,7 +1030,6 @@ export default function TripDashboard() {
                           <div className="item-summary-row">
                             <strong>{item.title}</strong>
                             {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
-                            <BookingReadinessBadge status={item.booking_readiness} />
                           </div>
                           <p>{item.detail}</p>
                           {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
