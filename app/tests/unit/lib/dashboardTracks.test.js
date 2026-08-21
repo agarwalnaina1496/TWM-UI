@@ -65,7 +65,7 @@ describe('dashboardPrimaryCta (TWM-182)', () => {
       trip_context: { destinations: ['Udaipur'] },
       planner_state: { conversation_context: { awaiting: 'trip_duration' }, day_plan: [] },
     });
-    expect(cta).toEqual({ label: 'Continue chat', to: '/trip-preview' });
+    expect(cta).toEqual({ label: 'Continue chat', to: '/scout-chat' });
   });
 
   it('returns null once both Route and Day plan are done (frozen)', () => {
@@ -88,4 +88,21 @@ describe('dashboardPrimaryCta (TWM-182)', () => {
       expect(cta).toEqual({ label: 'Review recommendations', to: '/destinations' });
     }
   );
+
+  // TWM-190: a "matching" trip with an existing recommendation round is a
+  // refinement awaiting clarification, not a fresh conversation — routes
+  // to /destinations, not /scout-chat.
+  it('routes matching with an existing recommendation to /destinations, not /scout-chat', () => {
+    const cta = dashboardPrimaryCta({
+      stage: 'matching', trip_context: {}, planner_state: null, has_recommendation: true,
+    });
+    expect(cta).toEqual({ label: 'Continue refining', to: '/destinations' });
+  });
+
+  it('still routes matching with no recommendation to /scout-chat', () => {
+    const cta = dashboardPrimaryCta({
+      stage: 'matching', trip_context: {}, planner_state: null, has_recommendation: false,
+    });
+    expect(cta).toEqual({ label: 'Continue chat', to: '/scout-chat' });
+  });
 });

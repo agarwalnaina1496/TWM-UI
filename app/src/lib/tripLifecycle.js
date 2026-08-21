@@ -85,7 +85,7 @@ const STAGE_CTA = {
   matching: { label: 'Resume matching', to: '/scout-chat' },
   recommended: { label: 'Review recommendations', to: '/destinations' },
   matched: { label: 'Review recommendations', to: '/destinations' },
-  planning: { label: 'Resume planning', to: '/trip-preview' },
+  planning: { label: 'Resume planning', to: '/scout-chat' },
   plan_ready: { label: 'Resume plan builder', to: '/trip-preview' },
   planned: { label: 'View trip', to: '/dashboard' },
   booked: { label: 'View trip', to: '/dashboard' },
@@ -108,6 +108,18 @@ export function stageCta(tripState) {
   const stage = tripState?.stage ?? 'new';
   if (isItineraryReady(tripState)) return { label: 'View trip', to: '/dashboard' };
   if (stage === 'new' && hasTripContext(tripState)) return { label: 'Resume chat', to: '/scout-chat' };
+  // TWM-190: planning/matching route by whether the stage's defining
+  // artifact actually exists yet (day_plan / a recommendation round), not
+  // by stage string alone — a "planning" trip with a day_plan is really
+  // plan_ready in substance, and a "matching" trip with an existing
+  // recommendation is a refinement awaiting clarification, which belongs
+  // on /destinations (where its composers live) rather than a fresh chat.
+  if ((stage === 'planning' || stage === 'plan_ready') && tripState?.has_day_plan) {
+    return { label: 'Resume plan builder', to: '/trip-preview' };
+  }
+  if (stage === 'matching' && tripState?.has_recommendation) {
+    return { label: 'Continue refining', to: '/destinations' };
+  }
   return STAGE_CTA[stage] || STAGE_CTA.new;
 }
 

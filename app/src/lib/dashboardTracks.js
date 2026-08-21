@@ -62,6 +62,21 @@ function routeTrack(tripState) {
   if (RECOMMENDATIONS_READY_STAGES.has(stage)) {
     return { status: 'progress', label: 'Recommendations ready', cta: { label: 'Review recommendations', to: '/destinations' } };
   }
+  // TWM-190: a "matching" trip can rest at that stage either mid-fresh-
+  // conversation, or awaiting clarification on a refinement round that
+  // already produced a prior recommendation list — the second case belongs
+  // on /destinations (where its composers live), not a fresh chat window.
+  // has_recommendation only ever exists on the thin GET /trips summary
+  // shape (matcher_recommendations is a separate table, never embedded in
+  // trip_state the way planner_state's day_plan is) — a full single-trip
+  // fetch has no equivalent signal here, so this branch is exact for
+  // summary-shaped tripState and best-effort (defaults to the chat CTA)
+  // for a full-fetch one. In practice this path is unreached today, since
+  // a matching-stage trip never routes through TripDashboard.jsx (it's
+  // still discover-only, rendered via DashboardHome's Explore rail).
+  if (stage === 'matching' && tripState?.has_recommendation) {
+    return { status: 'progress', label: 'Refining recommendations', cta: { label: 'Continue refining', to: '/destinations' } };
+  }
   return { status: 'progress', label: 'Discovering your destination', cta: { label: 'Continue chat', to: '/scout-chat' } };
 }
 
@@ -77,7 +92,9 @@ function dayPlanTrack(tripState) {
     return { status: 'progress', label: 'Draft ready for review', cta: { label: 'Resume in Plan Builder', to: '/trip-preview' } };
   }
   if (progress.known) {
-    return { status: 'progress', label: 'Guide is gathering trip details', cta: { label: 'Continue chat', to: '/trip-preview' } };
+    // TWM-190: still-gating (no day_plan yet) chat lives on /scout-chat now,
+    // not /trip-preview — that page is Plan Builder only once a plan exists.
+    return { status: 'progress', label: 'Guide is gathering trip details', cta: { label: 'Continue chat', to: '/scout-chat' } };
   }
   return { status: 'pending', label: 'Not started', cta: null };
 }
