@@ -251,14 +251,14 @@ describe('flight live-offer resolution (TWM-146)', () => {
 });
 
 describe('feasibleTransportOptions', () => {
-  it('excludes a ruled_out mode entirely (not faded), carrying the Backend-computed reason', () => {
+  it('excludes a ruled_out mode entirely (not faded), carrying the classifier-sourced reason', () => {
     const options = [
       { mode: 'flight', name: 'Flight' },
       { mode: 'bus', name: 'Bus' },
     ];
     const feasibility = {
       modes: [
-        { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fast option.' },
+        { mode: 'flight', status: 'feasible', duration_source: 'llm_estimated', reason: 'Fast option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
         { mode: 'bus', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'A 14h journey is not practical here.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
       ],
     };
@@ -268,10 +268,77 @@ describe('feasibleTransportOptions', () => {
     expect(excluded.find(o => o.mode === 'bus').reason).toBe('A 14h journey is not practical here.');
   });
 
-  it('treats every mode as feasible with no duration data when no assessment exists yet', () => {
+  // TWM-195 regression: a missing/null assessment must NEVER be treated as
+  // "every mode is feasible" — that was the exact bug (Dashboard Bookings
+  // showing e.g. a Train option for Bhubaneswar -> Puri when the Backend
+  // simply hadn't judged the route yet). It must render as an honest
+  // "not yet assessed" state instead.
+  it('treats every mode as unassessed (never feasible) when no assessment exists yet', () => {
+    const options = [{ mode: 'flight', name: 'Flight' }, { mode: 'train', name: 'Train' }];
+    const { feasible, excluded, unassessed } = feasibleTransportOptions(options, null);
+    expect(feasible).toHaveLength(0);
+    expect(excluded).toHaveLength(0);
+    expect(unassessed).toHaveLength(2);
+  });
+
+  // TWM-195 regression: a per-mode "unknown" status (classifier failed,
+  // timed out, or was uncertain for that mode) must also render as
+  // unassessed — never silently as a normal bookable option.
+  it('treats a per-mode "unknown" status as unassessed, not feasible', () => {
     const options = [{ mode: 'flight', name: 'Flight' }];
-    const { feasible, excluded } = feasibleTransportOptions(options, null);
-    expect(feasible).toHaveLength(1);
+    const feasibility = {
+      modes: [
+        { mode: 'flight', status: 'unknown', duration_source: 'llm_estimated', reason: 'Could not confidently assess this route.' },
+      ],
+    };
+    const { feasible, excluded, unassessed } = feasibleTransportOptions(options, feasibility);
+    expect(feasible).toHaveLength(0);
+    expect(excluded).toHaveLength(0);
+    expect(unassessed).toHaveLength(1);
+    expect(unassessed[0].feasibilityStatus).toBe('unknown');
+  });
+
+  // TWM-195 regression: a Bhubaneswar/Puri/Konark-like local hop must not
+  // render all transport modes blindly — flight is route-absurd and must
+  // land in `excluded`, not `feasible`.
+  it('a Bhubaneswar -> Puri-like local route does not render all modes as feasible', () => {
+    const options = [
+      { mode: 'flight', name: 'Flight' },
+      { mode: 'train', name: 'Train' },
+      { mode: 'bus', name: 'Bus' },
+      { mode: 'drive', name: 'Drive' },
+    ];
+    const feasibility = {
+      modes: [
+        { mode: 'flight', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'Too short a hop for a flight.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'Regular train service.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        { mode: 'bus', status: 'feasible', duration_source: 'llm_estimated', reason: 'Frequent bus service.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        { mode: 'drive', status: 'feasible', duration_source: 'llm_estimated', reason: 'Short drive.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      ],
+    };
+    const { feasible, excluded } = feasibleTransportOptions(options, feasibility);
+    expect(feasible.map(o => o.mode).sort()).toEqual(['bus', 'drive', 'train']);
+    expect(excluded.map(o => o.mode)).toEqual(['flight']);
+  });
+
+  // TWM-195 regression: a Bangalore -> Mangalore-like route can legitimately
+  // have multiple route-valid modes — the UI must not over-correct into
+  // hiding legitimate options; it only prunes what Backend ruled out.
+  it('a Bangalore -> Mangalore-like route keeps all route-valid modes visible', () => {
+    const options = [
+      { mode: 'flight', name: 'Flight' },
+      { mode: 'train', name: 'Train' },
+      { mode: 'bus', name: 'Bus' },
+    ];
+    const feasibility = {
+      modes: [
+        { mode: 'flight', status: 'feasible', duration_source: 'llm_estimated', reason: 'Direct flight exists.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'Overnight train exists.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        { mode: 'bus', status: 'feasible', duration_source: 'llm_estimated', reason: 'Regular bus service.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      ],
+    };
+    const { feasible, excluded } = feasibleTransportOptions(options, feasibility);
+    expect(feasible.map(o => o.mode).sort()).toEqual(['bus', 'flight', 'train']);
     expect(excluded).toHaveLength(0);
   });
 

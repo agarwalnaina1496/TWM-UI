@@ -267,34 +267,55 @@ export async function fetchLegFeasibility(tripId, leg) {
 
 // Merges the real TripFeasibilityAssessment onto each mode's resolved
 // option — duration/distance/reason now come straight from the Backend
-// (already computed there), never re-synthesized client-side. A mode with
-// status: ruled_out is genuinely excluded (in `excluded`, for the
-// explanatory note), never rendered faded. When no assessment exists yet,
-// every option is treated as feasible with no duration/reason attached.
+// (already computed there), never re-synthesized client-side.
+//
+// TWM-195: a missing/null assessment (Backend has not judged this route at
+// all yet — e.g. still loading, or the feasibility call itself failed) must
+// never be treated as "every mode is feasible" — that is exactly the bug
+// this story fixes (Dashboard Bookings showing e.g. a Train option for
+// Bhubaneswar -> Puri). Likewise a per-mode status of "unknown" (Backend's
+// route classifier could not confidently judge that mode — TWM-195's
+// twm/schemas/trusted_action.py FeasibilityStatus) must render as an
+// honest "not yet assessed" state, never silently as a normal bookable
+// option and never silently as "all modes". Three buckets, not two:
+//   - feasible: status "feasible" — a genuine, bookable route option.
+//   - excluded: status "ruled_out" — genuinely not a real option for this
+//     route, kept (not hidden) so the UI can explain why, exactly as
+//     before.
+//   - unassessed: status "unknown", OR no feasibility assessment exists
+//     yet at all for this leg — nothing is known well enough to call it
+//     feasible or ruled out.
 export function feasibleTransportOptions(options, feasibility) {
   const modesByName = new Map((feasibility?.modes || []).map(entry => [entry.mode, entry]));
   const feasible = [];
   const excluded = [];
+  const unassessed = [];
   for (const option of options) {
     const modeFeasibility = modesByName.get(option.mode);
-    const enriched = modeFeasibility
-      ? {
+    if (!modeFeasibility || modeFeasibility.status === 'unknown') {
+      unassessed.push({
         ...option,
-        durationMinutes: modeFeasibility.estimated_duration_minutes,
-        distanceKm: modeFeasibility.estimated_distance_km,
-        reason: modeFeasibility.reason,
-        durationSource: modeFeasibility.duration_source,
-        verification: modeFeasibility.verification,
-        feasibilityStatus: modeFeasibility.status,
-      }
-      : option;
-    if (modeFeasibility?.status === 'ruled_out') {
+        feasibilityStatus: modeFeasibility?.status ?? 'unknown',
+        reason: modeFeasibility?.reason ?? null,
+      });
+      continue;
+    }
+    const enriched = {
+      ...option,
+      durationMinutes: modeFeasibility.estimated_duration_minutes,
+      distanceKm: modeFeasibility.estimated_distance_km,
+      reason: modeFeasibility.reason,
+      durationSource: modeFeasibility.duration_source,
+      verification: modeFeasibility.verification,
+      feasibilityStatus: modeFeasibility.status,
+    };
+    if (modeFeasibility.status === 'ruled_out') {
       excluded.push(enriched);
     } else {
       feasible.push(enriched);
     }
   }
-  return { feasible, excluded };
+  return { feasible, excluded, unassessed };
 }
 
 // "Recommended mode" selection (TWM-132 — no explicit ranking rule was

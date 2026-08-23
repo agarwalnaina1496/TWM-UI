@@ -154,11 +154,29 @@ function clarificationNeededResponse() {
   };
 }
 
+// TWM-195: default feasibility fixture — all four modes genuinely feasible
+// for the fixture's Delhi <-> Rishikesh route, so tests unrelated to
+// feasibility semantics (e.g. TWM-146's flight-card tests) still reach a
+// bookable Transport card. A `null`/missing assessment now renders an honest
+// "not yet assessed" state instead of assuming every mode is feasible, so
+// tests that specifically exercise that path mock feasibility as `null`
+// explicitly rather than relying on this default.
+function feasibleAssessmentResponse() {
+  return {
+    modes: [
+      { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90 },
+      { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      { mode: 'bus', status: 'feasible', duration_source: 'llm_estimated', reason: 'Also practical for this trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.' },
+    ],
+  };
+}
+
 function defaultFetchMock() {
   return vi.fn(async (url) => {
     if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
     if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-    if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+    if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
     if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
     if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
     return jsonResponse({});
@@ -535,7 +553,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({
@@ -574,7 +592,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({ status: 'unavailable', queried_at: '2026-01-01T00:00:00.000Z', unavailable: { code: 'provider_timeout', message: 'The flight provider timed out — try again shortly.' } });

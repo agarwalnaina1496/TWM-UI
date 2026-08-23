@@ -475,7 +475,7 @@ function FeasibilityDisclosure({ modes }) {
         {modes.map(mode => (
           <li key={mode.mode}>
             <ModeTag mode={mode.mode} />
-            {' '}<strong>{mode.status === 'feasible' ? 'Feasible' : 'Ruled out'}</strong>
+            {' '}<strong>{mode.status === 'feasible' ? 'Feasible' : mode.status === 'ruled_out' ? 'Ruled out' : 'Not yet assessed'}</strong>
             {mode.estimated_duration_minutes != null && <> — {Math.round((mode.estimated_duration_minutes / 60) * 10) / 10}h</>}
             {mode.estimated_distance_km != null && <> · {Math.round(mode.estimated_distance_km)} km</>}
             {mode.duration_source === 'llm_estimated' && <VerificationTag status={mode.verification?.status} />}
@@ -492,7 +492,7 @@ function FeasibilityDisclosure({ modes }) {
 // navigation, no separate Logistics page. Confirmed segments (an anchor
 // already exists) skip straight to the 🔒-confirmed treatment.
 function BookingSegment({
-  label, anchor, expanded, onToggleExpand, loading, loadError, options, excluded, renderOption, onOpenConfirm,
+  label, anchor, expanded, onToggleExpand, loading, loadError, options, excluded, unassessed, renderOption, onOpenConfirm,
   recommended, feasibilityModes,
 }) {
   if (anchor) {
@@ -526,6 +526,12 @@ function BookingSegment({
               <div className="stay-options-grid">{(options || []).map((option, index) => renderOption(option, recommended ? option === recommended : index === 0))}</div>
               {excluded?.length > 0 && (
                 <p className="already-booked-note">{excluded.map(item => item.reason).filter(Boolean).join(' ')}</p>
+              )}
+              {unassessed?.length > 0 && (
+                <p className="already-booked-note" role="status">
+                  {`Still checking whether ${unassessed.map(item => modeLabel(item.mode)).join(', ')} `}
+                  {unassessed.length === 1 ? 'is' : 'are'} a real option for this route — not shown as bookable yet.
+                </p>
               )}
               {feasibilityModes && <FeasibilityDisclosure modes={feasibilityModes} />}
             </>
@@ -626,7 +632,12 @@ export default function TripDashboard() {
   // (transportData) or a stay's id (stayData) so lookups don't depend on
   // the round-trip bundle's synthetic id.
   const [bookingsStatus, setBookingsStatus] = useState('idle'); // idle | loading | ready | error
-  const [bookingsError, setBookingsError] = useState(null);
+  // TWM-195: a transport-section resolution/feasibility failure must stay
+  // local to Transport and never take down the already-independent Stay
+  // section (or vice versa) — split out of the single shared bookingsError
+  // so one section's failure can never surface as the other's loadError.
+  const [transportError, setTransportError] = useState(null);
+  const [stayError, setStayError] = useState(null);
   const [transportData, setTransportData] = useState({});
   const [stayData, setStayData] = useState({});
   const bookingsFetchStarted = useRef(null); // tripId currently/last fetched, or null
@@ -649,7 +660,6 @@ export default function TripDashboard() {
     if (bookingsFetchStarted.current === tripId) return;
     bookingsFetchStarted.current = tripId;
     setBookingsStatus('loading');
-    setBookingsError(null);
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
     const bookingOrigin = tripState?.trip_context?.origin;
@@ -665,28 +675,43 @@ export default function TripDashboard() {
     const partySize = travelerCount(itineraryResult.result.final_itinerary.trip_summary);
 
     let cancelled = false;
+    setTransportError(null);
+    setStayError(null);
     (async () => {
-      try {
-        const transportEntries = await Promise.all(legsToFetch.map(async leg => {
+      // TWM-195: Transport and Stay are fetched and error-isolated
+      // independently (Promise.allSettled, not Promise.all) — a transport
+      // resolution or feasibility failure must never blank out or error
+      // the already-fetched/fetching Stay section, and vice versa.
+      const [transportOutcome, stayOutcome] = await Promise.allSettled([
+        Promise.all(legsToFetch.map(async leg => {
           const [options, feasibility] = await Promise.all([
             transportOptionsFor(tripId, leg, partySize),
             fetchLegFeasibility(tripId, leg).catch(() => null),
           ]);
           return [legKey(leg), { options, feasibility }];
-        }));
-        const stayEntries = await Promise.all(stays.map(async stay => {
+        })),
+        Promise.all(stays.map(async stay => {
           const options = await stayOptionsFor(tripId, stay);
           return [stay.id, { options }];
-        }));
-        if (cancelled) return;
-        setTransportData(Object.fromEntries(transportEntries));
-        setStayData(Object.fromEntries(stayEntries));
-        setBookingsStatus('ready');
-      } catch (error) {
-        if (cancelled) return;
-        setBookingsStatus('error');
-        setBookingsError(error.message || 'Could not load booking options.');
+        })),
+      ]);
+      if (cancelled) return;
+
+      if (transportOutcome.status === 'fulfilled') {
+        setTransportData(Object.fromEntries(transportOutcome.value));
+      } else {
+        setTransportError(transportOutcome.reason?.message || 'Could not load transport options.');
       }
+
+      if (stayOutcome.status === 'fulfilled') {
+        setStayData(Object.fromEntries(stayOutcome.value));
+      } else {
+        setStayError(stayOutcome.reason?.message || 'Could not load stay options.');
+      }
+
+      setBookingsStatus(
+        transportOutcome.status === 'rejected' && stayOutcome.status === 'rejected' ? 'error' : 'ready'
+      );
     })();
     return () => { cancelled = true; };
   }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin]);
@@ -1093,11 +1118,13 @@ export default function TripDashboard() {
       {tab === 'Bookings' && <section aria-label="Bookings">
         <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Real route options for every leg — schedules and fares are yours to verify before you book.</p></div></div>
         <AnchorList anchors={orphanTransportAnchors} />
-        {bookingsStatus === 'error' && <p className="already-booked-note" role="alert">{bookingsError}</p>}
+        {transportError && <p className="already-booked-note" role="alert">{transportError}</p>}
         {roundTripBundle && (() => {
           const label = `${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`;
           const entry = transportData[legKey(roundTripBundle.outbound)];
-          const { feasible, excluded } = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : { feasible: [], excluded: [] };
+          const { feasible, excluded, unassessed } = entry
+            ? feasibleTransportOptions(entry.options, entry.feasibility)
+            : { feasible: [], excluded: [], unassessed: [] };
           const recommended = entry ? recommendedMode(feasible) : undefined;
           return (
             <BookingSegment
@@ -1106,9 +1133,10 @@ export default function TripDashboard() {
               expanded={expandedBookingId === roundTripBundle.id}
               onToggleExpand={() => toggleExpandedBooking(roundTripBundle.id, 'transport', { isRoundTrip: true, excludedOptions: excluded })}
               loading={expandedBookingId === roundTripBundle.id && bookingsStatus === 'loading'}
-              loadError={expandedBookingId === roundTripBundle.id ? bookingsError : null}
+              loadError={expandedBookingId === roundTripBundle.id ? transportError : null}
               options={feasible}
               excluded={excluded}
+              unassessed={unassessed}
               recommended={recommended}
               feasibilityModes={entry?.feasibility?.modes}
               renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
@@ -1119,7 +1147,9 @@ export default function TripDashboard() {
         {soloLegs.map(leg => {
           const label = `${leg.from} → ${leg.to}`;
           const entry = transportData[legKey(leg)];
-          const { feasible, excluded } = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : { feasible: [], excluded: [] };
+          const { feasible, excluded, unassessed } = entry
+            ? feasibleTransportOptions(entry.options, entry.feasibility)
+            : { feasible: [], excluded: [], unassessed: [] };
           const recommended = entry ? recommendedMode(feasible) : undefined;
           return (
             <BookingSegment
@@ -1129,9 +1159,10 @@ export default function TripDashboard() {
               expanded={expandedBookingId === leg.id}
               onToggleExpand={() => toggleExpandedBooking(leg.id, 'transport', { excludedOptions: excluded })}
               loading={expandedBookingId === leg.id && bookingsStatus === 'loading'}
-              loadError={expandedBookingId === leg.id ? bookingsError : null}
+              loadError={expandedBookingId === leg.id ? transportError : null}
               options={feasible}
               excluded={excluded}
+              unassessed={unassessed}
               recommended={recommended}
               feasibilityModes={entry?.feasibility?.modes}
               renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
@@ -1145,6 +1176,7 @@ export default function TripDashboard() {
 
         <div className="tab-intro"><div><h2>🏨 Stay</h2><p>Real properties for every base — check dates and price before booking.</p></div></div>
         <AnchorList anchors={orphanStayAnchors} />
+        {stayError && <p className="already-booked-note" role="alert">{stayError}</p>}
         {stayLegList.map(stay => {
           const entry = stayData[stay.id];
           return (
@@ -1155,7 +1187,7 @@ export default function TripDashboard() {
               expanded={expandedBookingId === stay.id}
               onToggleExpand={() => toggleExpandedBooking(stay.id, 'stay')}
               loading={expandedBookingId === stay.id && bookingsStatus === 'loading'}
-              loadError={expandedBookingId === stay.id ? bookingsError : null}
+              loadError={expandedBookingId === stay.id ? stayError : null}
               options={entry?.options || []}
               excluded={[]}
               renderOption={(option, best) => <StayOptionCard key={option.name} option={option} best={best} />}
