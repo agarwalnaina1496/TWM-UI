@@ -79,11 +79,23 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
     // Bookings tab (TWM-130/131/146) resolves each transport mode's CTA,
     // per-route feasibility, and a live flight-offer search — all real
     // network calls, unmocked by default. Fulfilled generically here
-    // (a resolved CTA to a placeholder URL, no feasibility data, no live
-    // offer) so any spec that reaches the Bookings tab gets deterministic,
-    // renderable options instead of the Vite SPA-fallback empty-object trick.
+    // (a resolved CTA to a placeholder URL, all four modes genuinely
+    // feasible, no live offer) so any spec that reaches the Bookings tab
+    // gets deterministic, renderable options instead of the Vite
+    // SPA-fallback empty-object trick.
+    // TWM-195: a `null`/missing assessment (this endpoint's old fixture
+    // response) is no longer equivalent to "every mode feasible" — the UI
+    // now renders that as an honest not-yet-assessed state instead of a
+    // bookable option, so specs that expect to reach a resolvable CTA need
+    // a real (mocked) TripFeasibilityAssessment, not `null`.
     if (method === 'POST' && pathname.endsWith('/trusted-action/feasibility')) {
-      return route.fulfill({ json: null });
+      const reference = { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
+      const modes = ['flight', 'train', 'bus', 'drive'].map(mode => ({
+        mode, status: 'feasible', duration_source: 'llm_estimated',
+        estimated_duration_minutes: 120, estimated_distance_km: null,
+        reason: 'Genuinely reachable by this mode.', verification: reference,
+      }));
+      return route.fulfill({ json: { modes } });
     }
     if (method === 'POST' && pathname.endsWith('/trusted-action')) {
       return route.fulfill({
