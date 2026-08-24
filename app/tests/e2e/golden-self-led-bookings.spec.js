@@ -18,22 +18,41 @@ function twoStopAtlasResult() {
         {
           day_number: 1, date: null, title: 'Coorg base', primary_location: 'Coorg',
           summary: 'Settle into Coorg.',
-          timeline: [{
-            start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Abbey Falls', location: 'Coorg',
-            detail: 'Visit at a relaxed pace.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
-            reference, requires_advance_booking: false, booking_readiness: null,
-          }],
+          timeline: [
+            {
+              // TWM-200: the canonical origin<->destination movement now comes
+              // from a structured TRAVEL item, not a bookend fabricated purely
+              // from trip_context.origin_city.
+              start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Arrival from Delhi', location: 'Coorg',
+              detail: 'Arrive from Delhi.', movement_guidance: null, from_city: 'Delhi', to_city: 'Coorg', display_label: null,
+              estimated_cost_low: 0, estimated_cost_high: 0,
+              reference, requires_advance_booking: false, booking_readiness: null,
+            },
+            {
+              start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Abbey Falls', location: 'Coorg',
+              detail: 'Visit at a relaxed pace.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
+              reference, requires_advance_booking: false, booking_readiness: null,
+            },
+          ],
           seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'None required.', backup_plan: null,
         },
         {
           day_number: 2, date: null, title: 'Wayanad wildlife', primary_location: 'Wayanad',
           summary: 'Move to Wayanad for a guided safari.',
-          timeline: [{
-            start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Wildlife safari', location: 'Wayanad',
-            detail: 'Limited daily slots — advance booking required.', movement_guidance: null,
-            estimated_cost_low: 1500, estimated_cost_high: 2500,
-            reference, requires_advance_booking: true, booking_readiness: null,
-          }],
+          timeline: [
+            {
+              start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Coorg to Wayanad', location: 'Wayanad',
+              detail: 'Travel to Wayanad.', movement_guidance: null, from_city: 'Coorg', to_city: 'Wayanad', display_label: null,
+              estimated_cost_low: 500, estimated_cost_high: 800,
+              reference, requires_advance_booking: false, booking_readiness: null,
+            },
+            {
+              start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Wildlife safari', location: 'Wayanad',
+              detail: 'Limited daily slots — advance booking required.', movement_guidance: null,
+              estimated_cost_low: 1500, estimated_cost_high: 2500,
+              reference, requires_advance_booking: true, booking_readiness: null,
+            },
+          ],
           seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'Forest permit required.', backup_plan: null,
         },
       ],

@@ -47,47 +47,111 @@ beforeEach(() => {
   });
 });
 
+// TWM-200: transportLegs now reads only structured, canonical
+// `from_city`/`to_city` off TRAVEL timeline items — never `location` or
+// `display_label`, which may carry road/landmark/"via" narration.
+function travelDay(dayNumber, fromCity, toCity, { date = null, displayLabel = null } = {}) {
+  return {
+    day_number: dayNumber,
+    date,
+    primary_location: toCity,
+    timeline: [
+      { kind: 'TRAVEL', from_city: fromCity, to_city: toCity, display_label: displayLabel, location: displayLabel || `${fromCity} to ${toCity}` },
+    ],
+  };
+}
+
 describe('transportLegs', () => {
-  it('includes the origin<->destination bookend legs, not just local transfers', () => {
+  it('builds legs from structured from_city/to_city on TRAVEL items, not local-transfer day grouping', () => {
     const days = [
-      { day_number: 1, primary_location: 'Gwalior' },
-      { day_number: 2, primary_location: 'Gwalior' },
-      { day_number: 3, primary_location: 'Orchha' },
+      travelDay(1, 'Delhi', 'Gwalior'),
+      { day_number: 2, primary_location: 'Gwalior', timeline: [{ kind: 'ACTIVITY', title: 'Fort visit' }] },
+      travelDay(3, 'Gwalior', 'Orchha'),
     ];
     const legs = transportLegs(days, 'Delhi');
-    expect(legs[0]).toEqual({ id: 'outbound-origin', from: 'Delhi', to: 'Gwalior', departureDate: null });
-    expect(legs[legs.length - 1]).toEqual({ id: 'return-origin', from: 'Orchha', to: 'Delhi', departureDate: null });
-    expect(legs).toHaveLength(3); // Delhi->Gwalior, Gwalior->Orchha, Orchha->Delhi
+    expect(legs).toEqual([
+      { id: 'leg-0', from: 'Delhi', to: 'Gwalior', departureDate: null },
+      { id: 'leg-1', from: 'Gwalior', to: 'Orchha', departureDate: null },
+      { id: 'return-origin', from: 'Orchha', to: 'Delhi', departureDate: null },
+    ]);
+  });
+
+  it('adds the outbound/return origin bookend legs only when Atlas has not already emitted the origin transfer as its own TRAVEL item', () => {
+    const days = [travelDay(1, 'Gwalior', 'Orchha')];
+    const legs = transportLegs(days, 'Delhi');
+    expect(legs).toEqual([
+      { id: 'outbound-origin', from: 'Delhi', to: 'Gwalior', departureDate: null },
+      { id: 'leg-0', from: 'Gwalior', to: 'Orchha', departureDate: null },
+      { id: 'return-origin', from: 'Orchha', to: 'Delhi', departureDate: null },
+    ]);
   });
 
   it('fails closed on the outbound/return bookend legs when origin is unknown, never fabricating one (TWM-199)', () => {
-    const legs = transportLegs([{ day_number: 1, primary_location: 'Goa' }], undefined);
-    expect(legs).toEqual([]);
+    const legs = transportLegs([travelDay(1, 'Mumbai', 'Goa')], undefined);
+    expect(legs).toEqual([{ id: 'leg-0', from: 'Mumbai', to: 'Goa', departureDate: null }]);
   });
 
-  it('omits only the bookend legs when origin is unknown, keeping inner transfers (which never depend on origin)', () => {
+  it('drops a TRAVEL movement missing a structured endpoint instead of parsing display_label/location (TWM-200)', () => {
     const days = [
-      { day_number: 1, primary_location: 'Gwalior' },
-      { day_number: 2, primary_location: 'Gwalior' },
-      { day_number: 3, primary_location: 'Orchha' },
+      travelDay(1, 'Bhubaneswar', 'Puri'),
+      {
+        day_number: 2,
+        primary_location: 'Konark',
+        timeline: [
+          {
+            kind: 'TRAVEL',
+            from_city: null,
+            to_city: null,
+            display_label: 'Drive along Marine Drive from Puri to Konark',
+            location: 'Marine Drive, Puri to Konark',
+          },
+        ],
+      },
+      travelDay(3, 'Konark', 'Bhubaneswar'),
     ];
     const legs = transportLegs(days, undefined);
-    expect(legs).toEqual([{ id: 'leg-0', from: 'Gwalior', to: 'Orchha', departureDate: null }]);
+    expect(legs).toEqual([
+      { id: 'leg-0', from: 'Bhubaneswar', to: 'Puri', departureDate: null },
+      { id: 'leg-1', from: 'Konark', to: 'Bhubaneswar', departureDate: null },
+    ]);
+    expect(legs.some(leg => leg.from === 'Puri' && leg.to === 'Konark')).toBe(false);
   });
 
   it('is empty for no days', () => {
     expect(transportLegs([], 'Delhi')).toEqual([]);
   });
 
+  it('is empty when no TRAVEL item carries a structured endpoint, even with origin known', () => {
+    const days = [{ day_number: 1, primary_location: 'Goa', timeline: [{ kind: 'ACTIVITY', title: 'Beach' }] }];
+    expect(transportLegs(days, 'Delhi')).toEqual([]);
+  });
+
   it('threads through a real Atlas day.date when present, never fabricating one', () => {
     const days = [
-      { day_number: 1, primary_location: 'Gwalior', date: '2026-03-01' },
-      { day_number: 2, primary_location: 'Orchha', date: '2026-03-02' },
+      travelDay(1, 'Delhi', 'Gwalior', { date: '2026-03-01' }),
+      travelDay(2, 'Gwalior', 'Orchha', { date: '2026-03-02' }),
     ];
     const legs = transportLegs(days, 'Delhi');
-    expect(legs[0].departureDate).toBe('2026-03-01'); // outbound: first stop's first date
-    expect(legs[1].departureDate).toBe('2026-03-02'); // inner leg: destination stop's first date
-    expect(legs[2].departureDate).toBe('2026-03-02'); // return: last stop's last date
+    expect(legs[0].departureDate).toBe('2026-03-01');
+    expect(legs[1].departureDate).toBe('2026-03-02');
+  });
+
+  it('regression: Odisha five-leg route resolves entirely from canonical endpoints, never the scenic display_label (TWM-200)', () => {
+    const days = [
+      travelDay(1, 'Bangalore', 'Bhubaneswar'),
+      travelDay(2, 'Bhubaneswar', 'Puri', { displayLabel: 'Bhubaneswar to Puri Highway' }),
+      travelDay(3, 'Puri', 'Konark', { displayLabel: 'Drive along Marine Drive from Puri to Konark' }),
+      travelDay(4, 'Konark', 'Bhubaneswar', { displayLabel: 'Konark to Bhubaneswar (via Pipili)' }),
+      travelDay(5, 'Bhubaneswar', 'Bangalore'),
+    ];
+    const legs = transportLegs(days, 'Bangalore');
+    expect(legs.map(({ from, to }) => ({ from, to }))).toEqual([
+      { from: 'Bangalore', to: 'Bhubaneswar' },
+      { from: 'Bhubaneswar', to: 'Puri' },
+      { from: 'Puri', to: 'Konark' },
+      { from: 'Konark', to: 'Bhubaneswar' },
+      { from: 'Bhubaneswar', to: 'Bangalore' },
+    ]);
   });
 });
 
