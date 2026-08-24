@@ -367,6 +367,28 @@ function timeAgoLabel(isoTimestamp) {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+// TWM-196: resolved-airport context (ResolvedAirport, twm/schemas/
+// flight_search.py) is Backend data correctness surfaced honestly — never
+// a UI guess. Rendered whenever Backend resolved an origin_place/
+// destination_place, regardless of search outcome, so a traveler can see
+// *which* airports TWM is actually searching even on a clarification/
+// unavailable card.
+function resolvedRouteLabel(liveOffer) {
+  const origin = liveOffer?.originResolved;
+  const destination = liveOffer?.destinationResolved;
+  if (!origin && !destination) return null;
+  return `Flights from ${origin ? origin.iata : '?'} to ${destination ? destination.iata : '?'}`;
+}
+
+// TWM-196: date_precision must never be silently dropped — "month"/
+// "flexible" results are cached/indicative, not a live quote for a
+// specific day, and the card must say so rather than implying the same
+// certainty as an "exact" result.
+const DATE_PRECISION_LABEL = {
+  month: 'Flexible dates — prices for the month',
+  flexible: 'Flexible dates — no specific day searched',
+};
+
 // TWM-146: the live-offer block — clearly a DIFFERENT thing from the CTA
 // below it (real Backend-searched price/airline/stops data, no url of its
 // own; see bookingCatalog.js's toLiveOffer/resolveFlightOption). Every
@@ -375,12 +397,24 @@ function timeAgoLabel(isoTimestamp) {
 // or misleading card.
 function FlightLiveOfferInfo({ liveOffer }) {
   if (!liveOffer) return null;
+  const routeLabel = resolvedRouteLabel(liveOffer);
+  const precisionLabel = DATE_PRECISION_LABEL[liveOffer.datePrecision] || null;
+  const routeContext = (routeLabel || precisionLabel) && (
+    <div className="live-offer-route-context">
+      {routeLabel && <span className="stay-option-tag">{routeLabel}</span>}
+      {precisionLabel && <span className="stay-option-tag">{precisionLabel}</span>}
+    </div>
+  );
   if (liveOffer.status === 'offer' || liveOffer.status === 'partial') {
     const freshness = timeAgoLabel(liveOffer.priceFoundAt);
+    const isExact = liveOffer.datePrecision === 'exact';
     return (
       <div className="live-offer-block">
-        <StatusPill tone="positive" variant="filled">
-          {liveOffer.status === 'partial' ? 'Live offer (partial)' : 'Live offer'}
+        {routeContext}
+        <StatusPill tone={isExact ? 'positive' : 'neutral'} variant="filled">
+          {isExact
+            ? (liveOffer.status === 'partial' ? 'Live offer (partial)' : 'Live offer')
+            : 'Indicative price'}
         </StatusPill>
         <strong className="live-offer-price">{liveOffer.priceLabel}</strong>
         <span className="stay-option-tag">
@@ -393,10 +427,20 @@ function FlightLiveOfferInfo({ liveOffer }) {
     );
   }
   if (liveOffer.status === 'clarification_needed') {
-    return <p className="already-booked-note">{liveOffer.message}</p>;
+    return (
+      <div className="live-offer-block">
+        {routeContext}
+        <p className="already-booked-note">{liveOffer.message}</p>
+      </div>
+    );
   }
   if (liveOffer.status === 'unavailable') {
-    return <p className="already-booked-note" role="alert">{liveOffer.message}</p>;
+    return (
+      <div className="live-offer-block">
+        {routeContext}
+        <p className="already-booked-note" role="alert">{liveOffer.message}</p>
+      </div>
+    );
   }
   if (liveOffer.status === 'expired') {
     return <p className="already-booked-note">This live price has expired — check again for a current one.</p>;

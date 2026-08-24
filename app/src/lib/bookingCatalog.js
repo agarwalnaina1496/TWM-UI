@@ -14,39 +14,6 @@ import { resolveTrustedAction, getTripFeasibility, searchFlights } from './tripA
 // feasibility endpoints instead of returning mock MODE_TEMPLATE bands and a
 // Google search URL — so every one of these is now async.
 
-// TWM-146 follow-up: a small, closed city-name -> IATA lookup, so
-// searchFlightOffer can actually populate origin_iata/destination_iata for
-// major Indian cities instead of always falling through to
-// clarification_needed. Deliberately scoped to cities that genuinely have
-// their own airport with a well-known IATA code -- a hill town or
-// non-airport destination (Alleppey, Coorg, Manali, Rishikesh, Spiti
-// Valley, etc.) is left unmapped on purpose: attaching a "nearest airport"
-// code would imply a direct-flight claim this app never actually makes, and
-// the honest outcome for those is the Backend's typed clarification_needed
-// (a traveler genuinely can't fly directly into a hill town). Case-
-// insensitive exact-name lookup only, not a geocoder.
-const CITY_IATA = {
-  'delhi': 'DEL', 'new delhi': 'DEL',
-  'agra': 'AGR',
-  'jaipur': 'JAI',
-  'mumbai': 'BOM',
-  'bengaluru': 'BLR', 'bangalore': 'BLR',
-  'kochi': 'COK', 'cochin': 'COK',
-  'goa': 'GOI', 'panaji': 'GOI',
-  'jaisalmer': 'JSA',
-  'udaipur': 'UDR',
-  'varanasi': 'VNS',
-  'chennai': 'MAA',
-  'kolkata': 'CCU',
-  'hyderabad': 'HYD',
-  'pune': 'PNQ',
-  'amritsar': 'ATQ',
-};
-
-function iataForCity(name) {
-  return CITY_IATA[(name || '').trim().toLowerCase()] || null;
-}
-
 // TWM-195 review comment: trip_context.num_travelers can arrive as a
 // chat-entered string (e.g. '2', 'Just me' — see entryCommandFixtures.js's
 // own quick-reply chips), not a number. Normalizes to a positive integer or
@@ -131,8 +98,19 @@ function pickPrimaryOffer(offers) {
 // evidence or a qualified Atlas cost estimate (TWM-144's contract keeps
 // these structurally distinct; this mapping preserves that distinction by
 // construction, not by convention).
+// TWM-196: every branch also carries originResolved/destinationResolved
+// (twm/schemas/flight_search.py's ResolvedAirport, when Backend resolved an
+// origin_place/destination_place) and datePrecision ("exact"/"month"/
+// "flexible", when readiness was satisfied) — present regardless of status
+// so the card can show honest airport/precision context ("Flights from BLR
+// to BBI, flexible dates") even alongside a clarification_needed or
+// unavailable outcome. Both are simply null when Backend didn't populate
+// them (e.g. the caller sent an already-resolved origin_iata directly).
 function toLiveOffer(response) {
   const status = response.status;
+  const originResolved = response.origin_resolved ?? null;
+  const destinationResolved = response.destination_resolved ?? null;
+  const datePrecision = response.date_precision ?? null;
   if ((status === 'offer' || status === 'partial') && response.offers?.length) {
     const offer = pickPrimaryOffer(response.offers);
     return {
@@ -142,6 +120,9 @@ function toLiveOffer(response) {
       stopCount: offer.stop_count ?? null,
       priceFoundAt: offer.price_found_at,
       offerExpiresAt: offer.offer_expires_at ?? null,
+      originResolved,
+      destinationResolved,
+      datePrecision,
     };
   }
   if (status === 'clarification_needed') {
@@ -149,42 +130,46 @@ function toLiveOffer(response) {
       status,
       message: response.clarification?.message || `We need ${flightMissingFieldsLabel(response.clarification?.missing_fields)} to search live flight prices.`,
       missingFields: response.clarification?.missing_fields || [],
+      originResolved,
+      destinationResolved,
+      datePrecision,
     };
   }
   if (status === 'unavailable') {
-    return { status, message: response.unavailable?.message };
+    return {
+      status,
+      message: response.unavailable?.message,
+      originResolved,
+      destinationResolved,
+      datePrecision,
+    };
   }
   // expired / failed: render safely, never raw provider/error data.
-  return { status };
+  return { status, originResolved, destinationResolved, datePrecision };
 }
 
-// Judgement call (TWM-146, documented per the story's instruction: "if
-// exact date/traveler-count data genuinely isn't available at the call
-// site today, that's fine"): transportLegs/routeStops (atlasView.js) now
-// pass through leg.departureDate straight from the real Atlas day.date
-// when the itinerary has per-day dates — but Atlas frequently only has a
-// travel-month/day-count window this early (see tripDatesLabel). Route is
-// resolved via CITY_IATA (above) for the closed set of major Indian cities
-// that genuinely have their own airport; leg.from/leg.to are otherwise
-// free-text city/location labels (e.g. "Home" or a primary_location
-// string) with no IATA code available, in which case origin_iata/
-// destination_iata are simply omitted — sending an unresolved or guessed
-// value would violate FlightSearchRequest's 3-letter IATA pattern or
-// misrepresent a hill town as having a direct flight. Rather than fabricate
-// an IATA code or a date, this function sends only what is genuinely known
-// — traveler count (from AtlasTripSummary.num_travelers), departure_date
-// when Atlas supplied one, and origin/destination IATA when CITY_IATA
-// resolves them — and lets the Backend's own typed clarification_needed
+// TWM-196: airport/IATA resolution is Backend data correctness, not UI
+// presentation — this function sends the visible leg's structured
+// city/place endpoints (leg.from/leg.to, sourced only from Atlas's
+// structured TRAVEL.from_city/to_city — see transportLegs) and lets
+// Backend's own OurAirports-backed resolver turn them into an IATA code
+// (twm.services.airport_resolution). The UI must never guess a city ->
+// IATA mapping itself — this replaces the old CITY_IATA lookup entirely.
+// Rather than fabricate a date, this still sends only what is genuinely
+// known — traveler count (from AtlasTripSummary.num_travelers) and
+// departure_date when Atlas supplied one (transportLegs/routeStops
+// (atlasView.js) pass through leg.departureDate straight from the real
+// Atlas day.date when the itinerary has per-day dates; a travel-month/
+// day-count window this early — see tripDatesLabel — has no per-leg exact
+// date to send) — and lets the Backend's own typed clarification_needed
 // outcome (FlightSearchClarification) render honestly for whatever's still
-// missing. This is the "render the typed clarification_needed state
-// honestly" branch the story anticipated,
-// not a bug.
+// missing. A month-only/no-date search is not a missing_input either
+// (TWM-196): Backend returns a flexible/latest-cached result instead of
+// blocking, labeled via the response's date_precision.
 async function searchFlightOffer(tripId, leg, travelerCount) {
   const payload = {};
-  const originIata = iataForCity(leg.from);
-  const destinationIata = iataForCity(leg.to);
-  if (originIata) payload[FLIGHT_SEARCH_KEYS.ORIGIN_IATA] = originIata;
-  if (destinationIata) payload[FLIGHT_SEARCH_KEYS.DESTINATION_IATA] = destinationIata;
+  if (leg.from) payload[FLIGHT_SEARCH_KEYS.ORIGIN_PLACE] = leg.from;
+  if (leg.to) payload[FLIGHT_SEARCH_KEYS.DESTINATION_PLACE] = leg.to;
   if (leg.departureDate) payload[FLIGHT_SEARCH_KEYS.DEPARTURE_DATE] = leg.departureDate;
   if (travelerCount) payload[FLIGHT_SEARCH_KEYS.TRAVELERS] = { adults: Math.max(1, travelerCount) };
   try {

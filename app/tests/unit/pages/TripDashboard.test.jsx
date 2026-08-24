@@ -960,6 +960,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
             return jsonResponse({
               status: 'offer',
               queried_at: '2026-01-01T00:00:00.000Z',
+              date_precision: 'exact',
               offers: [{
                 origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'round_trip',
                 departure_date: '2026-03-01', return_date: '2026-03-05',
@@ -985,6 +986,49 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         // The trusted-action CTA (ixigo redirect) is still present and separate
         // from the live-offer data block — the offer itself carries no url.
         expect(document.querySelector('a[href*="ixigo"]')).not.toBeNull();
+      });
+
+      // TWM-196: a month/flexible-precision offer must be labeled honestly,
+      // never presented with the same "Live offer" certainty as an
+      // exact-date result.
+      it('labels a month-precision offer as Indicative price, and shows resolved airport context', async () => {
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+        sendTripCommand = vi.fn();
+        global.fetch = vi.fn(async url => {
+          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+          if (url.includes('/flight-search')) {
+            return jsonResponse({
+              status: 'offer',
+              queried_at: '2026-01-01T00:00:00.000Z',
+              date_precision: 'month',
+              origin_resolved: { input_label: 'Delhi', iata: 'DEL', airport_name: 'Indira Gandhi International Airport', source: 'ourairports', confidence: 'high' },
+              destination_resolved: { input_label: 'Dehradun', iata: 'DED', airport_name: 'Dehradun Airport', source: 'ourairports', confidence: 'high' },
+              offers: [{
+                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'one_way',
+                departure_date: '2026-03-11',
+                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
+                baggage: { checked_bag_included: null, cabin_bag_included: null },
+                fare_conditions: { refundable: null, changeable: null },
+                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
+                price_found_at: '2026-01-01T00:00:00.000Z',
+                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
+              }],
+            });
+          }
+          return jsonResponse({});
+        });
+        const user = userEvent.setup();
+        await readyDashboard();
+        await user.click(screen.getByRole('button', { name: /Bookings/ }));
+        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+
+        await waitFor(() => expect(screen.getAllByText('Indicative price').length).toBeGreaterThan(0));
+        expect(screen.queryAllByText('Live offer').length).toBe(0);
+        expect(screen.getAllByText(/Flexible dates/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Flights from DEL to DED').length).toBeGreaterThan(0);
       });
 
       it('renders the Backend-authored unavailable message safely for a flight card', async () => {
