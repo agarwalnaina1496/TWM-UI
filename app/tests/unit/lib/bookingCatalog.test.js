@@ -60,9 +60,19 @@ describe('transportLegs', () => {
     expect(legs).toHaveLength(3); // Delhi->Gwalior, Gwalior->Orchha, Orchha->Delhi
   });
 
-  it('falls back to a generic origin label when none is known', () => {
+  it('fails closed on the outbound/return bookend legs when origin is unknown, never fabricating one (TWM-199)', () => {
     const legs = transportLegs([{ day_number: 1, primary_location: 'Goa' }], undefined);
-    expect(legs[0].from).toBe('Home');
+    expect(legs).toEqual([]);
+  });
+
+  it('omits only the bookend legs when origin is unknown, keeping inner transfers (which never depend on origin)', () => {
+    const days = [
+      { day_number: 1, primary_location: 'Gwalior' },
+      { day_number: 2, primary_location: 'Gwalior' },
+      { day_number: 3, primary_location: 'Orchha' },
+    ];
+    const legs = transportLegs(days, undefined);
+    expect(legs).toEqual([{ id: 'leg-0', from: 'Gwalior', to: 'Orchha', departureDate: null }]);
   });
 
   it('is empty for no days', () => {

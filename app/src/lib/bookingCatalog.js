@@ -197,6 +197,7 @@ async function resolveFlightOption(tripId, leg, travelerCount) {
       [TRUSTED_ACTION_KEYS.DOMAIN]: 'flight',
       [TRUSTED_ACTION_KEYS.ORIGIN]: leg.from,
       [TRUSTED_ACTION_KEYS.DESTINATION]: leg.to,
+      ...(travelerCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: travelerCount } : {}),
     })
       .then(result => toTransportOption('flight', name, result))
       .catch(error => ({ mode: 'flight', name, status: 'error', errorMessage: error.message || 'Could not load this option.' })),
@@ -229,6 +230,7 @@ async function resolveTransportOption(tripId, leg, mode, travelerCount) {
       [TRUSTED_ACTION_KEYS.DOMAIN]: domain,
       [TRUSTED_ACTION_KEYS.ORIGIN]: leg.from,
       [TRUSTED_ACTION_KEYS.DESTINATION]: leg.to,
+      ...(travelerCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: travelerCount } : {}),
     });
     return toTransportOption(mode, name, result);
   } catch (error) {
@@ -335,16 +337,27 @@ export function recommendedMode(feasibleOptions) {
 // When Atlas has no per-day dates yet (tripDatesLabel's "Travel month"/
 // day-count fallback case), every leg's departureDate is null — the honest
 // outcome, not a guess.
+//
+// TWM-199: `origin` (canonical trip_context.origin_city, via
+// tripOriginCity()) is genuinely unknown for some trips — this fails
+// closed on the bookend legs rather than fabricating a "Home" label. An
+// unresolved origin is not a rendering gap; it's the honest "we don't
+// know where this trip starts" outcome, so only the inner transfer legs
+// (which never depend on origin) are returned.
 export function transportLegs(days, origin) {
   const stops = routeStops(days);
   if (stops.length === 0) return [];
-  const originLabel = origin || 'Home';
-  const legs = [{ id: 'outbound-origin', from: originLabel, to: stops[0].location, departureDate: stops[0].dates?.[0] ?? null }];
+  const legs = [];
+  if (origin) {
+    legs.push({ id: 'outbound-origin', from: origin, to: stops[0].location, departureDate: stops[0].dates?.[0] ?? null });
+  }
   for (let i = 0; i < stops.length - 1; i++) {
     legs.push({ id: `leg-${i}`, from: stops[i].location, to: stops[i + 1].location, departureDate: stops[i + 1].dates?.[0] ?? null });
   }
-  const lastStop = stops[stops.length - 1];
-  legs.push({ id: 'return-origin', from: lastStop.location, to: originLabel, departureDate: lastStop.dates?.[lastStop.dates.length - 1] ?? null });
+  if (origin) {
+    const lastStop = stops[stops.length - 1];
+    legs.push({ id: 'return-origin', from: lastStop.location, to: origin, departureDate: lastStop.dates?.[lastStop.dates.length - 1] ?? null });
+  }
   return legs;
 }
 

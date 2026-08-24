@@ -408,14 +408,31 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(within(disclosure).getAllByText('General guidance').length).toBeGreaterThan(0);
     });
 
-    it('never falls back to noncanonical trip_context.origin for the booking origin leg (TWM-199)', async () => {
+    it('never falls back to noncanonical trip_context.origin, and fails closed (no fabricated "Home") when origin_city is unknown (TWM-199)', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Mumbai' } });
       sendTripCommand = vi.fn();
       await readyDashboard();
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
       expect(screen.queryByText(/Mumbai ⇄ Rishikesh/)).not.toBeInTheDocument();
-      expect(screen.getByText('Home ⇄ Rishikesh round trip not booked yet')).toBeInTheDocument();
+      expect(screen.queryByText(/Home ⇄ Rishikesh/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/⇄/)).not.toBeInTheDocument();
+    });
+
+    it('sources the Trusted Action traveler_count from canonical trip_context.num_travelers, not Atlas trip_summary (TWM-199)', async () => {
+      // Atlas trip_summary.num_travelers is 2 (atlasResult's default) — a
+      // deliberately different value than trip_context.num_travelers below,
+      // so the assertion can only pass if trip_context is the source used.
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', num_travelers: '3' } });
+      sendTripCommand = vi.fn();
+      await readyDashboard();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await waitFor(() => {
+        const trustedActionCall = global.fetch.mock.calls.find(([url]) => url.includes('/trusted-action') && !url.includes('feasibility'));
+        expect(trustedActionCall).toBeTruthy();
+        expect(JSON.parse(trustedActionCall[1].body)).toMatchObject({ traveler_count: 3 });
+      });
     });
 
     it('shows a specific "not booked yet" label per segment, never a bare generic one', async () => {
