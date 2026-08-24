@@ -95,7 +95,7 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
         estimated_duration_minutes: 120, estimated_distance_km: null,
         reason: 'Genuinely reachable by this mode.', verification: reference,
       }));
-      return route.fulfill({ json: { modes } });
+      return route.fulfill({ json: { modes, excluded_modes: [] } });
     }
     if (method === 'POST' && pathname.endsWith('/trusted-action')) {
       return route.fulfill({

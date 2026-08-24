@@ -169,6 +169,7 @@ function feasibleAssessmentResponse() {
       { mode: 'bus', status: 'feasible', duration_source: 'llm_estimated', reason: 'Also practical for this trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
       { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.' },
     ],
+    excluded_modes: [],
   };
 }
 

@@ -285,8 +285,17 @@ export async function fetchLegFeasibility(tripId, leg) {
 //   - unassessed: status "unknown", OR no feasibility assessment exists
 //     yet at all for this leg — nothing is known well enough to call it
 //     feasible or ruled out.
+//
+// PR-review fix (TWM-195): Backend now splits TripFeasibilityAssessment into
+// `modes` (feasible/bookable only) and `excluded_modes` (ruled_out/unknown,
+// non-bookable metadata) so a route-absurd mode never comes back as a
+// normal option. Read both lists here so ruled_out/unknown modes are still
+// found and rendered (in the `excluded`/`unassessed` buckets below) — the
+// three-bucket split itself is unchanged.
 export function feasibleTransportOptions(options, feasibility) {
-  const modesByName = new Map((feasibility?.modes || []).map(entry => [entry.mode, entry]));
+  const modesByName = new Map(
+    [...(feasibility?.modes || []), ...(feasibility?.excluded_modes || [])].map(entry => [entry.mode, entry])
+  );
   const feasible = [];
   const excluded = [];
   const unassessed = [];

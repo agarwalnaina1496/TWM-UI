@@ -259,6 +259,8 @@ describe('feasibleTransportOptions', () => {
     const feasibility = {
       modes: [
         { mode: 'flight', status: 'feasible', duration_source: 'llm_estimated', reason: 'Fast option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      ],
+      excluded_modes: [
         { mode: 'bus', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'A 14h journey is not practical here.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
       ],
     };
@@ -287,7 +289,7 @@ describe('feasibleTransportOptions', () => {
   it('treats a per-mode "unknown" status as unassessed, not feasible', () => {
     const options = [{ mode: 'flight', name: 'Flight' }];
     const feasibility = {
-      modes: [
+      excluded_modes: [
         { mode: 'flight', status: 'unknown', duration_source: 'llm_estimated', reason: 'Could not confidently assess this route.' },
       ],
     };
@@ -310,10 +312,12 @@ describe('feasibleTransportOptions', () => {
     ];
     const feasibility = {
       modes: [
-        { mode: 'flight', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'Too short a hop for a flight.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
         { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'Regular train service.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
         { mode: 'bus', status: 'feasible', duration_source: 'llm_estimated', reason: 'Frequent bus service.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
         { mode: 'drive', status: 'feasible', duration_source: 'llm_estimated', reason: 'Short drive.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      ],
+      excluded_modes: [
+        { mode: 'flight', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'Too short a hop for a flight.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
       ],
     };
     const { feasible, excluded } = feasibleTransportOptions(options, feasibility);

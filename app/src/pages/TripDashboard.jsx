@@ -1138,7 +1138,7 @@ export default function TripDashboard() {
               excluded={excluded}
               unassessed={unassessed}
               recommended={recommended}
-              feasibilityModes={entry?.feasibility?.modes}
+              feasibilityModes={entry?.feasibility ? [...(entry.feasibility.modes || []), ...(entry.feasibility.excluded_modes || [])] : undefined}
               renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
               onOpenConfirm={() => openConfirmForm('transport', label)}
             />
@@ -1164,7 +1164,7 @@ export default function TripDashboard() {
               excluded={excluded}
               unassessed={unassessed}
               recommended={recommended}
-              feasibilityModes={entry?.feasibility?.modes}
+              feasibilityModes={entry?.feasibility ? [...(entry.feasibility.modes || []), ...(entry.feasibility.excluded_modes || [])] : undefined}
               renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
               onOpenConfirm={() => openConfirmForm('transport', label)}
             />
