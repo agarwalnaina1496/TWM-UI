@@ -355,107 +355,30 @@ export function recommendedMode(feasibleOptions) {
   return null;
 }
 
-// TWM-195 review comment (rewrite): atomic directional transport legs,
-// walking Atlas timeline data in day order and tracking a running "current
-// location" pointer — replaces the old routeStops-only derivation, which
-// deduped consecutive days purely by day.primary_location and had no
-// awareness of Atlas TRAVEL timeline items at all. That was the exact
-// source of two review-flagged bugs: (1) a compound day.primary_location
-// like "Konark & Bhubaneswar" got treated as one destination city and sent
-// to feasibility as-is, which isn't a real city and fails closed; (2) every
-// leg was bundled into a generic round-trip row (see the now-deleted
-// bundleRoundTrip below).
+// Transport legs (TWM-200): built only from each TRAVEL timeline item's
+// structured, canonical `from_city`/`to_city` — never from `location` or
+// `display_label`, which may carry road/landmark/"via" narration Atlas is
+// free to write for a traveler to read (e.g. "Marine Drive, Puri to
+// Konark"). Atlas/Backend owns route meaning; this function must not parse
+// that narrative text, and must not infer a route on its own — including a
+// trip_context.origin_city bookend leg. Atlas's own prompt already
+// instructs it to include transport to/from the origin as a TRAVEL item
+// when known; if it omits that movement (or any other), the honest outcome
+// is a missing leg here, not a UI-synthesized one (TWM-200 review finding).
 //
-// Algorithm (TWM-195 review comment — "prefer Atlas TRAVEL timeline
-// movements... rather than treating compound day locations as one
-// destination"):
-//   1. currentLocation starts at the trip's canonical origin.
-//   2. Walk days in order; within each day, walk `timeline` in order. Each
-//      `kind: 'TRAVEL'` item's `location` is the destination reached by
-//      that atomic movement (Atlas has no explicit from-field on a TRAVEL
-//      item — the origin of any movement is implicitly wherever the
-//      traveler was immediately before it, i.e. our running pointer). When
-//      it differs from currentLocation, emit an atomic leg and advance the
-//      pointer; when it equals currentLocation, it's not a real movement,
-//      so no same-city pseudo-leg is emitted (per the review comment's
-//      explicit "avoid creating a pseudo same-city leg" requirement).
-//   3. Gap-filler judgement call: a day-level fallback leg to
-//      day.primary_location only fires when that day had ZERO TRAVEL
-//      timeline items at all (a genuine Atlas data gap the old
-//      routeStops-only logic used to paper over for every day). A day that
-//      *does* carry TRAVEL items is trusted completely and never
-//      reconciled against day.primary_location — reconciling against it
-//      would resurrect exactly the compound-label bug this rewrite fixes
-//      (e.g. Day 3's real "Konark" + "Bhubaneswar" TRAVEL items would
-//      otherwise get a bogus trailing leg to the compound
-//      "Konark & Bhubaneswar" string, since neither atomic destination
-//      string-equals that compound label).
-//   4. After every day is processed, a final currentLocation -> origin leg
-//      is emitted only if the traveler isn't already back at origin — never
-//      a pseudo same-city leg for an itinerary that already ends at home.
-// departureDate (TWM-146, preserved): best-effort only, taken straight from
-// the real Atlas day.date whenever available — never fabricated. Each leg
-// uses the date of the day whose timeline (or day-level fallback) produced
-// it, i.e. the date the traveler arrives at that leg's destination; the
-// final return-to-origin leg uses the last day's date. When Atlas has no
-// per-day dates yet, every leg's departureDate is null — the honest
-// outcome, not a guess.
+// A TRAVEL item that is missing a structured endpoint pair is dropped
+// entirely rather than falling back to display text — fail closed for that
+// movement (TWM-200 acceptance criteria), not a best-effort parse.
 //
-// TWM-195 review comment (correction — fail closed on missing origin): the
-// caller (TripDashboard.jsx) now passes `trip_context.origin_city` with NO
-// fallback — `origin` here may genuinely be undefined/null. This function
-// must not fabricate an origin (no more `origin || 'Home'`). When origin is
-// unknown, `currentLocation` starts as `null` instead of a real place: the
-// first real location the walk encounters (first TRAVEL item, or first
-// day's primary_location) becomes the new running-pointer baseline WITHOUT
-// emitting a leg from a null origin (a leg needs two real endpoints), and
-// the final return-to-origin leg is only emitted when a real, non-null
-// origin was known at the start — never a pseudo `X -> null` bookend. Inner
-// legs between two real Atlas locations are still emitted normally once
-// `currentLocation` has a real value — only the bookend (outbound-from-
-// origin and return-to-origin) legs require a known origin to exist at all.
-export function transportLegs(days, origin) {
-  const originLabel = origin || null;
-  const legs = [];
-  let currentLocation = originLabel;
-  let legIndex = 0;
-  let lastDayDate = null;
-
-  const pushLeg = (from, to, departureDate) => {
-    // Composite id (index + route), not from/to alone — the same city pair
-    // can legitimately repeat (e.g. a there-and-back local excursion), so
-    // from/to alone wouldn't be a stable/unique key.
-    legs.push({ id: `leg-${legIndex++}-${from}->${to}`, from, to, departureDate: departureDate ?? null });
-  };
-
-  for (const day of days || []) {
-    if (day.date) lastDayDate = day.date;
-    let hasTravelItem = false;
-    for (const item of day.timeline || []) {
-      if (item.kind !== 'TRAVEL' || !item.location) continue;
-      hasTravelItem = true;
-      if (item.location === currentLocation) continue; // not a real movement
-      // currentLocation === null means origin is genuinely unknown — this
-      // is the FIRST real location reached, so it becomes the running
-      // pointer's baseline without emitting a leg from a null origin.
-      if (currentLocation !== null) pushLeg(currentLocation, item.location, day.date);
-      currentLocation = item.location;
-    }
-    // Gap-filler: only when Atlas modeled no TRAVEL movement at all this
-    // day — see judgement-call comment above for why a day WITH TRAVEL
-    // items is never reconciled against (possibly compound) primary_location.
-    if (!hasTravelItem && day.primary_location && currentLocation !== day.primary_location) {
-      if (currentLocation !== null) pushLeg(currentLocation, day.primary_location, day.date);
-      currentLocation = day.primary_location;
-    }
-  }
-
-  // Final return-to-origin leg: only when a real origin was known AND the
-  // traveler isn't already back there — never a leg to/from a null origin.
-  if (originLabel !== null && currentLocation !== originLabel) {
-    pushLeg(currentLocation, originLabel, lastDayDate);
-  }
-
+// departureDate: best-effort only, taken from the movement's own day.date
+// when Atlas supplied one; never fabricated.
+export function transportLegs(days) {
+  const movements = (days || []).flatMap(day =>
+    (day.timeline || [])
+      .filter(item => item.kind === 'TRAVEL' && item.from_city && item.to_city)
+      .map(item => ({ from: item.from_city, to: item.to_city, departureDate: day.date ?? null }))
+  );
+  const legs = movements.map((movement, i) => ({ id: `leg-${i}`, ...movement }));
   return legs;
 }
 

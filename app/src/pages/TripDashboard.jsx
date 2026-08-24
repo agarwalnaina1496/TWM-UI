@@ -16,7 +16,6 @@ import {
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
-import { tripOriginCity } from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -587,16 +586,6 @@ export default function TripDashboard() {
   const frozenPlan = plannerState?.frozen_plan;
   const itineraryState = tripState?.itinerary_state;
   const anchors = tripState?.logistics_state?.anchors ?? [];
-  // TWM-195 review comment (correction): `trip_context.origin_city` is the
-  // ONLY canonical TripState origin field for Dashboard Bookings — the
-  // earlier `origin_city || origin` fallback is explicitly reversed by the
-  // review comment. If `origin_city` is missing, origin is genuinely
-  // missing; Bookings must fail closed (no bookable external legs) rather
-  // than silently substituting the legacy `origin` field or "Home".
-  // Computed ONCE and threaded everywhere origin feeds Bookings (the fetch
-  // effect, transportLegs' from/to leg labels, and confirmation-anchor
-  // matching via findAnchor below) so every call site agrees.
-  const canonicalOrigin = tripOriginCity(tripState?.trip_context);
   const [bootStatus, setBootStatus] = useState('idle'); // idle | booting | ready | error
   const [bootError, setBootError] = useState(null);
   const [showBookingPrompt, setShowBookingPrompt] = useState(false);
@@ -668,9 +657,11 @@ export default function TripDashboard() {
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
     // TWM-195 review comment: every leg transportLegs returns is fetched —
-    // no more round-trip bundling (also removed by TWM-199 independently),
-    // so there's no outbound/rest split here.
-    const legsToFetch = transportLegs(bookingDays, canonicalOrigin);
+    // no round-trip bundling in this story, so there's no outbound/rest
+    // split here. TWM-200: transportLegs now takes only `days` — legs come
+    // solely from Atlas's own structured TRAVEL.from_city/to_city
+    // movements, never a UI-synthesized origin bookend.
+    const legsToFetch = transportLegs(bookingDays);
     const stays = stayLegs(bookingDays);
     // TWM-146/TWM-195/TWM-199: threaded through to flight's live-offer
     // search and Trusted Action's traveler_count so those payloads are
@@ -739,7 +730,7 @@ export default function TripDashboard() {
       );
     })();
     return () => { cancelled = true; };
-  }, [tab, itineraryStatus, tripId, itineraryResult, canonicalOrigin]);
+  }, [tab, itineraryStatus, tripId, itineraryResult]);
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -966,11 +957,10 @@ export default function TripDashboard() {
   // is part of this contract — changing that formatting without updating
   // this matcher will silently reclassify real confirmed anchors as orphaned.
   const findAnchor = (typeAnchors, label) => typeAnchors.find(a => a.label === label);
-  // TWM-195 review comment: canonicalOrigin (computed once above) feeds
-  // transportLegs here too, so render-side leg labels/anchor-matching use
-  // the exact same origin the fetch effect already used to key
-  // transportData — never a second, possibly-disagreeing resolution.
-  const transportLegList = transportLegs(days, canonicalOrigin);
+  // TWM-200: transportLegs derives legs solely from Atlas's own structured
+  // TRAVEL.from_city/to_city movements now — no origin argument, no
+  // UI-synthesized bookend leg, and (per TWM-195) no round-trip bundling.
+  const transportLegList = transportLegs(days);
   const stayLegList = stayLegs(days);
   const activityList = activityBookings(days);
 

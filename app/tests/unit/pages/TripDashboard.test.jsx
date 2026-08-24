@@ -34,21 +34,43 @@ function atlasResult(overrides = {}) {
         {
           day_number: 1, date: null, title: 'Arrival and ghats', primary_location: 'Rishikesh',
           summary: 'Settle in and explore.',
-          timeline: [{
-            start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Triveni Ghat', location: 'Rishikesh',
-            detail: 'Visit at a relaxed pace.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
-            reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
-          }],
+          timeline: [
+            {
+              // TWM-200: the canonical origin<->destination movement now comes
+              // from a structured TRAVEL item, not a bookend fabricated purely
+              // from trip_context.origin_city.
+              start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Arrival from Delhi', location: 'Rishikesh',
+              detail: 'Arrive from Delhi.', movement_guidance: null, from_city: 'Delhi', to_city: 'Rishikesh', display_label: null,
+              estimated_cost_low: 0, estimated_cost_high: 0,
+              reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+            },
+            {
+              start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Triveni Ghat', location: 'Rishikesh',
+              detail: 'Visit at a relaxed pace.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
+              reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+            },
+          ],
           seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'None required.', backup_plan: null,
         },
         {
           day_number: 2, date: null, title: 'Ram Jhula', primary_location: 'Rishikesh',
           summary: 'A quieter second day.',
-          timeline: [{
-            start_time: 'Afternoon', end_time: null, kind: 'TRAVEL', title: 'Ram Jhula crossing', location: 'Rishikesh',
-            detail: 'Cross the bridge.', movement_guidance: 'Short walk.', estimated_cost_low: 100, estimated_cost_high: 200,
-            reference: generalReference(), requires_advance_booking: true, booking_readiness: 'unresolved',
-          }],
+          timeline: [
+            {
+              start_time: 'Afternoon', end_time: null, kind: 'TRAVEL', title: 'Ram Jhula crossing', location: 'Rishikesh',
+              detail: 'Cross the bridge.', movement_guidance: 'Short walk.', estimated_cost_low: 100, estimated_cost_high: 200,
+              reference: generalReference(), requires_advance_booking: true, booking_readiness: 'unresolved',
+            },
+            {
+              // TWM-200 review finding: the return-to-origin leg must come
+              // from its own structured TRAVEL movement — UI no longer
+              // synthesizes an origin bookend leg on its own.
+              start_time: 'Evening', end_time: null, kind: 'TRAVEL', title: 'Return to Delhi', location: 'Delhi',
+              detail: 'Return to Delhi.', movement_guidance: null, from_city: 'Rishikesh', to_city: 'Delhi', display_label: null,
+              estimated_cost_low: 0, estimated_cost_high: 0,
+              reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+            },
+          ],
           seasonal_guidance: 'Best in cooler months.', permit_or_ticket_guidance: 'None required.', backup_plan: 'Indoor market visit if it rains.',
         },
       ],
@@ -371,39 +393,13 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.queryByText('Delhi ⇄ Rishikesh round trip')).not.toBeInTheDocument();
     });
 
-    // TWM-195 review comment: canonical origin_city must be used over the
-    // legacy origin field, and that origin must be used everywhere Bookings
-    // derives leg labels — never fall back to a placeholder like "Home"
-    // when origin_city genuinely exists.
-    it('uses trip_context.origin_city over the legacy origin field for booking legs', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Bangalore', origin: 'Home' } });
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.getByText('Bangalore → Rishikesh')).toBeInTheDocument();
-      expect(screen.getByText('Rishikesh → Bangalore')).toBeInTheDocument();
-      expect(screen.queryByText(/Home/)).not.toBeInTheDocument();
-    });
-
-    // TWM-195 review comment (correction): origin_city is the ONLY
-    // canonical origin field for Bookings — the legacy `origin` field must
-    // NOT be used as a fallback. When origin_city is absent, origin is
-    // genuinely missing and Bookings must fail closed (no outbound/return
-    // bookend legs), never silently substitute the legacy field or "Home".
-    it('does not fall back to the legacy origin field when origin_city is absent — fails closed instead', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Chennai' } });
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.queryByText(/Chennai/)).not.toBeInTheDocument();
-      // Fixture: both days are Rishikesh with no real inner movement and no
-      // known origin, so transportLegs emits zero legs — the Transport
-      // section has nothing to render.
-      expect(screen.queryByText(/→ Rishikesh/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Rishikesh →/)).not.toBeInTheDocument();
-    });
+    // TWM-200: transportLegs derives legs solely from Atlas's own
+    // structured TRAVEL.from_city/to_city — trip_context.origin/origin_city
+    // has no effect on Bookings leg labels at all any more (the shared
+    // fixture's TRAVEL items hardcode Delhi/Rishikesh regardless of
+    // trip_context), so there is no origin-vs-origin_city leg-label
+    // behavior left to test here; see the "fails closed when Atlas has not
+    // emitted a structured movement" test below for the current contract.
 
     // TWM-195 review comment: canonical trip_context.num_travelers (which
     // can arrive as a chat-entered string) is the primary traveler-count
@@ -484,7 +480,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
     // Every leg transportLegs returns renders as its own row — proven here
     // with a 3-city fixture (no bundling of any kind, not just the
-    // 2-city/round-trip case above).
+    // 2-city/round-trip case above). TWM-200: legs come solely from each
+    // day's own structured TRAVEL.from_city/to_city now, not an inferred
+    // origin bookend.
     it('renders every returned leg as its own row, with no bundled heading anywhere', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       itineraryFetchResponse = {
@@ -492,8 +490,36 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         result: atlasResult({
           final_itinerary: {
             days: [
-              { day_number: 1, date: null, title: 'Arrival', primary_location: 'Rishikesh', summary: 'x', timeline: [], seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null },
-              { day_number: 2, date: null, title: 'Onward', primary_location: 'Haridwar', summary: 'x', timeline: [], seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null },
+              {
+                day_number: 1, date: null, title: 'Arrival', primary_location: 'Rishikesh', summary: 'x',
+                timeline: [{
+                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Arrival', location: 'Rishikesh',
+                  detail: 'Arrive from Delhi.', movement_guidance: null, from_city: 'Delhi', to_city: 'Rishikesh', display_label: null,
+                  estimated_cost_low: 0, estimated_cost_high: 0,
+                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+                }],
+                seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+              },
+              {
+                day_number: 2, date: null, title: 'Onward', primary_location: 'Haridwar', summary: 'x',
+                timeline: [{
+                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Onward', location: 'Haridwar',
+                  detail: 'Move to Haridwar.', movement_guidance: null, from_city: 'Rishikesh', to_city: 'Haridwar', display_label: null,
+                  estimated_cost_low: 0, estimated_cost_high: 0,
+                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+                }],
+                seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+              },
+              {
+                day_number: 3, date: null, title: 'Return', primary_location: 'Delhi', summary: 'x',
+                timeline: [{
+                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Return', location: 'Delhi',
+                  detail: 'Return to Delhi.', movement_guidance: null, from_city: 'Haridwar', to_city: 'Delhi', display_label: null,
+                  estimated_cost_low: 0, estimated_cost_high: 0,
+                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+                }],
+                seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+              },
             ],
           },
         }),
@@ -612,13 +638,38 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(transportNetworkCalls).toEqual([]);
     });
 
-    it('never falls back to noncanonical trip_context.origin, and fails closed (no fabricated "Home") when origin_city is unknown (TWM-199)', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Mumbai' } });
+    it('fails closed (no synthesized leg) when Atlas has not emitted a structured movement, never inferring one from trip_context (TWM-200)', async () => {
+      // Neither trip_context.origin (noncanonical) nor trip_context.origin_city
+      // can produce a leg on their own anymore — transportLegs no longer
+      // accepts an origin at all. Only a TRAVEL item's own from_city/to_city
+      // can, and this fixture's TRAVEL item carries none.
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Mumbai', origin_city: 'Delhi' } });
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: {
+            days: [
+              {
+                day_number: 1, date: null, title: 'Arrival and ghats', primary_location: 'Rishikesh',
+                summary: 'Settle in and explore.',
+                timeline: [{
+                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Arrival', location: 'Rishikesh',
+                  detail: 'Arrive and settle in.', movement_guidance: null, from_city: null, to_city: null, display_label: null,
+                  estimated_cost_low: 0, estimated_cost_high: 0,
+                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+                }],
+                seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'None required.', backup_plan: null,
+              },
+            ],
+          },
+        }),
+      };
       sendTripCommand = vi.fn();
       await readyDashboard();
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
       expect(screen.queryByText(/Mumbai ⇄ Rishikesh/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Delhi ⇄ Rishikesh/)).not.toBeInTheDocument();
       expect(screen.queryByText(/Home ⇄ Rishikesh/)).not.toBeInTheDocument();
       expect(screen.queryByText(/⇄/)).not.toBeInTheDocument();
     });
