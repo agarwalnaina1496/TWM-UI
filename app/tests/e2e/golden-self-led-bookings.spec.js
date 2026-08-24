@@ -226,15 +226,16 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
   await page.getByRole('button', { name: 'Take a look at the trip first' }).click();
   await page.getByRole('navigation', { name: 'Trip Dashboard tabs' }).getByRole('button', { name: 'Bookings' }).click();
 
-  // Transport (TWM-195 review comment): no more round-trip bundling — the
-  // Delhi -> Coorg -> Wayanad -> Delhi route (this fixture's days carry no
-  // Atlas TRAVEL timeline items, so transportLegs falls back to the
-  // day-level gap-filler leg per transition) renders as three explicit
-  // directional legs.
+  // Transport (TWM-195 MVP scope narrowing): Bookings Transport is
+  // gateway-only — the Delhi -> Coorg -> Wayanad -> Delhi route renders
+  // only the two gateway rows touching origin_city (Delhi -> Coorg,
+  // Wayanad -> Delhi); the internal Coorg -> Wayanad leg is hidden
+  // entirely (still real itinerary guidance elsewhere, just not a
+  // Bookings row), with no round-trip bundling either way.
   await expect(page.getByText('🚗 Transport')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Delhi → Coorg' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Coorg → Wayanad' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Wayanad → Delhi' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Coorg → Wayanad' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: /round trip/ })).toHaveCount(0);
   await page.getByRole('button', { name: /Resolve/ }).first().click();
   await expect(page.getByRole('link', { name: 'Check ↗' }).first()).toBeVisible();

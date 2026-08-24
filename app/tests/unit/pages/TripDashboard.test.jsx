@@ -483,7 +483,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     // 2-city/round-trip case above). TWM-200: legs come solely from each
     // day's own structured TRAVEL.from_city/to_city now, not an inferred
     // origin bookend.
-    it('renders every returned leg as its own row, with no bundled heading anywhere', async () => {
+    // TWM-195 (MVP scope narrowing): Bookings Transport is gateway-only —
+    // only the outbound-from-origin and return-to-origin legs render; the
+    // internal Rishikesh->Haridwar leg is genuinely omitted, and never
+    // resolved (no trusted-action/feasibility call for it at all).
+    it('renders only the gateway legs (outbound from and return to origin_city), hiding the internal leg entirely, with no bundled heading', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       itineraryFetchResponse = {
         version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
@@ -524,15 +528,28 @@ describe('Trip Dashboard (real Atlas contract)', () => {
           },
         }),
       };
-      global.fetch = defaultFetchMock();
+      let feasibilityCalls = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) {
+          feasibilityCalls.push(JSON.parse(options.body));
+          return jsonResponse(feasibleAssessmentResponse());
+        }
+        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
       expect(screen.getByText('Delhi → Rishikesh')).toBeInTheDocument();
-      expect(screen.getByText('Rishikesh → Haridwar')).toBeInTheDocument();
       expect(screen.getByText('Haridwar → Delhi')).toBeInTheDocument();
+      expect(screen.queryByText('Rishikesh → Haridwar')).not.toBeInTheDocument();
       expect(screen.queryByText(/round trip/)).not.toBeInTheDocument();
+      await waitFor(() => expect(feasibilityCalls.length).toBeGreaterThan(0));
+      expect(feasibilityCalls.some(body => body.origin === 'Rishikesh' && body.destination === 'Haridwar')).toBe(false);
     });
 
     it('expanding a segment shows mode-tagged options; a route-absurd mode is genuinely absent because Backend never returned it', async () => {
@@ -672,6 +689,65 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.queryByText(/Delhi ⇄ Rishikesh/)).not.toBeInTheDocument();
       expect(screen.queryByText(/Home ⇄ Rishikesh/)).not.toBeInTheDocument();
       expect(screen.queryByText(/⇄/)).not.toBeInTheDocument();
+    });
+
+    // TWM-195 review-example regression: the Odisha itinerary's five real
+    // structured legs (Bangalore->Bhubaneswar->Puri->Konark->Bhubaneswar->
+    // Bangalore) must render only the two gateway rows touching
+    // origin_city, and must never call feasibility for the three internal
+    // legs at all.
+    it('Odisha regression: renders only Bangalore<->Bhubaneswar gateway rows, never resolving the three internal legs', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Bangalore' } });
+      const travelDay = (dayNumber, fromCity, toCity) => ({
+        day_number: dayNumber, date: null, title: `${fromCity} to ${toCity}`, primary_location: toCity, summary: 'x',
+        timeline: [{
+          start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: `${fromCity} to ${toCity}`, location: toCity,
+          detail: 'Travel.', movement_guidance: null, from_city: fromCity, to_city: toCity, display_label: null,
+          estimated_cost_low: 0, estimated_cost_high: 0,
+          reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+        }],
+        seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+      });
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: {
+            days: [
+              travelDay(1, 'Bangalore', 'Bhubaneswar'),
+              travelDay(2, 'Bhubaneswar', 'Puri'),
+              travelDay(3, 'Puri', 'Konark'),
+              travelDay(4, 'Konark', 'Bhubaneswar'),
+              travelDay(5, 'Bhubaneswar', 'Bangalore'),
+            ],
+          },
+        }),
+      };
+      let feasibilityCalls = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) {
+          feasibilityCalls.push(JSON.parse(options.body));
+          return jsonResponse(feasibleAssessmentResponse());
+        }
+        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      expect(screen.getByText('Bangalore → Bhubaneswar')).toBeInTheDocument();
+      expect(screen.getByText('Bhubaneswar → Bangalore')).toBeInTheDocument();
+      expect(screen.queryByText('Bhubaneswar → Puri')).not.toBeInTheDocument();
+      expect(screen.queryByText('Puri → Konark')).not.toBeInTheDocument();
+      expect(screen.queryByText('Konark → Bhubaneswar')).not.toBeInTheDocument();
+      await waitFor(() => expect(feasibilityCalls.length).toBeGreaterThan(0));
+      const internalPairs = [['Bhubaneswar', 'Puri'], ['Puri', 'Konark'], ['Konark', 'Bhubaneswar']];
+      for (const [origin, destination] of internalPairs) {
+        expect(feasibilityCalls.some(body => body.origin === origin && body.destination === destination)).toBe(false);
+      }
     });
 
     it('sources the Trusted Action traveler_count from canonical trip_context.num_travelers, not Atlas trip_summary (TWM-199)', async () => {

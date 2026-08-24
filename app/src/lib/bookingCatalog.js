@@ -382,6 +382,42 @@ export function transportLegs(days) {
   return legs;
 }
 
+// TWM-195 (MVP scope narrowing): Bookings Transport is gateway-only —
+// only the boundary legs that connect the traveler's canonical
+// trip_context.origin_city to the itinerary route are ever fed to
+// feasibility/resolved/rendered. Every internal/circuit/local movement
+// stays visible as itinerary guidance (it's still in `transportLegs`'
+// full output for that), but must never become a Bookings row, and must
+// never trigger a feasibility/trusted-action/flight-search network call —
+// this filter runs BEFORE any of those calls, not as an after-the-fact
+// UI hide.
+//
+// - Outbound gateway: the FIRST leg (in itinerary order) whose `from`
+//   equals originCity — "the first structured movement from origin_city
+//   into the itinerary route."
+// - Inbound gateway: the LAST leg whose `to` equals originCity — "the
+//   final structured movement from the itinerary route back to
+//   origin_city." Independent of the outbound leg on purpose: an
+//   open-jaw trip (fly into one city, out of another) is valid, so this
+//   is never assumed to be the same leg reversed.
+// - If originCity is unknown (no canonical trip_context.origin_city), or
+//   no leg's `from`/`to` matches it, that direction fails closed — no
+//   gateway row is fabricated, exactly like `transportLegs` itself never
+//   fabricates a bookend from a missing structured endpoint.
+// - The two gateway legs may be the same leg (a single direct round-trip
+//   leg) or two different legs (open-jaw, or a multi-stop circuit) — both
+//   render as their own row regardless; this function only selects which
+//   leg objects are visible, it doesn't merge or bundle them.
+export function gatewayLegs(legs, originCity) {
+  if (!originCity) return [];
+  const outbound = (legs || []).find(leg => leg.from === originCity);
+  const inbound = [...(legs || [])].reverse().find(leg => leg.to === originCity);
+  const gateways = [];
+  if (outbound) gateways.push(outbound);
+  if (inbound && inbound.id !== outbound?.id) gateways.push(inbound);
+  return gateways;
+}
+
 export function stayLegs(days) {
   return routeStops(days).map(stop => ({ id: `stay-${stop.location}`, location: stop.location, nights: stop.dayNumbers.length }));
 }

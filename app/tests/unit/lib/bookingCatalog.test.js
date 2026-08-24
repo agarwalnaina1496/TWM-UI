@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  transportOptionsFor, feasibleTransportOptions, transportLegs,
+  transportOptionsFor, feasibleTransportOptions, transportLegs, gatewayLegs,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
   fetchLegFeasibility, MODES, normalizeTravelerCount,
 } from '../../../src/lib/bookingCatalog.js';
@@ -141,6 +141,73 @@ describe('transportLegs', () => {
       { from: 'Konark', to: 'Bhubaneswar' },
       { from: 'Bhubaneswar', to: 'Bangalore' },
     ]);
+  });
+});
+
+describe('gatewayLegs', () => {
+  it('keeps only the outbound-from-origin and return-to-origin legs for the Odisha route, hiding every internal/circuit leg', () => {
+    const legs = [
+      { id: 'leg-0', from: 'Bangalore', to: 'Bhubaneswar' },
+      { id: 'leg-1', from: 'Bhubaneswar', to: 'Puri' },
+      { id: 'leg-2', from: 'Puri', to: 'Konark' },
+      { id: 'leg-3', from: 'Konark', to: 'Bhubaneswar' },
+      { id: 'leg-4', from: 'Bhubaneswar', to: 'Bangalore' },
+    ];
+    expect(gatewayLegs(legs, 'Bangalore')).toEqual([legs[0], legs[4]]);
+  });
+
+  it('supports an open-jaw trip — outbound and inbound gateways can be genuinely different legs, never assumed to mirror each other', () => {
+    // Bangalore -> Delhi -> Agra -> Jaipur -> Bangalore: only the first and
+    // last legs (both touching Bangalore) are gateways; Delhi->Agra and
+    // Agra->Jaipur are internal and must be hidden.
+    const legs = [
+      { id: 'leg-0', from: 'Bangalore', to: 'Delhi' },
+      { id: 'leg-1', from: 'Delhi', to: 'Agra' },
+      { id: 'leg-2', from: 'Agra', to: 'Jaipur' },
+      { id: 'leg-3', from: 'Jaipur', to: 'Bangalore' },
+    ];
+    expect(gatewayLegs(legs, 'Bangalore')).toEqual([legs[0], legs[3]]);
+  });
+
+  it('genuine open-jaw where outbound and return never touch the same non-origin city', () => {
+    // Mumbai -> Delhi (outbound) ... Kolkata -> Mumbai (return) — the
+    // traveler flies into Delhi but home-bound from Kolkata; neither
+    // gateway leg is assumed to mirror the other.
+    const legs = [
+      { id: 'leg-0', from: 'Mumbai', to: 'Delhi' },
+      { id: 'leg-1', from: 'Delhi', to: 'Kolkata' },
+      { id: 'leg-2', from: 'Kolkata', to: 'Mumbai' },
+    ];
+    expect(gatewayLegs(legs, 'Mumbai')).toEqual([legs[0], legs[2]]);
+  });
+
+  it('a single direct round-trip leg is its own one-element gateway list, never duplicated', () => {
+    const legs = [{ id: 'leg-0', from: 'Delhi', to: 'Goa' }, { id: 'leg-1', from: 'Goa', to: 'Delhi' }];
+    // Neither leg's from/to matches origin on both ends simultaneously here
+    // (open-jaw-shaped fixture); confirm the genuinely-single-leg case too:
+    const oneLeg = [{ id: 'leg-0', from: 'Delhi', to: 'Goa' }];
+    expect(gatewayLegs(oneLeg, 'Delhi')).toEqual(oneLeg);
+    expect(gatewayLegs(legs, 'Delhi')).toEqual(legs);
+  });
+
+  it('fails closed to an empty list when origin is unknown — never fabricates a gateway row', () => {
+    const legs = [{ id: 'leg-0', from: 'Bangalore', to: 'Bhubaneswar' }];
+    expect(gatewayLegs(legs, null)).toEqual([]);
+    expect(gatewayLegs(legs, undefined)).toEqual([]);
+  });
+
+  it('fails closed on a direction with no matching leg — never fabricates a missing gateway', () => {
+    // No leg ever returns to Bangalore in this fixture — only the outbound
+    // gateway should appear, never a synthesized return row.
+    const legs = [
+      { id: 'leg-0', from: 'Bangalore', to: 'Bhubaneswar' },
+      { id: 'leg-1', from: 'Bhubaneswar', to: 'Puri' },
+    ];
+    expect(gatewayLegs(legs, 'Bangalore')).toEqual([legs[0]]);
+  });
+
+  it('is empty when no legs exist at all', () => {
+    expect(gatewayLegs([], 'Bangalore')).toEqual([]);
   });
 });
 

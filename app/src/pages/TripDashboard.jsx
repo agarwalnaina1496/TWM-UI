@@ -11,11 +11,12 @@ import {
   verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
 } from '../lib/atlasView.js';
 import {
-  transportLegs, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
+  transportLegs, gatewayLegs, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
   stayLegs, activityBookings, notBookedYetLabel, modeLabel, recommendedMode, normalizeTravelerCount,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
+import { tripOriginCity } from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -656,12 +657,15 @@ export default function TripDashboard() {
     setBookingsStatus('loading');
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
-    // TWM-195 review comment: every leg transportLegs returns is fetched —
-    // no round-trip bundling in this story, so there's no outbound/rest
-    // split here. TWM-200: transportLegs now takes only `days` — legs come
-    // solely from Atlas's own structured TRAVEL.from_city/to_city
-    // movements, never a UI-synthesized origin bookend.
-    const legsToFetch = transportLegs(bookingDays);
+    // TWM-200: transportLegs derives every structured TRAVEL movement —
+    // solely from Atlas's own from_city/to_city, never a UI-synthesized
+    // origin bookend. TWM-195 (MVP scope narrowing): Bookings Transport is
+    // gateway-only — gatewayLegs filters that full list down to just the
+    // outbound-from-origin and return-to-origin rows BEFORE any
+    // feasibility/trusted-action/flight-search call fires, so internal/
+    // circuit/local movements never hit the network at all, not merely
+    // hidden after the fact. No round-trip bundling either way.
+    const legsToFetch = gatewayLegs(transportLegs(bookingDays), tripOriginCity(tripState?.trip_context));
     const stays = stayLegs(bookingDays);
     // TWM-146/TWM-195/TWM-199: threaded through to flight's live-offer
     // search and Trusted Action's traveler_count so those payloads are
@@ -730,7 +734,7 @@ export default function TripDashboard() {
       );
     })();
     return () => { cancelled = true; };
-  }, [tab, itineraryStatus, tripId, itineraryResult]);
+  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city]);
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -958,9 +962,12 @@ export default function TripDashboard() {
   // this matcher will silently reclassify real confirmed anchors as orphaned.
   const findAnchor = (typeAnchors, label) => typeAnchors.find(a => a.label === label);
   // TWM-200: transportLegs derives legs solely from Atlas's own structured
-  // TRAVEL.from_city/to_city movements now — no origin argument, no
-  // UI-synthesized bookend leg, and (per TWM-195) no round-trip bundling.
-  const transportLegList = transportLegs(days);
+  // TRAVEL.from_city/to_city movements — no origin argument, no
+  // UI-synthesized bookend leg. TWM-195 (MVP scope narrowing): render-side
+  // must filter to the same gateway-only rows the fetch effect resolved —
+  // never a wider render-side list than what was actually fetched, and
+  // (per TWM-195) no round-trip bundling either way.
+  const transportLegList = gatewayLegs(transportLegs(days), tripOriginCity(tripState?.trip_context));
   const stayLegList = stayLegs(days);
   const activityList = activityBookings(days);
 
@@ -1130,12 +1137,14 @@ export default function TripDashboard() {
       </section>}
 
       {tab === 'Bookings' && <section aria-label="Bookings">
-        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Real route options for every leg — schedules and fares are yours to verify before you book.</p></div></div>
+        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Getting to and from {tripOriginCity(tripState?.trip_context) || 'your trip'} — schedules and fares are yours to verify before you book.</p></div></div>
         <AnchorList anchors={orphanTransportAnchors} />
         {transportError && <p className="already-booked-note" role="alert">{transportError}</p>}
-        {/* TWM-195 review comment: no more round-trip bundling — every leg
-            transportLegs returns (including the outbound/return bookend
-            legs) renders as its own explicit directional row. */}
+        {/* TWM-195 (MVP scope narrowing): Bookings Transport is gateway-only
+            — transportLegList is already filtered to just the outbound-
+            from-origin and return-to-origin rows (gatewayLegs), each its
+            own explicit directional row, no round-trip bundling. Internal/
+            circuit/local legs stay out of this list entirely. */}
         {transportLegList.map(leg => {
           const label = `${leg.from} → ${leg.to}`;
           const entry = transportData[legKey(leg)];
