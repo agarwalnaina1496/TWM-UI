@@ -60,9 +60,19 @@ describe('transportLegs', () => {
     expect(legs).toHaveLength(3); // Delhi->Gwalior, Gwalior->Orchha, Orchha->Delhi
   });
 
-  it('falls back to a generic origin label when none is known', () => {
+  it('fails closed on the outbound/return bookend legs when origin is unknown, never fabricating one (TWM-199)', () => {
     const legs = transportLegs([{ day_number: 1, primary_location: 'Goa' }], undefined);
-    expect(legs[0].from).toBe('Home');
+    expect(legs).toEqual([]);
+  });
+
+  it('omits only the bookend legs when origin is unknown, keeping inner transfers (which never depend on origin)', () => {
+    const days = [
+      { day_number: 1, primary_location: 'Gwalior' },
+      { day_number: 2, primary_location: 'Gwalior' },
+      { day_number: 3, primary_location: 'Orchha' },
+    ];
+    const legs = transportLegs(days, undefined);
+    expect(legs).toEqual([{ id: 'leg-0', from: 'Gwalior', to: 'Orchha', departureDate: null }]);
   });
 
   it('is empty for no days', () => {
@@ -78,6 +88,16 @@ describe('transportLegs', () => {
     expect(legs[0].departureDate).toBe('2026-03-01'); // outbound: first stop's first date
     expect(legs[1].departureDate).toBe('2026-03-02'); // inner leg: destination stop's first date
     expect(legs[2].departureDate).toBe('2026-03-02'); // return: last stop's last date
+  });
+});
+
+describe('Trusted Action / Flight Search payload mapping (TWM-199)', () => {
+  it('builds the trusted-action request with TRUSTED_ACTION_KEYS field names', async () => {
+    const leg = { from: 'Delhi', to: 'Gwalior' };
+    await transportOptionsFor('trip-1', leg);
+    const trustedActionCall = global.fetch.mock.calls.find(([url]) => url.includes('/trusted-action') && !url.includes('feasibility'));
+    const body = JSON.parse(trustedActionCall[1].body);
+    expect(body).toMatchObject({ action_type: expect.any(String), domain: 'flight', origin: 'Delhi', destination: 'Gwalior' });
   });
 });
 

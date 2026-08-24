@@ -114,7 +114,7 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
         version: 7,
         trip_state: {
           stage: 'planning', active_agent: 'guide',
-          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin: 'Delhi' },
+          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin_city: 'Delhi' },
           planner_state: {
             conversation_context: { awaiting: null },
             places: ['Abbey Falls'],
@@ -133,7 +133,7 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
         version: 8,
         trip_state: {
           stage: 'planned', active_agent: null,
-          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin: 'Delhi' },
+          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin_city: 'Delhi' },
           planner_state: {
             conversation_context: { awaiting: null },
             places: ['Abbey Falls'],
@@ -153,7 +153,7 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
         version: 9,
         trip_state: {
           stage: 'planned', active_agent: null,
-          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin: 'Delhi' },
+          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin_city: 'Delhi' },
           planner_state: {
             conversation_context: { awaiting: null },
             places: ['Abbey Falls'],

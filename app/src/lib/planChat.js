@@ -1,3 +1,4 @@
+import { TRIP_CONTEXT_KEYS } from '../constants/tripContext.js';
 import { contextRecapPills, hasTripContext } from './tripLifecycle.js';
 
 // TWM-174: Guide gates on a fixed 5-field checklist before it can build a
@@ -8,7 +9,13 @@ import { contextRecapPills, hasTripContext } from './tripLifecycle.js';
 // trip_context key when Guide is asking for one of them (see
 // twm/prompts/guide.md) — anything else (null, or "anything_else") is not
 // this specific gap.
-export const FIXED_FIELDS = ['trip_duration', 'origin_city', 'num_travelers', 'travel_dates', 'budget'];
+export const FIXED_FIELDS = [
+  TRIP_CONTEXT_KEYS.TRIP_DURATION,
+  TRIP_CONTEXT_KEYS.ORIGIN_CITY,
+  TRIP_CONTEXT_KEYS.NUM_TRAVELERS,
+  TRIP_CONTEXT_KEYS.TRAVEL_DATES,
+  TRIP_CONTEXT_KEYS.BUDGET,
+];
 
 export function isFixedFieldGap(awaiting) {
   return FIXED_FIELDS.includes(awaiting);
@@ -21,7 +28,7 @@ export function isFixedFieldGap(awaiting) {
 // already saved.
 export function buildPlanRecapTurn(tripContext, { awaiting } = {}) {
   if (!hasTripContext({ trip_context: tripContext })) return null;
-  const destinations = tripContext?.destinations;
+  const destinations = tripContext?.[TRIP_CONTEXT_KEYS.DESTINATIONS];
   const destinationText = Array.isArray(destinations) && destinations.length > 0
     ? destinations.join(', ')
     : 'your trip';

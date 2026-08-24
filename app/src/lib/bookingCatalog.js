@@ -1,3 +1,4 @@
+import { FLIGHT_SEARCH_KEYS, TRUSTED_ACTION_KEYS } from '../constants/tripPayloads.js';
 import { routeStops } from './atlasView.js';
 import { resolveTrustedAction, getTripFeasibility, searchFlights } from './tripApi.js';
 
@@ -171,10 +172,10 @@ async function searchFlightOffer(tripId, leg, travelerCount) {
   const payload = {};
   const originIata = iataForCity(leg.from);
   const destinationIata = iataForCity(leg.to);
-  if (originIata) payload.origin_iata = originIata;
-  if (destinationIata) payload.destination_iata = destinationIata;
-  if (leg.departureDate) payload.departure_date = leg.departureDate;
-  if (travelerCount) payload.travelers = { adults: Math.max(1, travelerCount) };
+  if (originIata) payload[FLIGHT_SEARCH_KEYS.ORIGIN_IATA] = originIata;
+  if (destinationIata) payload[FLIGHT_SEARCH_KEYS.DESTINATION_IATA] = destinationIata;
+  if (leg.departureDate) payload[FLIGHT_SEARCH_KEYS.DEPARTURE_DATE] = leg.departureDate;
+  if (travelerCount) payload[FLIGHT_SEARCH_KEYS.TRAVELERS] = { adults: Math.max(1, travelerCount) };
   try {
     const response = await searchFlights(tripId, payload);
     return toLiveOffer(response);
@@ -192,10 +193,11 @@ async function resolveFlightOption(tripId, leg, travelerCount) {
   const name = `${modeLabel('flight')}: ${leg.from} → ${leg.to}`;
   const [ctaOption, liveOffer] = await Promise.all([
     resolveTrustedAction(tripId, {
-      action_type: ACTION_TYPE_FOR_MODE.flight,
-      domain: 'flight',
-      origin: leg.from,
-      destination: leg.to,
+      [TRUSTED_ACTION_KEYS.ACTION_TYPE]: ACTION_TYPE_FOR_MODE.flight,
+      [TRUSTED_ACTION_KEYS.DOMAIN]: 'flight',
+      [TRUSTED_ACTION_KEYS.ORIGIN]: leg.from,
+      [TRUSTED_ACTION_KEYS.DESTINATION]: leg.to,
+      ...(travelerCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: travelerCount } : {}),
     })
       .then(result => toTransportOption('flight', name, result))
       .catch(error => ({ mode: 'flight', name, status: 'error', errorMessage: error.message || 'Could not load this option.' })),
@@ -224,10 +226,11 @@ async function resolveTransportOption(tripId, leg, mode, travelerCount) {
   }
   try {
     const result = await resolveTrustedAction(tripId, {
-      action_type: ACTION_TYPE_FOR_MODE[mode],
-      domain,
-      origin: leg.from,
-      destination: leg.to,
+      [TRUSTED_ACTION_KEYS.ACTION_TYPE]: ACTION_TYPE_FOR_MODE[mode],
+      [TRUSTED_ACTION_KEYS.DOMAIN]: domain,
+      [TRUSTED_ACTION_KEYS.ORIGIN]: leg.from,
+      [TRUSTED_ACTION_KEYS.DESTINATION]: leg.to,
+      ...(travelerCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: travelerCount } : {}),
     });
     return toTransportOption(mode, name, result);
   } catch (error) {
@@ -261,6 +264,9 @@ export async function transportOptionsFor(tripId, leg, travelerCount) {
 // drive) for a leg. May resolve to null — the Backend has no assessment for
 // this route yet — which callers must treat as "no feasibility data", not
 // an error.
+// Trip Feasibility is its own contract, independent of Trusted Action —
+// same field names on this occasion, but not the same payload, so this
+// intentionally builds a plain object rather than importing TRUSTED_ACTION_KEYS.
 export async function fetchLegFeasibility(tripId, leg) {
   return getTripFeasibility(tripId, { origin: leg.from, destination: leg.to });
 }
@@ -331,16 +337,27 @@ export function recommendedMode(feasibleOptions) {
 // When Atlas has no per-day dates yet (tripDatesLabel's "Travel month"/
 // day-count fallback case), every leg's departureDate is null — the honest
 // outcome, not a guess.
+//
+// TWM-199: `origin` (canonical trip_context.origin_city, via
+// tripOriginCity()) is genuinely unknown for some trips — this fails
+// closed on the bookend legs rather than fabricating a "Home" label. An
+// unresolved origin is not a rendering gap; it's the honest "we don't
+// know where this trip starts" outcome, so only the inner transfer legs
+// (which never depend on origin) are returned.
 export function transportLegs(days, origin) {
   const stops = routeStops(days);
   if (stops.length === 0) return [];
-  const originLabel = origin || 'Home';
-  const legs = [{ id: 'outbound-origin', from: originLabel, to: stops[0].location, departureDate: stops[0].dates?.[0] ?? null }];
+  const legs = [];
+  if (origin) {
+    legs.push({ id: 'outbound-origin', from: origin, to: stops[0].location, departureDate: stops[0].dates?.[0] ?? null });
+  }
   for (let i = 0; i < stops.length - 1; i++) {
     legs.push({ id: `leg-${i}`, from: stops[i].location, to: stops[i + 1].location, departureDate: stops[i + 1].dates?.[0] ?? null });
   }
-  const lastStop = stops[stops.length - 1];
-  legs.push({ id: 'return-origin', from: lastStop.location, to: originLabel, departureDate: lastStop.dates?.[lastStop.dates.length - 1] ?? null });
+  if (origin) {
+    const lastStop = stops[stops.length - 1];
+    legs.push({ id: 'return-origin', from: lastStop.location, to: origin, departureDate: lastStop.dates?.[lastStop.dates.length - 1] ?? null });
+  }
   return legs;
 }
 
@@ -374,10 +391,10 @@ async function resolveStayOption(tripId, stay, partner) {
   const name = `${stay.location} — ${PARTNER_LABEL[partner] || partner}`;
   try {
     const result = await resolveTrustedAction(tripId, {
-      action_type: 'SEARCH_REDIRECT',
-      domain: 'stay',
-      destination: stay.location,
-      preferred_partner: partner,
+      [TRUSTED_ACTION_KEYS.ACTION_TYPE]: 'SEARCH_REDIRECT',
+      [TRUSTED_ACTION_KEYS.DOMAIN]: 'stay',
+      [TRUSTED_ACTION_KEYS.DESTINATION]: stay.location,
+      [TRUSTED_ACTION_KEYS.PREFERRED_PARTNER]: partner,
     });
     if (result.status === 'resolved') {
       const action = result.action;

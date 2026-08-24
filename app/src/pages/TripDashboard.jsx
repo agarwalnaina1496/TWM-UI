@@ -8,7 +8,7 @@ import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary } from '../lib/tripApi.js';
 import {
   anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange,
-  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
+  verificationTone, trustStripCounts, bookingReadinessRollup,
 } from '../lib/atlasView.js';
 import {
   transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
@@ -16,6 +16,7 @@ import {
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
+import { tripOriginCity, tripTravelerCount } from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -652,17 +653,21 @@ export default function TripDashboard() {
     setBookingsError(null);
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
-    const bookingOrigin = tripState?.trip_context?.origin;
+    const bookingOrigin = tripOriginCity(tripState?.trip_context);
     const legs = transportLegs(bookingDays, bookingOrigin);
     const { bundle, rest } = bundleRoundTrip(legs);
     const legsToFetch = [...(bundle ? [bundle.outbound] : []), ...rest];
     const stays = stayLegs(bookingDays);
-    // TWM-146: threaded through to flight's live-offer search so
-    // FlightSearchRequest.travelers is populated whenever Atlas has it,
-    // instead of always hitting clarification_needed for a field we
-    // actually know — see bookingCatalog.searchFlightOffer's comment for
-    // why departure_date/IATA still aren't threaded through today.
-    const partySize = travelerCount(itineraryResult.result.final_itinerary.trip_summary);
+    // TWM-146/TWM-199: threaded through to flight's live-offer search and
+    // Trusted Action's traveler_count so those payloads are populated
+    // whenever it's known, instead of always hitting clarification_needed
+    // for a field we actually have — see bookingCatalog.searchFlightOffer's
+    // comment for why departure_date/IATA still aren't threaded through
+    // today. Sourced from canonical trip_context.num_travelers (via
+    // tripTravelerCount), not Atlas's own trip_summary.num_travelers —
+    // trip_context is this product's one internal source of truth for
+    // traveler count (TWM-199).
+    const partySize = tripTravelerCount(tripState?.trip_context);
 
     let cancelled = false;
     (async () => {
@@ -689,7 +694,7 @@ export default function TripDashboard() {
       }
     })();
     return () => { cancelled = true; };
-  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin]);
+  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city]);
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -907,7 +912,7 @@ export default function TripDashboard() {
   const readiness = bookingReadinessRollup(days, anchors);
 
   const dayNumbers = days.map(day => day.day_number);
-  const bookingOrigin = tripState?.trip_context?.origin;
+  const bookingOrigin = tripOriginCity(tripState?.trip_context);
   const transportAnchors = anchorsByType(anchors, 'transport');
   const stayAnchors = anchorsByType(anchors, 'stay');
   const activityAnchors = anchorsByType(anchors, 'activity');
