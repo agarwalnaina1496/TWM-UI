@@ -335,7 +335,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // TWM-176: real Bookings content, replacing TWM-175's inert placeholder.
   describe('Bookings tab (TWM-176)', () => {
     it('shows the origin<->destination transport leg, not just local transfers, bundled as one round-trip decision', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
@@ -345,7 +345,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('expanding a segment shows mode-tagged options; an infeasible mode is genuinely absent, with the Backend-provided explanatory note', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -376,7 +376,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('shows a recommended-mode card and the "why other modes aren\'t shown" feasibility row, with a GENERAL_GUIDANCE tag for the llm_estimated train mode', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -408,8 +408,18 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(within(disclosure).getAllByText('General guidance').length).toBeGreaterThan(0);
     });
 
+    it('never falls back to noncanonical trip_context.origin for the booking origin leg (TWM-199)', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Mumbai' } });
+      sendTripCommand = vi.fn();
+      await readyDashboard();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      expect(screen.queryByText(/Mumbai ⇄ Rishikesh/)).not.toBeInTheDocument();
+      expect(screen.getByText('Home ⇄ Rishikesh round trip not booked yet')).toBeInTheDocument();
+    });
+
     it('shows a specific "not booked yet" label per segment, never a bare generic one', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       await readyDashboard();
       const user = userEvent.setup();
@@ -421,7 +431,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows a confirmed segment with the 🔒-confirmed treatment — property/service name, price/detail, and confirmation number, never a bare status word', async () => {
       commandSnapshot = snapshotWith(
         readyItineraryState(), { anchors: [anchor({ type: 'stay', label: 'Rishikesh · 2 nights', detail: 'Riverside Cottage, ₹4,200/night', reference: 'CONF-9921' })] },
-        { trip_context: { origin: 'Delhi' } },
+        { trip_context: { origin_city: 'Delhi' } },
       );
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
@@ -472,7 +482,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('renders the affiliate disclosure line when the resolved trusted action carries it, never dropping it', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
@@ -482,7 +492,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('shows an inert note, no broken link, when a trusted action resolves to missing_input', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -500,7 +510,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('the confirm-it-yourself flow is reachable per segment, and submits a real confirm_logistics command', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn(async () => ({ message: 'Noted.', agent_meta: null, trip: commandSnapshot }));
       const user = userEvent.setup();
       await readyDashboard();
@@ -519,7 +529,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     // distinct from the plain redirect-only cards train/bus still use.
     describe('flight live-offer card (TWM-146)', () => {
       it('renders a specific clarification prompt (not a generic error) when flight-search needs more info', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
         global.fetch = defaultFetchMock(); // flight-search defaults to clarification_needed
         const user = userEvent.setup();
@@ -530,7 +540,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       });
 
       it('renders live-offer price/airline/stops distinctly from the plain redirect-only cards, and still keeps the CTA link separate', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -569,7 +579,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       });
 
       it('renders the Backend-authored unavailable message safely for a flight card', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -872,7 +882,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows the tab bar in the thin state, with non-Overview tabs rendering an honest placeholder', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -895,7 +905,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows a "Back to your trips" link pointing at Home', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -906,7 +916,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows budget as a row in "Your trip so far" when present, and omits it when absent', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi', budget: '₹1,00,000 total for both' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -918,7 +928,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('omits the Budget row entirely when trip_context has no budget', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -931,7 +941,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows a bottom primary CTA pointing at destination discovery when Route is not yet done', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1019,7 +1029,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('unknown-destination Discover path (still gathering): Destination row shows "Continue chat"', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1031,7 +1041,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('unknown-destination Discover path (recommendations ready): Destination row shows "Review recommendations"', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'recommended', trip_context: { origin: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'recommended', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1045,7 +1055,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         id: 'trip-1', version: 1,
         trip_state: {
           stage: 'planning',
-          trip_context: { origin: 'Delhi', destinations: ['Udaipur'] },
+          trip_context: { origin_city: 'Delhi', destinations: ['Udaipur'] },
           planner_state: { conversation_context: { awaiting: 'trip_duration' }, places: [], day_plan: [] },
           itinerary_state: {}, logistics_state: { anchors: [] },
         },

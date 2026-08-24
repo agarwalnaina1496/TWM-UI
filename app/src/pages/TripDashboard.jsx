@@ -16,6 +16,7 @@ import {
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
+import { tripOriginCity } from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -652,7 +653,7 @@ export default function TripDashboard() {
     setBookingsError(null);
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
-    const bookingOrigin = tripState?.trip_context?.origin;
+    const bookingOrigin = tripOriginCity(tripState?.trip_context);
     const legs = transportLegs(bookingDays, bookingOrigin);
     const { bundle, rest } = bundleRoundTrip(legs);
     const legsToFetch = [...(bundle ? [bundle.outbound] : []), ...rest];
@@ -689,7 +690,7 @@ export default function TripDashboard() {
       }
     })();
     return () => { cancelled = true; };
-  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin]);
+  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city]);
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -907,7 +908,7 @@ export default function TripDashboard() {
   const readiness = bookingReadinessRollup(days, anchors);
 
   const dayNumbers = days.map(day => day.day_number);
-  const bookingOrigin = tripState?.trip_context?.origin;
+  const bookingOrigin = tripOriginCity(tripState?.trip_context);
   const transportAnchors = anchorsByType(anchors, 'transport');
   const stayAnchors = anchorsByType(anchors, 'stay');
   const activityAnchors = anchorsByType(anchors, 'activity');

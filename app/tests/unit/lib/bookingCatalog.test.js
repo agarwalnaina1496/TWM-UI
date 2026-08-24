@@ -81,6 +81,16 @@ describe('transportLegs', () => {
   });
 });
 
+describe('Trusted Action / Flight Search payload mapping (TWM-199)', () => {
+  it('builds the trusted-action request with TRUSTED_ACTION_KEYS field names', async () => {
+    const leg = { from: 'Delhi', to: 'Gwalior' };
+    await transportOptionsFor('trip-1', leg);
+    const trustedActionCall = global.fetch.mock.calls.find(([url]) => url.includes('/trusted-action') && !url.includes('feasibility'));
+    const body = JSON.parse(trustedActionCall[1].body);
+    expect(body).toMatchObject({ action_type: expect.any(String), domain: 'flight', origin: 'Delhi', destination: 'Gwalior' });
+  });
+});
+
 describe('bundleRoundTrip', () => {
   it('bundles the outbound and return legs into one decision when they mirror each other', () => {
     const legs = [

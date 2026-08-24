@@ -6,6 +6,7 @@
 // tripLifecycle.js rather than duplicated here as a second hardcoded
 // literal-string check.
 
+import { TRIP_CONTEXT_KEYS } from '../constants/tripContext.js';
 import { RECOMMENDATIONS_READY_STAGES, contextDestination, tripContextFacts } from './tripLifecycle.js';
 
 // Normalizes planner progress from either shape TripDashboard's tripState
@@ -132,21 +133,21 @@ export function dashboardPrimaryCta(tripState) {
 // form (a month, a range, "flexible"), so Duration and Dates are just two
 // independent facts now, never mutually exclusive.
 const FACT_LABELS = {
-  origin_city: 'Origin',
-  travel_dates: 'Dates',
-  trip_duration: 'Duration',
-  num_travelers: 'No. of travelers',
-  budget: 'Budget',
+  [TRIP_CONTEXT_KEYS.ORIGIN_CITY]: 'Origin',
+  [TRIP_CONTEXT_KEYS.TRAVEL_DATES]: 'Dates',
+  [TRIP_CONTEXT_KEYS.TRIP_DURATION]: 'Duration',
+  [TRIP_CONTEXT_KEYS.NUM_TRAVELERS]: 'No. of travelers',
+  [TRIP_CONTEXT_KEYS.BUDGET]: 'Budget',
 };
 
 export function contextFactRows(tripContext) {
   return tripContextFacts(tripContext)
-    .filter(fact => fact.key !== 'destinations')
+    .filter(fact => fact.key !== TRIP_CONTEXT_KEYS.DESTINATIONS)
     .map(fact => ({
       label: FACT_LABELS[fact.key],
       // The "No. of travelers" label already says what the number counts —
       // unlike the pill/facts-panel formats (no separate label), this row
       // doesn't repeat "traveler(s)" in the value too.
-      value: fact.key === 'num_travelers' ? String(tripContext[fact.key]) : fact.value,
+      value: fact.key === TRIP_CONTEXT_KEYS.NUM_TRAVELERS ? String(tripContext[fact.key]) : fact.value,
     }));
 }
