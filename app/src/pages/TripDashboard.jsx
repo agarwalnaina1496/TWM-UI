@@ -635,7 +635,7 @@ export default function TripDashboard() {
   const [stayError, setStayError] = useState(null);
   const [transportData, setTransportData] = useState({});
   const [stayData, setStayData] = useState({});
-  const bookingsFetchStarted = useRef(null); // tripId currently/last fetched, or null
+  const bookingsFetchStarted = useRef(null); // `${tripId}:${itineraryResult.version}:${originCity}` currently/last fetched, or null
 
   const tripId = commandSnapshot?.id;
 
@@ -652,8 +652,17 @@ export default function TripDashboard() {
 
   useEffect(() => {
     if (tab !== 'Bookings' || itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
-    if (bookingsFetchStarted.current === tripId) return;
-    bookingsFetchStarted.current = tripId;
+    // Keyed by more than just tripId — a bare tripId key means this guard
+    // never resets while the same trip stays mounted, even when the
+    // itinerary is revised (resolveRevision -> a new itineraryResult) or
+    // origin_city changes, so Bookings would keep serving stale
+    // transport/stay data until a full reload. itineraryResult.version
+    // (the itinerary body's own revision number, not commandSnapshot's)
+    // and origin_city are exactly the two inputs gatewayLegs/transportLegs
+    // below actually depend on, so the guard is keyed on both.
+    const bookingsFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}`;
+    if (bookingsFetchStarted.current === bookingsFetchKey) return;
+    bookingsFetchStarted.current = bookingsFetchKey;
     setBookingsStatus('loading');
 
     const bookingDays = itineraryResult.result.final_itinerary.days;

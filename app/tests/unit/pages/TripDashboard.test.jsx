@@ -750,6 +750,62 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       }
     });
 
+    // Regression: bookingsFetchStarted used to be keyed only by tripId, so
+    // once Bookings fetched for a trip it would never refetch while that
+    // trip stayed mounted — even if origin_city (or the itinerary itself)
+    // changed underneath it. The guard is now keyed on
+    // tripId+itineraryResult.version+originCity, so a genuine origin_city
+    // change re-derives gateway legs and re-fetches for them.
+    it('refetches Bookings transport when trip_context.origin_city changes while the same trip stays mounted', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      const travelDay = (dayNumber, fromCity, toCity) => ({
+        day_number: dayNumber, date: null, title: `${fromCity} to ${toCity}`, primary_location: toCity, summary: 'x',
+        timeline: [{
+          start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: `${fromCity} to ${toCity}`, location: toCity,
+          detail: 'Travel.', movement_guidance: null, from_city: fromCity, to_city: toCity, display_label: null,
+          estimated_cost_low: 0, estimated_cost_high: 0,
+          reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+        }],
+        seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+      });
+      // Delhi -> Agra -> Mumbai: with origin=Delhi, the outbound gateway is
+      // Delhi->Agra (no leg returns to Delhi, so no inbound gateway); with
+      // origin=Mumbai, the inbound gateway is Agra->Mumbai instead (no leg
+      // departs Mumbai) — genuinely different visible content either way.
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: { days: [travelDay(1, 'Delhi', 'Agra'), travelDay(2, 'Agra', 'Mumbai')] },
+        }),
+      };
+      let feasibilityCallCount = 0;
+      global.fetch = vi.fn(async url => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) { feasibilityCallCount += 1; return jsonResponse(feasibleAssessmentResponse()); }
+        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      const view = await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await waitFor(() => expect(screen.getByText('Delhi → Agra')).toBeInTheDocument());
+      await waitFor(() => expect(feasibilityCallCount).toBeGreaterThan(0));
+      const callCountBeforeOriginChange = feasibilityCallCount;
+
+      // origin_city changes underneath the same mounted trip — force a
+      // re-render so the mocked useTrip() picks up the new commandSnapshot,
+      // exactly as a real trip_context update would.
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Mumbai' } });
+      view.rerender(<MemoryRouter initialEntries={['/dashboard']}><TripDashboard /></MemoryRouter>);
+
+      await waitFor(() => expect(screen.getByText('Agra → Mumbai')).toBeInTheDocument());
+      expect(screen.queryByText('Delhi → Agra')).not.toBeInTheDocument();
+      await waitFor(() => expect(feasibilityCallCount).toBeGreaterThan(callCountBeforeOriginChange));
+    });
+
     it('sources the Trusted Action traveler_count from canonical trip_context.num_travelers, not Atlas trip_summary (TWM-199)', async () => {
       // Atlas trip_summary.num_travelers is 2 (atlasResult's default) — a
       // deliberately different value than trip_context.num_travelers below,
