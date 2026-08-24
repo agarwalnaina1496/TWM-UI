@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  transportOptionsFor, feasibleTransportOptions, transportLegs, bundleRoundTrip,
+  transportOptionsFor, feasibleTransportOptions, transportLegs, gatewayLegs,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
-  fetchLegFeasibility,
+  fetchLegFeasibility, MODES, normalizeTravelerCount,
 } from '../../../src/lib/bookingCatalog.js';
 
 function flightSearchResponse(overrides = {}) {
@@ -33,14 +33,13 @@ function resolvedAction({ url = 'https://www.ixigo.com/search?domain=flight', af
   };
 }
 
-// TWM-132: transportOptionsFor/stayOptionsFor/feasibleTransportOptions now
-// call the real Backend trusted-action + feasibility endpoints
-// (POST /trips/{id}/trusted-action, POST /trips/{id}/trusted-action/feasibility)
-// instead of returning mock MODE_TEMPLATE bands — every fetch mock below
-// stands in for those two endpoints.
+// TWM-195 root-fix: transportOptionsFor/feasibleTransportOptions now take
+// an explicit `approvedModes` list (Backend's TripFeasibilityAssessment.modes)
+// instead of unconditionally resolving the hardcoded MODES constant —
+// every fetch mock below stands in for the trusted-action/flight-search
+// endpoints only, never feasibility (tests pass approvedModes directly).
 beforeEach(() => {
   global.fetch = vi.fn(async url => {
-    if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
     if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
     if (url.includes('/flight-search')) return jsonResponse(flightSearchResponse());
     return jsonResponse({});
@@ -145,71 +144,183 @@ describe('transportLegs', () => {
   });
 });
 
-describe('Trusted Action / Flight Search payload mapping (TWM-199)', () => {
-  it('builds the trusted-action request with TRUSTED_ACTION_KEYS field names', async () => {
-    const leg = { from: 'Delhi', to: 'Gwalior' };
-    await transportOptionsFor('trip-1', leg);
-    const trustedActionCall = global.fetch.mock.calls.find(([url]) => url.includes('/trusted-action') && !url.includes('feasibility'));
-    const body = JSON.parse(trustedActionCall[1].body);
-    expect(body).toMatchObject({ action_type: expect.any(String), domain: 'flight', origin: 'Delhi', destination: 'Gwalior' });
-  });
-});
-
-describe('bundleRoundTrip', () => {
-  it('bundles the outbound and return legs into one decision when they mirror each other', () => {
+describe('gatewayLegs', () => {
+  it('keeps only the outbound-from-origin and return-to-origin legs for the Odisha route, hiding every internal/circuit leg', () => {
     const legs = [
-      { id: 'outbound-origin', from: 'Delhi', to: 'Gwalior' },
-      { id: 'leg-0', from: 'Gwalior', to: 'Orchha' },
-      { id: 'return-origin', from: 'Orchha', to: 'Delhi' },
+      { id: 'leg-0', from: 'Bangalore', to: 'Bhubaneswar' },
+      { id: 'leg-1', from: 'Bhubaneswar', to: 'Puri' },
+      { id: 'leg-2', from: 'Puri', to: 'Konark' },
+      { id: 'leg-3', from: 'Konark', to: 'Bhubaneswar' },
+      { id: 'leg-4', from: 'Bhubaneswar', to: 'Bangalore' },
     ];
-    const { bundle, rest } = bundleRoundTrip(legs);
-    expect(bundle).toEqual({ id: 'round-trip', outbound: legs[0], inbound: legs[2] });
-    expect(rest).toEqual([legs[1]]);
+    expect(gatewayLegs(legs, 'Bangalore')).toEqual([legs[0], legs[4]]);
   });
 
-  it('does not bundle when the trip is genuinely one-way', () => {
+  it('supports an open-jaw trip — outbound and inbound gateways can be genuinely different legs, never assumed to mirror each other', () => {
+    // Bangalore -> Delhi -> Agra -> Jaipur -> Bangalore: only the first and
+    // last legs (both touching Bangalore) are gateways; Delhi->Agra and
+    // Agra->Jaipur are internal and must be hidden.
     const legs = [
-      { id: 'a', from: 'Delhi', to: 'Gwalior' },
-      { id: 'b', from: 'Gwalior', to: 'Mumbai' },
+      { id: 'leg-0', from: 'Bangalore', to: 'Delhi' },
+      { id: 'leg-1', from: 'Delhi', to: 'Agra' },
+      { id: 'leg-2', from: 'Agra', to: 'Jaipur' },
+      { id: 'leg-3', from: 'Jaipur', to: 'Bangalore' },
     ];
-    const { bundle, rest } = bundleRoundTrip(legs);
-    expect(bundle).toBeNull();
-    expect(rest).toEqual(legs);
+    expect(gatewayLegs(legs, 'Bangalore')).toEqual([legs[0], legs[3]]);
   });
 
-  it('does not bundle a single leg', () => {
-    const legs = [{ id: 'a', from: 'Delhi', to: 'Gwalior' }];
-    expect(bundleRoundTrip(legs)).toEqual({ bundle: null, rest: legs });
+  it('genuine open-jaw where outbound and return never touch the same non-origin city', () => {
+    // Mumbai -> Delhi (outbound) ... Kolkata -> Mumbai (return) — the
+    // traveler flies into Delhi but home-bound from Kolkata; neither
+    // gateway leg is assumed to mirror the other.
+    const legs = [
+      { id: 'leg-0', from: 'Mumbai', to: 'Delhi' },
+      { id: 'leg-1', from: 'Delhi', to: 'Kolkata' },
+      { id: 'leg-2', from: 'Kolkata', to: 'Mumbai' },
+    ];
+    expect(gatewayLegs(legs, 'Mumbai')).toEqual([legs[0], legs[2]]);
+  });
+
+  it('a single direct round-trip leg is its own one-element gateway list, never duplicated', () => {
+    const legs = [{ id: 'leg-0', from: 'Delhi', to: 'Goa' }, { id: 'leg-1', from: 'Goa', to: 'Delhi' }];
+    // Neither leg's from/to matches origin on both ends simultaneously here
+    // (open-jaw-shaped fixture); confirm the genuinely-single-leg case too:
+    const oneLeg = [{ id: 'leg-0', from: 'Delhi', to: 'Goa' }];
+    expect(gatewayLegs(oneLeg, 'Delhi')).toEqual(oneLeg);
+    expect(gatewayLegs(legs, 'Delhi')).toEqual(legs);
+  });
+
+  it('fails closed to an empty list when origin is unknown — never fabricates a gateway row', () => {
+    const legs = [{ id: 'leg-0', from: 'Bangalore', to: 'Bhubaneswar' }];
+    expect(gatewayLegs(legs, null)).toEqual([]);
+    expect(gatewayLegs(legs, undefined)).toEqual([]);
+  });
+
+  it('fails closed on a direction with no matching leg — never fabricates a missing gateway', () => {
+    // No leg ever returns to Bangalore in this fixture — only the outbound
+    // gateway should appear, never a synthesized return row.
+    const legs = [
+      { id: 'leg-0', from: 'Bangalore', to: 'Bhubaneswar' },
+      { id: 'leg-1', from: 'Bhubaneswar', to: 'Puri' },
+    ];
+    expect(gatewayLegs(legs, 'Bangalore')).toEqual([legs[0]]);
+  });
+
+  it('is empty when no legs exist at all', () => {
+    expect(gatewayLegs([], 'Bangalore')).toEqual([]);
   });
 });
 
 describe('transportOptionsFor', () => {
   const leg = { from: 'Delhi', to: 'Gwalior' };
 
-  it('resolves one trusted action per mode, keyed by mode, with the target URL mapped onto option.url', async () => {
-    const options = await transportOptionsFor('trip-1', leg);
+  it('resolves a trusted action only for the explicitly approved modes, keyed by mode', async () => {
+    const options = await transportOptionsFor('trip-1', leg, undefined, ['flight', 'train', 'bus', 'drive']);
     expect(options.map(o => o.mode)).toEqual(['flight', 'train', 'bus', 'drive']);
     expect(options.find(o => o.mode === 'flight')).toMatchObject({ status: 'resolved', url: 'https://www.ixigo.com/search?domain=flight', affiliateDisclosure: true });
   });
 
-  it('drive has no trusted-action domain — feasibility-only, no network call, no CTA', async () => {
+  it('resolves only the given subset of modes, never the full MODES constant', async () => {
+    const options = await transportOptionsFor('trip-1', leg, undefined, ['train', 'bus']);
+    expect(options.map(o => o.mode).sort()).toEqual(['bus', 'train']);
+  });
+
+  it('resolves nothing and makes no network call when approvedModes is empty', async () => {
+    const options = await transportOptionsFor('trip-1', leg, undefined, []);
+    expect(options).toEqual([]);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('resolves nothing when approvedModes is omitted (never falls back to MODES)', async () => {
     const options = await transportOptionsFor('trip-1', leg);
+    expect(options).toEqual([]);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('drive has no trusted-action domain — feasibility-only, no network call, no CTA', async () => {
+    const options = await transportOptionsFor('trip-1', leg, undefined, ['drive']);
     expect(options.find(o => o.mode === 'drive')).toMatchObject({ status: 'no_action' });
   });
 
   it('maps each of the four non-resolved statuses onto option.status safely', async () => {
-    global.fetch = vi.fn(async url => {
-      if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
-      return jsonResponse({ status: 'missing_input', generated_at: '2026-01-01T00:00:00.000Z', missing_input: { missing_fields: ['origin'], message: 'x' } });
-    });
-    const options = await transportOptionsFor('trip-1', leg);
+    global.fetch = vi.fn(async () =>
+      jsonResponse({ status: 'missing_input', generated_at: '2026-01-01T00:00:00.000Z', missing_input: { missing_fields: ['origin'], message: 'x' } })
+    );
+    const options = await transportOptionsFor('trip-1', leg, undefined, ['flight']);
     expect(options.find(o => o.mode === 'flight')).toMatchObject({ status: 'missing_input' });
   });
 
   it('surfaces a network failure as a status: error option instead of throwing', async () => {
     global.fetch = vi.fn(async () => { throw new Error('network down'); });
-    const options = await transportOptionsFor('trip-1', leg);
+    const options = await transportOptionsFor('trip-1', leg, undefined, ['flight']);
     expect(options.find(o => o.mode === 'flight')).toMatchObject({ status: 'error' });
+  });
+
+  it('MODES remains exported only as a label/ordering helper, unrelated to what gets resolved', () => {
+    expect(MODES).toEqual(['flight', 'train', 'bus', 'drive']);
+  });
+});
+
+describe('normalizeTravelerCount', () => {
+  it('normalizes a numeric string like "2" to the number 2', () => {
+    expect(normalizeTravelerCount('2')).toBe(2);
+  });
+
+  it('passes a real number through unchanged', () => {
+    expect(normalizeTravelerCount(4)).toBe(4);
+  });
+
+  it('returns null for missing, non-numeric, zero, or negative values — never NaN or 0', () => {
+    expect(normalizeTravelerCount(null)).toBeNull();
+    expect(normalizeTravelerCount(undefined)).toBeNull();
+    expect(normalizeTravelerCount('Just me')).toBeNull();
+    expect(normalizeTravelerCount(0)).toBeNull();
+    expect(normalizeTravelerCount(-1)).toBeNull();
+  });
+});
+
+describe('traveler_count on trusted-action transport CTA payloads (TWM-195 review comment)', () => {
+  const leg = { from: 'Delhi', to: 'Gwalior' };
+
+  it('includes traveler_count on train/bus trusted-action payloads when a normalized count is known', async () => {
+    let capturedBodies = [];
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedAction()); }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', leg, 2, ['train', 'bus']);
+    expect(capturedBodies).toHaveLength(2);
+    expect(capturedBodies.every(body => body.traveler_count === 2)).toBe(true);
+  });
+
+  it('omits traveler_count entirely when it cannot be determined', async () => {
+    let capturedBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { capturedBody = JSON.parse(options.body); return jsonResponse(resolvedAction()); }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', leg, undefined, ['train']);
+    expect(capturedBody).not.toHaveProperty('traveler_count');
+  });
+
+  it('includes traveler_count on the flight trusted-action CTA payload, separate from flight-search\'s own travelers shape', async () => {
+    let ctaBody = null;
+    let flightSearchBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { ctaBody = JSON.parse(options.body); return jsonResponse(resolvedAction()); }
+      if (url.includes('/flight-search')) { flightSearchBody = JSON.parse(options.body); return jsonResponse(flightSearchResponse()); }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', leg, 3, ['flight']);
+    expect(ctaBody).toMatchObject({ traveler_count: 3 });
+    expect(flightSearchBody).toMatchObject({ travelers: { adults: 3 } });
+  });
+
+  it('drive never calls trusted-action at all, so it never carries traveler_count', async () => {
+    let called = false;
+    global.fetch = vi.fn(async (url) => { if (url.includes('/trusted-action')) called = true; return jsonResponse({}); });
+    await transportOptionsFor('trip-1', leg, 2, ['drive']);
+    expect(called).toBe(false);
   });
 });
 
@@ -218,7 +329,6 @@ describe('flight live-offer resolution (TWM-146)', () => {
 
   function withFlightSearch(response) {
     global.fetch = vi.fn(async url => {
-      if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
       if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
       if (url.includes('/flight-search')) return jsonResponse(response);
       return jsonResponse({});
@@ -227,7 +337,7 @@ describe('flight live-offer resolution (TWM-146)', () => {
 
   it('still resolves the trusted-action CTA for flight (url/affiliateDisclosure unchanged)', async () => {
     withFlightSearch(flightSearchResponse());
-    const options = await transportOptionsFor('trip-1', leg, 2);
+    const options = await transportOptionsFor('trip-1', leg, 2, ['flight']);
     const flight = options.find(o => o.mode === 'flight');
     expect(flight).toMatchObject({ status: 'resolved', url: 'https://www.ixigo.com/search?domain=flight', affiliateDisclosure: true });
   });
@@ -240,7 +350,7 @@ describe('flight live-offer resolution (TWM-146)', () => {
         { origin_iata: 'DEL', destination_iata: 'GWL', trip_type: 'one_way', departure_date: '2026-03-01', money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true }, baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'y' }, price_found_at: '2026-01-01T00:00:00.000Z', is_recommended: true, airline_name: 'IndiGo', stop_count: 0 },
       ],
     }));
-    const options = await transportOptionsFor('trip-1', leg, 2);
+    const options = await transportOptionsFor('trip-1', leg, 2, ['flight']);
     const flight = options.find(o => o.mode === 'flight');
     expect(flight.liveOffer).toMatchObject({ status: 'offer', priceLabel: 'approx. INR 8,000.00', airline: 'IndiGo', stopCount: 0 });
   });
@@ -252,41 +362,40 @@ describe('flight live-offer resolution (TWM-146)', () => {
         { origin_iata: 'DEL', destination_iata: 'GWL', trip_type: 'one_way', departure_date: '2026-03-01', money: { currency: 'INR', per_traveler_amount_minor_units: 500000, traveler_count: 1, group_total_minor_units: 500000, group_total_is_approximate: true }, baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'x' }, price_found_at: '2026-01-01T00:00:00.000Z', is_recommended: false, airline_code: '6E' },
       ],
     }));
-    const options = await transportOptionsFor('trip-1', leg, 1);
+    const options = await transportOptionsFor('trip-1', leg, 1, ['flight']);
     const flight = options.find(o => o.mode === 'flight');
     expect(flight.liveOffer).toMatchObject({ status: 'partial', airline: '6E' });
   });
 
   it('renders a specific missing-field prompt for clarification_needed, not a generic error', async () => {
     withFlightSearch(flightSearchResponse({ status: 'clarification_needed', clarification: { missing_fields: ['departure_date'], message: 'We need your exact departure date.' } }));
-    const options = await transportOptionsFor('trip-1', leg, 2);
+    const options = await transportOptionsFor('trip-1', leg, 2, ['flight']);
     expect(options.find(o => o.mode === 'flight').liveOffer).toMatchObject({ status: 'clarification_needed', message: 'We need your exact departure date.' });
   });
 
   it('renders the Backend-authored unavailable.message safely', async () => {
     withFlightSearch(flightSearchResponse({ status: 'unavailable', clarification: undefined, unavailable: { code: 'provider_timeout', message: 'The flight provider timed out.' } }));
-    const options = await transportOptionsFor('trip-1', leg, 2);
+    const options = await transportOptionsFor('trip-1', leg, 2, ['flight']);
     expect(options.find(o => o.mode === 'flight').liveOffer).toMatchObject({ status: 'unavailable', message: 'The flight provider timed out.' });
   });
 
   it('renders expired/failed statuses safely with no raw data', async () => {
     withFlightSearch(flightSearchResponse({ status: 'expired', clarification: undefined }));
-    let options = await transportOptionsFor('trip-1', leg, 2);
+    let options = await transportOptionsFor('trip-1', leg, 2, ['flight']);
     expect(options.find(o => o.mode === 'flight').liveOffer).toMatchObject({ status: 'expired' });
 
     withFlightSearch(flightSearchResponse({ status: 'failed', clarification: undefined, failure: { code: 'internal_error', message: 'Something went wrong.' } }));
-    options = await transportOptionsFor('trip-1', leg, 2);
+    options = await transportOptionsFor('trip-1', leg, 2, ['flight']);
     expect(options.find(o => o.mode === 'flight').liveOffer).toMatchObject({ status: 'failed' });
   });
 
   it('surfaces a flight-search network failure as liveOffer.status: failed without blocking the CTA', async () => {
     global.fetch = vi.fn(async url => {
-      if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
       if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
       if (url.includes('/flight-search')) throw new Error('flight search down');
       return jsonResponse({});
     });
-    const options = await transportOptionsFor('trip-1', leg, 2);
+    const options = await transportOptionsFor('trip-1', leg, 2, ['flight']);
     const flight = options.find(o => o.mode === 'flight');
     expect(flight.liveOffer).toMatchObject({ status: 'failed' });
     expect(flight.status).toBe('resolved'); // CTA unaffected by the live-offer failure
@@ -295,7 +404,6 @@ describe('flight live-offer resolution (TWM-146)', () => {
   it('resolves origin_iata/destination_iata for a known city pair via the closed CITY_IATA lookup', async () => {
     let capturedBody = null;
     global.fetch = vi.fn(async (url, options) => {
-      if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
       if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
       if (url.includes('/flight-search')) {
         capturedBody = JSON.parse(options.body);
@@ -303,14 +411,13 @@ describe('flight live-offer resolution (TWM-146)', () => {
       }
       return jsonResponse({});
     });
-    await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Kochi', departureDate: '2026-03-01' }, 2);
+    await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Kochi', departureDate: '2026-03-01' }, 2, ['flight']);
     expect(capturedBody).toMatchObject({ origin_iata: 'BLR', destination_iata: 'COK' });
   });
 
   it('omits origin_iata/destination_iata for a city with no direct airport, rather than guessing a nearest one', async () => {
     let capturedBody = null;
     global.fetch = vi.fn(async (url, options) => {
-      if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
       if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
       if (url.includes('/flight-search')) {
         capturedBody = JSON.parse(options.body);
@@ -318,35 +425,61 @@ describe('flight live-offer resolution (TWM-146)', () => {
       }
       return jsonResponse({});
     });
-    await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Alleppey', departureDate: '2026-03-01' }, 2);
+    await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Alleppey', departureDate: '2026-03-01' }, 2, ['flight']);
     expect(capturedBody).not.toHaveProperty('destination_iata');
     expect(capturedBody).toMatchObject({ origin_iata: 'BLR' });
   });
 });
 
 describe('feasibleTransportOptions', () => {
-  it('excludes a ruled_out mode entirely (not faded), carrying the Backend-computed reason', () => {
+  // TWM-195 root-fix contract: TripFeasibilityAssessment.modes only ever
+  // contains genuinely feasible entries now (no excluded_modes field, no
+  // per-mode ruled_out/unknown). `options` was already resolved only for
+  // Backend-approved modes, so this is a straight enrichment pass.
+  it('enriches each resolved option with its matching feasibility metadata', () => {
     const options = [
       { mode: 'flight', name: 'Flight' },
+      { mode: 'train', name: 'Train' },
+    ];
+    const feasibility = {
+      modes: [
+        { mode: 'flight', status: 'feasible', duration_source: 'computed', estimated_distance_km: 350, reason: 'Fast option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        { mode: 'train', status: 'feasible', duration_source: 'computed', estimated_distance_km: 350, reason: 'Regular train service.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      ],
+    };
+    const enriched = feasibleTransportOptions(options, feasibility);
+    expect(enriched.map(o => o.mode).sort()).toEqual(['flight', 'train']);
+    expect(enriched.find(o => o.mode === 'flight').reason).toBe('Fast option.');
+    expect(enriched.find(o => o.mode === 'flight').distanceKm).toBe(350);
+  });
+
+  it('returns an empty array when there is nothing to enrich (no resolved options)', () => {
+    expect(feasibleTransportOptions([], { modes: [] })).toEqual([]);
+  });
+
+  it('returns options unchanged when no feasibility data is available', () => {
+    const options = [{ mode: 'flight', name: 'Flight' }];
+    expect(feasibleTransportOptions(options, null)).toEqual(options);
+  });
+
+  // TWM-195 regression: a Bangalore -> Mangalore-like route can legitimately
+  // have multiple route-valid modes — all of them enriched and kept, none
+  // pruned client-side (Backend already did the only pruning that happens).
+  it('keeps every resolved option visible when Backend returned multiple valid modes', () => {
+    const options = [
+      { mode: 'flight', name: 'Flight' },
+      { mode: 'train', name: 'Train' },
       { mode: 'bus', name: 'Bus' },
     ];
     const feasibility = {
       modes: [
-        { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fast option.' },
-        { mode: 'bus', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'A 14h journey is not practical here.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Direct flight exists.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'Overnight train exists.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        { mode: 'bus', status: 'feasible', duration_source: 'computed', reason: 'Regular bus service.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
       ],
     };
-    const { feasible, excluded } = feasibleTransportOptions(options, feasibility);
-    expect(feasible.some(o => o.mode === 'bus')).toBe(false);
-    expect(excluded.some(o => o.mode === 'bus')).toBe(true);
-    expect(excluded.find(o => o.mode === 'bus').reason).toBe('A 14h journey is not practical here.');
-  });
-
-  it('treats every mode as feasible with no duration data when no assessment exists yet', () => {
-    const options = [{ mode: 'flight', name: 'Flight' }];
-    const { feasible, excluded } = feasibleTransportOptions(options, null);
-    expect(feasible).toHaveLength(1);
-    expect(excluded).toHaveLength(0);
+    const enriched = feasibleTransportOptions(options, feasibility);
+    expect(enriched.map(o => o.mode).sort()).toEqual(['bus', 'flight', 'train']);
   });
 
   it('every option carries a real mode label, not a raw enum', () => {

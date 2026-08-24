@@ -226,13 +226,25 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
   await page.getByRole('button', { name: 'Take a look at the trip first' }).click();
   await page.getByRole('navigation', { name: 'Trip Dashboard tabs' }).getByRole('button', { name: 'Bookings' }).click();
 
-  // Transport: the Delhi -> Coorg -> Wayanad -> Delhi route is a round trip
-  // (returns to origin), so it bundles as one priced decision, not per-leg.
+  // Transport (TWM-195 MVP scope narrowing): Bookings Transport is
+  // gateway-only — the Delhi -> Coorg -> Wayanad -> Delhi route renders
+  // only the two gateway rows touching origin_city (Delhi -> Coorg,
+  // Wayanad -> Delhi); the internal Coorg -> Wayanad leg is hidden
+  // entirely (still real itinerary guidance elsewhere, just not a
+  // Bookings row), with no round-trip bundling either way.
   await expect(page.getByText('🚗 Transport')).toBeVisible();
-  const roundTripLabel = page.getByRole('heading', { name: /Delhi ⇄ Coorg round trip|Delhi ⇄ Wayanad round trip/ });
-  await expect(roundTripLabel).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Delhi → Coorg' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Wayanad → Delhi' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Coorg → Wayanad' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: /round trip/ })).toHaveCount(0);
   await page.getByRole('button', { name: /Resolve/ }).first().click();
   await expect(page.getByRole('link', { name: 'Check ↗' }).first()).toBeVisible();
+
+  // Stay (TWM-195 review comment blocker): out of scope for this slice —
+  // no partner options resolve, just an honest "not yet available" state.
+  const stayResolveButtons = page.getByRole('button', { name: /Resolve/ });
+  await stayResolveButtons.last().click();
+  await expect(page.getByText(/Stay booking isn't available here yet/)).toBeVisible();
 
   // Activity: only the Atlas-flagged Wayanad safari appears, framed as the exception.
   await expect(page.getByText(/the exception, not the norm/)).toBeVisible();

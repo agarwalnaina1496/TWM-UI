@@ -176,11 +176,31 @@ function clarificationNeededResponse() {
   };
 }
 
+// TWM-195 root-fix contract: default feasibility fixture — all four modes
+// genuinely route-valid for the fixture's Delhi <-> Rishikesh route
+// (TripFeasibilityAssessment.modes is the only field now — no
+// excluded_modes), so tests unrelated to feasibility semantics (e.g.
+// TWM-146's flight-card tests) still reach a bookable Transport card. A
+// `null`/missing assessment, or `modes: []`, must resolve zero transport
+// modes on the UI side — tests that specifically exercise that path mock
+// feasibility as `null`/empty explicitly rather than relying on this
+// default.
+function feasibleAssessmentResponse() {
+  return {
+    modes: [
+      { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      { mode: 'bus', status: 'feasible', duration_source: 'computed', reason: 'Also practical for this trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+    ],
+  };
+}
+
 function defaultFetchMock() {
   return vi.fn(async (url) => {
     if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
     if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-    if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+    if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
     if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
     if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
     return jsonResponse({});
@@ -356,33 +376,205 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // purpose; that coverage returns with the real Bookings tab.
   // TWM-176: real Bookings content, replacing TWM-175's inert placeholder.
   describe('Bookings tab (TWM-176)', () => {
-    it('shows the origin<->destination transport leg, not just local transfers, bundled as one round-trip decision', async () => {
+    // TWM-195 review comment: no more round-trip bundling (also independently
+    // removed by TWM-199) — the outbound and return legs each render as
+    // their own explicit directional row.
+    it('shows explicit directional outbound and return transport legs, never a bundled round-trip row', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      // Fixture: both days are Rishikesh, so the round trip is Delhi <-> Rishikesh.
-      expect(screen.getByText('Delhi ⇄ Rishikesh round trip')).toBeInTheDocument();
+      // Fixture: both days are Rishikesh with no real inner movement, so the
+      // only legs are the outbound and return bookends, as two separate rows.
+      expect(screen.getByText('Delhi → Rishikesh')).toBeInTheDocument();
+      expect(screen.getByText('Rishikesh → Delhi')).toBeInTheDocument();
+      expect(screen.queryByText(/round trip/)).not.toBeInTheDocument();
+      expect(screen.queryByText('Delhi ⇄ Rishikesh round trip')).not.toBeInTheDocument();
     });
 
-    it('expanding a segment shows mode-tagged options; an infeasible mode is genuinely absent, with the Backend-provided explanatory note', async () => {
+    // TWM-200: transportLegs derives legs solely from Atlas's own
+    // structured TRAVEL.from_city/to_city — trip_context.origin/origin_city
+    // has no effect on Bookings leg labels at all any more (the shared
+    // fixture's TRAVEL items hardcode Delhi/Rishikesh regardless of
+    // trip_context), so there is no origin-vs-origin_city leg-label
+    // behavior left to test here; see the "fails closed when Atlas has not
+    // emitted a structured movement" test below for the current contract.
+
+    // TWM-195 review comment: canonical trip_context.num_travelers (which
+    // can arrive as a chat-entered string) is the primary traveler-count
+    // source for transport CTA payloads, normalized to a number.
+    it('derives traveler_count from trip_context.num_travelers (normalizing a string like "3") for transport CTA payloads', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', num_travelers: '3' } });
+      sendTripCommand = vi.fn();
+      let capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(0));
+      expect(capturedBodies.some(body => body.traveler_count === 3)).toBe(true);
+    });
+
+    // Falls back to Atlas trip_summary.num_travelers (fixture: 2) only when
+    // trip_context.num_travelers itself is absent — the review comment only
+    // demanded removing the *origin* fallback, not this one.
+    it('falls back to Atlas trip_summary.num_travelers when trip_context.num_travelers is absent', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
-      global.fetch = vi.fn(async url => {
+      let capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(0));
+      // atlasResult()'s trip_summary.num_travelers fixture value is 2.
+      expect(capturedBodies.some(body => body.traveler_count === 2)).toBe(true);
+    });
+
+    // TWM-195 review comment (blocker): stay/hotel affiliate resolution must
+    // not fire eagerly in this slice — no resolveTrustedAction(domain:
+    // 'stay') / stayOptionsFor network call, and an honest "not yet
+    // available" message instead of an empty options list.
+    it('does not eagerly resolve stay trusted-actions, and shows an honest "not yet available" state for Stay', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      let stayNetworkCalls = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) {
+          const body = JSON.parse(options.body);
+          if (body.domain === 'stay') stayNetworkCalls.push(body);
+          return jsonResponse(resolvedActionResponse());
+        }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      const resolveButtons = screen.getAllByRole('button', { name: 'Resolve ▾' });
+      // Stay section is the second block (Transport legs first, then Stay).
+      await user.click(resolveButtons[resolveButtons.length - 1]);
+      await waitFor(() => expect(screen.getByText(/Stay booking isn't available here yet/)).toBeInTheDocument());
+      expect(stayNetworkCalls).toEqual([]);
+    });
+
+    // Every leg transportLegs returns renders as its own row — proven here
+    // with a 3-city fixture (no bundling of any kind, not just the
+    // 2-city/round-trip case above). TWM-200: legs come solely from each
+    // day's own structured TRAVEL.from_city/to_city now, not an inferred
+    // origin bookend.
+    // TWM-195 (MVP scope narrowing): Bookings Transport is gateway-only —
+    // only the outbound-from-origin and return-to-origin legs render; the
+    // internal Rishikesh->Haridwar leg is genuinely omitted, and never
+    // resolved (no trusted-action/feasibility call for it at all).
+    it('renders only the gateway legs (outbound from and return to origin_city), hiding the internal leg entirely, with no bundled heading', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: {
+            days: [
+              {
+                day_number: 1, date: null, title: 'Arrival', primary_location: 'Rishikesh', summary: 'x',
+                timeline: [{
+                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Arrival', location: 'Rishikesh',
+                  detail: 'Arrive from Delhi.', movement_guidance: null, from_city: 'Delhi', to_city: 'Rishikesh', display_label: null,
+                  estimated_cost_low: 0, estimated_cost_high: 0,
+                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+                }],
+                seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+              },
+              {
+                day_number: 2, date: null, title: 'Onward', primary_location: 'Haridwar', summary: 'x',
+                timeline: [{
+                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Onward', location: 'Haridwar',
+                  detail: 'Move to Haridwar.', movement_guidance: null, from_city: 'Rishikesh', to_city: 'Haridwar', display_label: null,
+                  estimated_cost_low: 0, estimated_cost_high: 0,
+                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+                }],
+                seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+              },
+              {
+                day_number: 3, date: null, title: 'Return', primary_location: 'Delhi', summary: 'x',
+                timeline: [{
+                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Return', location: 'Delhi',
+                  detail: 'Return to Delhi.', movement_guidance: null, from_city: 'Haridwar', to_city: 'Delhi', display_label: null,
+                  estimated_cost_low: 0, estimated_cost_high: 0,
+                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+                }],
+                seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+              },
+            ],
+          },
+        }),
+      };
+      let feasibilityCalls = [];
+      global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
         if (url.includes('/trusted-action/feasibility')) {
+          feasibilityCalls.push(JSON.parse(options.body));
+          return jsonResponse(feasibleAssessmentResponse());
+        }
+        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      expect(screen.getByText('Delhi → Rishikesh')).toBeInTheDocument();
+      expect(screen.getByText('Haridwar → Delhi')).toBeInTheDocument();
+      expect(screen.queryByText('Rishikesh → Haridwar')).not.toBeInTheDocument();
+      expect(screen.queryByText(/round trip/)).not.toBeInTheDocument();
+      await waitFor(() => expect(feasibilityCalls.length).toBeGreaterThan(0));
+      expect(feasibilityCalls.some(body => body.origin === 'Rishikesh' && body.destination === 'Haridwar')).toBe(false);
+    });
+
+    it('expanding a segment shows mode-tagged options; a route-absurd mode is genuinely absent because Backend never returned it', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      let trustedActionCalls = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) {
+          // TWM-195 root-fix contract: Backend simply omits a route-absurd
+          // mode (bus) from `modes` entirely — there is no ruled_out entry
+          // to send, and no excluded_modes field at all.
           return jsonResponse({
             modes: [
-              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90 },
-              { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'bus', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'Bus excluded — a 14h journey is not practical for a 2-day trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.' },
+              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
             ],
           });
         }
-        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        if (url.includes('/trusted-action')) {
+          trustedActionCalls.push(JSON.parse(options.body));
+          return jsonResponse(resolvedActionResponse());
+        }
         return jsonResponse({});
       });
       const user = userEvent.setup();
@@ -391,13 +583,15 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
       await waitFor(() => expect(screen.getAllByText(/Flight/).length).toBeGreaterThan(0));
-      // Bus is ruled_out per the mocked feasibility assessment — genuinely
-      // absent from the options grid, not just faded.
+      // Bus is absent from the options grid...
       expect(screen.queryByText(/^Bus:/)).not.toBeInTheDocument();
-      expect(screen.getAllByText(/Bus excluded/).length).toBeGreaterThan(0);
+      // ...and, critically, the UI never even called trusted-action for it —
+      // proving mode resolution is gated by Backend's returned list, not a
+      // resolve-then-filter pattern.
+      expect(trustedActionCalls.some(call => call.domain === 'bus')).toBe(false);
     });
 
-    it('shows a recommended-mode card and the "why other modes aren\'t shown" feasibility row, with a GENERAL_GUIDANCE tag for the llm_estimated train mode', async () => {
+    it('shows a recommended-mode card and a route-details disclosure with a GENERAL_GUIDANCE tag for the returned modes', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
@@ -406,10 +600,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         if (url.includes('/trusted-action/feasibility')) {
           return jsonResponse({
             modes: [
-              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90 },
-              { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'bus', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'Not practical for this trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.' },
+              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
             ],
           });
         }
@@ -424,10 +617,42 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(screen.getByLabelText('Recommended mode')).toBeInTheDocument());
       expect(within(screen.getByLabelText('Recommended mode')).getByText('Fastest option.')).toBeInTheDocument();
 
-      await user.click(screen.getByText("Why other modes aren't shown"));
-      const disclosure = screen.getByText("Why other modes aren't shown").closest('details');
-      expect(within(disclosure).getByText('Not practical for this trip.')).toBeInTheDocument();
+      await user.click(screen.getByText('Route details for these modes'));
+      const disclosure = screen.getByText('Route details for these modes').closest('details');
+      expect(within(disclosure).getByText('A comfortable overland option.')).toBeInTheDocument();
       expect(within(disclosure).getAllByText('General guidance').length).toBeGreaterThan(0);
+    });
+
+    it('renders an honest "no bookable transport options" state and makes zero trusted-action/flight-search calls when Backend returns modes: []', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      let transportNetworkCalls = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse({ modes: [] });
+        if (url.includes('/trusted-action')) {
+          // Distinguish the transport leg's own calls (domain
+          // flight/train/bus) from the independent Stay section's calls
+          // (domain stay), which are unaffected by this leg's empty
+          // feasibility — only transport calls must be zero here.
+          const body = JSON.parse(options.body);
+          if (['flight', 'train', 'bus'].includes(body.domain)) transportNetworkCalls.push(body);
+          return jsonResponse(resolvedActionResponse());
+        }
+        if (url.includes('/flight-search')) {
+          transportNetworkCalls.push({ url });
+          return jsonResponse(resolvedActionResponse());
+        }
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+
+      await waitFor(() => expect(screen.getByText('No bookable transport options for this leg.')).toBeInTheDocument());
+      expect(transportNetworkCalls).toEqual([]);
     });
 
     it('fails closed (no synthesized leg) when Atlas has not emitted a structured movement, never inferring one from trip_context (TWM-200)', async () => {
@@ -466,6 +691,121 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.queryByText(/⇄/)).not.toBeInTheDocument();
     });
 
+    // TWM-195 review-example regression: the Odisha itinerary's five real
+    // structured legs (Bangalore->Bhubaneswar->Puri->Konark->Bhubaneswar->
+    // Bangalore) must render only the two gateway rows touching
+    // origin_city, and must never call feasibility for the three internal
+    // legs at all.
+    it('Odisha regression: renders only Bangalore<->Bhubaneswar gateway rows, never resolving the three internal legs', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Bangalore' } });
+      const travelDay = (dayNumber, fromCity, toCity) => ({
+        day_number: dayNumber, date: null, title: `${fromCity} to ${toCity}`, primary_location: toCity, summary: 'x',
+        timeline: [{
+          start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: `${fromCity} to ${toCity}`, location: toCity,
+          detail: 'Travel.', movement_guidance: null, from_city: fromCity, to_city: toCity, display_label: null,
+          estimated_cost_low: 0, estimated_cost_high: 0,
+          reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+        }],
+        seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+      });
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: {
+            days: [
+              travelDay(1, 'Bangalore', 'Bhubaneswar'),
+              travelDay(2, 'Bhubaneswar', 'Puri'),
+              travelDay(3, 'Puri', 'Konark'),
+              travelDay(4, 'Konark', 'Bhubaneswar'),
+              travelDay(5, 'Bhubaneswar', 'Bangalore'),
+            ],
+          },
+        }),
+      };
+      let feasibilityCalls = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) {
+          feasibilityCalls.push(JSON.parse(options.body));
+          return jsonResponse(feasibleAssessmentResponse());
+        }
+        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      expect(screen.getByText('Bangalore → Bhubaneswar')).toBeInTheDocument();
+      expect(screen.getByText('Bhubaneswar → Bangalore')).toBeInTheDocument();
+      expect(screen.queryByText('Bhubaneswar → Puri')).not.toBeInTheDocument();
+      expect(screen.queryByText('Puri → Konark')).not.toBeInTheDocument();
+      expect(screen.queryByText('Konark → Bhubaneswar')).not.toBeInTheDocument();
+      await waitFor(() => expect(feasibilityCalls.length).toBeGreaterThan(0));
+      const internalPairs = [['Bhubaneswar', 'Puri'], ['Puri', 'Konark'], ['Konark', 'Bhubaneswar']];
+      for (const [origin, destination] of internalPairs) {
+        expect(feasibilityCalls.some(body => body.origin === origin && body.destination === destination)).toBe(false);
+      }
+    });
+
+    // Regression: bookingsFetchStarted used to be keyed only by tripId, so
+    // once Bookings fetched for a trip it would never refetch while that
+    // trip stayed mounted — even if origin_city (or the itinerary itself)
+    // changed underneath it. The guard is now keyed on
+    // tripId+itineraryResult.version+originCity, so a genuine origin_city
+    // change re-derives gateway legs and re-fetches for them.
+    it('refetches Bookings transport when trip_context.origin_city changes while the same trip stays mounted', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      const travelDay = (dayNumber, fromCity, toCity) => ({
+        day_number: dayNumber, date: null, title: `${fromCity} to ${toCity}`, primary_location: toCity, summary: 'x',
+        timeline: [{
+          start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: `${fromCity} to ${toCity}`, location: toCity,
+          detail: 'Travel.', movement_guidance: null, from_city: fromCity, to_city: toCity, display_label: null,
+          estimated_cost_low: 0, estimated_cost_high: 0,
+          reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+        }],
+        seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
+      });
+      // Delhi -> Agra -> Mumbai: with origin=Delhi, the outbound gateway is
+      // Delhi->Agra (no leg returns to Delhi, so no inbound gateway); with
+      // origin=Mumbai, the inbound gateway is Agra->Mumbai instead (no leg
+      // departs Mumbai) — genuinely different visible content either way.
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: { days: [travelDay(1, 'Delhi', 'Agra'), travelDay(2, 'Agra', 'Mumbai')] },
+        }),
+      };
+      let feasibilityCallCount = 0;
+      global.fetch = vi.fn(async url => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) { feasibilityCallCount += 1; return jsonResponse(feasibleAssessmentResponse()); }
+        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      const view = await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await waitFor(() => expect(screen.getByText('Delhi → Agra')).toBeInTheDocument());
+      await waitFor(() => expect(feasibilityCallCount).toBeGreaterThan(0));
+      const callCountBeforeOriginChange = feasibilityCallCount;
+
+      // origin_city changes underneath the same mounted trip — force a
+      // re-render so the mocked useTrip() picks up the new commandSnapshot,
+      // exactly as a real trip_context update would.
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Mumbai' } });
+      view.rerender(<MemoryRouter initialEntries={['/dashboard']}><TripDashboard /></MemoryRouter>);
+
+      await waitFor(() => expect(screen.getByText('Agra → Mumbai')).toBeInTheDocument());
+      expect(screen.queryByText('Delhi → Agra')).not.toBeInTheDocument();
+      await waitFor(() => expect(feasibilityCallCount).toBeGreaterThan(callCountBeforeOriginChange));
+    });
+
     it('sources the Trusted Action traveler_count from canonical trip_context.num_travelers, not Atlas trip_summary (TWM-199)', async () => {
       // Atlas trip_summary.num_travelers is 2 (atlasResult's default) — a
       // deliberately different value than trip_context.num_travelers below,
@@ -488,7 +828,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await readyDashboard();
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.getByText('Delhi ⇄ Rishikesh round trip not booked yet')).toBeInTheDocument();
+      expect(screen.getByText('Delhi → Rishikesh not booked yet')).toBeInTheDocument();
+      expect(screen.getByText('Rishikesh → Delhi not booked yet')).toBeInTheDocument();
       expect(screen.queryByText('Not booked yet')).not.toBeInTheDocument();
     });
 
@@ -561,7 +902,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+        if (url.includes('/trusted-action/feasibility')) {
+          return jsonResponse({
+            modes: [{ mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } }],
+          });
+        }
         if (url.includes('/trusted-action')) return jsonResponse({ status: 'missing_input', generated_at: '2026-01-01T00:00:00.000Z', missing_input: { missing_fields: ['origin'], message: 'Tell us the missing details.' } });
         return jsonResponse({});
       });
@@ -585,7 +930,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: 'Save confirmation' }));
 
       expect(sendTripCommand).toHaveBeenCalledWith('confirm_logistics', expect.objectContaining({
-        logisticsConfirmation: expect.objectContaining({ type: 'transport', label: 'Delhi ⇄ Rishikesh round trip' }),
+        logisticsConfirmation: expect.objectContaining({ type: 'transport', label: 'Delhi → Rishikesh' }),
       }));
     });
 
@@ -609,7 +954,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({
@@ -648,7 +993,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({ status: 'unavailable', queried_at: '2026-01-01T00:00:00.000Z', unavailable: { code: 'provider_timeout', message: 'The flight provider timed out — try again shortly.' } });

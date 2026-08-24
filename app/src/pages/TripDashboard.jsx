@@ -8,15 +8,15 @@ import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary } from '../lib/tripApi.js';
 import {
   anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange,
-  verificationTone, trustStripCounts, bookingReadinessRollup,
+  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
 } from '../lib/atlasView.js';
 import {
-  transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
-  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
+  transportLegs, gatewayLegs, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
+  stayLegs, activityBookings, notBookedYetLabel, modeLabel, recommendedMode, normalizeTravelerCount,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
-import { tripTravelerCount } from '../constants/tripContext.js';
+import { tripOriginCity } from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -461,25 +461,25 @@ function RecommendedModeCard({ option }) {
   );
 }
 
-// TWM-132: "why other modes aren't shown" — every mode's real feasibility
-// (feasible/ruled_out, reason, duration/distance). Train/bus durations are
-// llm_estimated, so they carry the same VERIFIED/GENERAL_GUIDANCE
-// VerificationTag already used in the Itinerary tab (reused, not
-// reinvented); flight/drive are Backend-computed and carry no such tag —
-// there's no model output there to caveat.
+// TWM-195 root-fix simplification: Backend's `modes` list only ever
+// contains genuinely route-valid entries now (no more ruled_out/unknown
+// bucket to explain "why other modes aren't shown" — a non-route-valid
+// mode is simply never sent to the UI at all, never resolved, never
+// rendered). This disclosure now just shows the route-plausibility detail
+// backing each mode that IS shown (duration/distance/reason), so a
+// traveler can see why e.g. train is listed as ~9h/620km.
 function FeasibilityDisclosure({ modes }) {
   if (!modes?.length) return null;
   return (
     <details className="feasibility-disclosure">
-      <summary>Why other modes aren't shown</summary>
+      <summary>Route details for these modes</summary>
       <ul className="trip-notes-list">
         {modes.map(mode => (
           <li key={mode.mode}>
             <ModeTag mode={mode.mode} />
-            {' '}<strong>{mode.status === 'feasible' ? 'Feasible' : 'Ruled out'}</strong>
             {mode.estimated_duration_minutes != null && <> — {Math.round((mode.estimated_duration_minutes / 60) * 10) / 10}h</>}
             {mode.estimated_distance_km != null && <> · {Math.round(mode.estimated_distance_km)} km</>}
-            {mode.duration_source === 'llm_estimated' && <VerificationTag status={mode.verification?.status} />}
+            <VerificationTag status={mode.verification?.status} />
             <p>{mode.reason}</p>
           </li>
         ))}
@@ -493,8 +493,8 @@ function FeasibilityDisclosure({ modes }) {
 // navigation, no separate Logistics page. Confirmed segments (an anchor
 // already exists) skip straight to the 🔒-confirmed treatment.
 function BookingSegment({
-  label, anchor, expanded, onToggleExpand, loading, loadError, options, excluded, renderOption, onOpenConfirm,
-  recommended, feasibilityModes,
+  label, anchor, expanded, onToggleExpand, loading, loadError, options, renderOption, onOpenConfirm,
+  recommended, feasibilityModes, noOptionsMessage,
 }) {
   if (anchor) {
     return (
@@ -521,13 +521,13 @@ function BookingSegment({
         <>
           {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
           {loadError && <p className="already-booked-note" role="alert">{loadError}</p>}
-          {!loading && !loadError && (
+          {!loading && !loadError && (options || []).length === 0 && (
+            <p className="already-booked-note" role="status">{noOptionsMessage || 'No bookable transport options for this leg.'}</p>
+          )}
+          {!loading && !loadError && (options || []).length > 0 && (
             <>
               {recommended !== undefined && <RecommendedModeCard option={recommended} />}
               <div className="stay-options-grid">{(options || []).map((option, index) => renderOption(option, recommended ? option === recommended : index === 0))}</div>
-              {excluded?.length > 0 && (
-                <p className="already-booked-note">{excluded.map(item => item.reason).filter(Boolean).join(' ')}</p>
-              )}
               {feasibilityModes && <FeasibilityDisclosure modes={feasibilityModes} />}
             </>
           )}
@@ -627,10 +627,15 @@ export default function TripDashboard() {
   // (transportData) or a stay's id (stayData) so lookups don't depend on
   // the round-trip bundle's synthetic id.
   const [bookingsStatus, setBookingsStatus] = useState('idle'); // idle | loading | ready | error
-  const [bookingsError, setBookingsError] = useState(null);
+  // TWM-195: a transport-section resolution/feasibility failure must stay
+  // local to Transport and never take down the already-independent Stay
+  // section (or vice versa) — split out of the single shared bookingsError
+  // so one section's failure can never surface as the other's loadError.
+  const [transportError, setTransportError] = useState(null);
+  const [stayError, setStayError] = useState(null);
   const [transportData, setTransportData] = useState({});
   const [stayData, setStayData] = useState({});
-  const bookingsFetchStarted = useRef(null); // tripId currently/last fetched, or null
+  const bookingsFetchStarted = useRef(null); // `${tripId}:${itineraryResult.version}:${originCity}` currently/last fetched, or null
 
   const tripId = commandSnapshot?.id;
 
@@ -647,53 +652,98 @@ export default function TripDashboard() {
 
   useEffect(() => {
     if (tab !== 'Bookings' || itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
-    if (bookingsFetchStarted.current === tripId) return;
-    bookingsFetchStarted.current = tripId;
+    // Keyed by more than just tripId — a bare tripId key means this guard
+    // never resets while the same trip stays mounted, even when the
+    // itinerary is revised (resolveRevision -> a new itineraryResult) or
+    // origin_city changes, so Bookings would keep serving stale
+    // transport/stay data until a full reload. itineraryResult.version
+    // (the itinerary body's own revision number, not commandSnapshot's)
+    // and origin_city are exactly the two inputs gatewayLegs/transportLegs
+    // below actually depend on, so the guard is keyed on both.
+    const bookingsFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}`;
+    if (bookingsFetchStarted.current === bookingsFetchKey) return;
+    bookingsFetchStarted.current = bookingsFetchKey;
     setBookingsStatus('loading');
-    setBookingsError(null);
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
-    const legs = transportLegs(bookingDays);
-    const { bundle, rest } = bundleRoundTrip(legs);
-    const legsToFetch = [...(bundle ? [bundle.outbound] : []), ...rest];
+    // TWM-200: transportLegs derives every structured TRAVEL movement —
+    // solely from Atlas's own from_city/to_city, never a UI-synthesized
+    // origin bookend. TWM-195 (MVP scope narrowing): Bookings Transport is
+    // gateway-only — gatewayLegs filters that full list down to just the
+    // outbound-from-origin and return-to-origin rows BEFORE any
+    // feasibility/trusted-action/flight-search call fires, so internal/
+    // circuit/local movements never hit the network at all, not merely
+    // hidden after the fact. No round-trip bundling either way.
+    const legsToFetch = gatewayLegs(transportLegs(bookingDays), tripOriginCity(tripState?.trip_context));
     const stays = stayLegs(bookingDays);
-    // TWM-146/TWM-199: threaded through to flight's live-offer search and
-    // Trusted Action's traveler_count so those payloads are populated
-    // whenever it's known, instead of always hitting clarification_needed
-    // for a field we actually have — see bookingCatalog.searchFlightOffer's
-    // comment for why departure_date/IATA still aren't threaded through
-    // today. Sourced from canonical trip_context.num_travelers (via
-    // tripTravelerCount), not Atlas's own trip_summary.num_travelers —
-    // trip_context is this product's one internal source of truth for
-    // traveler count (TWM-199).
-    const partySize = tripTravelerCount(tripState?.trip_context);
+    // TWM-146/TWM-195/TWM-199: threaded through to flight's live-offer
+    // search and Trusted Action's traveler_count so those payloads are
+    // populated whenever it's known, instead of always hitting
+    // clarification_needed for a field we actually have — see
+    // bookingCatalog.searchFlightOffer's comment for why departure_date/
+    // IATA still aren't threaded through today. Canonical
+    // trip_context.num_travelers (normalized — it can arrive as a
+    // chat-entered string like '2') is the primary source, with Atlas's own
+    // trip_summary.num_travelers kept as a fallback — the review comment
+    // only demanded removing the *origin* fallback, not this one.
+    const partySize = normalizeTravelerCount(tripState?.trip_context?.num_travelers)
+      ?? travelerCount(itineraryResult.result.final_itinerary.trip_summary);
 
     let cancelled = false;
+    setTransportError(null);
+    setStayError(null);
     (async () => {
-      try {
-        const transportEntries = await Promise.all(legsToFetch.map(async leg => {
-          const [options, feasibility] = await Promise.all([
-            transportOptionsFor(tripId, leg, partySize),
-            fetchLegFeasibility(tripId, leg).catch(() => null),
-          ]);
+      // TWM-195: Transport and Stay are fetched and error-isolated
+      // independently (Promise.allSettled, not Promise.all) — a transport
+      // resolution or feasibility failure must never blank out or error
+      // the already-fetched/fetching Stay section, and vice versa.
+      const [transportOutcome, stayOutcome] = await Promise.allSettled([
+        Promise.all(legsToFetch.map(async leg => {
+          // TWM-195 root fix: feasibility must be fetched and read FIRST,
+          // and only its approved modes are ever resolved — never
+          // Promise.all-concurrent with resolution. A failed/missing
+          // feasibility fetch (caught to null here) resolves zero modes,
+          // exactly like an honest `modes: []` response — never a
+          // fallback that tries every mode.
+          const feasibility = await fetchLegFeasibility(tripId, leg).catch(() => null);
+          const approvedModes = (feasibility?.modes || []).map(entry => entry.mode);
+          const options = await transportOptionsFor(tripId, leg, partySize, approvedModes);
           return [legKey(leg), { options, feasibility }];
-        }));
-        const stayEntries = await Promise.all(stays.map(async stay => {
-          const options = await stayOptionsFor(tripId, stay);
-          return [stay.id, { options }];
-        }));
-        if (cancelled) return;
-        setTransportData(Object.fromEntries(transportEntries));
-        setStayData(Object.fromEntries(stayEntries));
-        setBookingsStatus('ready');
-      } catch (error) {
-        if (cancelled) return;
-        setBookingsStatus('error');
-        setBookingsError(error.message || 'Could not load booking options.');
+        })),
+        // TWM-195 review comment (blocker): stay/hotel affiliate resolution
+        // is explicitly out of scope for this first mode-visibility slice —
+        // Backend's trusted-action readiness currently requires route/date/
+        // traveler fields that a stay leg doesn't genuinely have, so eagerly
+        // calling resolveTrustedAction(domain: 'stay') here only produced
+        // noisy missing_input responses. `stayOptionsFor`/the stay-partner
+        // resolution code in bookingCatalog.js is intentionally left intact
+        // (not deleted) for the future hotel/stay affiliate story to wire
+        // back in — it is simply not called from this flow anymore. Each
+        // stay leg instead gets a stable, honest "not yet available"
+        // result (`status: 'not_available'`, no options) that the Stay
+        // section renders directly rather than an empty options list.
+        Promise.resolve(stays.map(stay => [stay.id, { options: [], notAvailable: true }])),
+      ]);
+      if (cancelled) return;
+
+      if (transportOutcome.status === 'fulfilled') {
+        setTransportData(Object.fromEntries(transportOutcome.value));
+      } else {
+        setTransportError(transportOutcome.reason?.message || 'Could not load transport options.');
       }
+
+      if (stayOutcome.status === 'fulfilled') {
+        setStayData(Object.fromEntries(stayOutcome.value));
+      } else {
+        setStayError(stayOutcome.reason?.message || 'Could not load stay options.');
+      }
+
+      setBookingsStatus(
+        transportOutcome.status === 'rejected' && stayOutcome.status === 'rejected' ? 'error' : 'ready'
+      );
     })();
     return () => { cancelled = true; };
-  }, [tab, itineraryStatus, tripId, itineraryResult]);
+  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city]);
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -782,14 +832,14 @@ export default function TripDashboard() {
     }
   }
 
-  function toggleExpandedBooking(id, segmentType, { isRoundTrip = false, excludedOptions = [] } = {}) {
+  // TWM-195 review comment: round-trip bundling is gone — every segment is
+  // its own directional row now, so there's no longer an is_round_trip_bundle
+  // distinction to track here.
+  function toggleExpandedBooking(id, segmentType) {
     setExpandedBookingId(previous => {
       const next = previous === id ? null : id;
       if (next) {
-        trackEvent('booking_intent', { booking_type: 'browse_options', segment_type: segmentType, is_round_trip_bundle: isRoundTrip });
-        for (const excludedOption of excludedOptions) {
-          trackEvent('mode_excluded', { segment_type: segmentType, mode: excludedOption.mode, reason: excludedOption.reason });
-        }
+        trackEvent('booking_intent', { booking_type: 'browse_options', segment_type: segmentType });
       }
       return next;
     });
@@ -920,8 +970,13 @@ export default function TripDashboard() {
   // is part of this contract — changing that formatting without updating
   // this matcher will silently reclassify real confirmed anchors as orphaned.
   const findAnchor = (typeAnchors, label) => typeAnchors.find(a => a.label === label);
-  const transportLegList = transportLegs(days);
-  const { bundle: roundTripBundle, rest: soloLegs } = bundleRoundTrip(transportLegList);
+  // TWM-200: transportLegs derives legs solely from Atlas's own structured
+  // TRAVEL.from_city/to_city movements — no origin argument, no
+  // UI-synthesized bookend leg. TWM-195 (MVP scope narrowing): render-side
+  // must filter to the same gateway-only rows the fetch effect resolved —
+  // never a wider render-side list than what was actually fetched, and
+  // (per TWM-195) no round-trip bundling either way.
+  const transportLegList = gatewayLegs(transportLegs(days), tripOriginCity(tripState?.trip_context));
   const stayLegList = stayLegs(days);
   const activityList = activityBookings(days);
 
@@ -929,10 +984,7 @@ export default function TripDashboard() {
   // itinerary no longer computes (e.g. after a regeneration). Segments
   // already show their own matching anchor inline, so only anchors with
   // no matching segment need the generic AnchorList fallback here.
-  const transportLabels = new Set([
-    ...(roundTripBundle ? [`${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`] : []),
-    ...soloLegs.map(leg => `${leg.from} → ${leg.to}`),
-  ]);
+  const transportLabels = new Set(transportLegList.map(leg => `${leg.from} → ${leg.to}`));
   const stayLabels = new Set(stayLegList.map(stay => `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`));
   const activityLabels = new Set(activityList.map(activity => activity.title));
   const orphanTransportAnchors = transportAnchors.filter(a => !transportLabels.has(a.label));
@@ -1094,49 +1146,32 @@ export default function TripDashboard() {
       </section>}
 
       {tab === 'Bookings' && <section aria-label="Bookings">
-        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Real route options for every leg — schedules and fares are yours to verify before you book.</p></div></div>
+        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Getting to and from {tripOriginCity(tripState?.trip_context) || 'your trip'} — schedules and fares are yours to verify before you book.</p></div></div>
         <AnchorList anchors={orphanTransportAnchors} />
-        {bookingsStatus === 'error' && <p className="already-booked-note" role="alert">{bookingsError}</p>}
-        {roundTripBundle && (() => {
-          const label = `${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`;
-          const entry = transportData[legKey(roundTripBundle.outbound)];
-          const { feasible, excluded } = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : { feasible: [], excluded: [] };
-          const recommended = entry ? recommendedMode(feasible) : undefined;
-          return (
-            <BookingSegment
-              label={label}
-              anchor={findAnchor(transportAnchors, label)}
-              expanded={expandedBookingId === roundTripBundle.id}
-              onToggleExpand={() => toggleExpandedBooking(roundTripBundle.id, 'transport', { isRoundTrip: true, excludedOptions: excluded })}
-              loading={expandedBookingId === roundTripBundle.id && bookingsStatus === 'loading'}
-              loadError={expandedBookingId === roundTripBundle.id ? bookingsError : null}
-              options={feasible}
-              excluded={excluded}
-              recommended={recommended}
-              feasibilityModes={entry?.feasibility?.modes}
-              renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
-              onOpenConfirm={() => openConfirmForm('transport', label)}
-            />
-          );
-        })()}
-        {soloLegs.map(leg => {
+        {transportError && <p className="already-booked-note" role="alert">{transportError}</p>}
+        {/* TWM-195 (MVP scope narrowing): Bookings Transport is gateway-only
+            — transportLegList is already filtered to just the outbound-
+            from-origin and return-to-origin rows (gatewayLegs), each its
+            own explicit directional row, no round-trip bundling. Internal/
+            circuit/local legs stay out of this list entirely. */}
+        {transportLegList.map(leg => {
           const label = `${leg.from} → ${leg.to}`;
           const entry = transportData[legKey(leg)];
-          const { feasible, excluded } = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : { feasible: [], excluded: [] };
-          const recommended = entry ? recommendedMode(feasible) : undefined;
+          const options = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : [];
+          const recommended = entry ? recommendedMode(options) : undefined;
           return (
             <BookingSegment
               key={leg.id}
               label={label}
               anchor={findAnchor(transportAnchors, label)}
               expanded={expandedBookingId === leg.id}
-              onToggleExpand={() => toggleExpandedBooking(leg.id, 'transport', { excludedOptions: excluded })}
+              onToggleExpand={() => toggleExpandedBooking(leg.id, 'transport')}
               loading={expandedBookingId === leg.id && bookingsStatus === 'loading'}
-              loadError={expandedBookingId === leg.id ? bookingsError : null}
-              options={feasible}
-              excluded={excluded}
+              loadError={expandedBookingId === leg.id ? transportError : null}
+              options={options}
               recommended={recommended}
               feasibilityModes={entry?.feasibility?.modes}
+              noOptionsMessage="No bookable transport options for this leg."
               renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
               onOpenConfirm={() => openConfirmForm('transport', label)}
             />
@@ -1148,6 +1183,7 @@ export default function TripDashboard() {
 
         <div className="tab-intro"><div><h2>🏨 Stay</h2><p>Real properties for every base — check dates and price before booking.</p></div></div>
         <AnchorList anchors={orphanStayAnchors} />
+        {stayError && <p className="already-booked-note" role="alert">{stayError}</p>}
         {stayLegList.map(stay => {
           const entry = stayData[stay.id];
           return (
@@ -1158,9 +1194,12 @@ export default function TripDashboard() {
               expanded={expandedBookingId === stay.id}
               onToggleExpand={() => toggleExpandedBooking(stay.id, 'stay')}
               loading={expandedBookingId === stay.id && bookingsStatus === 'loading'}
-              loadError={expandedBookingId === stay.id ? bookingsError : null}
+              loadError={expandedBookingId === stay.id ? stayError : null}
               options={entry?.options || []}
-              excluded={[]}
+              // TWM-195 review comment: stay/hotel affiliate resolution is
+              // out of scope for this slice — this is an honest "not yet
+              // available" state, not "we searched and found nothing".
+              noOptionsMessage="Stay booking isn't available here yet — check back once hotel partners are connected."
               renderOption={(option, best) => <StayOptionCard key={option.name} option={option} best={best} />}
               onOpenConfirm={() => openConfirmForm('stay', `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`)}
             />

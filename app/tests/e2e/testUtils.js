@@ -79,12 +79,35 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
     // Bookings tab (TWM-130/131/146) resolves each transport mode's CTA,
     // per-route feasibility, and a live flight-offer search — all real
     // network calls, unmocked by default. Fulfilled generically here
-    // (a resolved CTA to a placeholder URL, no feasibility data, no live
-    // offer) so any spec that reaches the Bookings tab gets deterministic,
-    // renderable options instead of the Vite SPA-fallback empty-object trick.
+    // (a resolved CTA to a placeholder URL, all four modes genuinely
+    // feasible, no live offer) so any spec that reaches the Bookings tab
+    // gets deterministic, renderable options instead of the Vite
+    // SPA-fallback empty-object trick.
+    // TWM-195 root-fix contract: `modes` is the only field on
+    // TripFeasibilityAssessment (no more excluded_modes) and only ever
+    // contains genuinely route-valid entries. A `null`/missing assessment,
+    // or `modes: []`, must resolve zero transport modes on the UI side —
+    // never "every mode feasible" as a fallback. This shared mock returns
+    // all four modes feasible by default so any generic spec that reaches
+    // the Bookings tab gets deterministic, renderable options; a spec that
+    // specifically needs to prove the empty/absurd-mode behavior overrides
+    // this route itself (see golden-self-led-bookings.spec.js).
     if (method === 'POST' && pathname.endsWith('/trusted-action/feasibility')) {
-      return route.fulfill({ json: null });
+      const reference = { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
+      const modes = ['flight', 'train', 'bus', 'drive'].map(mode => ({
+        mode, status: 'feasible', duration_source: 'computed',
+        estimated_duration_minutes: 120, estimated_distance_km: null,
+        reason: 'Genuinely reachable by this mode.', verification: reference,
+      }));
+      return route.fulfill({ json: { modes } });
     }
+    // TWM-195 review comment (blocker): TripDashboard.jsx no longer calls
+    // resolveTrustedAction(domain: 'stay') at all in this flow — stay/hotel
+    // affiliate resolution is out of scope for this slice. This generic
+    // fulfill is only ever reached by flight/train/bus CTA calls now; it's
+    // kept domain-agnostic since no current spec needs a stay-specific
+    // response, but a spec asserting on stay behavior should not rely on
+    // this route ever firing for domain: 'stay'.
     if (method === 'POST' && pathname.endsWith('/trusted-action')) {
       return route.fulfill({
         json: { status: 'resolved', action: { target: { target_url: 'https://example.com/booking' }, internal_capability: null, affiliate_disclosure: false } },

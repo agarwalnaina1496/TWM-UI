@@ -6,7 +6,7 @@ import { resolveTrustedAction, getTripFeasibility, searchFlights } from './tripA
 // schema shape (primary_location, day_number, timeline, kind,
 // requires_advance_booking) — deliberately NOT reusing mockAtlasTrip.js's
 // structurally different shape (cost_inr, base, number, items).
-// Search/ranking/reasoning here (transportLegs/bundleRoundTrip/stayLegs) are
+// Search/ranking/reasoning here (transportLegs/stayLegs) are
 // permanent, pure route-derivation from Atlas days with no Backend
 // dependency. TWM-132 is the transition promised in the old header comment:
 // the terminal action (transportOptionsFor/feasibleTransportOptions/
@@ -45,6 +45,17 @@ const CITY_IATA = {
 
 function iataForCity(name) {
   return CITY_IATA[(name || '').trim().toLowerCase()] || null;
+}
+
+// TWM-195 review comment: trip_context.num_travelers can arrive as a
+// chat-entered string (e.g. '2', 'Just me' — see entryCommandFixtures.js's
+// own quick-reply chips), not a number. Normalizes to a positive integer or
+// null — never NaN, never 0/negative — so callers can safely omit the
+// field entirely rather than send a garbage value.
+export function normalizeTravelerCount(value) {
+  if (value == null) return null;
+  const parsed = typeof value === 'number' ? value : parseInt(String(value).trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 export const MODES = ['flight', 'train', 'bus', 'drive'];
@@ -191,13 +202,22 @@ async function searchFlightOffer(tripId, leg, travelerCount) {
 // blocks the other from rendering.
 async function resolveFlightOption(tripId, leg, travelerCount) {
   const name = `${modeLabel('flight')}: ${leg.from} → ${leg.to}`;
+  // TWM-195 review comment: trusted-action transport CTA payloads carry
+  // traveler_count (twm/schemas/trusted_action.py's
+  // TrustedActionRequest.traveler_count) when a normalized count is known —
+  // never sent when it can't be determined, matching this file's existing
+  // "only include what's genuinely known" pattern (see origin_iata/
+  // departure_date above). This is a structurally separate field from
+  // searchFlightOffer's own `travelers: { adults: n }` shape below, which
+  // is untouched.
+  const normalizedCount = normalizeTravelerCount(travelerCount);
   const [ctaOption, liveOffer] = await Promise.all([
     resolveTrustedAction(tripId, {
       [TRUSTED_ACTION_KEYS.ACTION_TYPE]: ACTION_TYPE_FOR_MODE.flight,
       [TRUSTED_ACTION_KEYS.DOMAIN]: 'flight',
       [TRUSTED_ACTION_KEYS.ORIGIN]: leg.from,
       [TRUSTED_ACTION_KEYS.DESTINATION]: leg.to,
-      ...(travelerCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: travelerCount } : {}),
+      ...(normalizedCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: normalizedCount } : {}),
     })
       .then(result => toTransportOption('flight', name, result))
       .catch(error => ({ mode: 'flight', name, status: 'error', errorMessage: error.message || 'Could not load this option.' })),
@@ -224,13 +244,17 @@ async function resolveTransportOption(tripId, leg, mode, travelerCount) {
     // drive: feasibility-only, no trusted-action domain exists.
     return { mode, name, status: 'no_action' };
   }
+  // TWM-195 review comment: train/bus CTA payloads also carry traveler_count
+  // when known — same rule as resolveFlightOption above, omitted entirely
+  // otherwise.
+  const normalizedCount = normalizeTravelerCount(travelerCount);
   try {
     const result = await resolveTrustedAction(tripId, {
       [TRUSTED_ACTION_KEYS.ACTION_TYPE]: ACTION_TYPE_FOR_MODE[mode],
       [TRUSTED_ACTION_KEYS.DOMAIN]: domain,
       [TRUSTED_ACTION_KEYS.ORIGIN]: leg.from,
       [TRUSTED_ACTION_KEYS.DESTINATION]: leg.to,
-      ...(travelerCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: travelerCount } : {}),
+      ...(normalizedCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: normalizedCount } : {}),
     });
     return toTransportOption(mode, name, result);
   } catch (error) {
@@ -253,17 +277,28 @@ function toTransportOption(mode, name, result) {
   return { mode, name, status: result.status };
 }
 
-// Async: resolves every mode's trusted action for one leg in parallel.
-// Called from TripDashboard.jsx inside a useEffect (not synchronously
-// during render — see the page's Bookings-tab loading/error state).
-export async function transportOptionsFor(tripId, leg, travelerCount) {
-  return Promise.all(MODES.map(mode => resolveTransportOption(tripId, leg, mode, travelerCount)));
+// TWM-195 root fix: resolves trusted-action/flight-search options only for
+// `approvedModes` — the Backend-approved, route-valid mode list for this
+// leg (TripFeasibilityAssessment.modes). This function must never resolve
+// a mode Backend did not return: the old behavior of unconditionally
+// resolving MODES=[flight,train,bus,drive] and hiding/filtering afterward
+// is exactly the "resolve all hardcoded modes then filter" pattern the
+// Linear issue's Root Fix Requirement forbids. `MODES` (above) remains
+// exported only as a label/ordering helper — never as the source of which
+// modes get resolved here. An empty/missing `approvedModes` resolves
+// nothing and returns `[]` immediately, with no network call at all.
+export async function transportOptionsFor(tripId, leg, travelerCount, approvedModes) {
+  const modes = approvedModes || [];
+  if (modes.length === 0) return [];
+  return Promise.all(modes.map(mode => resolveTransportOption(tripId, leg, mode, travelerCount)));
 }
 
-// Fetches the real per-route TripFeasibilityAssessment (flight/train/bus/
-// drive) for a leg. May resolve to null — the Backend has no assessment for
-// this route yet — which callers must treat as "no feasibility data", not
-// an error.
+// Fetches the real per-route TripFeasibilityAssessment for a leg. Callers
+// MUST fetch this and read `.modes` BEFORE calling transportOptionsFor —
+// never resolve-then-filter (TWM-195 Root Fix Requirement). May resolve to
+// null on a request failure, which callers must treat identically to an
+// empty `modes: []` response: no bookable modes, never a fallback to "try
+// every mode".
 // Trip Feasibility is its own contract, independent of Trusted Action —
 // same field names on this occasion, but not the same payload, so this
 // intentionally builds a plain object rather than importing TRUSTED_ACTION_KEYS.
@@ -271,36 +306,32 @@ export async function fetchLegFeasibility(tripId, leg) {
   return getTripFeasibility(tripId, { origin: leg.from, destination: leg.to });
 }
 
-// Merges the real TripFeasibilityAssessment onto each mode's resolved
-// option — duration/distance/reason now come straight from the Backend
-// (already computed there), never re-synthesized client-side. A mode with
-// status: ruled_out is genuinely excluded (in `excluded`, for the
-// explanatory note), never rendered faded. When no assessment exists yet,
-// every option is treated as feasible with no duration/reason attached.
+// TWM-195 root-fix simplification: Backend's TripFeasibilityAssessment now
+// only ever contains genuinely feasible/route-valid entries (no more
+// excluded_modes / per-mode ruled_out / unknown to bucket) — so this no
+// longer splits options into feasible/excluded/unassessed. `options` was
+// already resolved only for the modes Backend approved (see
+// transportOptionsFor above), so this is a straight 1:1 enrichment pass:
+// attach each option's matching duration/distance/reason/verification
+// metadata from the feasibility entry with the same mode. Traveler-fit
+// ranking among the returned modes (recommendedMode, below) is a UI
+// concern the Backend deliberately does not perform — it stays separate
+// from this route-plausibility enrichment step.
 export function feasibleTransportOptions(options, feasibility) {
   const modesByName = new Map((feasibility?.modes || []).map(entry => [entry.mode, entry]));
-  const feasible = [];
-  const excluded = [];
-  for (const option of options) {
+  return (options || []).map(option => {
     const modeFeasibility = modesByName.get(option.mode);
-    const enriched = modeFeasibility
-      ? {
-        ...option,
-        durationMinutes: modeFeasibility.estimated_duration_minutes,
-        distanceKm: modeFeasibility.estimated_distance_km,
-        reason: modeFeasibility.reason,
-        durationSource: modeFeasibility.duration_source,
-        verification: modeFeasibility.verification,
-        feasibilityStatus: modeFeasibility.status,
-      }
-      : option;
-    if (modeFeasibility?.status === 'ruled_out') {
-      excluded.push(enriched);
-    } else {
-      feasible.push(enriched);
-    }
-  }
-  return { feasible, excluded };
+    if (!modeFeasibility) return option;
+    return {
+      ...option,
+      durationMinutes: modeFeasibility.estimated_duration_minutes,
+      distanceKm: modeFeasibility.estimated_distance_km,
+      reason: modeFeasibility.reason,
+      durationSource: modeFeasibility.duration_source,
+      verification: modeFeasibility.verification,
+      feasibilityStatus: modeFeasibility.status,
+    };
+  });
 }
 
 // "Recommended mode" selection (TWM-132 — no explicit ranking rule was
@@ -351,18 +382,40 @@ export function transportLegs(days) {
   return legs;
 }
 
-// A round trip bundles as one priced decision, not two separate one-way
-// resolves — true whenever the traveler ends up back where they started
-// (the first leg's origin equals the last leg's destination), regardless
-// of how many different cities sit in between on a multi-stop circuit.
-export function bundleRoundTrip(legs) {
-  if (legs.length < 2) return { bundle: null, rest: legs };
-  const first = legs[0];
-  const last = legs[legs.length - 1];
-  if (first.from === last.to) {
-    return { bundle: { id: 'round-trip', outbound: first, inbound: last }, rest: legs.slice(1, -1) };
-  }
-  return { bundle: null, rest: legs };
+// TWM-195 (MVP scope narrowing): Bookings Transport is gateway-only —
+// only the boundary legs that connect the traveler's canonical
+// trip_context.origin_city to the itinerary route are ever fed to
+// feasibility/resolved/rendered. Every internal/circuit/local movement
+// stays visible as itinerary guidance (it's still in `transportLegs`'
+// full output for that), but must never become a Bookings row, and must
+// never trigger a feasibility/trusted-action/flight-search network call —
+// this filter runs BEFORE any of those calls, not as an after-the-fact
+// UI hide.
+//
+// - Outbound gateway: the FIRST leg (in itinerary order) whose `from`
+//   equals originCity — "the first structured movement from origin_city
+//   into the itinerary route."
+// - Inbound gateway: the LAST leg whose `to` equals originCity — "the
+//   final structured movement from the itinerary route back to
+//   origin_city." Independent of the outbound leg on purpose: an
+//   open-jaw trip (fly into one city, out of another) is valid, so this
+//   is never assumed to be the same leg reversed.
+// - If originCity is unknown (no canonical trip_context.origin_city), or
+//   no leg's `from`/`to` matches it, that direction fails closed — no
+//   gateway row is fabricated, exactly like `transportLegs` itself never
+//   fabricates a bookend from a missing structured endpoint.
+// - The two gateway legs may be the same leg (a single direct round-trip
+//   leg) or two different legs (open-jaw, or a multi-stop circuit) — both
+//   render as their own row regardless; this function only selects which
+//   leg objects are visible, it doesn't merge or bundle them.
+export function gatewayLegs(legs, originCity) {
+  if (!originCity) return [];
+  const outbound = (legs || []).find(leg => leg.from === originCity);
+  const inbound = [...(legs || [])].reverse().find(leg => leg.to === originCity);
+  const gateways = [];
+  if (outbound) gateways.push(outbound);
+  if (inbound && inbound.id !== outbound?.id) gateways.push(inbound);
+  return gateways;
 }
 
 export function stayLegs(days) {
@@ -397,8 +450,13 @@ async function resolveStayOption(tripId, stay, partner) {
 }
 
 // Async: resolves the approved stay partners in parallel for one stay leg.
-// Called from TripDashboard.jsx inside a useEffect, mirroring
-// transportOptionsFor.
+// TWM-195 review comment (blocker): NOT currently called from
+// TripDashboard.jsx — stay/hotel affiliate resolution is out of scope for
+// this first mode-visibility slice, and Backend's trusted-action readiness
+// currently requires route/date/traveler fields a stay leg doesn't
+// genuinely have, so calling this eagerly produced noisy missing_input
+// responses. Left intact (not deleted) for the future hotel/stay affiliate
+// story to wire back in.
 export async function stayOptionsFor(tripId, stay) {
   return Promise.all(STAY_PARTNERS.map(partner => resolveStayOption(tripId, stay, partner)));
 }
