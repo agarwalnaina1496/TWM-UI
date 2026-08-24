@@ -83,19 +83,23 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
     // feasible, no live offer) so any spec that reaches the Bookings tab
     // gets deterministic, renderable options instead of the Vite
     // SPA-fallback empty-object trick.
-    // TWM-195: a `null`/missing assessment (this endpoint's old fixture
-    // response) is no longer equivalent to "every mode feasible" — the UI
-    // now renders that as an honest not-yet-assessed state instead of a
-    // bookable option, so specs that expect to reach a resolvable CTA need
-    // a real (mocked) TripFeasibilityAssessment, not `null`.
+    // TWM-195 root-fix contract: `modes` is the only field on
+    // TripFeasibilityAssessment (no more excluded_modes) and only ever
+    // contains genuinely route-valid entries. A `null`/missing assessment,
+    // or `modes: []`, must resolve zero transport modes on the UI side —
+    // never "every mode feasible" as a fallback. This shared mock returns
+    // all four modes feasible by default so any generic spec that reaches
+    // the Bookings tab gets deterministic, renderable options; a spec that
+    // specifically needs to prove the empty/absurd-mode behavior overrides
+    // this route itself (see golden-self-led-bookings.spec.js).
     if (method === 'POST' && pathname.endsWith('/trusted-action/feasibility')) {
       const reference = { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
       const modes = ['flight', 'train', 'bus', 'drive'].map(mode => ({
-        mode, status: 'feasible', duration_source: 'llm_estimated',
+        mode, status: 'feasible', duration_source: 'computed',
         estimated_duration_minutes: 120, estimated_distance_km: null,
         reason: 'Genuinely reachable by this mode.', verification: reference,
       }));
-      return route.fulfill({ json: { modes, excluded_modes: [] } });
+      return route.fulfill({ json: { modes } });
     }
     if (method === 'POST' && pathname.endsWith('/trusted-action')) {
       return route.fulfill({

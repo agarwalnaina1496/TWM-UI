@@ -154,22 +154,23 @@ function clarificationNeededResponse() {
   };
 }
 
-// TWM-195: default feasibility fixture — all four modes genuinely feasible
-// for the fixture's Delhi <-> Rishikesh route, so tests unrelated to
-// feasibility semantics (e.g. TWM-146's flight-card tests) still reach a
-// bookable Transport card. A `null`/missing assessment now renders an honest
-// "not yet assessed" state instead of assuming every mode is feasible, so
-// tests that specifically exercise that path mock feasibility as `null`
-// explicitly rather than relying on this default.
+// TWM-195 root-fix contract: default feasibility fixture — all four modes
+// genuinely route-valid for the fixture's Delhi <-> Rishikesh route
+// (TripFeasibilityAssessment.modes is the only field now — no
+// excluded_modes), so tests unrelated to feasibility semantics (e.g.
+// TWM-146's flight-card tests) still reach a bookable Transport card. A
+// `null`/missing assessment, or `modes: []`, must resolve zero transport
+// modes on the UI side — tests that specifically exercise that path mock
+// feasibility as `null`/empty explicitly rather than relying on this
+// default.
 function feasibleAssessmentResponse() {
   return {
     modes: [
-      { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90 },
-      { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-      { mode: 'bus', status: 'feasible', duration_source: 'llm_estimated', reason: 'Also practical for this trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-      { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.' },
+      { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      { mode: 'bus', status: 'feasible', duration_source: 'computed', reason: 'Also practical for this trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+      { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
     ],
-    excluded_modes: [],
   };
 }
 
@@ -363,23 +364,29 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.getByText('Delhi ⇄ Rishikesh round trip')).toBeInTheDocument();
     });
 
-    it('expanding a segment shows mode-tagged options; an infeasible mode is genuinely absent, with the Backend-provided explanatory note', async () => {
+    it('expanding a segment shows mode-tagged options; a route-absurd mode is genuinely absent because Backend never returned it', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
       sendTripCommand = vi.fn();
-      global.fetch = vi.fn(async url => {
+      let trustedActionCalls = [];
+      global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
         if (url.includes('/trusted-action/feasibility')) {
+          // TWM-195 root-fix contract: Backend simply omits a route-absurd
+          // mode (bus) from `modes` entirely — there is no ruled_out entry
+          // to send, and no excluded_modes field at all.
           return jsonResponse({
             modes: [
-              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90 },
-              { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'bus', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'Bus excluded — a 14h journey is not practical for a 2-day trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.' },
+              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
             ],
           });
         }
-        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        if (url.includes('/trusted-action')) {
+          trustedActionCalls.push(JSON.parse(options.body));
+          return jsonResponse(resolvedActionResponse());
+        }
         return jsonResponse({});
       });
       const user = userEvent.setup();
@@ -388,13 +395,15 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
       await waitFor(() => expect(screen.getAllByText(/Flight/).length).toBeGreaterThan(0));
-      // Bus is ruled_out per the mocked feasibility assessment — genuinely
-      // absent from the options grid, not just faded.
+      // Bus is absent from the options grid...
       expect(screen.queryByText(/^Bus:/)).not.toBeInTheDocument();
-      expect(screen.getAllByText(/Bus excluded/).length).toBeGreaterThan(0);
+      // ...and, critically, the UI never even called trusted-action for it —
+      // proving mode resolution is gated by Backend's returned list, not a
+      // resolve-then-filter pattern.
+      expect(trustedActionCalls.some(call => call.domain === 'bus')).toBe(false);
     });
 
-    it('shows a recommended-mode card and the "why other modes aren\'t shown" feasibility row, with a GENERAL_GUIDANCE tag for the llm_estimated train mode', async () => {
+    it('shows a recommended-mode card and a route-details disclosure with a GENERAL_GUIDANCE tag for the returned modes', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
@@ -403,10 +412,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         if (url.includes('/trusted-action/feasibility')) {
           return jsonResponse({
             modes: [
-              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90 },
-              { mode: 'train', status: 'feasible', duration_source: 'llm_estimated', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'bus', status: 'ruled_out', duration_source: 'llm_estimated', reason: 'Not practical for this trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.' },
+              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
             ],
           });
         }
@@ -421,10 +429,42 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(screen.getByLabelText('Recommended mode')).toBeInTheDocument());
       expect(within(screen.getByLabelText('Recommended mode')).getByText('Fastest option.')).toBeInTheDocument();
 
-      await user.click(screen.getByText("Why other modes aren't shown"));
-      const disclosure = screen.getByText("Why other modes aren't shown").closest('details');
-      expect(within(disclosure).getByText('Not practical for this trip.')).toBeInTheDocument();
+      await user.click(screen.getByText('Route details for these modes'));
+      const disclosure = screen.getByText('Route details for these modes').closest('details');
+      expect(within(disclosure).getByText('A comfortable overland option.')).toBeInTheDocument();
       expect(within(disclosure).getAllByText('General guidance').length).toBeGreaterThan(0);
+    });
+
+    it('renders an honest "no bookable transport options" state and makes zero trusted-action/flight-search calls when Backend returns modes: []', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      let transportNetworkCalls = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse({ modes: [] });
+        if (url.includes('/trusted-action')) {
+          // Distinguish the transport leg's own calls (domain
+          // flight/train/bus) from the independent Stay section's calls
+          // (domain stay), which are unaffected by this leg's empty
+          // feasibility — only transport calls must be zero here.
+          const body = JSON.parse(options.body);
+          if (['flight', 'train', 'bus'].includes(body.domain)) transportNetworkCalls.push(body);
+          return jsonResponse(resolvedActionResponse());
+        }
+        if (url.includes('/flight-search')) {
+          transportNetworkCalls.push({ url });
+          return jsonResponse(resolvedActionResponse());
+        }
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+
+      await waitFor(() => expect(screen.getByText('No bookable transport options for this leg.')).toBeInTheDocument());
+      expect(transportNetworkCalls).toEqual([]);
     });
 
     it('shows a specific "not booked yet" label per segment, never a bare generic one', async () => {
@@ -506,7 +546,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(null);
+        if (url.includes('/trusted-action/feasibility')) {
+          return jsonResponse({
+            modes: [{ mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } }],
+          });
+        }
         if (url.includes('/trusted-action')) return jsonResponse({ status: 'missing_input', generated_at: '2026-01-01T00:00:00.000Z', missing_input: { missing_fields: ['origin'], message: 'Tell us the missing details.' } });
         return jsonResponse({});
       });

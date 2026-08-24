@@ -460,25 +460,25 @@ function RecommendedModeCard({ option }) {
   );
 }
 
-// TWM-132: "why other modes aren't shown" — every mode's real feasibility
-// (feasible/ruled_out, reason, duration/distance). Train/bus durations are
-// llm_estimated, so they carry the same VERIFIED/GENERAL_GUIDANCE
-// VerificationTag already used in the Itinerary tab (reused, not
-// reinvented); flight/drive are Backend-computed and carry no such tag —
-// there's no model output there to caveat.
+// TWM-195 root-fix simplification: Backend's `modes` list only ever
+// contains genuinely route-valid entries now (no more ruled_out/unknown
+// bucket to explain "why other modes aren't shown" — a non-route-valid
+// mode is simply never sent to the UI at all, never resolved, never
+// rendered). This disclosure now just shows the route-plausibility detail
+// backing each mode that IS shown (duration/distance/reason), so a
+// traveler can see why e.g. train is listed as ~9h/620km.
 function FeasibilityDisclosure({ modes }) {
   if (!modes?.length) return null;
   return (
     <details className="feasibility-disclosure">
-      <summary>Why other modes aren't shown</summary>
+      <summary>Route details for these modes</summary>
       <ul className="trip-notes-list">
         {modes.map(mode => (
           <li key={mode.mode}>
             <ModeTag mode={mode.mode} />
-            {' '}<strong>{mode.status === 'feasible' ? 'Feasible' : mode.status === 'ruled_out' ? 'Ruled out' : 'Not yet assessed'}</strong>
             {mode.estimated_duration_minutes != null && <> — {Math.round((mode.estimated_duration_minutes / 60) * 10) / 10}h</>}
             {mode.estimated_distance_km != null && <> · {Math.round(mode.estimated_distance_km)} km</>}
-            {mode.duration_source === 'llm_estimated' && <VerificationTag status={mode.verification?.status} />}
+            <VerificationTag status={mode.verification?.status} />
             <p>{mode.reason}</p>
           </li>
         ))}
@@ -492,8 +492,8 @@ function FeasibilityDisclosure({ modes }) {
 // navigation, no separate Logistics page. Confirmed segments (an anchor
 // already exists) skip straight to the 🔒-confirmed treatment.
 function BookingSegment({
-  label, anchor, expanded, onToggleExpand, loading, loadError, options, excluded, unassessed, renderOption, onOpenConfirm,
-  recommended, feasibilityModes,
+  label, anchor, expanded, onToggleExpand, loading, loadError, options, renderOption, onOpenConfirm,
+  recommended, feasibilityModes, noOptionsMessage,
 }) {
   if (anchor) {
     return (
@@ -520,19 +520,13 @@ function BookingSegment({
         <>
           {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
           {loadError && <p className="already-booked-note" role="alert">{loadError}</p>}
-          {!loading && !loadError && (
+          {!loading && !loadError && (options || []).length === 0 && (
+            <p className="already-booked-note" role="status">{noOptionsMessage || 'No bookable transport options for this leg.'}</p>
+          )}
+          {!loading && !loadError && (options || []).length > 0 && (
             <>
               {recommended !== undefined && <RecommendedModeCard option={recommended} />}
               <div className="stay-options-grid">{(options || []).map((option, index) => renderOption(option, recommended ? option === recommended : index === 0))}</div>
-              {excluded?.length > 0 && (
-                <p className="already-booked-note">{excluded.map(item => item.reason).filter(Boolean).join(' ')}</p>
-              )}
-              {unassessed?.length > 0 && (
-                <p className="already-booked-note" role="status">
-                  {`Still checking whether ${unassessed.map(item => modeLabel(item.mode)).join(', ')} `}
-                  {unassessed.length === 1 ? 'is' : 'are'} a real option for this route — not shown as bookable yet.
-                </p>
-              )}
               {feasibilityModes && <FeasibilityDisclosure modes={feasibilityModes} />}
             </>
           )}
@@ -684,10 +678,15 @@ export default function TripDashboard() {
       // the already-fetched/fetching Stay section, and vice versa.
       const [transportOutcome, stayOutcome] = await Promise.allSettled([
         Promise.all(legsToFetch.map(async leg => {
-          const [options, feasibility] = await Promise.all([
-            transportOptionsFor(tripId, leg, partySize),
-            fetchLegFeasibility(tripId, leg).catch(() => null),
-          ]);
+          // TWM-195 root fix: feasibility must be fetched and read FIRST,
+          // and only its approved modes are ever resolved — never
+          // Promise.all-concurrent with resolution. A failed/missing
+          // feasibility fetch (caught to null here) resolves zero modes,
+          // exactly like an honest `modes: []` response — never a
+          // fallback that tries every mode.
+          const feasibility = await fetchLegFeasibility(tripId, leg).catch(() => null);
+          const approvedModes = (feasibility?.modes || []).map(entry => entry.mode);
+          const options = await transportOptionsFor(tripId, leg, partySize, approvedModes);
           return [legKey(leg), { options, feasibility }];
         })),
         Promise.all(stays.map(async stay => {
@@ -803,14 +802,11 @@ export default function TripDashboard() {
     }
   }
 
-  function toggleExpandedBooking(id, segmentType, { isRoundTrip = false, excludedOptions = [] } = {}) {
+  function toggleExpandedBooking(id, segmentType, { isRoundTrip = false } = {}) {
     setExpandedBookingId(previous => {
       const next = previous === id ? null : id;
       if (next) {
         trackEvent('booking_intent', { booking_type: 'browse_options', segment_type: segmentType, is_round_trip_bundle: isRoundTrip });
-        for (const excludedOption of excludedOptions) {
-          trackEvent('mode_excluded', { segment_type: segmentType, mode: excludedOption.mode, reason: excludedOption.reason });
-        }
       }
       return next;
     });
@@ -1122,23 +1118,20 @@ export default function TripDashboard() {
         {roundTripBundle && (() => {
           const label = `${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`;
           const entry = transportData[legKey(roundTripBundle.outbound)];
-          const { feasible, excluded, unassessed } = entry
-            ? feasibleTransportOptions(entry.options, entry.feasibility)
-            : { feasible: [], excluded: [], unassessed: [] };
-          const recommended = entry ? recommendedMode(feasible) : undefined;
+          const options = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : [];
+          const recommended = entry ? recommendedMode(options) : undefined;
           return (
             <BookingSegment
               label={label}
               anchor={findAnchor(transportAnchors, label)}
               expanded={expandedBookingId === roundTripBundle.id}
-              onToggleExpand={() => toggleExpandedBooking(roundTripBundle.id, 'transport', { isRoundTrip: true, excludedOptions: excluded })}
+              onToggleExpand={() => toggleExpandedBooking(roundTripBundle.id, 'transport', { isRoundTrip: true })}
               loading={expandedBookingId === roundTripBundle.id && bookingsStatus === 'loading'}
               loadError={expandedBookingId === roundTripBundle.id ? transportError : null}
-              options={feasible}
-              excluded={excluded}
-              unassessed={unassessed}
+              options={options}
               recommended={recommended}
-              feasibilityModes={entry?.feasibility ? [...(entry.feasibility.modes || []), ...(entry.feasibility.excluded_modes || [])] : undefined}
+              feasibilityModes={entry?.feasibility?.modes}
+              noOptionsMessage="No bookable transport options for this leg."
               renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
               onOpenConfirm={() => openConfirmForm('transport', label)}
             />
@@ -1147,24 +1140,21 @@ export default function TripDashboard() {
         {soloLegs.map(leg => {
           const label = `${leg.from} → ${leg.to}`;
           const entry = transportData[legKey(leg)];
-          const { feasible, excluded, unassessed } = entry
-            ? feasibleTransportOptions(entry.options, entry.feasibility)
-            : { feasible: [], excluded: [], unassessed: [] };
-          const recommended = entry ? recommendedMode(feasible) : undefined;
+          const options = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : [];
+          const recommended = entry ? recommendedMode(options) : undefined;
           return (
             <BookingSegment
               key={leg.id}
               label={label}
               anchor={findAnchor(transportAnchors, label)}
               expanded={expandedBookingId === leg.id}
-              onToggleExpand={() => toggleExpandedBooking(leg.id, 'transport', { excludedOptions: excluded })}
+              onToggleExpand={() => toggleExpandedBooking(leg.id, 'transport')}
               loading={expandedBookingId === leg.id && bookingsStatus === 'loading'}
               loadError={expandedBookingId === leg.id ? transportError : null}
-              options={feasible}
-              excluded={excluded}
-              unassessed={unassessed}
+              options={options}
               recommended={recommended}
-              feasibilityModes={entry?.feasibility ? [...(entry.feasibility.modes || []), ...(entry.feasibility.excluded_modes || [])] : undefined}
+              feasibilityModes={entry?.feasibility?.modes}
+              noOptionsMessage="No bookable transport options for this leg."
               renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
               onOpenConfirm={() => openConfirmForm('transport', label)}
             />
@@ -1189,7 +1179,7 @@ export default function TripDashboard() {
               loading={expandedBookingId === stay.id && bookingsStatus === 'loading'}
               loadError={expandedBookingId === stay.id ? stayError : null}
               options={entry?.options || []}
-              excluded={[]}
+              noOptionsMessage="No stay options available for this base."
               renderOption={(option, best) => <StayOptionCard key={option.name} option={option} best={best} />}
               onOpenConfirm={() => openConfirmForm('stay', `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`)}
             />

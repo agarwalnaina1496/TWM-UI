@@ -250,66 +250,49 @@ function toTransportOption(mode, name, result) {
   return { mode, name, status: result.status };
 }
 
-// Async: resolves every mode's trusted action for one leg in parallel.
-// Called from TripDashboard.jsx inside a useEffect (not synchronously
-// during render — see the page's Bookings-tab loading/error state).
-export async function transportOptionsFor(tripId, leg, travelerCount) {
-  return Promise.all(MODES.map(mode => resolveTransportOption(tripId, leg, mode, travelerCount)));
+// TWM-195 root fix: resolves trusted-action/flight-search options only for
+// `approvedModes` — the Backend-approved, route-valid mode list for this
+// leg (TripFeasibilityAssessment.modes). This function must never resolve
+// a mode Backend did not return: the old behavior of unconditionally
+// resolving MODES=[flight,train,bus,drive] and hiding/filtering afterward
+// is exactly the "resolve all hardcoded modes then filter" pattern the
+// Linear issue's Root Fix Requirement forbids. `MODES` (above) remains
+// exported only as a label/ordering helper — never as the source of which
+// modes get resolved here. An empty/missing `approvedModes` resolves
+// nothing and returns `[]` immediately, with no network call at all.
+export async function transportOptionsFor(tripId, leg, travelerCount, approvedModes) {
+  const modes = approvedModes || [];
+  if (modes.length === 0) return [];
+  return Promise.all(modes.map(mode => resolveTransportOption(tripId, leg, mode, travelerCount)));
 }
 
-// Fetches the real per-route TripFeasibilityAssessment (flight/train/bus/
-// drive) for a leg. May resolve to null — the Backend has no assessment for
-// this route yet — which callers must treat as "no feasibility data", not
-// an error.
+// Fetches the real per-route TripFeasibilityAssessment for a leg. Callers
+// MUST fetch this and read `.modes` BEFORE calling transportOptionsFor —
+// never resolve-then-filter (TWM-195 Root Fix Requirement). May resolve to
+// null on a request failure, which callers must treat identically to an
+// empty `modes: []` response: no bookable modes, never a fallback to "try
+// every mode".
 export async function fetchLegFeasibility(tripId, leg) {
   return getTripFeasibility(tripId, { origin: leg.from, destination: leg.to });
 }
 
-// Merges the real TripFeasibilityAssessment onto each mode's resolved
-// option — duration/distance/reason now come straight from the Backend
-// (already computed there), never re-synthesized client-side.
-//
-// TWM-195: a missing/null assessment (Backend has not judged this route at
-// all yet — e.g. still loading, or the feasibility call itself failed) must
-// never be treated as "every mode is feasible" — that is exactly the bug
-// this story fixes (Dashboard Bookings showing e.g. a Train option for
-// Bhubaneswar -> Puri). Likewise a per-mode status of "unknown" (Backend's
-// route classifier could not confidently judge that mode — TWM-195's
-// twm/schemas/trusted_action.py FeasibilityStatus) must render as an
-// honest "not yet assessed" state, never silently as a normal bookable
-// option and never silently as "all modes". Three buckets, not two:
-//   - feasible: status "feasible" — a genuine, bookable route option.
-//   - excluded: status "ruled_out" — genuinely not a real option for this
-//     route, kept (not hidden) so the UI can explain why, exactly as
-//     before.
-//   - unassessed: status "unknown", OR no feasibility assessment exists
-//     yet at all for this leg — nothing is known well enough to call it
-//     feasible or ruled out.
-//
-// PR-review fix (TWM-195): Backend now splits TripFeasibilityAssessment into
-// `modes` (feasible/bookable only) and `excluded_modes` (ruled_out/unknown,
-// non-bookable metadata) so a route-absurd mode never comes back as a
-// normal option. Read both lists here so ruled_out/unknown modes are still
-// found and rendered (in the `excluded`/`unassessed` buckets below) — the
-// three-bucket split itself is unchanged.
+// TWM-195 root-fix simplification: Backend's TripFeasibilityAssessment now
+// only ever contains genuinely feasible/route-valid entries (no more
+// excluded_modes / per-mode ruled_out / unknown to bucket) — so this no
+// longer splits options into feasible/excluded/unassessed. `options` was
+// already resolved only for the modes Backend approved (see
+// transportOptionsFor above), so this is a straight 1:1 enrichment pass:
+// attach each option's matching duration/distance/reason/verification
+// metadata from the feasibility entry with the same mode. Traveler-fit
+// ranking among the returned modes (recommendedMode, below) is a UI
+// concern the Backend deliberately does not perform — it stays separate
+// from this route-plausibility enrichment step.
 export function feasibleTransportOptions(options, feasibility) {
-  const modesByName = new Map(
-    [...(feasibility?.modes || []), ...(feasibility?.excluded_modes || [])].map(entry => [entry.mode, entry])
-  );
-  const feasible = [];
-  const excluded = [];
-  const unassessed = [];
-  for (const option of options) {
+  const modesByName = new Map((feasibility?.modes || []).map(entry => [entry.mode, entry]));
+  return (options || []).map(option => {
     const modeFeasibility = modesByName.get(option.mode);
-    if (!modeFeasibility || modeFeasibility.status === 'unknown') {
-      unassessed.push({
-        ...option,
-        feasibilityStatus: modeFeasibility?.status ?? 'unknown',
-        reason: modeFeasibility?.reason ?? null,
-      });
-      continue;
-    }
-    const enriched = {
+    if (!modeFeasibility) return option;
+    return {
       ...option,
       durationMinutes: modeFeasibility.estimated_duration_minutes,
       distanceKm: modeFeasibility.estimated_distance_km,
@@ -318,13 +301,7 @@ export function feasibleTransportOptions(options, feasibility) {
       verification: modeFeasibility.verification,
       feasibilityStatus: modeFeasibility.status,
     };
-    if (modeFeasibility.status === 'ruled_out') {
-      excluded.push(enriched);
-    } else {
-      feasible.push(enriched);
-    }
-  }
-  return { feasible, excluded, unassessed };
+  });
 }
 
 // "Recommended mode" selection (TWM-132 — no explicit ranking rule was
