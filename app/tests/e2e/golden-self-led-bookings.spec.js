@@ -52,6 +52,15 @@ function twoStopAtlasResult() {
               estimated_cost_low: 1500, estimated_cost_high: 2500,
               reference, requires_advance_booking: true, booking_readiness: null,
             },
+            {
+              // TWM-200 review finding: the return-to-origin leg must come from
+              // Atlas's own structured TRAVEL movement — UI no longer
+              // synthesizes an origin bookend leg on its own.
+              start_time: 'Evening', end_time: null, kind: 'TRAVEL', title: 'Return to Delhi', location: 'Delhi',
+              detail: 'Return to Delhi.', movement_guidance: null, from_city: 'Wayanad', to_city: 'Delhi', display_label: null,
+              estimated_cost_low: 0, estimated_cost_high: 0,
+              reference, requires_advance_booking: false, booking_readiness: null,
+            },
           ],
           seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'Forest permit required.', backup_plan: null,
         },

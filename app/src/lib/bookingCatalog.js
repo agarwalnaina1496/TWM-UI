@@ -329,7 +329,11 @@ export function recommendedMode(feasibleOptions) {
 // `display_label`, which may carry road/landmark/"via" narration Atlas is
 // free to write for a traveler to read (e.g. "Marine Drive, Puri to
 // Konark"). Atlas/Backend owns route meaning; this function must not parse
-// that narrative text to guess an endpoint.
+// that narrative text, and must not infer a route on its own — including a
+// trip_context.origin_city bookend leg. Atlas's own prompt already
+// instructs it to include transport to/from the origin as a TRAVEL item
+// when known; if it omits that movement (or any other), the honest outcome
+// is a missing leg here, not a UI-synthesized one (TWM-200 review finding).
 //
 // A TRAVEL item that is missing a structured endpoint pair is dropped
 // entirely rather than falling back to display text — fail closed for that
@@ -337,33 +341,13 @@ export function recommendedMode(feasibleOptions) {
 //
 // departureDate: best-effort only, taken from the movement's own day.date
 // when Atlas supplied one; never fabricated.
-//
-// TWM-199: `origin` (canonical trip_context.origin_city, via
-// tripOriginCity()) is genuinely unknown for some trips. A bookend leg is
-// only added when it is not already covered by the first/last structured
-// movement (Atlas often already emits the origin transfer as its own
-// TRAVEL item, per the atlas.md prompt's "transport to and from the
-// origin" instruction) and only when origin is known — never fabricating
-// an origin label.
-export function transportLegs(days, origin) {
+export function transportLegs(days) {
   const movements = (days || []).flatMap(day =>
     (day.timeline || [])
       .filter(item => item.kind === 'TRAVEL' && item.from_city && item.to_city)
       .map(item => ({ from: item.from_city, to: item.to_city, departureDate: day.date ?? null }))
   );
-  if (movements.length === 0) return [];
-  const legs = [];
-  const first = movements[0];
-  const last = movements[movements.length - 1];
-  if (origin && first.from !== origin) {
-    legs.push({ id: 'outbound-origin', from: origin, to: first.from, departureDate: first.departureDate });
-  }
-  movements.forEach((movement, i) => {
-    legs.push({ id: `leg-${i}`, ...movement });
-  });
-  if (origin && last.to !== origin) {
-    legs.push({ id: 'return-origin', from: last.to, to: origin, departureDate: last.departureDate });
-  }
+  const legs = movements.map((movement, i) => ({ id: `leg-${i}`, ...movement }));
   return legs;
 }
 
