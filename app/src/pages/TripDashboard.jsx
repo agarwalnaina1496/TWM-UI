@@ -12,7 +12,7 @@ import {
 } from '../lib/atlasView.js';
 import {
   transportLegs, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
-  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
+  stayLegs, activityBookings, notBookedYetLabel, modeLabel, recommendedMode, normalizeTravelerCount,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
@@ -586,15 +586,16 @@ export default function TripDashboard() {
   const frozenPlan = plannerState?.frozen_plan;
   const itineraryState = tripState?.itinerary_state;
   const anchors = tripState?.logistics_state?.anchors ?? [];
-  // TWM-195 review comment: canonical booking origin, computed ONCE and
-  // threaded everywhere origin feeds Bookings (the fetch effect,
-  // transportLegs' from/to leg labels, and confirmation-anchor matching
-  // via findAnchor below) — origin_city first, legacy `origin` only as a
-  // fallback, never the other way around. A single derived value here
-  // (rather than resolving ad-hoc at each call site) is what prevents the
-  // exact mismatch the review comment reported: one call site reading
-  // `origin` while another reads `origin_city` and silently disagreeing.
-  const canonicalOrigin = tripState?.trip_context?.origin_city || tripState?.trip_context?.origin;
+  // TWM-195 review comment (correction): `trip_context.origin_city` is the
+  // ONLY canonical TripState origin field for Dashboard Bookings — the
+  // earlier `origin_city || origin` fallback is explicitly reversed by the
+  // review comment. If `origin_city` is missing, origin is genuinely
+  // missing; Bookings must fail closed (no bookable external legs) rather
+  // than silently substituting the legacy `origin` field or "Home".
+  // Computed ONCE and threaded everywhere origin feeds Bookings (the fetch
+  // effect, transportLegs' from/to leg labels, and confirmation-anchor
+  // matching via findAnchor below) so every call site agrees.
+  const canonicalOrigin = tripState?.trip_context?.origin_city;
   const [bootStatus, setBootStatus] = useState('idle'); // idle | booting | ready | error
   const [bootError, setBootError] = useState(null);
   const [showBookingPrompt, setShowBookingPrompt] = useState(false);
@@ -674,7 +675,14 @@ export default function TripDashboard() {
     // instead of always hitting clarification_needed for a field we
     // actually know — see bookingCatalog.searchFlightOffer's comment for
     // why departure_date/IATA still aren't threaded through today.
-    const partySize = travelerCount(itineraryResult.result.final_itinerary.trip_summary);
+    // TWM-195 review comment: canonical trip_context.num_travelers is the
+    // primary source now (it can arrive as a chat-entered string like '2',
+    // hence normalizeTravelerCount below), with the Atlas
+    // trip_summary.num_travelers value kept as a fallback — the review
+    // comment only demanded removing the *origin* fallback; it did not ask
+    // for the Atlas traveler-count fallback to be dropped.
+    const partySize = normalizeTravelerCount(tripState?.trip_context?.num_travelers)
+      ?? travelerCount(itineraryResult.result.final_itinerary.trip_summary);
 
     let cancelled = false;
     setTransportError(null);
@@ -697,10 +705,19 @@ export default function TripDashboard() {
           const options = await transportOptionsFor(tripId, leg, partySize, approvedModes);
           return [legKey(leg), { options, feasibility }];
         })),
-        Promise.all(stays.map(async stay => {
-          const options = await stayOptionsFor(tripId, stay);
-          return [stay.id, { options }];
-        })),
+        // TWM-195 review comment (blocker): stay/hotel affiliate resolution
+        // is explicitly out of scope for this first mode-visibility slice —
+        // Backend's trusted-action readiness currently requires route/date/
+        // traveler fields that a stay leg doesn't genuinely have, so eagerly
+        // calling resolveTrustedAction(domain: 'stay') here only produced
+        // noisy missing_input responses. `stayOptionsFor`/the stay-partner
+        // resolution code in bookingCatalog.js is intentionally left intact
+        // (not deleted) for the future hotel/stay affiliate story to wire
+        // back in — it is simply not called from this flow anymore. Each
+        // stay leg instead gets a stable, honest "not yet available"
+        // result (`status: 'not_available'`, no options) that the Stay
+        // section renders directly rather than an empty options list.
+        Promise.resolve(stays.map(stay => [stay.id, { options: [], notAvailable: true }])),
       ]);
       if (cancelled) return;
 
@@ -1170,7 +1187,10 @@ export default function TripDashboard() {
               loading={expandedBookingId === stay.id && bookingsStatus === 'loading'}
               loadError={expandedBookingId === stay.id ? stayError : null}
               options={entry?.options || []}
-              noOptionsMessage="No stay options available for this base."
+              // TWM-195 review comment: stay/hotel affiliate resolution is
+              // out of scope for this slice — this is an honest "not yet
+              // available" state, not "we searched and found nothing".
+              noOptionsMessage="Stay booking isn't available here yet — check back once hotel partners are connected."
               renderOption={(option, best) => <StayOptionCard key={option.name} option={option} best={best} />}
               onOpenConfirm={() => openConfirmForm('stay', `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`)}
             />

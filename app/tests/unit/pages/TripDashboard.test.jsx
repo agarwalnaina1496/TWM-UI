@@ -385,16 +385,100 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.queryByText(/Home/)).not.toBeInTheDocument();
     });
 
-    // Legacy fallback: origin_city absent, only the older origin field
-    // present — still used, never defaulting to the generic "Home" label.
-    it('falls back to the legacy origin field when origin_city is absent', async () => {
+    // TWM-195 review comment (correction): origin_city is the ONLY
+    // canonical origin field for Bookings — the legacy `origin` field must
+    // NOT be used as a fallback. When origin_city is absent, origin is
+    // genuinely missing and Bookings must fail closed (no outbound/return
+    // bookend legs), never silently substitute the legacy field or "Home".
+    it('does not fall back to the legacy origin field when origin_city is absent — fails closed instead', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Chennai' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.getByText('Chennai → Rishikesh')).toBeInTheDocument();
-      expect(screen.getByText('Rishikesh → Chennai')).toBeInTheDocument();
+      expect(screen.queryByText(/Chennai/)).not.toBeInTheDocument();
+      // Fixture: both days are Rishikesh with no real inner movement and no
+      // known origin, so transportLegs emits zero legs — the Transport
+      // section has nothing to render.
+      expect(screen.queryByText(/→ Rishikesh/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Rishikesh →/)).not.toBeInTheDocument();
+    });
+
+    // TWM-195 review comment: canonical trip_context.num_travelers (which
+    // can arrive as a chat-entered string) is the primary traveler-count
+    // source for transport CTA payloads, normalized to a number.
+    it('derives traveler_count from trip_context.num_travelers (normalizing a string like "3") for transport CTA payloads', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', num_travelers: '3' } });
+      sendTripCommand = vi.fn();
+      let capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(0));
+      expect(capturedBodies.some(body => body.traveler_count === 3)).toBe(true);
+    });
+
+    // Falls back to Atlas trip_summary.num_travelers (fixture: 2) only when
+    // trip_context.num_travelers itself is absent — the review comment only
+    // demanded removing the *origin* fallback, not this one.
+    it('falls back to Atlas trip_summary.num_travelers when trip_context.num_travelers is absent', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      let capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(0));
+      // atlasResult()'s trip_summary.num_travelers fixture value is 2.
+      expect(capturedBodies.some(body => body.traveler_count === 2)).toBe(true);
+    });
+
+    // TWM-195 review comment (blocker): stay/hotel affiliate resolution must
+    // not fire eagerly in this slice — no resolveTrustedAction(domain:
+    // 'stay') / stayOptionsFor network call, and an honest "not yet
+    // available" message instead of an empty options list.
+    it('does not eagerly resolve stay trusted-actions, and shows an honest "not yet available" state for Stay', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      let stayNetworkCalls = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) {
+          const body = JSON.parse(options.body);
+          if (body.domain === 'stay') stayNetworkCalls.push(body);
+          return jsonResponse(resolvedActionResponse());
+        }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      const resolveButtons = screen.getAllByRole('button', { name: 'Resolve ▾' });
+      // Stay section is the second block (Transport legs first, then Stay).
+      await user.click(resolveButtons[resolveButtons.length - 1]);
+      await waitFor(() => expect(screen.getByText(/Stay booking isn't available here yet/)).toBeInTheDocument());
+      expect(stayNetworkCalls).toEqual([]);
     });
 
     // Every leg transportLegs returns renders as its own row — proven here

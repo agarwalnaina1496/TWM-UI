@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   transportOptionsFor, feasibleTransportOptions, transportLegs,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
-  fetchLegFeasibility, MODES,
+  fetchLegFeasibility, MODES, normalizeTravelerCount,
 } from '../../../src/lib/bookingCatalog.js';
 
 function flightSearchResponse(overrides = {}) {
@@ -59,9 +59,40 @@ describe('transportLegs', () => {
     expect(legs).toHaveLength(3); // Delhi->Gwalior, Gwalior->Orchha, Orchha->Delhi
   });
 
-  it('falls back to a generic origin label when none is known', () => {
+  // TWM-195 review comment (correction): origin_city is the only canonical
+  // origin — when it's missing, fail closed rather than fabricating "Home".
+  // A day-level gap-filler leg still fires, but the origin bookend legs
+  // (outbound-from-origin, return-to-origin) never do.
+  it('fails closed on missing origin: no outbound or return bookend legs, but the day-level gap-filler leg still shows genuine internal movement', () => {
+    const legs = transportLegs([{ day_number: 1, primary_location: 'Goa' }, { day_number: 2, primary_location: 'Panaji' }], undefined);
+    expect(legs).toEqual([{ id: expect.any(String), from: 'Goa', to: 'Panaji', departureDate: null }]);
+  });
+
+  it('fails closed on missing origin with no genuine internal movement at all: emits no legs whatsoever', () => {
     const legs = transportLegs([{ day_number: 1, primary_location: 'Goa' }], undefined);
-    expect(legs[0].from).toBe('Home');
+    expect(legs).toEqual([]);
+  });
+
+  // Inner atomic legs between two real Atlas locations remain genuinely
+  // knowable even without a known origin — only the bookend legs to/from
+  // "home" require a real origin.
+  it('still derives genuine inner TRAVEL legs between real Atlas locations when origin is missing', () => {
+    const days = [
+      {
+        day_number: 1,
+        primary_location: 'Konark & Bhubaneswar',
+        timeline: [
+          { kind: 'TRAVEL', location: 'Konark' },
+          { kind: 'ACTIVITY', title: 'Sun Temple' },
+          { kind: 'TRAVEL', location: 'Bhubaneswar' },
+        ],
+      },
+    ];
+    const legs = transportLegs(days, undefined);
+    // First TRAVEL item (Konark) becomes the new baseline with no leg from
+    // a null origin; the second TRAVEL item (Bhubaneswar) is a genuine
+    // inner leg and IS emitted.
+    expect(legs).toEqual([{ id: expect.any(String), from: 'Konark', to: 'Bhubaneswar', departureDate: null }]);
   });
 
   it('is empty for no days', () => {
@@ -223,6 +254,69 @@ describe('transportOptionsFor', () => {
 
   it('MODES remains exported only as a label/ordering helper, unrelated to what gets resolved', () => {
     expect(MODES).toEqual(['flight', 'train', 'bus', 'drive']);
+  });
+});
+
+describe('normalizeTravelerCount', () => {
+  it('normalizes a numeric string like "2" to the number 2', () => {
+    expect(normalizeTravelerCount('2')).toBe(2);
+  });
+
+  it('passes a real number through unchanged', () => {
+    expect(normalizeTravelerCount(4)).toBe(4);
+  });
+
+  it('returns null for missing, non-numeric, zero, or negative values — never NaN or 0', () => {
+    expect(normalizeTravelerCount(null)).toBeNull();
+    expect(normalizeTravelerCount(undefined)).toBeNull();
+    expect(normalizeTravelerCount('Just me')).toBeNull();
+    expect(normalizeTravelerCount(0)).toBeNull();
+    expect(normalizeTravelerCount(-1)).toBeNull();
+  });
+});
+
+describe('traveler_count on trusted-action transport CTA payloads (TWM-195 review comment)', () => {
+  const leg = { from: 'Delhi', to: 'Gwalior' };
+
+  it('includes traveler_count on train/bus trusted-action payloads when a normalized count is known', async () => {
+    let capturedBodies = [];
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedAction()); }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', leg, 2, ['train', 'bus']);
+    expect(capturedBodies).toHaveLength(2);
+    expect(capturedBodies.every(body => body.traveler_count === 2)).toBe(true);
+  });
+
+  it('omits traveler_count entirely when it cannot be determined', async () => {
+    let capturedBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { capturedBody = JSON.parse(options.body); return jsonResponse(resolvedAction()); }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', leg, undefined, ['train']);
+    expect(capturedBody).not.toHaveProperty('traveler_count');
+  });
+
+  it('includes traveler_count on the flight trusted-action CTA payload, separate from flight-search\'s own travelers shape', async () => {
+    let ctaBody = null;
+    let flightSearchBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { ctaBody = JSON.parse(options.body); return jsonResponse(resolvedAction()); }
+      if (url.includes('/flight-search')) { flightSearchBody = JSON.parse(options.body); return jsonResponse(flightSearchResponse()); }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', leg, 3, ['flight']);
+    expect(ctaBody).toMatchObject({ traveler_count: 3 });
+    expect(flightSearchBody).toMatchObject({ travelers: { adults: 3 } });
+  });
+
+  it('drive never calls trusted-action at all, so it never carries traveler_count', async () => {
+    let called = false;
+    global.fetch = vi.fn(async (url) => { if (url.includes('/trusted-action')) called = true; return jsonResponse({}); });
+    await transportOptionsFor('trip-1', leg, 2, ['drive']);
+    expect(called).toBe(false);
   });
 });
 

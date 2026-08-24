@@ -101,6 +101,13 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
       }));
       return route.fulfill({ json: { modes } });
     }
+    // TWM-195 review comment (blocker): TripDashboard.jsx no longer calls
+    // resolveTrustedAction(domain: 'stay') at all in this flow — stay/hotel
+    // affiliate resolution is out of scope for this slice. This generic
+    // fulfill is only ever reached by flight/train/bus CTA calls now; it's
+    // kept domain-agnostic since no current spec needs a stay-specific
+    // response, but a spec asserting on stay behavior should not rely on
+    // this route ever firing for domain: 'stay'.
     if (method === 'POST' && pathname.endsWith('/trusted-action')) {
       return route.fulfill({
         json: { status: 'resolved', action: { target: { target_url: 'https://example.com/booking' }, internal_capability: null, affiliate_disclosure: false } },

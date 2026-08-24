@@ -46,6 +46,17 @@ function iataForCity(name) {
   return CITY_IATA[(name || '').trim().toLowerCase()] || null;
 }
 
+// TWM-195 review comment: trip_context.num_travelers can arrive as a
+// chat-entered string (e.g. '2', 'Just me' — see entryCommandFixtures.js's
+// own quick-reply chips), not a number. Normalizes to a positive integer or
+// null — never NaN, never 0/negative — so callers can safely omit the
+// field entirely rather than send a garbage value.
+export function normalizeTravelerCount(value) {
+  if (value == null) return null;
+  const parsed = typeof value === 'number' ? value : parseInt(String(value).trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 export const MODES = ['flight', 'train', 'bus', 'drive'];
 const MODE_LABEL = { flight: 'Flight', train: 'Train', bus: 'Bus', drive: 'Drive' };
 export function modeLabel(mode) {
@@ -190,12 +201,22 @@ async function searchFlightOffer(tripId, leg, travelerCount) {
 // blocks the other from rendering.
 async function resolveFlightOption(tripId, leg, travelerCount) {
   const name = `${modeLabel('flight')}: ${leg.from} → ${leg.to}`;
+  // TWM-195 review comment: trusted-action transport CTA payloads carry
+  // traveler_count (twm/schemas/trusted_action.py's
+  // TrustedActionRequest.traveler_count) when a normalized count is known —
+  // never sent when it can't be determined, matching this file's existing
+  // "only include what's genuinely known" pattern (see origin_iata/
+  // departure_date above). This is a structurally separate field from
+  // searchFlightOffer's own `travelers: { adults: n }` shape below, which
+  // is untouched.
+  const normalizedCount = normalizeTravelerCount(travelerCount);
   const [ctaOption, liveOffer] = await Promise.all([
     resolveTrustedAction(tripId, {
       action_type: ACTION_TYPE_FOR_MODE.flight,
       domain: 'flight',
       origin: leg.from,
       destination: leg.to,
+      ...(normalizedCount ? { traveler_count: normalizedCount } : {}),
     })
       .then(result => toTransportOption('flight', name, result))
       .catch(error => ({ mode: 'flight', name, status: 'error', errorMessage: error.message || 'Could not load this option.' })),
@@ -222,12 +243,17 @@ async function resolveTransportOption(tripId, leg, mode, travelerCount) {
     // drive: feasibility-only, no trusted-action domain exists.
     return { mode, name, status: 'no_action' };
   }
+  // TWM-195 review comment: train/bus CTA payloads also carry traveler_count
+  // when known — same rule as resolveFlightOption above, omitted entirely
+  // otherwise.
+  const normalizedCount = normalizeTravelerCount(travelerCount);
   try {
     const result = await resolveTrustedAction(tripId, {
       action_type: ACTION_TYPE_FOR_MODE[mode],
       domain,
       origin: leg.from,
       destination: leg.to,
+      ...(normalizedCount ? { traveler_count: normalizedCount } : {}),
     });
     return toTransportOption(mode, name, result);
   } catch (error) {
@@ -370,8 +396,22 @@ export function recommendedMode(feasibleOptions) {
 // final return-to-origin leg uses the last day's date. When Atlas has no
 // per-day dates yet, every leg's departureDate is null — the honest
 // outcome, not a guess.
+//
+// TWM-195 review comment (correction — fail closed on missing origin): the
+// caller (TripDashboard.jsx) now passes `trip_context.origin_city` with NO
+// fallback — `origin` here may genuinely be undefined/null. This function
+// must not fabricate an origin (no more `origin || 'Home'`). When origin is
+// unknown, `currentLocation` starts as `null` instead of a real place: the
+// first real location the walk encounters (first TRAVEL item, or first
+// day's primary_location) becomes the new running-pointer baseline WITHOUT
+// emitting a leg from a null origin (a leg needs two real endpoints), and
+// the final return-to-origin leg is only emitted when a real, non-null
+// origin was known at the start — never a pseudo `X -> null` bookend. Inner
+// legs between two real Atlas locations are still emitted normally once
+// `currentLocation` has a real value — only the bookend (outbound-from-
+// origin and return-to-origin) legs require a known origin to exist at all.
 export function transportLegs(days, origin) {
-  const originLabel = origin || 'Home';
+  const originLabel = origin || null;
   const legs = [];
   let currentLocation = originLabel;
   let legIndex = 0;
@@ -391,19 +431,24 @@ export function transportLegs(days, origin) {
       if (item.kind !== 'TRAVEL' || !item.location) continue;
       hasTravelItem = true;
       if (item.location === currentLocation) continue; // not a real movement
-      pushLeg(currentLocation, item.location, day.date);
+      // currentLocation === null means origin is genuinely unknown — this
+      // is the FIRST real location reached, so it becomes the running
+      // pointer's baseline without emitting a leg from a null origin.
+      if (currentLocation !== null) pushLeg(currentLocation, item.location, day.date);
       currentLocation = item.location;
     }
     // Gap-filler: only when Atlas modeled no TRAVEL movement at all this
     // day — see judgement-call comment above for why a day WITH TRAVEL
     // items is never reconciled against (possibly compound) primary_location.
     if (!hasTravelItem && day.primary_location && currentLocation !== day.primary_location) {
-      pushLeg(currentLocation, day.primary_location, day.date);
+      if (currentLocation !== null) pushLeg(currentLocation, day.primary_location, day.date);
       currentLocation = day.primary_location;
     }
   }
 
-  if (currentLocation !== originLabel) {
+  // Final return-to-origin leg: only when a real origin was known AND the
+  // traveler isn't already back there — never a leg to/from a null origin.
+  if (originLabel !== null && currentLocation !== originLabel) {
     pushLeg(currentLocation, originLabel, lastDayDate);
   }
 
@@ -442,8 +487,13 @@ async function resolveStayOption(tripId, stay, partner) {
 }
 
 // Async: resolves the approved stay partners in parallel for one stay leg.
-// Called from TripDashboard.jsx inside a useEffect, mirroring
-// transportOptionsFor.
+// TWM-195 review comment (blocker): NOT currently called from
+// TripDashboard.jsx — stay/hotel affiliate resolution is out of scope for
+// this first mode-visibility slice, and Backend's trusted-action readiness
+// currently requires route/date/traveler fields a stay leg doesn't
+// genuinely have, so calling this eagerly produced noisy missing_input
+// responses. Left intact (not deleted) for the future hotel/stay affiliate
+// story to wire back in.
 export async function stayOptionsFor(tripId, stay) {
   return Promise.all(STAY_PARTNERS.map(partner => resolveStayOption(tripId, stay, partner)));
 }
