@@ -1,3 +1,4 @@
+import { TRIP_CONTEXT_KEYS } from '../constants/tripContext.js';
 import { contextRecapPills, hasTripContext, tripContextFacts } from './tripLifecycle.js';
 
 // TWM-173: shared helpers for the Discover entry chat (JourneyEntry's
@@ -39,12 +40,12 @@ export function buildRecapTurn(tripState, { awaiting } = {}) {
 // panel's own presentation choice; the field names and raw-value
 // formatting come from tripContextFacts (the one canonical trip_context list).
 const FACT_LABELS = {
-  destinations: 'Destination',
-  origin_city: 'From',
-  trip_duration: 'Duration',
-  travel_dates: 'When',
-  num_travelers: 'Travelers',
-  budget: 'Budget',
+  [TRIP_CONTEXT_KEYS.DESTINATIONS]: 'Destination',
+  [TRIP_CONTEXT_KEYS.ORIGIN_CITY]: 'From',
+  [TRIP_CONTEXT_KEYS.TRIP_DURATION]: 'Duration',
+  [TRIP_CONTEXT_KEYS.TRAVEL_DATES]: 'When',
+  [TRIP_CONTEXT_KEYS.NUM_TRAVELERS]: 'Travelers',
+  [TRIP_CONTEXT_KEYS.BUDGET]: 'Budget',
 };
 
 export function buildFactsPanel(tripContext) {

@@ -59,10 +59,10 @@ describe('transportLegs', () => {
     expect(legs).toHaveLength(3); // Delhi->Gwalior, Gwalior->Orchha, Orchha->Delhi
   });
 
-  // TWM-195 review comment (correction): origin_city is the only canonical
-  // origin — when it's missing, fail closed rather than fabricating "Home".
-  // A day-level gap-filler leg still fires, but the origin bookend legs
-  // (outbound-from-origin, return-to-origin) never do.
+  // TWM-195 review comment (correction) / TWM-199: origin_city is the only
+  // canonical origin — when it's missing, fail closed rather than
+  // fabricating "Home". A day-level gap-filler leg still fires, but the
+  // origin bookend legs (outbound-from-origin, return-to-origin) never do.
   it('fails closed on missing origin: no outbound or return bookend legs, but the day-level gap-filler leg still shows genuine internal movement', () => {
     const legs = transportLegs([{ day_number: 1, primary_location: 'Goa' }, { day_number: 2, primary_location: 'Panaji' }], undefined);
     expect(legs).toEqual([{ id: expect.any(String), from: 'Goa', to: 'Panaji', departureDate: null }]);
@@ -93,6 +93,16 @@ describe('transportLegs', () => {
     // a null origin; the second TRAVEL item (Bhubaneswar) is a genuine
     // inner leg and IS emitted.
     expect(legs).toEqual([{ id: expect.any(String), from: 'Konark', to: 'Bhubaneswar', departureDate: null }]);
+  });
+
+  it('omits only the bookend legs when origin is unknown, keeping day-level inner transfers (which never depend on origin) (TWM-199)', () => {
+    const days = [
+      { day_number: 1, primary_location: 'Gwalior' },
+      { day_number: 2, primary_location: 'Gwalior' },
+      { day_number: 3, primary_location: 'Orchha' },
+    ];
+    const legs = transportLegs(days, undefined);
+    expect(legs).toEqual([{ id: expect.any(String), from: 'Gwalior', to: 'Orchha', departureDate: null }]);
   });
 
   it('is empty for no days', () => {

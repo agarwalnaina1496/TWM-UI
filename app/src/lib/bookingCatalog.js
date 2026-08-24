@@ -1,3 +1,4 @@
+import { FLIGHT_SEARCH_KEYS, TRUSTED_ACTION_KEYS } from '../constants/tripPayloads.js';
 import { routeStops } from './atlasView.js';
 import { resolveTrustedAction, getTripFeasibility, searchFlights } from './tripApi.js';
 
@@ -182,10 +183,10 @@ async function searchFlightOffer(tripId, leg, travelerCount) {
   const payload = {};
   const originIata = iataForCity(leg.from);
   const destinationIata = iataForCity(leg.to);
-  if (originIata) payload.origin_iata = originIata;
-  if (destinationIata) payload.destination_iata = destinationIata;
-  if (leg.departureDate) payload.departure_date = leg.departureDate;
-  if (travelerCount) payload.travelers = { adults: Math.max(1, travelerCount) };
+  if (originIata) payload[FLIGHT_SEARCH_KEYS.ORIGIN_IATA] = originIata;
+  if (destinationIata) payload[FLIGHT_SEARCH_KEYS.DESTINATION_IATA] = destinationIata;
+  if (leg.departureDate) payload[FLIGHT_SEARCH_KEYS.DEPARTURE_DATE] = leg.departureDate;
+  if (travelerCount) payload[FLIGHT_SEARCH_KEYS.TRAVELERS] = { adults: Math.max(1, travelerCount) };
   try {
     const response = await searchFlights(tripId, payload);
     return toLiveOffer(response);
@@ -212,11 +213,11 @@ async function resolveFlightOption(tripId, leg, travelerCount) {
   const normalizedCount = normalizeTravelerCount(travelerCount);
   const [ctaOption, liveOffer] = await Promise.all([
     resolveTrustedAction(tripId, {
-      action_type: ACTION_TYPE_FOR_MODE.flight,
-      domain: 'flight',
-      origin: leg.from,
-      destination: leg.to,
-      ...(normalizedCount ? { traveler_count: normalizedCount } : {}),
+      [TRUSTED_ACTION_KEYS.ACTION_TYPE]: ACTION_TYPE_FOR_MODE.flight,
+      [TRUSTED_ACTION_KEYS.DOMAIN]: 'flight',
+      [TRUSTED_ACTION_KEYS.ORIGIN]: leg.from,
+      [TRUSTED_ACTION_KEYS.DESTINATION]: leg.to,
+      ...(normalizedCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: normalizedCount } : {}),
     })
       .then(result => toTransportOption('flight', name, result))
       .catch(error => ({ mode: 'flight', name, status: 'error', errorMessage: error.message || 'Could not load this option.' })),
@@ -249,11 +250,11 @@ async function resolveTransportOption(tripId, leg, mode, travelerCount) {
   const normalizedCount = normalizeTravelerCount(travelerCount);
   try {
     const result = await resolveTrustedAction(tripId, {
-      action_type: ACTION_TYPE_FOR_MODE[mode],
-      domain,
-      origin: leg.from,
-      destination: leg.to,
-      ...(normalizedCount ? { traveler_count: normalizedCount } : {}),
+      [TRUSTED_ACTION_KEYS.ACTION_TYPE]: ACTION_TYPE_FOR_MODE[mode],
+      [TRUSTED_ACTION_KEYS.DOMAIN]: domain,
+      [TRUSTED_ACTION_KEYS.ORIGIN]: leg.from,
+      [TRUSTED_ACTION_KEYS.DESTINATION]: leg.to,
+      ...(normalizedCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: normalizedCount } : {}),
     });
     return toTransportOption(mode, name, result);
   } catch (error) {
@@ -298,6 +299,9 @@ export async function transportOptionsFor(tripId, leg, travelerCount, approvedMo
 // null on a request failure, which callers must treat identically to an
 // empty `modes: []` response: no bookable modes, never a fallback to "try
 // every mode".
+// Trip Feasibility is its own contract, independent of Trusted Action —
+// same field names on this occasion, but not the same payload, so this
+// intentionally builds a plain object rather than importing TRUSTED_ACTION_KEYS.
 export async function fetchLegFeasibility(tripId, leg) {
   return getTripFeasibility(tripId, { origin: leg.from, destination: leg.to });
 }
@@ -471,10 +475,10 @@ async function resolveStayOption(tripId, stay, partner) {
   const name = `${stay.location} — ${PARTNER_LABEL[partner] || partner}`;
   try {
     const result = await resolveTrustedAction(tripId, {
-      action_type: 'SEARCH_REDIRECT',
-      domain: 'stay',
-      destination: stay.location,
-      preferred_partner: partner,
+      [TRUSTED_ACTION_KEYS.ACTION_TYPE]: 'SEARCH_REDIRECT',
+      [TRUSTED_ACTION_KEYS.DOMAIN]: 'stay',
+      [TRUSTED_ACTION_KEYS.DESTINATION]: stay.location,
+      [TRUSTED_ACTION_KEYS.PREFERRED_PARTNER]: partner,
     });
     if (result.status === 'resolved') {
       const action = result.action;

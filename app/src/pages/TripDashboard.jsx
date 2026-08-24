@@ -16,6 +16,7 @@ import {
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
+import { tripOriginCity } from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -595,7 +596,7 @@ export default function TripDashboard() {
   // Computed ONCE and threaded everywhere origin feeds Bookings (the fetch
   // effect, transportLegs' from/to leg labels, and confirmation-anchor
   // matching via findAnchor below) so every call site agrees.
-  const canonicalOrigin = tripState?.trip_context?.origin_city;
+  const canonicalOrigin = tripOriginCity(tripState?.trip_context);
   const [bootStatus, setBootStatus] = useState('idle'); // idle | booting | ready | error
   const [bootError, setBootError] = useState(null);
   const [showBookingPrompt, setShowBookingPrompt] = useState(false);
@@ -667,20 +668,20 @@ export default function TripDashboard() {
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
     // TWM-195 review comment: every leg transportLegs returns is fetched —
-    // no more round-trip bundling, so there's no outbound/rest split here.
+    // no more round-trip bundling (also removed by TWM-199 independently),
+    // so there's no outbound/rest split here.
     const legsToFetch = transportLegs(bookingDays, canonicalOrigin);
     const stays = stayLegs(bookingDays);
-    // TWM-146: threaded through to flight's live-offer search so
-    // FlightSearchRequest.travelers is populated whenever Atlas has it,
-    // instead of always hitting clarification_needed for a field we
-    // actually know — see bookingCatalog.searchFlightOffer's comment for
-    // why departure_date/IATA still aren't threaded through today.
-    // TWM-195 review comment: canonical trip_context.num_travelers is the
-    // primary source now (it can arrive as a chat-entered string like '2',
-    // hence normalizeTravelerCount below), with the Atlas
-    // trip_summary.num_travelers value kept as a fallback — the review
-    // comment only demanded removing the *origin* fallback; it did not ask
-    // for the Atlas traveler-count fallback to be dropped.
+    // TWM-146/TWM-195/TWM-199: threaded through to flight's live-offer
+    // search and Trusted Action's traveler_count so those payloads are
+    // populated whenever it's known, instead of always hitting
+    // clarification_needed for a field we actually have — see
+    // bookingCatalog.searchFlightOffer's comment for why departure_date/
+    // IATA still aren't threaded through today. Canonical
+    // trip_context.num_travelers (normalized — it can arrive as a
+    // chat-entered string like '2') is the primary source, with Atlas's own
+    // trip_summary.num_travelers kept as a fallback — the review comment
+    // only demanded removing the *origin* fallback, not this one.
     const partySize = normalizeTravelerCount(tripState?.trip_context?.num_travelers)
       ?? travelerCount(itineraryResult.result.final_itinerary.trip_summary);
 

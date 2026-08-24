@@ -5,6 +5,8 @@
 // canonical `stage`/`status`/`itinerary_state` — never the legacy mock
 // `plan`/`paid` fields.
 
+import { TRIP_CONTEXT_KEYS } from '../constants/tripContext.js';
+
 export function hasTripContext(tripState) {
   return !!(tripState?.trip_context && Object.keys(tripState.trip_context).length > 0);
 }
@@ -35,12 +37,12 @@ export function isCompletedTrip(tripState) {
 // own label/wrapping on top of these raw values — that's legitimate
 // per-screen presentation, not the duplication this list eliminates.
 export const TRIP_CONTEXT_FIELDS = [
-  ['destinations', value => (Array.isArray(value) ? value.join(', ') : String(value))],
-  ['origin_city', value => String(value)],
-  ['trip_duration', value => `${value} day${value === 1 ? '' : 's'}`],
-  ['travel_dates', value => String(value)],
-  ['num_travelers', value => `${value} traveler${value === 1 ? '' : 's'}`],
-  ['budget', value => String(value)],
+  [TRIP_CONTEXT_KEYS.DESTINATIONS, value => (Array.isArray(value) ? value.join(', ') : String(value))],
+  [TRIP_CONTEXT_KEYS.ORIGIN_CITY, value => String(value)],
+  [TRIP_CONTEXT_KEYS.TRIP_DURATION, value => `${value} day${value === 1 ? '' : 's'}`],
+  [TRIP_CONTEXT_KEYS.TRAVEL_DATES, value => String(value)],
+  [TRIP_CONTEXT_KEYS.NUM_TRAVELERS, value => `${value} traveler${value === 1 ? '' : 's'}`],
+  [TRIP_CONTEXT_KEYS.BUDGET, value => String(value)],
 ];
 
 // {key, value}[] of every known trip_context field currently set — a
@@ -57,8 +59,8 @@ export function tripContextFacts(tripContext) {
 
 export function contextRecapPills(tripContext) {
   return tripContextFacts(tripContext)
-    .filter(fact => fact.key !== 'destinations')
-    .map(fact => (fact.key === 'origin_city' ? `From ${fact.value}` : fact.value));
+    .filter(fact => fact.key !== TRIP_CONTEXT_KEYS.DESTINATIONS)
+    .map(fact => (fact.key === TRIP_CONTEXT_KEYS.ORIGIN_CITY ? `From ${fact.value}` : fact.value));
 }
 
 // The traveler's confirmed destination, once one exists — the one
@@ -66,7 +68,7 @@ export function contextRecapPills(tripContext) {
 // Discover path (select_destination) and extracted by Guide itself for
 // the known-destination path (twm/schemas/trip_context.py).
 export function contextDestination(tripContext) {
-  const destinations = tripContext?.destinations;
+  const destinations = tripContext?.[TRIP_CONTEXT_KEYS.DESTINATIONS];
   return Array.isArray(destinations) && destinations.length > 0 ? destinations.join(', ') : null;
 }
 
