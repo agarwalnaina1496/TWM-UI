@@ -451,6 +451,24 @@ function FlightLiveOfferInfo({ liveOffer }) {
   return null;
 }
 
+// TWM-196: flight's live-priced data (FlightLiveOfferInfo, above) and the
+// affiliate/partner redirect (TrustedActionCta, below) must read as two
+// visibly distinct things — a traveler should never mistake the partner
+// search link for TWM-resolved inventory. The CTA always names the actual
+// partner ("Search on ixigo") rather than a generic "Search flights", and
+// this caption is worded to match exactly what the live-offer block above
+// it is (or isn't) showing: a confirmed live/indicative price still gets a
+// booking action; anything else gets the honest "no TWM-resolved price"
+// framing instead of implying the redirect carries the same data.
+function flightAffiliateCaption(liveOffer) {
+  if (liveOffer?.status === 'offer' || liveOffer?.status === 'partial') {
+    return liveOffer.datePrecision === 'exact'
+      ? 'External partner — book the exact fare there, not TWM'
+      : 'External partner — this indicative price is not TWM-confirmed';
+  }
+  return 'External partner search — no TWM-resolved price for this route yet';
+}
+
 function TransportOptionCard({ option, best }) {
   const durationDistance = durationDistanceLabel(option);
   const isFlight = option.mode === 'flight';
@@ -467,13 +485,9 @@ function TransportOptionCard({ option, best }) {
       )}
       {isFlight && <FlightLiveOfferInfo liveOffer={option.liveOffer} />}
       {isFlight && (
-        <span className="stay-option-tag">
-          {option.liveOffer?.status === 'offer' || option.liveOffer?.status === 'partial'
-            ? 'External action — search elsewhere to book'
-            : 'Search elsewhere (no TWM-resolved price)'}
-        </span>
+        <span className="stay-option-tag">{flightAffiliateCaption(option.liveOffer)}</span>
       )}
-      <TrustedActionCta option={option} label={isFlight ? 'Search flights ↗' : 'Check ↗'} best={best} />
+      <TrustedActionCta option={option} label={isFlight ? 'Search on ixigo ↗' : 'Check ↗'} best={best} />
     </article>
   );
 }

@@ -986,6 +986,37 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         // The trusted-action CTA (ixigo redirect) is still present and separate
         // from the live-offer data block — the offer itself carries no url.
         expect(document.querySelector('a[href*="ixigo"]')).not.toBeNull();
+        // TWM-196: the affiliate CTA names the actual partner rather than a
+        // generic "Search flights" label, so it's never confused with the
+        // TWM-resolved live-offer block above it.
+        expect(screen.getAllByText('Search on ixigo ↗').length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/External partner — book the exact fare there, not TWM/).length).toBeGreaterThan(0);
+      });
+
+      it('captions the affiliate CTA as "no TWM-resolved price" when live search has no offer to show', async () => {
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+        sendTripCommand = vi.fn();
+        global.fetch = vi.fn(async url => {
+          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+          if (url.includes('/flight-search')) {
+            return jsonResponse({
+              status: 'unavailable',
+              queried_at: '2026-01-01T00:00:00.000Z',
+              unavailable: { code: 'provider_not_configured', message: 'Live flight search is not available yet for this trip.' },
+            });
+          }
+          return jsonResponse({});
+        });
+        const user = userEvent.setup();
+        await readyDashboard();
+        await user.click(screen.getByRole('button', { name: /Bookings/ }));
+        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+
+        await waitFor(() => expect(screen.getAllByText('Search on ixigo ↗').length).toBeGreaterThan(0));
+        expect(screen.getAllByText(/no TWM-resolved price for this route yet/).length).toBeGreaterThan(0);
       });
 
       // TWM-196: a month/flexible-precision offer must be labeled honestly,
