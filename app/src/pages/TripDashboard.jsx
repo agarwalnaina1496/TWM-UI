@@ -16,7 +16,7 @@ import {
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
-import { tripOriginCity, tripTravelerCount } from '../constants/tripContext.js';
+import { tripTravelerCount } from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -653,8 +653,7 @@ export default function TripDashboard() {
     setBookingsError(null);
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
-    const bookingOrigin = tripOriginCity(tripState?.trip_context);
-    const legs = transportLegs(bookingDays, bookingOrigin);
+    const legs = transportLegs(bookingDays);
     const { bundle, rest } = bundleRoundTrip(legs);
     const legsToFetch = [...(bundle ? [bundle.outbound] : []), ...rest];
     const stays = stayLegs(bookingDays);
@@ -694,7 +693,7 @@ export default function TripDashboard() {
       }
     })();
     return () => { cancelled = true; };
-  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city]);
+  }, [tab, itineraryStatus, tripId, itineraryResult]);
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -912,7 +911,6 @@ export default function TripDashboard() {
   const readiness = bookingReadinessRollup(days, anchors);
 
   const dayNumbers = days.map(day => day.day_number);
-  const bookingOrigin = tripOriginCity(tripState?.trip_context);
   const transportAnchors = anchorsByType(anchors, 'transport');
   const stayAnchors = anchorsByType(anchors, 'stay');
   const activityAnchors = anchorsByType(anchors, 'activity');
@@ -922,7 +920,7 @@ export default function TripDashboard() {
   // is part of this contract — changing that formatting without updating
   // this matcher will silently reclassify real confirmed anchors as orphaned.
   const findAnchor = (typeAnchors, label) => typeAnchors.find(a => a.label === label);
-  const transportLegList = transportLegs(days, bookingOrigin);
+  const transportLegList = transportLegs(days);
   const { bundle: roundTripBundle, rest: soloLegs } = bundleRoundTrip(transportLegList);
   const stayLegList = stayLegs(days);
   const activityList = activityBookings(days);

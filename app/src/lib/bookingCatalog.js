@@ -324,40 +324,30 @@ export function recommendedMode(feasibleOptions) {
   return null;
 }
 
-// Transport legs: consecutive primary_location changes across days, PLUS
-// the origin<->destination bookend legs — the old Logistics page showed
-// only local transfers between stops and dropped the actual origin leg
-// entirely.
-// departureDate (TWM-146): best-effort only, derived straight from
-// stops[i].dates (routeStops's additive Atlas day.date passthrough) — never
-// fabricated. The outbound-origin leg uses the first stop's first date (the
-// traveler needs to be there by then); an inner leg uses its destination
-// stop's first date (when the traveler arrives there); the return-origin
-// leg uses the last stop's last date (departing after the final stop).
-// When Atlas has no per-day dates yet (tripDatesLabel's "Travel month"/
-// day-count fallback case), every leg's departureDate is null — the honest
-// outcome, not a guess.
+// Transport legs (TWM-200): built only from each TRAVEL timeline item's
+// structured, canonical `from_city`/`to_city` — never from `location` or
+// `display_label`, which may carry road/landmark/"via" narration Atlas is
+// free to write for a traveler to read (e.g. "Marine Drive, Puri to
+// Konark"). Atlas/Backend owns route meaning; this function must not parse
+// that narrative text, and must not infer a route on its own — including a
+// trip_context.origin_city bookend leg. Atlas's own prompt already
+// instructs it to include transport to/from the origin as a TRAVEL item
+// when known; if it omits that movement (or any other), the honest outcome
+// is a missing leg here, not a UI-synthesized one (TWM-200 review finding).
 //
-// TWM-199: `origin` (canonical trip_context.origin_city, via
-// tripOriginCity()) is genuinely unknown for some trips — this fails
-// closed on the bookend legs rather than fabricating a "Home" label. An
-// unresolved origin is not a rendering gap; it's the honest "we don't
-// know where this trip starts" outcome, so only the inner transfer legs
-// (which never depend on origin) are returned.
-export function transportLegs(days, origin) {
-  const stops = routeStops(days);
-  if (stops.length === 0) return [];
-  const legs = [];
-  if (origin) {
-    legs.push({ id: 'outbound-origin', from: origin, to: stops[0].location, departureDate: stops[0].dates?.[0] ?? null });
-  }
-  for (let i = 0; i < stops.length - 1; i++) {
-    legs.push({ id: `leg-${i}`, from: stops[i].location, to: stops[i + 1].location, departureDate: stops[i + 1].dates?.[0] ?? null });
-  }
-  if (origin) {
-    const lastStop = stops[stops.length - 1];
-    legs.push({ id: 'return-origin', from: lastStop.location, to: origin, departureDate: lastStop.dates?.[lastStop.dates.length - 1] ?? null });
-  }
+// A TRAVEL item that is missing a structured endpoint pair is dropped
+// entirely rather than falling back to display text — fail closed for that
+// movement (TWM-200 acceptance criteria), not a best-effort parse.
+//
+// departureDate: best-effort only, taken from the movement's own day.date
+// when Atlas supplied one; never fabricated.
+export function transportLegs(days) {
+  const movements = (days || []).flatMap(day =>
+    (day.timeline || [])
+      .filter(item => item.kind === 'TRAVEL' && item.from_city && item.to_city)
+      .map(item => ({ from: item.from_city, to: item.to_city, departureDate: day.date ?? null }))
+  );
+  const legs = movements.map((movement, i) => ({ id: `leg-${i}`, ...movement }));
   return legs;
 }
 
