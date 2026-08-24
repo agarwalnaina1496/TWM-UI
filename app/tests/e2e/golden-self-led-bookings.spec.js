@@ -114,7 +114,7 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
         version: 7,
         trip_state: {
           stage: 'planning', active_agent: 'guide',
-          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin: 'Delhi' },
+          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin_city: 'Delhi' },
           planner_state: {
             conversation_context: { awaiting: null },
             places: ['Abbey Falls'],
@@ -133,7 +133,7 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
         version: 8,
         trip_state: {
           stage: 'planned', active_agent: null,
-          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin: 'Delhi' },
+          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin_city: 'Delhi' },
           planner_state: {
             conversation_context: { awaiting: null },
             places: ['Abbey Falls'],
@@ -153,7 +153,7 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
         version: 9,
         trip_state: {
           stage: 'planned', active_agent: null,
-          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin: 'Delhi' },
+          trip_context: { destinations: ['Coorg', 'Wayanad'], trip_duration: 2, origin_city: 'Delhi' },
           planner_state: {
             conversation_context: { awaiting: null },
             places: ['Abbey Falls'],
@@ -198,11 +198,16 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
   await page.getByRole('button', { name: 'Take a look at the trip first' }).click();
   await page.getByRole('navigation', { name: 'Trip Dashboard tabs' }).getByRole('button', { name: 'Bookings' }).click();
 
-  // Transport: the Delhi -> Coorg -> Wayanad -> Delhi route is a round trip
-  // (returns to origin), so it bundles as one priced decision, not per-leg.
+  // Transport (TWM-195 review comment): no more round-trip bundling — the
+  // Delhi -> Coorg -> Wayanad -> Delhi route (this fixture's days carry no
+  // Atlas TRAVEL timeline items, so transportLegs falls back to the
+  // day-level gap-filler leg per transition) renders as three explicit
+  // directional legs.
   await expect(page.getByText('🚗 Transport')).toBeVisible();
-  const roundTripLabel = page.getByRole('heading', { name: /Delhi ⇄ Coorg round trip|Delhi ⇄ Wayanad round trip/ });
-  await expect(roundTripLabel).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Delhi → Coorg' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Coorg → Wayanad' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Wayanad → Delhi' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /round trip/ })).toHaveCount(0);
   await page.getByRole('button', { name: /Resolve/ }).first().click();
   await expect(page.getByRole('link', { name: 'Check ↗' }).first()).toBeVisible();
 

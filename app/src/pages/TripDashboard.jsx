@@ -11,7 +11,7 @@ import {
   verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
 } from '../lib/atlasView.js';
 import {
-  transportLegs, bundleRoundTrip, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
+  transportLegs, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
@@ -586,6 +586,15 @@ export default function TripDashboard() {
   const frozenPlan = plannerState?.frozen_plan;
   const itineraryState = tripState?.itinerary_state;
   const anchors = tripState?.logistics_state?.anchors ?? [];
+  // TWM-195 review comment: canonical booking origin, computed ONCE and
+  // threaded everywhere origin feeds Bookings (the fetch effect,
+  // transportLegs' from/to leg labels, and confirmation-anchor matching
+  // via findAnchor below) — origin_city first, legacy `origin` only as a
+  // fallback, never the other way around. A single derived value here
+  // (rather than resolving ad-hoc at each call site) is what prevents the
+  // exact mismatch the review comment reported: one call site reading
+  // `origin` while another reads `origin_city` and silently disagreeing.
+  const canonicalOrigin = tripState?.trip_context?.origin_city || tripState?.trip_context?.origin;
   const [bootStatus, setBootStatus] = useState('idle'); // idle | booting | ready | error
   const [bootError, setBootError] = useState(null);
   const [showBookingPrompt, setShowBookingPrompt] = useState(false);
@@ -656,10 +665,9 @@ export default function TripDashboard() {
     setBookingsStatus('loading');
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
-    const bookingOrigin = tripState?.trip_context?.origin;
-    const legs = transportLegs(bookingDays, bookingOrigin);
-    const { bundle, rest } = bundleRoundTrip(legs);
-    const legsToFetch = [...(bundle ? [bundle.outbound] : []), ...rest];
+    // TWM-195 review comment: every leg transportLegs returns is fetched —
+    // no more round-trip bundling, so there's no outbound/rest split here.
+    const legsToFetch = transportLegs(bookingDays, canonicalOrigin);
     const stays = stayLegs(bookingDays);
     // TWM-146: threaded through to flight's live-offer search so
     // FlightSearchRequest.travelers is populated whenever Atlas has it,
@@ -713,7 +721,7 @@ export default function TripDashboard() {
       );
     })();
     return () => { cancelled = true; };
-  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin]);
+  }, [tab, itineraryStatus, tripId, itineraryResult, canonicalOrigin]);
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -802,11 +810,14 @@ export default function TripDashboard() {
     }
   }
 
-  function toggleExpandedBooking(id, segmentType, { isRoundTrip = false } = {}) {
+  // TWM-195 review comment: round-trip bundling is gone — every segment is
+  // its own directional row now, so there's no longer an is_round_trip_bundle
+  // distinction to track here.
+  function toggleExpandedBooking(id, segmentType) {
     setExpandedBookingId(previous => {
       const next = previous === id ? null : id;
       if (next) {
-        trackEvent('booking_intent', { booking_type: 'browse_options', segment_type: segmentType, is_round_trip_bundle: isRoundTrip });
+        trackEvent('booking_intent', { booking_type: 'browse_options', segment_type: segmentType });
       }
       return next;
     });
@@ -928,7 +939,6 @@ export default function TripDashboard() {
   const readiness = bookingReadinessRollup(days, anchors);
 
   const dayNumbers = days.map(day => day.day_number);
-  const bookingOrigin = tripState?.trip_context?.origin;
   const transportAnchors = anchorsByType(anchors, 'transport');
   const stayAnchors = anchorsByType(anchors, 'stay');
   const activityAnchors = anchorsByType(anchors, 'activity');
@@ -938,8 +948,11 @@ export default function TripDashboard() {
   // is part of this contract — changing that formatting without updating
   // this matcher will silently reclassify real confirmed anchors as orphaned.
   const findAnchor = (typeAnchors, label) => typeAnchors.find(a => a.label === label);
-  const transportLegList = transportLegs(days, bookingOrigin);
-  const { bundle: roundTripBundle, rest: soloLegs } = bundleRoundTrip(transportLegList);
+  // TWM-195 review comment: canonicalOrigin (computed once above) feeds
+  // transportLegs here too, so render-side leg labels/anchor-matching use
+  // the exact same origin the fetch effect already used to key
+  // transportData — never a second, possibly-disagreeing resolution.
+  const transportLegList = transportLegs(days, canonicalOrigin);
   const stayLegList = stayLegs(days);
   const activityList = activityBookings(days);
 
@@ -947,10 +960,7 @@ export default function TripDashboard() {
   // itinerary no longer computes (e.g. after a regeneration). Segments
   // already show their own matching anchor inline, so only anchors with
   // no matching segment need the generic AnchorList fallback here.
-  const transportLabels = new Set([
-    ...(roundTripBundle ? [`${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`] : []),
-    ...soloLegs.map(leg => `${leg.from} → ${leg.to}`),
-  ]);
+  const transportLabels = new Set(transportLegList.map(leg => `${leg.from} → ${leg.to}`));
   const stayLabels = new Set(stayLegList.map(stay => `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`));
   const activityLabels = new Set(activityList.map(activity => activity.title));
   const orphanTransportAnchors = transportAnchors.filter(a => !transportLabels.has(a.label));
@@ -1115,29 +1125,10 @@ export default function TripDashboard() {
         <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Real route options for every leg — schedules and fares are yours to verify before you book.</p></div></div>
         <AnchorList anchors={orphanTransportAnchors} />
         {transportError && <p className="already-booked-note" role="alert">{transportError}</p>}
-        {roundTripBundle && (() => {
-          const label = `${roundTripBundle.outbound.from} ⇄ ${roundTripBundle.outbound.to} round trip`;
-          const entry = transportData[legKey(roundTripBundle.outbound)];
-          const options = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : [];
-          const recommended = entry ? recommendedMode(options) : undefined;
-          return (
-            <BookingSegment
-              label={label}
-              anchor={findAnchor(transportAnchors, label)}
-              expanded={expandedBookingId === roundTripBundle.id}
-              onToggleExpand={() => toggleExpandedBooking(roundTripBundle.id, 'transport', { isRoundTrip: true })}
-              loading={expandedBookingId === roundTripBundle.id && bookingsStatus === 'loading'}
-              loadError={expandedBookingId === roundTripBundle.id ? transportError : null}
-              options={options}
-              recommended={recommended}
-              feasibilityModes={entry?.feasibility?.modes}
-              noOptionsMessage="No bookable transport options for this leg."
-              renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
-              onOpenConfirm={() => openConfirmForm('transport', label)}
-            />
-          );
-        })()}
-        {soloLegs.map(leg => {
+        {/* TWM-195 review comment: no more round-trip bundling — every leg
+            transportLegs returns (including the outbound/return bookend
+            legs) renders as its own explicit directional row. */}
+        {transportLegList.map(leg => {
           const label = `${leg.from} → ${leg.to}`;
           const entry = transportData[legKey(leg)];
           const options = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : [];

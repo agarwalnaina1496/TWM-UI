@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  transportOptionsFor, feasibleTransportOptions, transportLegs, bundleRoundTrip,
+  transportOptionsFor, feasibleTransportOptions, transportLegs,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
   fetchLegFeasibility, MODES,
 } from '../../../src/lib/bookingCatalog.js';
@@ -47,15 +47,15 @@ beforeEach(() => {
 });
 
 describe('transportLegs', () => {
-  it('includes the origin<->destination bookend legs, not just local transfers', () => {
+  it('includes the origin<->destination bookend legs, not just local transfers, when there is no Atlas TRAVEL data (gap-filler case)', () => {
     const days = [
       { day_number: 1, primary_location: 'Gwalior' },
       { day_number: 2, primary_location: 'Gwalior' },
       { day_number: 3, primary_location: 'Orchha' },
     ];
     const legs = transportLegs(days, 'Delhi');
-    expect(legs[0]).toEqual({ id: 'outbound-origin', from: 'Delhi', to: 'Gwalior', departureDate: null });
-    expect(legs[legs.length - 1]).toEqual({ id: 'return-origin', from: 'Orchha', to: 'Delhi', departureDate: null });
+    expect(legs[0]).toMatchObject({ from: 'Delhi', to: 'Gwalior', departureDate: null });
+    expect(legs[legs.length - 1]).toMatchObject({ from: 'Orchha', to: 'Delhi', departureDate: null });
     expect(legs).toHaveLength(3); // Delhi->Gwalior, Gwalior->Orchha, Orchha->Delhi
   });
 
@@ -68,43 +68,111 @@ describe('transportLegs', () => {
     expect(transportLegs([], 'Delhi')).toEqual([]);
   });
 
-  it('threads through a real Atlas day.date when present, never fabricating one', () => {
+  it('threads through a real Atlas day.date when present, never fabricating one (day-level gap-filler case)', () => {
     const days = [
       { day_number: 1, primary_location: 'Gwalior', date: '2026-03-01' },
       { day_number: 2, primary_location: 'Orchha', date: '2026-03-02' },
     ];
     const legs = transportLegs(days, 'Delhi');
-    expect(legs[0].departureDate).toBe('2026-03-01'); // outbound: first stop's first date
-    expect(legs[1].departureDate).toBe('2026-03-02'); // inner leg: destination stop's first date
-    expect(legs[2].departureDate).toBe('2026-03-02'); // return: last stop's last date
+    expect(legs[0].departureDate).toBe('2026-03-01'); // outbound: first day reaching Gwalior
+    expect(legs[1].departureDate).toBe('2026-03-02'); // inner leg: day reaching Orchha
+    expect(legs[2].departureDate).toBe('2026-03-02'); // return: last day's date
   });
-});
 
-describe('bundleRoundTrip', () => {
-  it('bundles the outbound and return legs into one decision when they mirror each other', () => {
-    const legs = [
-      { id: 'outbound-origin', from: 'Delhi', to: 'Gwalior' },
-      { id: 'leg-0', from: 'Gwalior', to: 'Orchha' },
-      { id: 'return-origin', from: 'Orchha', to: 'Delhi' },
+  // TWM-195 review comment (a): a compound day.primary_location like
+  // "Konark & Bhubaneswar" must never become one destination leg — when
+  // Atlas TRAVEL items are present, they're trusted completely and never
+  // reconciled against the (possibly compound) primary_location string.
+  it('derives atomic legs from Atlas TRAVEL timeline items, never sending a compound primary_location as one destination', () => {
+    const days = [
+      {
+        day_number: 3,
+        primary_location: 'Konark & Bhubaneswar',
+        date: '2026-03-03',
+        timeline: [
+          { kind: 'TRAVEL', location: 'Konark' },
+          { kind: 'ACTIVITY', title: 'Sun Temple' },
+          { kind: 'TRAVEL', location: 'Bhubaneswar' },
+        ],
+      },
     ];
-    const { bundle, rest } = bundleRoundTrip(legs);
-    expect(bundle).toEqual({ id: 'round-trip', outbound: legs[0], inbound: legs[2] });
-    expect(rest).toEqual([legs[1]]);
+    const legs = transportLegs(days, 'Puri');
+    const atomicLegs = legs.filter(leg => leg.to !== 'Puri');
+    expect(atomicLegs).toEqual([
+      expect.objectContaining({ from: 'Puri', to: 'Konark' }),
+      expect.objectContaining({ from: 'Konark', to: 'Bhubaneswar' }),
+    ]);
+    expect(legs.some(leg => leg.to === 'Konark & Bhubaneswar' || leg.from === 'Konark & Bhubaneswar')).toBe(false);
   });
 
-  it('does not bundle when the trip is genuinely one-way', () => {
-    const legs = [
-      { id: 'a', from: 'Delhi', to: 'Gwalior' },
-      { id: 'b', from: 'Gwalior', to: 'Mumbai' },
+  // (b) gap-filler: a day with a genuine primary_location change but NO
+  // TRAVEL items falls back to one day-level leg.
+  it('falls back to one day-level leg when a day changes primary_location with no TRAVEL items at all', () => {
+    const days = [
+      { day_number: 1, primary_location: 'Bhubaneswar', timeline: [{ kind: 'ACTIVITY', title: 'Temple walk' }] },
+      { day_number: 2, primary_location: 'Puri', timeline: [{ kind: 'MEAL', title: 'Lunch' }] },
     ];
-    const { bundle, rest } = bundleRoundTrip(legs);
-    expect(bundle).toBeNull();
-    expect(rest).toEqual(legs);
+    const legs = transportLegs(days, 'Bangalore');
+    // Bangalore->Bhubaneswar (outbound), Bhubaneswar->Puri (day-level gap-filler), Puri->Bangalore (return)
+    expect(legs.map(l => `${l.from}->${l.to}`)).toEqual(['Bangalore->Bhubaneswar', 'Bhubaneswar->Puri', 'Puri->Bangalore']);
   });
 
-  it('does not bundle a single leg', () => {
-    const legs = [{ id: 'a', from: 'Delhi', to: 'Gwalior' }];
-    expect(bundleRoundTrip(legs)).toEqual({ bundle: null, rest: legs });
+  // (c) a TRAVEL item whose location equals the current location produces
+  // no leg — no same-city pseudo-leg.
+  it('does not emit a leg for a TRAVEL item whose location equals the current location', () => {
+    const days = [
+      {
+        day_number: 1,
+        primary_location: 'Bhubaneswar',
+        timeline: [
+          { kind: 'TRAVEL', location: 'Bhubaneswar' }, // already there — not a real movement
+          { kind: 'ACTIVITY', title: 'Local sightseeing' },
+        ],
+      },
+    ];
+    const legs = transportLegs(days, 'Bhubaneswar');
+    expect(legs).toEqual([]); // starts and ends at Bhubaneswar, no real movement anywhere
+  });
+
+  // (d) full Odisha-shaped fixture — the exact five legs from the review
+  // comment, in order.
+  it('produces the exact five Odisha review-comment legs in order: Bangalore -> Bhubaneswar -> Puri -> Konark -> Bhubaneswar -> Bangalore', () => {
+    const days = [
+      { day_number: 1, primary_location: 'Bhubaneswar', date: '2026-03-01', timeline: [{ kind: 'TRAVEL', location: 'Bhubaneswar' }] },
+      { day_number: 2, primary_location: 'Puri', date: '2026-03-02', timeline: [{ kind: 'TRAVEL', location: 'Puri' }] },
+      {
+        day_number: 3,
+        primary_location: 'Konark & Bhubaneswar',
+        date: '2026-03-03',
+        timeline: [
+          { kind: 'TRAVEL', location: 'Konark' },
+          { kind: 'ACTIVITY', title: 'Sun Temple' },
+          { kind: 'TRAVEL', location: 'Bhubaneswar' },
+        ],
+      },
+    ];
+    const legs = transportLegs(days, 'Bangalore');
+    expect(legs.map(l => `${l.from} -> ${l.to}`)).toEqual([
+      'Bangalore -> Bhubaneswar',
+      'Bhubaneswar -> Puri',
+      'Puri -> Konark',
+      'Konark -> Bhubaneswar',
+      'Bhubaneswar -> Bangalore',
+    ]);
+  });
+
+  // (e) an itinerary that genuinely ends back at the origin does not get a
+  // duplicate/pseudo final leg.
+  it('does not emit a duplicate/pseudo final leg when the itinerary already ends back at the origin', () => {
+    const days = [
+      { day_number: 1, primary_location: 'Gwalior', timeline: [{ kind: 'TRAVEL', location: 'Gwalior' }] },
+      { day_number: 2, primary_location: 'Delhi', timeline: [{ kind: 'TRAVEL', location: 'Delhi' }] },
+    ];
+    const legs = transportLegs(days, 'Delhi');
+    expect(legs.map(l => `${l.from}->${l.to}`)).toEqual(['Delhi->Gwalior', 'Gwalior->Delhi']);
+    expect(legs[legs.length - 1].to).toBe('Delhi');
+    // no trailing Delhi->Delhi pseudo-leg
+    expect(legs.filter(l => l.from === 'Delhi' && l.to === 'Delhi')).toEqual([]);
   });
 });
 

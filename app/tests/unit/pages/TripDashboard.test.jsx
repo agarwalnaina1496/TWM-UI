@@ -354,18 +354,78 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // purpose; that coverage returns with the real Bookings tab.
   // TWM-176: real Bookings content, replacing TWM-175's inert placeholder.
   describe('Bookings tab (TWM-176)', () => {
-    it('shows the origin<->destination transport leg, not just local transfers, bundled as one round-trip decision', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+    // TWM-195 review comment: no more round-trip bundling — the outbound
+    // and return legs each render as their own explicit directional row.
+    it('shows explicit directional outbound and return transport legs, never a bundled round-trip row', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      // Fixture: both days are Rishikesh, so the round trip is Delhi <-> Rishikesh.
-      expect(screen.getByText('Delhi ⇄ Rishikesh round trip')).toBeInTheDocument();
+      // Fixture: both days are Rishikesh with no real inner movement, so the
+      // only legs are the outbound and return bookends, as two separate rows.
+      expect(screen.getByText('Delhi → Rishikesh')).toBeInTheDocument();
+      expect(screen.getByText('Rishikesh → Delhi')).toBeInTheDocument();
+      expect(screen.queryByText(/round trip/)).not.toBeInTheDocument();
+      expect(screen.queryByText('Delhi ⇄ Rishikesh round trip')).not.toBeInTheDocument();
+    });
+
+    // TWM-195 review comment: canonical origin_city must be used over the
+    // legacy origin field, and that origin must be used everywhere Bookings
+    // derives leg labels — never fall back to a placeholder like "Home"
+    // when origin_city genuinely exists.
+    it('uses trip_context.origin_city over the legacy origin field for booking legs', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Bangalore', origin: 'Home' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      expect(screen.getByText('Bangalore → Rishikesh')).toBeInTheDocument();
+      expect(screen.getByText('Rishikesh → Bangalore')).toBeInTheDocument();
+      expect(screen.queryByText(/Home/)).not.toBeInTheDocument();
+    });
+
+    // Legacy fallback: origin_city absent, only the older origin field
+    // present — still used, never defaulting to the generic "Home" label.
+    it('falls back to the legacy origin field when origin_city is absent', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Chennai' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      expect(screen.getByText('Chennai → Rishikesh')).toBeInTheDocument();
+      expect(screen.getByText('Rishikesh → Chennai')).toBeInTheDocument();
+    });
+
+    // Every leg transportLegs returns renders as its own row — proven here
+    // with a 3-city fixture (no bundling of any kind, not just the
+    // 2-city/round-trip case above).
+    it('renders every returned leg as its own row, with no bundled heading anywhere', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: {
+            days: [
+              { day_number: 1, date: null, title: 'Arrival', primary_location: 'Rishikesh', summary: 'x', timeline: [], seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null },
+              { day_number: 2, date: null, title: 'Onward', primary_location: 'Haridwar', summary: 'x', timeline: [], seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null },
+            ],
+          },
+        }),
+      };
+      global.fetch = defaultFetchMock();
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Bookings/ }));
+      expect(screen.getByText('Delhi → Rishikesh')).toBeInTheDocument();
+      expect(screen.getByText('Rishikesh → Haridwar')).toBeInTheDocument();
+      expect(screen.getByText('Haridwar → Delhi')).toBeInTheDocument();
+      expect(screen.queryByText(/round trip/)).not.toBeInTheDocument();
     });
 
     it('expanding a segment shows mode-tagged options; a route-absurd mode is genuinely absent because Backend never returned it', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       let trustedActionCalls = [];
       global.fetch = vi.fn(async (url, options) => {
@@ -404,7 +464,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('shows a recommended-mode card and a route-details disclosure with a GENERAL_GUIDANCE tag for the returned modes', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -436,7 +496,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('renders an honest "no bookable transport options" state and makes zero trusted-action/flight-search calls when Backend returns modes: []', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       let transportNetworkCalls = [];
       global.fetch = vi.fn(async (url, options) => {
@@ -468,19 +528,20 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('shows a specific "not booked yet" label per segment, never a bare generic one', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       await readyDashboard();
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.getByText('Delhi ⇄ Rishikesh round trip not booked yet')).toBeInTheDocument();
+      expect(screen.getByText('Delhi → Rishikesh not booked yet')).toBeInTheDocument();
+      expect(screen.getByText('Rishikesh → Delhi not booked yet')).toBeInTheDocument();
       expect(screen.queryByText('Not booked yet')).not.toBeInTheDocument();
     });
 
     it('shows a confirmed segment with the 🔒-confirmed treatment — property/service name, price/detail, and confirmation number, never a bare status word', async () => {
       commandSnapshot = snapshotWith(
         readyItineraryState(), { anchors: [anchor({ type: 'stay', label: 'Rishikesh · 2 nights', detail: 'Riverside Cottage, ₹4,200/night', reference: 'CONF-9921' })] },
-        { trip_context: { origin: 'Delhi' } },
+        { trip_context: { origin_city: 'Delhi' } },
       );
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
@@ -531,7 +592,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('renders the affiliate disclosure line when the resolved trusted action carries it, never dropping it', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
@@ -541,7 +602,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('shows an inert note, no broken link, when a trusted action resolves to missing_input', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -563,7 +624,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
 
     it('the confirm-it-yourself flow is reachable per segment, and submits a real confirm_logistics command', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn(async () => ({ message: 'Noted.', agent_meta: null, trip: commandSnapshot }));
       const user = userEvent.setup();
       await readyDashboard();
@@ -574,7 +635,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: 'Save confirmation' }));
 
       expect(sendTripCommand).toHaveBeenCalledWith('confirm_logistics', expect.objectContaining({
-        logisticsConfirmation: expect.objectContaining({ type: 'transport', label: 'Delhi ⇄ Rishikesh round trip' }),
+        logisticsConfirmation: expect.objectContaining({ type: 'transport', label: 'Delhi → Rishikesh' }),
       }));
     });
 
@@ -582,7 +643,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     // distinct from the plain redirect-only cards train/bus still use.
     describe('flight live-offer card (TWM-146)', () => {
       it('renders a specific clarification prompt (not a generic error) when flight-search needs more info', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
         global.fetch = defaultFetchMock(); // flight-search defaults to clarification_needed
         const user = userEvent.setup();
@@ -593,7 +654,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       });
 
       it('renders live-offer price/airline/stops distinctly from the plain redirect-only cards, and still keeps the CTA link separate', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
@@ -632,7 +693,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       });
 
       it('renders the Backend-authored unavailable message safely for a flight card', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Delhi' } });
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);

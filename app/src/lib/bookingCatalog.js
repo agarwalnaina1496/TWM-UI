@@ -5,7 +5,7 @@ import { resolveTrustedAction, getTripFeasibility, searchFlights } from './tripA
 // schema shape (primary_location, day_number, timeline, kind,
 // requires_advance_booking) — deliberately NOT reusing mockAtlasTrip.js's
 // structurally different shape (cost_inr, base, number, items).
-// Search/ranking/reasoning here (transportLegs/bundleRoundTrip/stayLegs) are
+// Search/ranking/reasoning here (transportLegs/stayLegs) are
 // permanent, pure route-derivation from Atlas days with no Backend
 // dependency. TWM-132 is the transition promised in the old header comment:
 // the terminal action (transportOptionsFor/feasibleTransportOptions/
@@ -325,44 +325,89 @@ export function recommendedMode(feasibleOptions) {
   return null;
 }
 
-// Transport legs: consecutive primary_location changes across days, PLUS
-// the origin<->destination bookend legs — the old Logistics page showed
-// only local transfers between stops and dropped the actual origin leg
-// entirely.
-// departureDate (TWM-146): best-effort only, derived straight from
-// stops[i].dates (routeStops's additive Atlas day.date passthrough) — never
-// fabricated. The outbound-origin leg uses the first stop's first date (the
-// traveler needs to be there by then); an inner leg uses its destination
-// stop's first date (when the traveler arrives there); the return-origin
-// leg uses the last stop's last date (departing after the final stop).
-// When Atlas has no per-day dates yet (tripDatesLabel's "Travel month"/
-// day-count fallback case), every leg's departureDate is null — the honest
+// TWM-195 review comment (rewrite): atomic directional transport legs,
+// walking Atlas timeline data in day order and tracking a running "current
+// location" pointer — replaces the old routeStops-only derivation, which
+// deduped consecutive days purely by day.primary_location and had no
+// awareness of Atlas TRAVEL timeline items at all. That was the exact
+// source of two review-flagged bugs: (1) a compound day.primary_location
+// like "Konark & Bhubaneswar" got treated as one destination city and sent
+// to feasibility as-is, which isn't a real city and fails closed; (2) every
+// leg was bundled into a generic round-trip row (see the now-deleted
+// bundleRoundTrip below).
+//
+// Algorithm (TWM-195 review comment — "prefer Atlas TRAVEL timeline
+// movements... rather than treating compound day locations as one
+// destination"):
+//   1. currentLocation starts at the trip's canonical origin.
+//   2. Walk days in order; within each day, walk `timeline` in order. Each
+//      `kind: 'TRAVEL'` item's `location` is the destination reached by
+//      that atomic movement (Atlas has no explicit from-field on a TRAVEL
+//      item — the origin of any movement is implicitly wherever the
+//      traveler was immediately before it, i.e. our running pointer). When
+//      it differs from currentLocation, emit an atomic leg and advance the
+//      pointer; when it equals currentLocation, it's not a real movement,
+//      so no same-city pseudo-leg is emitted (per the review comment's
+//      explicit "avoid creating a pseudo same-city leg" requirement).
+//   3. Gap-filler judgement call: a day-level fallback leg to
+//      day.primary_location only fires when that day had ZERO TRAVEL
+//      timeline items at all (a genuine Atlas data gap the old
+//      routeStops-only logic used to paper over for every day). A day that
+//      *does* carry TRAVEL items is trusted completely and never
+//      reconciled against day.primary_location — reconciling against it
+//      would resurrect exactly the compound-label bug this rewrite fixes
+//      (e.g. Day 3's real "Konark" + "Bhubaneswar" TRAVEL items would
+//      otherwise get a bogus trailing leg to the compound
+//      "Konark & Bhubaneswar" string, since neither atomic destination
+//      string-equals that compound label).
+//   4. After every day is processed, a final currentLocation -> origin leg
+//      is emitted only if the traveler isn't already back at origin — never
+//      a pseudo same-city leg for an itinerary that already ends at home.
+// departureDate (TWM-146, preserved): best-effort only, taken straight from
+// the real Atlas day.date whenever available — never fabricated. Each leg
+// uses the date of the day whose timeline (or day-level fallback) produced
+// it, i.e. the date the traveler arrives at that leg's destination; the
+// final return-to-origin leg uses the last day's date. When Atlas has no
+// per-day dates yet, every leg's departureDate is null — the honest
 // outcome, not a guess.
 export function transportLegs(days, origin) {
-  const stops = routeStops(days);
-  if (stops.length === 0) return [];
   const originLabel = origin || 'Home';
-  const legs = [{ id: 'outbound-origin', from: originLabel, to: stops[0].location, departureDate: stops[0].dates?.[0] ?? null }];
-  for (let i = 0; i < stops.length - 1; i++) {
-    legs.push({ id: `leg-${i}`, from: stops[i].location, to: stops[i + 1].location, departureDate: stops[i + 1].dates?.[0] ?? null });
-  }
-  const lastStop = stops[stops.length - 1];
-  legs.push({ id: 'return-origin', from: lastStop.location, to: originLabel, departureDate: lastStop.dates?.[lastStop.dates.length - 1] ?? null });
-  return legs;
-}
+  const legs = [];
+  let currentLocation = originLabel;
+  let legIndex = 0;
+  let lastDayDate = null;
 
-// A round trip bundles as one priced decision, not two separate one-way
-// resolves — true whenever the traveler ends up back where they started
-// (the first leg's origin equals the last leg's destination), regardless
-// of how many different cities sit in between on a multi-stop circuit.
-export function bundleRoundTrip(legs) {
-  if (legs.length < 2) return { bundle: null, rest: legs };
-  const first = legs[0];
-  const last = legs[legs.length - 1];
-  if (first.from === last.to) {
-    return { bundle: { id: 'round-trip', outbound: first, inbound: last }, rest: legs.slice(1, -1) };
+  const pushLeg = (from, to, departureDate) => {
+    // Composite id (index + route), not from/to alone — the same city pair
+    // can legitimately repeat (e.g. a there-and-back local excursion), so
+    // from/to alone wouldn't be a stable/unique key.
+    legs.push({ id: `leg-${legIndex++}-${from}->${to}`, from, to, departureDate: departureDate ?? null });
+  };
+
+  for (const day of days || []) {
+    if (day.date) lastDayDate = day.date;
+    let hasTravelItem = false;
+    for (const item of day.timeline || []) {
+      if (item.kind !== 'TRAVEL' || !item.location) continue;
+      hasTravelItem = true;
+      if (item.location === currentLocation) continue; // not a real movement
+      pushLeg(currentLocation, item.location, day.date);
+      currentLocation = item.location;
+    }
+    // Gap-filler: only when Atlas modeled no TRAVEL movement at all this
+    // day — see judgement-call comment above for why a day WITH TRAVEL
+    // items is never reconciled against (possibly compound) primary_location.
+    if (!hasTravelItem && day.primary_location && currentLocation !== day.primary_location) {
+      pushLeg(currentLocation, day.primary_location, day.date);
+      currentLocation = day.primary_location;
+    }
   }
-  return { bundle: null, rest: legs };
+
+  if (currentLocation !== originLabel) {
+    pushLeg(currentLocation, originLabel, lastDayDate);
+  }
+
+  return legs;
 }
 
 export function stayLegs(days) {
