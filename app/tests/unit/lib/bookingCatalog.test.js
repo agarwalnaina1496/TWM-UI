@@ -324,6 +324,58 @@ describe('traveler_count on trusted-action transport CTA payloads (TWM-195 revie
   });
 });
 
+describe('departure_date on trusted-action transport CTA payloads (TWM-196 review comment)', () => {
+  // Backend no longer requires departure_date to resolve an affiliate
+  // redirect (see twm/services/trusted_action/calculations.py), but a
+  // genuinely known date should still be sent so the partner search page
+  // is pre-filled rather than deliberately omitted.
+  it('includes departure_date on the flight trusted-action CTA payload when the leg has one', async () => {
+    let ctaBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { ctaBody = JSON.parse(options.body); return jsonResponse(resolvedAction()); }
+      if (url.includes('/flight-search')) return jsonResponse(flightSearchResponse());
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', { from: 'Delhi', to: 'Gwalior', departureDate: '2026-03-01' }, 2, ['flight']);
+    expect(ctaBody).toMatchObject({ departure_date: '2026-03-01' });
+  });
+
+  it('includes departure_date on train/bus trusted-action CTA payloads when the leg has one', async () => {
+    let capturedBodies = [];
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedAction()); }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', { from: 'Delhi', to: 'Gwalior', departureDate: '2026-03-01' }, 2, ['train', 'bus']);
+    expect(capturedBodies.every(body => body.departure_date === '2026-03-01')).toBe(true);
+  });
+
+  it('omits departure_date entirely when the leg has none, never fabricating one', async () => {
+    let ctaBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { ctaBody = JSON.parse(options.body); return jsonResponse(resolvedAction()); }
+      if (url.includes('/flight-search')) return jsonResponse(flightSearchResponse());
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', { from: 'Delhi', to: 'Gwalior' }, 2, ['flight']);
+    expect(ctaBody).not.toHaveProperty('departure_date');
+  });
+
+  it('resolves the flight affiliate CTA even with no departure_date at all — the hybrid model\'s affiliate-only fallback', async () => {
+    global.fetch = vi.fn(async url => {
+      if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
+      if (url.includes('/flight-search')) {
+        return jsonResponse(flightSearchResponse({ status: 'unavailable', clarification: undefined, unavailable: { code: 'provider_not_configured', message: 'Live flight search is not available yet for this trip.' } }));
+      }
+      return jsonResponse({});
+    });
+    const options = await transportOptionsFor('trip-1', { from: 'Delhi', to: 'Gwalior' }, 2, ['flight']);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight.status).toBe('resolved');
+    expect(flight.liveOffer.status).toBe('unavailable');
+  });
+});
+
 describe('flight live-offer resolution (TWM-146)', () => {
   const leg = { from: 'Delhi', to: 'Gwalior', departureDate: '2026-03-01' };
 

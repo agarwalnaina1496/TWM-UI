@@ -195,6 +195,11 @@ async function resolveFlightOption(tripId, leg, travelerCount) {
   // departure_date above). This is a structurally separate field from
   // searchFlightOffer's own `travelers: { adults: n }` shape below, which
   // is untouched.
+  // TWM-196 review comment: the affiliate CTA must carry leg.departureDate
+  // when Atlas provided one — Backend no longer requires an exact date to
+  // resolve a trusted-action redirect (it's an optional query param, see
+  // trusted_action/resolvers.py), but a known date should still be sent so
+  // the partner search page is pre-filled rather than deliberately omitted.
   const normalizedCount = normalizeTravelerCount(travelerCount);
   const [ctaOption, liveOffer] = await Promise.all([
     resolveTrustedAction(tripId, {
@@ -202,6 +207,7 @@ async function resolveFlightOption(tripId, leg, travelerCount) {
       [TRUSTED_ACTION_KEYS.DOMAIN]: 'flight',
       [TRUSTED_ACTION_KEYS.ORIGIN]: leg.from,
       [TRUSTED_ACTION_KEYS.DESTINATION]: leg.to,
+      ...(leg.departureDate ? { [TRUSTED_ACTION_KEYS.DEPARTURE_DATE]: leg.departureDate } : {}),
       ...(normalizedCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: normalizedCount } : {}),
     })
       .then(result => toTransportOption('flight', name, result))
@@ -239,6 +245,7 @@ async function resolveTransportOption(tripId, leg, mode, travelerCount) {
       [TRUSTED_ACTION_KEYS.DOMAIN]: domain,
       [TRUSTED_ACTION_KEYS.ORIGIN]: leg.from,
       [TRUSTED_ACTION_KEYS.DESTINATION]: leg.to,
+      ...(leg.departureDate ? { [TRUSTED_ACTION_KEYS.DEPARTURE_DATE]: leg.departureDate } : {}),
       ...(normalizedCount ? { [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: normalizedCount } : {}),
     });
     return toTransportOption(mode, name, result);
