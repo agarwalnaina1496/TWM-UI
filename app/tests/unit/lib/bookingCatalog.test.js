@@ -49,13 +49,20 @@ beforeEach(() => {
 // TWM-200: transportLegs now reads only structured, canonical
 // `from_city`/`to_city` off TRAVEL timeline items — never `location` or
 // `display_label`, which may carry road/landmark/"via" narration.
-function travelDay(dayNumber, fromCity, toCity, { date = null, displayLabel = null } = {}) {
+function travelDay(dayNumber, fromCity, toCity, { departureDate = null, departureMonth = null, displayLabel = null } = {}) {
   return {
     day_number: dayNumber,
-    date,
     primary_location: toCity,
     timeline: [
-      { kind: 'TRAVEL', from_city: fromCity, to_city: toCity, display_label: displayLabel, location: displayLabel || `${fromCity} to ${toCity}` },
+      {
+        kind: 'TRAVEL',
+        from_city: fromCity,
+        to_city: toCity,
+        departure_date: departureDate,
+        departure_month: departureMonth,
+        display_label: displayLabel,
+        location: displayLabel || `${fromCity} to ${toCity}`,
+      },
     ],
   };
 }
@@ -69,15 +76,15 @@ describe('transportLegs', () => {
     ];
     const legs = transportLegs(days);
     expect(legs).toEqual([
-      { id: 'leg-0', from: 'Delhi', to: 'Gwalior', departureDate: null },
-      { id: 'leg-1', from: 'Gwalior', to: 'Orchha', departureDate: null },
+      { id: 'leg-0', from: 'Delhi', to: 'Gwalior', departureDate: null, departureMonth: null },
+      { id: 'leg-1', from: 'Gwalior', to: 'Orchha', departureDate: null, departureMonth: null },
     ]);
   });
 
   it('never synthesizes an origin<->destination bookend leg — Atlas/Backend owns route meaning, UI must not infer one (TWM-200 review finding)', () => {
     const days = [travelDay(1, 'Gwalior', 'Orchha')];
     const legs = transportLegs(days);
-    expect(legs).toEqual([{ id: 'leg-0', from: 'Gwalior', to: 'Orchha', departureDate: null }]);
+    expect(legs).toEqual([{ id: 'leg-0', from: 'Gwalior', to: 'Orchha', departureDate: null, departureMonth: null }]);
   });
 
   it('drops a TRAVEL movement missing a structured endpoint instead of parsing display_label/location (TWM-200)', () => {
@@ -100,8 +107,8 @@ describe('transportLegs', () => {
     ];
     const legs = transportLegs(days);
     expect(legs).toEqual([
-      { id: 'leg-0', from: 'Bhubaneswar', to: 'Puri', departureDate: null },
-      { id: 'leg-1', from: 'Konark', to: 'Bhubaneswar', departureDate: null },
+      { id: 'leg-0', from: 'Bhubaneswar', to: 'Puri', departureDate: null, departureMonth: null },
+      { id: 'leg-1', from: 'Konark', to: 'Bhubaneswar', departureDate: null, departureMonth: null },
     ]);
     expect(legs.some(leg => leg.from === 'Puri' && leg.to === 'Konark')).toBe(false);
   });
@@ -115,14 +122,29 @@ describe('transportLegs', () => {
     expect(transportLegs(days)).toEqual([]);
   });
 
-  it('threads through a real Atlas day.date when present, never fabricating one', () => {
+  it('threads through the TRAVEL item\'s own structured departure_date, never fabricating one (TWM-200)', () => {
     const days = [
-      travelDay(1, 'Delhi', 'Gwalior', { date: '2026-03-01' }),
-      travelDay(2, 'Gwalior', 'Orchha', { date: '2026-03-02' }),
+      travelDay(1, 'Delhi', 'Gwalior', { departureDate: '2026-03-01' }),
+      travelDay(2, 'Gwalior', 'Orchha', { departureDate: '2026-03-02' }),
     ];
     const legs = transportLegs(days);
     expect(legs[0].departureDate).toBe('2026-03-01');
+    expect(legs[0].departureMonth).toBeNull();
     expect(legs[1].departureDate).toBe('2026-03-02');
+  });
+
+  it('threads through the TRAVEL item\'s own structured departure_month when only month precision is known (TWM-200)', () => {
+    const days = [travelDay(1, 'Delhi', 'Gwalior', { departureMonth: '2026-10' })];
+    const legs = transportLegs(days);
+    expect(legs[0].departureMonth).toBe('2026-10');
+    expect(legs[0].departureDate).toBeNull();
+  });
+
+  it('leaves both departureDate and departureMonth null when Atlas has no confirmed date precision, never parsing day-level free text like a trip-level "October" label (TWM-200)', () => {
+    const days = [travelDay(1, 'Delhi', 'Gwalior')];
+    const legs = transportLegs(days);
+    expect(legs[0].departureDate).toBeNull();
+    expect(legs[0].departureMonth).toBeNull();
   });
 
   it('regression: Odisha five-leg route resolves entirely from canonical endpoints, never the scenic display_label (TWM-200)', () => {

@@ -161,20 +161,21 @@ function toLiveOffer(response) {
 // Judgement call (TWM-146, documented per the story's instruction: "if
 // exact date/traveler-count data genuinely isn't available at the call
 // site today, that's fine"): transportLegs/routeStops (atlasView.js) now
-// pass through leg.departureDate straight from the real Atlas day.date
-// when the itinerary has per-day dates — but Atlas frequently only has a
-// travel-month/day-count window this early (see tripDatesLabel). Route is
-// resolved via CITY_IATA (above) for the closed set of major Indian cities
-// that genuinely have their own airport; leg.from/leg.to are otherwise
-// free-text city/location labels (e.g. "Home" or a primary_location
-// string) with no IATA code available, in which case origin_iata/
-// destination_iata are simply omitted — sending an unresolved or guessed
-// value would violate FlightSearchRequest's 3-letter IATA pattern or
-// misrepresent a hill town as having a direct flight. Rather than fabricate
-// an IATA code or a date, this function sends only what is genuinely known
-// — traveler count (from AtlasTripSummary.num_travelers), departure_date
-// when Atlas supplied one, and origin/destination IATA when CITY_IATA
-// resolves them — and lets the Backend's own typed clarification_needed
+// pass through leg.departureDate straight from the TRAVEL item's own
+// structured `departure_date` (TWM-200) — a month-only leg carries
+// leg.departureMonth instead, which this call does not yet consume (see
+// TWM-196). Route is resolved via CITY_IATA (above) for the closed set of
+// major Indian cities that genuinely have their own airport; leg.from/
+// leg.to are otherwise free-text city/location labels (e.g. "Home" or a
+// primary_location string) with no IATA code available, in which case
+// origin_iata/destination_iata are simply omitted — sending an unresolved
+// or guessed value would violate FlightSearchRequest's 3-letter IATA
+// pattern or misrepresent a hill town as having a direct flight. Rather
+// than fabricate an IATA code or a date, this function sends only what is
+// genuinely known — traveler count (from AtlasTripSummary.num_travelers),
+// departure_date when Atlas supplied one, and origin/destination IATA when
+// CITY_IATA resolves them — and lets the Backend's own typed
+// clarification_needed
 // outcome (FlightSearchClarification) render honestly for whatever's still
 // missing. This is the "render the typed clarification_needed state
 // honestly" branch the story anticipated,
@@ -370,13 +371,23 @@ export function recommendedMode(feasibleOptions) {
 // entirely rather than falling back to display text — fail closed for that
 // movement (TWM-200 acceptance criteria), not a best-effort parse.
 //
-// departureDate: best-effort only, taken from the movement's own day.date
-// when Atlas supplied one; never fabricated.
+// departureDate/departureMonth (TWM-200): read only from the TRAVEL item's
+// own structured `departure_date`/`departure_month` fields — never the
+// day-level `day.date` (which Atlas may leave as day-offset/free text) and
+// never derived from free-text trip timing. Atlas's schema already
+// guarantees the two are mutually exclusive and validated (YYYY-MM-DD /
+// YYYY-MM); this function just passes through whichever is present, or
+// both null when Atlas didn't have confirmed precision for that leg.
 export function transportLegs(days) {
   const movements = (days || []).flatMap(day =>
     (day.timeline || [])
       .filter(item => item.kind === 'TRAVEL' && item.from_city && item.to_city)
-      .map(item => ({ from: item.from_city, to: item.to_city, departureDate: day.date ?? null }))
+      .map(item => ({
+        from: item.from_city,
+        to: item.to_city,
+        departureDate: item.departure_date ?? null,
+        departureMonth: item.departure_month ?? null,
+      }))
   );
   const legs = movements.map((movement, i) => ({ id: `leg-${i}`, ...movement }));
   return legs;
