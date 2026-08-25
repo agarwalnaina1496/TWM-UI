@@ -346,6 +346,58 @@ describe('traveler_count on trusted-action transport CTA payloads (TWM-195 revie
   });
 });
 
+describe('departure_date on trusted-action transport CTA payloads (TWM-196 review comment)', () => {
+  // Backend no longer requires departure_date to resolve an affiliate
+  // redirect (see twm/services/trusted_action/calculations.py), but a
+  // genuinely known date should still be sent so the partner search page
+  // is pre-filled rather than deliberately omitted.
+  it('includes departure_date on the flight trusted-action CTA payload when the leg has one', async () => {
+    let ctaBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { ctaBody = JSON.parse(options.body); return jsonResponse(resolvedAction()); }
+      if (url.includes('/flight-search')) return jsonResponse(flightSearchResponse());
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', { from: 'Delhi', to: 'Gwalior', departureDate: '2026-03-01' }, 2, ['flight']);
+    expect(ctaBody).toMatchObject({ departure_date: '2026-03-01' });
+  });
+
+  it('includes departure_date on train/bus trusted-action CTA payloads when the leg has one', async () => {
+    let capturedBodies = [];
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedAction()); }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', { from: 'Delhi', to: 'Gwalior', departureDate: '2026-03-01' }, 2, ['train', 'bus']);
+    expect(capturedBodies.every(body => body.departure_date === '2026-03-01')).toBe(true);
+  });
+
+  it('omits departure_date entirely when the leg has none, never fabricating one', async () => {
+    let ctaBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) { ctaBody = JSON.parse(options.body); return jsonResponse(resolvedAction()); }
+      if (url.includes('/flight-search')) return jsonResponse(flightSearchResponse());
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', { from: 'Delhi', to: 'Gwalior' }, 2, ['flight']);
+    expect(ctaBody).not.toHaveProperty('departure_date');
+  });
+
+  it('resolves the flight affiliate CTA even with no departure_date at all — the hybrid model\'s affiliate-only fallback', async () => {
+    global.fetch = vi.fn(async url => {
+      if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
+      if (url.includes('/flight-search')) {
+        return jsonResponse(flightSearchResponse({ status: 'unavailable', clarification: undefined, unavailable: { code: 'provider_not_configured', message: 'Live flight search is not available yet for this trip.' } }));
+      }
+      return jsonResponse({});
+    });
+    const options = await transportOptionsFor('trip-1', { from: 'Delhi', to: 'Gwalior' }, 2, ['flight']);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight.status).toBe('resolved');
+    expect(flight.liveOffer.status).toBe('unavailable');
+  });
+});
+
 describe('flight live-offer resolution (TWM-146)', () => {
   const leg = { from: 'Delhi', to: 'Gwalior', departureDate: '2026-03-01' };
 
@@ -423,7 +475,12 @@ describe('flight live-offer resolution (TWM-146)', () => {
     expect(flight.status).toBe('resolved'); // CTA unaffected by the live-offer failure
   });
 
-  it('resolves origin_iata/destination_iata for a known city pair via the closed CITY_IATA lookup', async () => {
+  // TWM-196: airport/IATA resolution moved to Backend
+  // (twm.services.airport_resolution) — the UI no longer owns a CITY_IATA
+  // map at all. searchFlightOffer must send the visible leg's structured
+  // city/place labels as origin_place/destination_place and let Backend
+  // resolve them.
+  it('sends origin_place/destination_place from the visible leg, never a frontend-resolved IATA code', async () => {
     let capturedBody = null;
     global.fetch = vi.fn(async (url, options) => {
       if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
@@ -434,22 +491,97 @@ describe('flight live-offer resolution (TWM-146)', () => {
       return jsonResponse({});
     });
     await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Kochi', departureDate: '2026-03-01' }, 2, ['flight']);
-    expect(capturedBody).toMatchObject({ origin_iata: 'BLR', destination_iata: 'COK' });
+    expect(capturedBody).toMatchObject({ origin_place: 'Bengaluru', destination_place: 'Kochi' });
+    expect(capturedBody).not.toHaveProperty('origin_iata');
+    expect(capturedBody).not.toHaveProperty('destination_iata');
   });
 
-  it('omits origin_iata/destination_iata for a city with no direct airport, rather than guessing a nearest one', async () => {
+  // TWM-196/TWM-200 review comment: leg.departureMonth (the TRAVEL item's
+  // own structured departure_month, never trip-level free text) must be
+  // sent to /flight-search when no exact departureDate is known.
+  it('sends departure_month when the leg has only a structured month, never a fabricated exact date', async () => {
     let capturedBody = null;
     global.fetch = vi.fn(async (url, options) => {
       if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
       if (url.includes('/flight-search')) {
         capturedBody = JSON.parse(options.body);
-        return jsonResponse(flightSearchResponse({ status: 'clarification_needed', clarification: { missing_fields: ['origin', 'destination'], message: 'We need airport details.' } }));
+        return jsonResponse(flightSearchResponse({ date_precision: 'month' }));
       }
       return jsonResponse({});
     });
-    await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Alleppey', departureDate: '2026-03-01' }, 2, ['flight']);
-    expect(capturedBody).not.toHaveProperty('destination_iata');
-    expect(capturedBody).toMatchObject({ origin_iata: 'BLR' });
+    await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Bhubaneswar', departureMonth: '2026-10' }, 2, ['flight']);
+    expect(capturedBody).toMatchObject({ departure_month: '2026-10' });
+    expect(capturedBody).not.toHaveProperty('departure_date');
+  });
+
+  it('prefers the exact departure_date over departure_month when the leg somehow has both', async () => {
+    let capturedBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
+      if (url.includes('/flight-search')) {
+        capturedBody = JSON.parse(options.body);
+        return jsonResponse(flightSearchResponse());
+      }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Bhubaneswar', departureDate: '2026-10-11', departureMonth: '2026-10' }, 2, ['flight']);
+    expect(capturedBody).toMatchObject({ departure_date: '2026-10-11' });
+    expect(capturedBody).not.toHaveProperty('departure_month');
+  });
+
+  it('sends neither departure_date nor departure_month when the leg has no structured date at all', async () => {
+    let capturedBody = null;
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) return jsonResponse(resolvedAction());
+      if (url.includes('/flight-search')) {
+        capturedBody = JSON.parse(options.body);
+        return jsonResponse(flightSearchResponse({ date_precision: 'flexible' }));
+      }
+      return jsonResponse({});
+    });
+    await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Bhubaneswar' }, 2, ['flight']);
+    expect(capturedBody).not.toHaveProperty('departure_date');
+    expect(capturedBody).not.toHaveProperty('departure_month');
+  });
+
+  it('renders origin_resolved/destination_resolved from the Backend response as honest airport context', async () => {
+    withFlightSearch(flightSearchResponse({
+      status: 'unavailable',
+      clarification: undefined,
+      unavailable: { code: 'provider_not_configured', message: 'Live flight search is not available yet for this trip.' },
+      origin_resolved: { input_label: 'Bengaluru', iata: 'BLR', airport_name: 'Kempegowda International Airport Bengaluru', source: 'ourairports', confidence: 'high' },
+      destination_resolved: { input_label: 'Bhubaneswar', iata: 'BBI', airport_name: 'Biju Patnaik International Airport', source: 'ourairports', confidence: 'high' },
+    }));
+    const options = await transportOptionsFor('trip-1', { from: 'Bengaluru', to: 'Bhubaneswar', departureDate: '2026-03-01' }, 2, ['flight']);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight.liveOffer.originResolved).toMatchObject({ iata: 'BLR' });
+    expect(flight.liveOffer.destinationResolved).toMatchObject({ iata: 'BBI' });
+  });
+
+  it('an unresolvable place leaves the corresponding resolved field null, never a guess', async () => {
+    withFlightSearch(flightSearchResponse({
+      status: 'clarification_needed',
+      clarification: { missing_fields: ['origin'], message: 'We need a departure city.' },
+      origin_resolved: null,
+      destination_resolved: { input_label: 'Bhubaneswar', iata: 'BBI', airport_name: 'Biju Patnaik International Airport', source: 'ourairports', confidence: 'high' },
+    }));
+    const options = await transportOptionsFor('trip-1', { from: 'Nowhereville', to: 'Bhubaneswar', departureDate: '2026-03-01' }, 2, ['flight']);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight.liveOffer.originResolved).toBeNull();
+    expect(flight.liveOffer.destinationResolved).toMatchObject({ iata: 'BBI' });
+  });
+
+  it('labels a month/flexible result as indicative, never as an exact-day live offer (TWM-196)', async () => {
+    withFlightSearch(flightSearchResponse({
+      status: 'offer',
+      date_precision: 'month',
+      offers: [
+        { origin_iata: 'DEL', destination_iata: 'GWL', trip_type: 'one_way', departure_date: '2026-03-11', money: { currency: 'INR', per_traveler_amount_minor_units: 500000, traveler_count: 2, group_total_minor_units: 1000000, group_total_is_approximate: true }, baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'x' }, price_found_at: '2026-01-01T00:00:00.000Z', is_recommended: true, airline_code: '6E' },
+      ],
+    }));
+    const options = await transportOptionsFor('trip-1', leg, 2, ['flight']);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight.liveOffer).toMatchObject({ status: 'offer', datePrecision: 'month' });
   });
 });
 

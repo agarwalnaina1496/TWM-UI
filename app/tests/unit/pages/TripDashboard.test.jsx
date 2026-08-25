@@ -152,13 +152,17 @@ let itineraryFetchResponse;
 // TWM-132: a generic resolved SEARCH_REDIRECT action, reused as the default
 // trusted-action fixture across Bookings-tab tests that don't care about
 // the specific resolution outcome.
+// TWM-196: flight's SEARCH_REDIRECT partner is Aviasales/Travelpayouts,
+// replacing the earlier ixigo placeholder — matches the real Backend
+// contract (twm/schemas/trusted_action.py's
+// _ALLOWED_PARTNERS_BY_DOMAIN["flight"]).
 function resolvedActionResponse({ affiliate = true } = {}) {
   return {
     status: 'resolved',
     generated_at: '2026-01-01T00:00:00.000Z',
     action: {
       action_type: 'SEARCH_REDIRECT', domain: 'flight',
-      target: { partner: 'ixigo', path: 'search', query_params: {}, target_url: 'https://www.ixigo.com/search' },
+      target: { partner: 'aviasales', path: 'search', query_params: {}, target_url: 'https://www.aviasales.com/search' },
       internal_capability: null, affiliate_disclosure: affiliate, generated_at: '2026-01-01T00:00:00.000Z',
     },
   };
@@ -615,7 +619,10 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
       await waitFor(() => expect(screen.getByLabelText('Recommended mode')).toBeInTheDocument());
-      expect(within(screen.getByLabelText('Recommended mode')).getByText('Fastest option.')).toBeInTheDocument();
+      // Recommended-mode card no longer repeats the per-mode reason text —
+      // that detail lives only in the opt-in "Route details" disclosure
+      // below.
+      expect(within(screen.getByLabelText('Recommended mode')).queryByText('Fastest option.')).toBeNull();
 
       await user.click(screen.getByText('Route details for these modes'));
       const disclosure = screen.getByText('Route details for these modes').closest('details');
@@ -886,14 +893,15 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.getByText('Rafting not booked yet')).toBeInTheDocument();
     });
 
-    it('renders the affiliate disclosure line when the resolved trusted action carries it, never dropping it', async () => {
+    it('does not render an affiliate-disclosure line even when the resolved trusted action carries one', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
       await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-      await waitFor(() => expect(screen.getAllByText(/This is an affiliate link/).length).toBeGreaterThan(0));
+      await waitFor(() => expect(screen.getAllByRole('link', { name: /↗/ }).length).toBeGreaterThan(0));
+      expect(screen.queryByText(/This is an affiliate link/)).toBeNull();
     });
 
     it('shows an inert note, no broken link, when a trusted action resolves to missing_input', async () => {
@@ -960,6 +968,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
             return jsonResponse({
               status: 'offer',
               queried_at: '2026-01-01T00:00:00.000Z',
+              date_precision: 'exact',
               offers: [{
                 origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'round_trip',
                 departure_date: '2026-03-01', return_date: '2026-03-05',
@@ -979,12 +988,93 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         await user.click(screen.getByRole('button', { name: /Bookings/ }));
         await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
-        await waitFor(() => expect(screen.getAllByText('Live offer').length).toBeGreaterThan(0));
+        // TWM-196 UX review: the Aviasales Data API is a cached lookup,
+        // never a confirmed-availability check, so the primary offer block
+        // reads "Cached price", not "Live offer".
+        await waitFor(() => expect(screen.getAllByText('Cached price').length).toBeGreaterThan(0));
         expect(screen.getAllByText(/approx\. INR 8,?000\.00/).length).toBeGreaterThan(0);
         expect(screen.getAllByText(/IndiGo/).length).toBeGreaterThan(0);
-        // The trusted-action CTA (ixigo redirect) is still present and separate
-        // from the live-offer data block — the offer itself carries no url.
-        expect(document.querySelector('a[href*="ixigo"]')).not.toBeNull();
+        // The trusted-action CTA (Aviasales redirect) is still present and
+        // separate from the offer data block — the offer itself carries no
+        // url.
+        expect(document.querySelector('a[href*="aviasales"]')).not.toBeNull();
+        // TWM-196: the affiliate CTA names the actual Backend-resolved
+        // partner rather than a generic "Search flights" label, so it's
+        // never confused with the TWM-resolved offer block above it.
+        expect(screen.getAllByText('Check availability on Aviasales ↗').length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/confirm the real fare and availability on Aviasales/).length).toBeGreaterThan(0);
+      });
+
+      it('captions the affiliate CTA as "no TWM-resolved price" when live search has no offer to show', async () => {
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+        sendTripCommand = vi.fn();
+        global.fetch = vi.fn(async url => {
+          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+          if (url.includes('/flight-search')) {
+            return jsonResponse({
+              status: 'unavailable',
+              queried_at: '2026-01-01T00:00:00.000Z',
+              unavailable: { code: 'provider_not_configured', message: 'Live flight search is not available yet for this trip.' },
+            });
+          }
+          return jsonResponse({});
+        });
+        const user = userEvent.setup();
+        await readyDashboard();
+        await user.click(screen.getByRole('button', { name: /Bookings/ }));
+        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+
+        await waitFor(() => expect(screen.getAllByText('Check availability on Aviasales ↗').length).toBeGreaterThan(0));
+        expect(screen.getAllByText(/No TWM-resolved price yet — search directly on Aviasales/).length).toBeGreaterThan(0);
+      });
+
+      // TWM-196: a month/flexible-precision offer must be labeled honestly,
+      // never presented with the same certainty as an exact-date result —
+      // and never implying confirmed availability regardless of precision.
+      it('labels a month-precision offer honestly and shows resolved airport context plus a date nudge', async () => {
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+        sendTripCommand = vi.fn();
+        global.fetch = vi.fn(async url => {
+          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+          if (url.includes('/flight-search')) {
+            return jsonResponse({
+              status: 'offer',
+              queried_at: '2026-01-01T00:00:00.000Z',
+              date_precision: 'month',
+              origin_resolved: { input_label: 'Delhi', iata: 'DEL', airport_name: 'Indira Gandhi International Airport', source: 'ourairports', confidence: 'high' },
+              destination_resolved: { input_label: 'Dehradun', iata: 'DED', airport_name: 'Dehradun Airport', source: 'ourairports', confidence: 'high' },
+              offers: [{
+                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'one_way',
+                departure_date: '2026-03-11',
+                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
+                baggage: { checked_bag_included: null, cabin_bag_included: null },
+                fare_conditions: { refundable: null, changeable: null },
+                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
+                price_found_at: '2026-01-01T00:00:00.000Z',
+                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
+              }],
+            });
+          }
+          return jsonResponse({});
+        });
+        const user = userEvent.setup();
+        await readyDashboard();
+        await user.click(screen.getByRole('button', { name: /Bookings/ }));
+        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+
+        await waitFor(() => expect(screen.getAllByText('Cached price').length).toBeGreaterThan(0));
+        expect(screen.queryAllByText('Live offer').length).toBe(0);
+        expect(screen.getAllByText(/Flexible dates/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Flights from DEL to DED').length).toBeGreaterThan(0);
+        // TWM-196 UX review: month/flexible precision gets a non-blocking
+        // nudge, never a hard block.
+        expect(screen.getAllByText('Add exact dates for live fares').length).toBeGreaterThan(0);
       });
 
       it('renders the Backend-authored unavailable message safely for a flight card', async () => {

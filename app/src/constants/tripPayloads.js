@@ -17,6 +17,14 @@ export const TRUSTED_ACTION_KEYS = Object.freeze({
 export const FLIGHT_SEARCH_KEYS = Object.freeze({
   ORIGIN_IATA: 'origin_iata',
   DESTINATION_IATA: 'destination_iata',
+  // TWM-196: structured city/place endpoints — Backend resolves these to
+  // an IATA code (twm/services/airport_resolution). Send instead of a
+  // frontend-guessed origin_iata/destination_iata.
+  ORIGIN_PLACE: 'origin_place',
+  DESTINATION_PLACE: 'destination_place',
   DEPARTURE_DATE: 'departure_date',
+  // TWM-196: month-precision search, mutually exclusive with
+  // DEPARTURE_DATE on the request — validated YYYY-MM only.
+  DEPARTURE_MONTH: 'departure_month',
   TRAVELERS: 'travelers',
 });
