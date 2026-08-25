@@ -47,7 +47,8 @@ const DOMAIN_FOR_MODE = { flight: 'flight', train: 'train', bus: 'bus' };
 // live offer never doubles as a booking-authority action object") — so the
 // flight card's actual clickable CTA still has to come from
 // resolveTrustedAction, exactly as before. This module still requests
-// action_type=SEARCH_REDIRECT (ixigo) for flight's CTA, per the backend
+// action_type=SEARCH_REDIRECT (Aviasales, TWM-196 — replacing the earlier
+// ixigo placeholder) for flight's CTA, per the backend
 // contract's own framing of SEARCH_REDIRECT as flight's alternative/
 // external-action path (CHECK_PRICES's internal_capability: "flight_search"
 // has no external target to link to — see trusted_action/service.py — so
@@ -117,7 +118,13 @@ function toLiveOffer(response) {
       status,
       priceLabel: flightPriceLabel(offer.money),
       airline: offer.airline_name || offer.airline_code || null,
+      flightNumber: offer.flight_number ?? null,
       stopCount: offer.stop_count ?? null,
+      // No arrival time exists on this contract (twm/schemas/
+      // flight_search.py's NormalizedFlightOffer deliberately has no
+      // arrival_at field — the current Aviasales Data API generation
+      // never discloses one) — only a departure time is ever shown.
+      departureAt: offer.departure_at ?? null,
       priceFoundAt: offer.price_found_at,
       offerExpiresAt: offer.offer_expires_at ?? null,
       originResolved,
@@ -267,6 +274,10 @@ function toTransportOption(mode, name, result) {
       name,
       status: 'resolved',
       url: action.target?.target_url ?? null,
+      // TWM-196: the actual resolved partner (e.g. "aviasales"), never
+      // hardcoded — the CTA label is built from this, not a fixed name,
+      // so a future partner change doesn't require a UI copy change here.
+      partner: action.target?.partner ?? null,
       internalCapability: action.internal_capability ?? null,
       affiliateDisclosure: !!action.affiliate_disclosure,
     };
@@ -433,8 +444,12 @@ export function stayLegs(days) {
 // _ALLOWED_PARTNERS_BY_DOMAIN["stay"]), capped to 3 so the Bookings tab
 // still shows a tiered comparison rather than every approved partner.
 const STAY_PARTNERS = ['hotellook', 'booking_com', 'agoda'];
-const PARTNER_LABEL = {
-  hotellook: 'Hotellook', booking_com: 'Booking.com', agoda: 'Agoda', hostelworld: 'Hostelworld', ixigo: 'ixigo',
+// TWM-196: exported so TripDashboard.jsx can build the flight affiliate
+// CTA's label from the Backend-returned partner name (option.partner)
+// instead of a hardcoded partner name — a future partner change on the
+// Backend side never requires a matching hardcoded-string change here.
+export const PARTNER_LABEL = {
+  aviasales: 'Aviasales', hotellook: 'Hotellook', booking_com: 'Booking.com', agoda: 'Agoda', hostelworld: 'Hostelworld', ixigo: 'ixigo',
 };
 
 async function resolveStayOption(tripId, stay, partner) {

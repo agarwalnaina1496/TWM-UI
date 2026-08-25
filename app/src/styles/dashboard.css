@@ -252,6 +252,11 @@
 .live-offer-block{display:flex;flex-direction:column;align-items:flex-start;gap:4px;border:1px dashed var(--border);border-radius:10px;padding:10px 12px;width:100%;background:var(--bg)}
 .live-offer-price{font-size:18px;font-family:'Fraunces',serif}
 .live-offer-route-context{display:flex;flex-wrap:wrap;gap:8px}
+/* TWM-196: affiliate CTA/caption/nudge read as secondary, lower-weight
+   content — the API offer block above (live-offer-block) stays the card's
+   visual anchor. */
+.flight-affiliate-caption{opacity:.72;font-weight:600}
+.flight-precision-nudge{color:var(--accent)}
 @media(max-width:700px){.stay-options-grid{grid-template-columns:1fr}}
 
 .route-title{font-family:'Fraunces',serif;font-size:18px;margin:8px 0 4px;color:var(--tp)}

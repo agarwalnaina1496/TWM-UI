@@ -152,13 +152,17 @@ let itineraryFetchResponse;
 // TWM-132: a generic resolved SEARCH_REDIRECT action, reused as the default
 // trusted-action fixture across Bookings-tab tests that don't care about
 // the specific resolution outcome.
+// TWM-196: flight's SEARCH_REDIRECT partner is Aviasales/Travelpayouts,
+// replacing the earlier ixigo placeholder — matches the real Backend
+// contract (twm/schemas/trusted_action.py's
+// _ALLOWED_PARTNERS_BY_DOMAIN["flight"]).
 function resolvedActionResponse({ affiliate = true } = {}) {
   return {
     status: 'resolved',
     generated_at: '2026-01-01T00:00:00.000Z',
     action: {
       action_type: 'SEARCH_REDIRECT', domain: 'flight',
-      target: { partner: 'ixigo', path: 'search', query_params: {}, target_url: 'https://www.ixigo.com/search' },
+      target: { partner: 'aviasales', path: 'search', query_params: {}, target_url: 'https://www.aviasales.com/search' },
       internal_capability: null, affiliate_disclosure: affiliate, generated_at: '2026-01-01T00:00:00.000Z',
     },
   };
@@ -980,17 +984,21 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         await user.click(screen.getByRole('button', { name: /Bookings/ }));
         await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
-        await waitFor(() => expect(screen.getAllByText('Live offer').length).toBeGreaterThan(0));
+        // TWM-196 UX review: the Aviasales Data API is a cached lookup,
+        // never a confirmed-availability check, so the primary offer block
+        // reads "Cached price", not "Live offer".
+        await waitFor(() => expect(screen.getAllByText('Cached price').length).toBeGreaterThan(0));
         expect(screen.getAllByText(/approx\. INR 8,?000\.00/).length).toBeGreaterThan(0);
         expect(screen.getAllByText(/IndiGo/).length).toBeGreaterThan(0);
-        // The trusted-action CTA (ixigo redirect) is still present and separate
-        // from the live-offer data block — the offer itself carries no url.
-        expect(document.querySelector('a[href*="ixigo"]')).not.toBeNull();
-        // TWM-196: the affiliate CTA names the actual partner rather than a
-        // generic "Search flights" label, so it's never confused with the
-        // TWM-resolved live-offer block above it.
-        expect(screen.getAllByText('Search on ixigo ↗').length).toBeGreaterThan(0);
-        expect(screen.getAllByText(/External partner — book the exact fare there, not TWM/).length).toBeGreaterThan(0);
+        // The trusted-action CTA (Aviasales redirect) is still present and
+        // separate from the offer data block — the offer itself carries no
+        // url.
+        expect(document.querySelector('a[href*="aviasales"]')).not.toBeNull();
+        // TWM-196: the affiliate CTA names the actual Backend-resolved
+        // partner rather than a generic "Search flights" label, so it's
+        // never confused with the TWM-resolved offer block above it.
+        expect(screen.getAllByText('Check availability on Aviasales ↗').length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/confirm the real fare and availability on Aviasales/).length).toBeGreaterThan(0);
       });
 
       it('captions the affiliate CTA as "no TWM-resolved price" when live search has no offer to show', async () => {
@@ -1015,14 +1023,14 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         await user.click(screen.getByRole('button', { name: /Bookings/ }));
         await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
-        await waitFor(() => expect(screen.getAllByText('Search on ixigo ↗').length).toBeGreaterThan(0));
-        expect(screen.getAllByText(/no TWM-resolved price for this route yet/).length).toBeGreaterThan(0);
+        await waitFor(() => expect(screen.getAllByText('Check availability on Aviasales ↗').length).toBeGreaterThan(0));
+        expect(screen.getAllByText(/No TWM-resolved price yet — search directly on Aviasales/).length).toBeGreaterThan(0);
       });
 
       // TWM-196: a month/flexible-precision offer must be labeled honestly,
-      // never presented with the same "Live offer" certainty as an
-      // exact-date result.
-      it('labels a month-precision offer as Indicative price, and shows resolved airport context', async () => {
+      // never presented with the same certainty as an exact-date result —
+      // and never implying confirmed availability regardless of precision.
+      it('labels a month-precision offer honestly and shows resolved airport context plus a date nudge', async () => {
         commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
         global.fetch = vi.fn(async url => {
@@ -1056,10 +1064,13 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         await user.click(screen.getByRole('button', { name: /Bookings/ }));
         await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
-        await waitFor(() => expect(screen.getAllByText('Indicative price').length).toBeGreaterThan(0));
+        await waitFor(() => expect(screen.getAllByText('Cached price').length).toBeGreaterThan(0));
         expect(screen.queryAllByText('Live offer').length).toBe(0);
         expect(screen.getAllByText(/Flexible dates/).length).toBeGreaterThan(0);
         expect(screen.getAllByText('Flights from DEL to DED').length).toBeGreaterThan(0);
+        // TWM-196 UX review: month/flexible precision gets a non-blocking
+        // nudge, never a hard block.
+        expect(screen.getAllByText('Add exact dates for live fares').length).toBeGreaterThan(0);
       });
 
       it('renders the Backend-authored unavailable message safely for a flight card', async () => {

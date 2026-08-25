@@ -13,6 +13,7 @@ import {
 import {
   transportLegs, gatewayLegs, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
   stayLegs, activityBookings, notBookedYetLabel, modeLabel, recommendedMode, normalizeTravelerCount,
+  PARTNER_LABEL,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
@@ -324,11 +325,15 @@ function ModeTag({ mode }) {
 // shows an inert note instead of linking to nothing. The affiliate
 // disclosure line is a hard requirement carried straight off
 // TrustedAction.affiliate_disclosure — never silently dropped.
-function TrustedActionCta({ option, label, best }) {
+// TWM-196: flight's CTA is always secondary (btn-ghost), regardless of
+// `best` — the affiliate redirect must never visually outrank the API
+// offer content above it (FlightLiveOfferInfo). Non-flight modes keep the
+// existing best-pick emphasis.
+function TrustedActionCta({ option, label, best, secondary = false }) {
   if (option.status === 'resolved' && option.url) {
     return (
       <>
-        <a className={`btn ${best ? 'btn-primary' : 'btn-ghost'}`} href={option.url} target="_blank" rel="noreferrer">{label}</a>
+        <a className={`btn ${best && !secondary ? 'btn-primary' : 'btn-ghost'}`} href={option.url} target="_blank" rel="noreferrer">{label}</a>
         {option.affiliateDisclosure && <p className="affiliate-disclosure">This is an affiliate link — TWM may earn a commission.</p>}
       </>
     );
@@ -380,14 +385,33 @@ function resolvedRouteLabel(liveOffer) {
   return `Flights from ${origin ? origin.iata : '?'} to ${destination ? destination.iata : '?'}`;
 }
 
-// TWM-196: date_precision must never be silently dropped — "month"/
-// "flexible" results are cached/indicative, not a live quote for a
-// specific day, and the card must say so rather than implying the same
-// certainty as an "exact" result.
+// TWM-196: date_precision must never be silently dropped. All three
+// precisions are cached/indicative (the Aviasales Data API never confirms
+// live seat availability — see FlightLiveOfferInfo's own note), but "exact"
+// at least matches the traveler's actual day; "month"/"flexible" do not,
+// and the card must say so rather than implying the same certainty.
 const DATE_PRECISION_LABEL = {
+  exact: 'Exact date',
   month: 'Flexible dates — prices for the month',
   flexible: 'Flexible dates — no specific day searched',
 };
+
+// Non-blocking nudge for month/flexible precision (TWM-196 UX review):
+// copy-only, since no per-leg date-edit flow exists yet to wire a real
+// action to — never blocks rendering the card, just names the limitation.
+function flightPrecisionNudge(datePrecision) {
+  if (datePrecision !== 'month' && datePrecision !== 'flexible') return null;
+  return 'Add exact dates for live fares';
+}
+
+function flightDepartureTimeLabel(isoTimestamp) {
+  if (!isoTimestamp) return null;
+  const parsed = new Date(isoTimestamp);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+}
 
 // TWM-146: the live-offer block — clearly a DIFFERENT thing from the CTA
 // below it (real Backend-searched price/airline/stops data, no url of its
@@ -399,6 +423,7 @@ function FlightLiveOfferInfo({ liveOffer }) {
   if (!liveOffer) return null;
   const routeLabel = resolvedRouteLabel(liveOffer);
   const precisionLabel = DATE_PRECISION_LABEL[liveOffer.datePrecision] || null;
+  const nudge = flightPrecisionNudge(liveOffer.datePrecision);
   const routeContext = (routeLabel || precisionLabel) && (
     <div className="live-offer-route-context">
       {routeLabel && <span className="stay-option-tag">{routeLabel}</span>}
@@ -407,22 +432,27 @@ function FlightLiveOfferInfo({ liveOffer }) {
   );
   if (liveOffer.status === 'offer' || liveOffer.status === 'partial') {
     const freshness = timeAgoLabel(liveOffer.priceFoundAt);
-    const isExact = liveOffer.datePrecision === 'exact';
+    const departureTime = flightDepartureTimeLabel(liveOffer.departureAt);
     return (
       <div className="live-offer-block">
         {routeContext}
-        <StatusPill tone={isExact ? 'positive' : 'neutral'} variant="filled">
-          {isExact
-            ? (liveOffer.status === 'partial' ? 'Live offer (partial)' : 'Live offer')
-            : 'Indicative price'}
+        {/* TWM-196 UX review: the Aviasales Data API is a cached lookup,
+            never a confirmed-availability check — "Cached" here, never
+            "Live"/"Confirmed", regardless of date precision. */}
+        <StatusPill tone="neutral" variant="filled">
+          {liveOffer.status === 'partial' ? 'Cached price (partial)' : 'Cached price'}
         </StatusPill>
         <strong className="live-offer-price">{liveOffer.priceLabel}</strong>
         <span className="stay-option-tag">
           {liveOffer.airline || 'Airline not disclosed'}
+          {liveOffer.flightNumber && ` ${liveOffer.flightNumber}`}
           {liveOffer.stopCount != null && ` · ${liveOffer.stopCount === 0 ? 'Nonstop' : `${liveOffer.stopCount} stop${liveOffer.stopCount === 1 ? '' : 's'}`}`}
         </span>
-        {freshness && <span className="stay-option-tag">Prices last checked {freshness}</span>}
+        {departureTime && <span className="stay-option-tag">Departs {departureTime}</span>}
+        <p className="already-booked-note">Not yet confirmed available — check availability before booking.</p>
+        {freshness && <span className="stay-option-tag">Updated {freshness}</span>}
         {liveOffer.offerExpiresAt && <span className="stay-option-tag">Expires {new Date(liveOffer.offerExpiresAt).toLocaleString()}</span>}
+        {nudge && <span className="stay-option-tag flight-precision-nudge">{nudge}</span>}
       </div>
     );
   }
@@ -439,34 +469,39 @@ function FlightLiveOfferInfo({ liveOffer }) {
       <div className="live-offer-block">
         {routeContext}
         <p className="already-booked-note" role="alert">{liveOffer.message}</p>
+        {nudge && <span className="stay-option-tag flight-precision-nudge">{nudge}</span>}
       </div>
     );
   }
   if (liveOffer.status === 'expired') {
-    return <p className="already-booked-note">This live price has expired — check again for a current one.</p>;
+    return <p className="already-booked-note">This cached price has expired — check again for a current one.</p>;
   }
   if (liveOffer.status === 'failed') {
-    return <p className="already-booked-note" role="alert">{liveOffer.message || 'Could not load live flight prices.'}</p>;
+    return <p className="already-booked-note" role="alert">{liveOffer.message || 'Could not load cached flight prices.'}</p>;
   }
   return null;
 }
 
-// TWM-196: flight's live-priced data (FlightLiveOfferInfo, above) and the
-// affiliate/partner redirect (TrustedActionCta, below) must read as two
-// visibly distinct things — a traveler should never mistake the partner
-// search link for TWM-resolved inventory. The CTA always names the actual
-// partner ("Search on ixigo") rather than a generic "Search flights", and
-// this caption is worded to match exactly what the live-offer block above
-// it is (or isn't) showing: a confirmed live/indicative price still gets a
-// booking action; anything else gets the honest "no TWM-resolved price"
-// framing instead of implying the redirect carries the same data.
-function flightAffiliateCaption(liveOffer) {
+// TWM-196: flight's API offer data (FlightLiveOfferInfo, above) and the
+// Aviasales affiliate redirect (TrustedActionCta, below) must read as two
+// visibly distinct things, with the affiliate action clearly secondary —
+// a traveler should never mistake the partner search link for TWM-resolved
+// inventory, or have it visually dominate the card. The CTA names the
+// actual Backend-resolved partner (option.partner via PARTNER_LABEL),
+// never a hardcoded name, so a future partner change needs no UI copy
+// change here.
+function flightCtaLabel(option) {
+  const partnerLabel = PARTNER_LABEL[option.partner] || option.partner || 'partner';
+  return `Check availability on ${partnerLabel} ↗`;
+}
+
+function flightAffiliateCaption(option) {
+  const partnerLabel = PARTNER_LABEL[option.partner] || option.partner || 'the partner';
+  const liveOffer = option.liveOffer;
   if (liveOffer?.status === 'offer' || liveOffer?.status === 'partial') {
-    return liveOffer.datePrecision === 'exact'
-      ? 'External partner — book the exact fare there, not TWM'
-      : 'External partner — this indicative price is not TWM-confirmed';
+    return `Secondary option — confirm the real fare and availability on ${partnerLabel}`;
   }
-  return 'External partner search — no TWM-resolved price for this route yet';
+  return `No TWM-resolved price yet — search directly on ${partnerLabel}`;
 }
 
 function TransportOptionCard({ option, best }) {
@@ -485,9 +520,14 @@ function TransportOptionCard({ option, best }) {
       )}
       {isFlight && <FlightLiveOfferInfo liveOffer={option.liveOffer} />}
       {isFlight && (
-        <span className="stay-option-tag">{flightAffiliateCaption(option.liveOffer)}</span>
+        <span className="stay-option-tag flight-affiliate-caption">{flightAffiliateCaption(option)}</span>
       )}
-      <TrustedActionCta option={option} label={isFlight ? 'Search on ixigo ↗' : 'Check ↗'} best={best} />
+      <TrustedActionCta
+        option={option}
+        label={isFlight ? flightCtaLabel(option) : 'Check ↗'}
+        best={best}
+        secondary={isFlight}
+      />
     </article>
   );
 }
