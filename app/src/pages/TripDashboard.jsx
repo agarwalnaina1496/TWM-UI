@@ -17,7 +17,7 @@ import {
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
-import { tripOriginCity } from '../constants/tripContext.js';
+import { tripOriginCity, tripBookingDateContext } from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -302,6 +302,46 @@ function ConfirmationForm({ dayOptions, fields, setFields, onSubmit, onCancel, p
   );
 }
 
+// TWM-201: small in-page flow for adding/updating booking-date precision on
+// a frozen trip — mirrors ConfirmationForm's scaffold (local field state,
+// pending/error, Save/Cancel). Deliberately only two fields (a mode toggle
+// and one date/month input): origin_city, route, and num_travelers are
+// never recollected here (out of scope), and the copy states the MVP
+// boundary explicitly so a traveler never mistakes this for re-planning.
+function DateEditForm({ mode, setMode, value, setValue, onSubmit, onCancel, pending, error }) {
+  return (
+    <form className="confirmation-form" onSubmit={onSubmit}>
+      <p className="already-booked-note">
+        Adding dates improves booking search precision only — it does not change your itinerary plan.
+      </p>
+      <div className="confirmation-form-actions" role="radiogroup" aria-label="Date precision">
+        <label>
+          <input type="radio" name="booking-date-mode" checked={mode === 'exact'} disabled={pending}
+            onChange={() => { setMode('exact'); setValue(''); }} /> I know the exact date
+        </label>
+        <label>
+          <input type="radio" name="booking-date-mode" checked={mode === 'month'} disabled={pending}
+            onChange={() => { setMode('month'); setValue(''); }} /> I only know the month
+        </label>
+      </div>
+      {mode === 'exact' ? (
+        <label>Departure date
+          <input required type="date" value={value} disabled={pending} onChange={event => setValue(event.target.value)} />
+        </label>
+      ) : (
+        <label>Travel month
+          <input required type="month" value={value} disabled={pending} onChange={event => setValue(event.target.value)} />
+        </label>
+      )}
+      {error && <p className="confirm-error" role="alert">{error}</p>}
+      <div className="confirmation-form-actions">
+        <button type="button" className="btn btn-ghost" disabled={pending} onClick={onCancel}>Cancel</button>
+        <button type="submit" className="btn btn-primary" disabled={pending || !value}>Save dates</button>
+      </div>
+    </form>
+  );
+}
+
 // Keys transportData by route rather than the round-trip bundle's synthetic
 // id, so the outbound leg's fetched options/feasibility can be looked up
 // the same way whether it's rendered solo or as part of a bundle.
@@ -391,12 +431,14 @@ const DATE_PRECISION_LABEL = {
   flexible: 'Flexible dates — no specific day searched',
 };
 
-// Non-blocking nudge for month/flexible precision (TWM-196 UX review):
-// copy-only, since no per-leg date-edit flow exists yet to wire a real
-// action to — never blocks rendering the card, just names the limitation.
-function flightPrecisionNudge(datePrecision) {
-  if (datePrecision !== 'month' && datePrecision !== 'flexible') return null;
-  return 'Add exact dates for live fares';
+// Non-blocking nudge for month/flexible precision (TWM-196 UX review,
+// TWM-201: now actionable). Never blocks rendering the card — a traveler
+// with no confirmed date still sees a flexible/latest cached price, this
+// only offers to improve on it.
+function flightPrecisionNudgeLabel(datePrecision) {
+  if (datePrecision === 'flexible') return 'Add travel month';
+  if (datePrecision === 'month') return 'Add dates for exact fares';
+  return null;
 }
 
 function flightDepartureTimeLabel(isoTimestamp) {
@@ -414,11 +456,16 @@ function flightDepartureTimeLabel(isoTimestamp) {
 // FlightSearchResponseStatus branch is rendered explicitly and safely —
 // clarification/unavailable/expired/failed never fall through to a blank
 // or misleading card.
-function FlightLiveOfferInfo({ liveOffer }) {
+function FlightLiveOfferInfo({ liveOffer, onAddDates }) {
   if (!liveOffer) return null;
   const routeLabel = resolvedRouteLabel(liveOffer);
   const precisionLabel = DATE_PRECISION_LABEL[liveOffer.datePrecision] || null;
-  const nudge = flightPrecisionNudge(liveOffer.datePrecision);
+  const nudgeLabel = flightPrecisionNudgeLabel(liveOffer.datePrecision);
+  const nudge = nudgeLabel && onAddDates && (
+    <button type="button" className="stay-option-tag flight-precision-nudge" onClick={onAddDates}>
+      {nudgeLabel}
+    </button>
+  );
   const routeContext = (routeLabel || precisionLabel) && (
     <div className="live-offer-route-context">
       {routeLabel && <span className="stay-option-tag">{routeLabel}</span>}
@@ -447,7 +494,7 @@ function FlightLiveOfferInfo({ liveOffer }) {
         <p className="already-booked-note">Not yet confirmed available — check availability before booking.</p>
         {freshness && <span className="stay-option-tag">Updated {freshness}</span>}
         {liveOffer.offerExpiresAt && <span className="stay-option-tag">Expires {new Date(liveOffer.offerExpiresAt).toLocaleString()}</span>}
-        {nudge && <span className="stay-option-tag flight-precision-nudge">{nudge}</span>}
+        {nudge}
       </div>
     );
   }
@@ -464,7 +511,7 @@ function FlightLiveOfferInfo({ liveOffer }) {
       <div className="live-offer-block">
         {routeContext}
         <p className="already-booked-note" role="alert">{liveOffer.message}</p>
-        {nudge && <span className="stay-option-tag flight-precision-nudge">{nudge}</span>}
+        {nudge}
       </div>
     );
   }
@@ -499,7 +546,7 @@ function flightAffiliateCaption(option) {
   return `No TWM-resolved price yet — search directly on ${partnerLabel}`;
 }
 
-function TransportOptionCard({ option, best }) {
+function TransportOptionCard({ option, best, onAddDates }) {
   const durationDistance = durationDistanceLabel(option);
   const isFlight = option.mode === 'flight';
   return (
@@ -513,7 +560,7 @@ function TransportOptionCard({ option, best }) {
           {option.durationSource === 'llm_estimated' && <VerificationTag status={option.verification?.status} />}
         </span>
       )}
-      {isFlight && <FlightLiveOfferInfo liveOffer={option.liveOffer} />}
+      {isFlight && <FlightLiveOfferInfo liveOffer={option.liveOffer} onAddDates={onAddDates} />}
       {isFlight && (
         <span className="stay-option-tag flight-affiliate-caption">{flightAffiliateCaption(option)}</span>
       )}
@@ -711,6 +758,17 @@ export default function TripDashboard() {
   const [confirmPending, setConfirmPending] = useState(false);
   const [confirmError, setConfirmError] = useState(null);
 
+  // TWM-201: booking-date update flow — open across the whole Bookings tab
+  // (not per-leg), since it saves one trip-level precision, not a per-leg
+  // fact. A save failure never clears/hides the flight cards already
+  // rendered from the last successful bookings fetch (acceptance criteria);
+  // it only surfaces inline in the form itself.
+  const [dateEditOpen, setDateEditOpen] = useState(false);
+  const [dateEditMode, setDateEditMode] = useState('exact');
+  const [dateEditValue, setDateEditValue] = useState('');
+  const [dateEditPending, setDateEditPending] = useState(false);
+  const [dateEditError, setDateEditError] = useState(null);
+
   // TWM-132: transportOptionsFor/stayOptionsFor/feasibility are now real
   // network calls (TWM-130/131's trusted-action + feasibility endpoints),
   // so the Bookings tab's data is fetched lazily here instead of computed
@@ -746,13 +804,15 @@ export default function TripDashboard() {
     if (tab !== 'Bookings' || itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
     // Keyed by more than just tripId — a bare tripId key means this guard
     // never resets while the same trip stays mounted, even when the
-    // itinerary is revised (resolveRevision -> a new itineraryResult) or
-    // origin_city changes, so Bookings would keep serving stale
-    // transport/stay data until a full reload. itineraryResult.version
-    // (the itinerary body's own revision number, not commandSnapshot's)
-    // and origin_city are exactly the two inputs gatewayLegs/transportLegs
-    // below actually depend on, so the guard is keyed on both.
-    const bookingsFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}`;
+    // itinerary is revised (resolveRevision -> a new itineraryResult),
+    // origin_city changes, or (TWM-201) the traveler saves a booking-date
+    // update, so Bookings would keep serving stale transport/stay data
+    // until a full reload. itineraryResult.version (the itinerary body's
+    // own revision number, not commandSnapshot's), origin_city, and
+    // booking_dates are exactly the inputs gatewayLegs/transportLegs below
+    // actually depend on, so the guard is keyed on all three.
+    const bookingDateContext = tripBookingDateContext(tripState?.trip_context);
+    const bookingsFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}:${bookingDateContext ? `${bookingDateContext.precision}:${bookingDateContext.departure_date || bookingDateContext.departure_month || ''}` : ''}`;
     if (bookingsFetchStarted.current === bookingsFetchKey) return;
     bookingsFetchStarted.current = bookingsFetchKey;
     setBookingsStatus('loading');
@@ -766,7 +826,10 @@ export default function TripDashboard() {
     // feasibility/trusted-action/flight-search call fires, so internal/
     // circuit/local movements never hit the network at all, not merely
     // hidden after the fact. No round-trip bundling either way.
-    const legsToFetch = gatewayLegs(transportLegs(bookingDays), tripOriginCity(tripState?.trip_context));
+    const legsToFetch = gatewayLegs(
+      transportLegs(bookingDays, tripBookingDateContext(tripState?.trip_context)),
+      tripOriginCity(tripState?.trip_context),
+    );
     const stays = stayLegs(bookingDays);
     // TWM-146/TWM-195/TWM-199: threaded through to flight's live-offer
     // search and Trusted Action's traveler_count so those payloads are
@@ -935,6 +998,32 @@ export default function TripDashboard() {
       }
       return next;
     });
+  }
+
+  function openDateEditForm(suggestedMode) {
+    setDateEditMode(suggestedMode === 'month' ? 'month' : 'exact');
+    setDateEditValue('');
+    setDateEditError(null);
+    setDateEditOpen(true);
+  }
+
+  async function submitDateEdit(event) {
+    event.preventDefault();
+    setDateEditPending(true);
+    setDateEditError(null);
+    try {
+      await sendTripCommand('update_booking_dates', {
+        bookingDateUpdate: dateEditMode === 'exact'
+          ? { departure_date: dateEditValue }
+          : { departure_month: dateEditValue },
+      });
+      trackEvent('booking_dates_updated', { precision: dateEditMode });
+      setDateEditOpen(false);
+    } catch (error) {
+      setDateEditError(error.message || 'Could not save those dates — your existing flight options are still available.');
+    } finally {
+      setDateEditPending(false);
+    }
   }
 
   function openConfirmForm(type, label, dayNumber) {
@@ -1264,13 +1353,36 @@ export default function TripDashboard() {
               recommended={recommended}
               feasibilityModes={entry?.feasibility?.modes}
               noOptionsMessage="No bookable transport options for this leg."
-              renderOption={(option, best) => <TransportOptionCard key={option.mode} option={option} best={best} />}
+              renderOption={(option, best) => (
+                <TransportOptionCard
+                  key={option.mode}
+                  option={option}
+                  best={best}
+                  onAddDates={
+                    option.mode === 'flight'
+                      ? () => openDateEditForm(option.liveOffer?.datePrecision === 'flexible' ? 'month' : 'exact')
+                      : undefined
+                  }
+                />
+              )}
               onOpenConfirm={() => openConfirmForm('transport', label)}
             />
           );
         })}
         {confirmType === 'transport' && (
           <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
+        )}
+        {dateEditOpen && (
+          <DateEditForm
+            mode={dateEditMode}
+            setMode={setDateEditMode}
+            value={dateEditValue}
+            setValue={setDateEditValue}
+            onSubmit={submitDateEdit}
+            onCancel={() => setDateEditOpen(false)}
+            pending={dateEditPending}
+            error={dateEditError}
+          />
         )}
 
         <div className="tab-intro"><div><h2>🏨 Stay</h2><p>Real properties for every base — check dates and price before booking.</p></div></div>

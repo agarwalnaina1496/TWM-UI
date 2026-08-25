@@ -10,6 +10,7 @@ export const TRIP_CONTEXT_KEYS = Object.freeze({
   TRAVEL_DATES: 'travel_dates',
   BUDGET: 'budget',
   DESTINATIONS: 'destinations',
+  BOOKING_DATES: 'booking_dates',
 });
 
 export function tripOriginCity(tripContext) {
@@ -25,4 +26,15 @@ export function tripTravelerCount(tripContext) {
   if (raw === undefined || raw === null || raw === '') return null;
   const count = Number(raw);
   return Number.isFinite(count) ? count : null;
+}
+
+// TWM-201: the post-freeze booking-date precision the traveler confirmed via
+// the Bookings date-update flow — Backend-owned (written only by the
+// update_booking_dates trip command), never UI-synthesized. Shape:
+// { precision: 'exact', departure_date: 'YYYY-MM-DD' } or
+// { precision: 'month', departure_month: 'YYYY-MM' }. null when the
+// traveler has never set one.
+export function tripBookingDateContext(tripContext) {
+  const value = tripContext?.[TRIP_CONTEXT_KEYS.BOOKING_DATES];
+  return value && typeof value === 'object' ? value : null;
 }

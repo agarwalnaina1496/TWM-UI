@@ -1073,8 +1073,140 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         expect(screen.getAllByText(/Flexible dates/).length).toBeGreaterThan(0);
         expect(screen.getAllByText('Flights from DEL to DED').length).toBeGreaterThan(0);
         // TWM-196 UX review: month/flexible precision gets a non-blocking
-        // nudge, never a hard block.
-        expect(screen.getAllByText('Add exact dates for live fares').length).toBeGreaterThan(0);
+        // nudge, never a hard block. TWM-201: the nudge is now an actionable
+        // button, not copy-only text.
+        expect(screen.getAllByRole('button', { name: 'Add dates for exact fares' }).length).toBeGreaterThan(0);
+      });
+
+      // TWM-201: the Bookings date nudge opens an explicit save flow that
+      // goes through the canonical update_booking_dates trip command, never
+      // local-only state.
+      it('opens the date-update flow from the nudge and saves an exact date via update_booking_dates', async () => {
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+        sendTripCommand = vi.fn(async () => ({ message: null, agent_meta: null, trip: commandSnapshot }));
+        global.fetch = vi.fn(async url => {
+          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+          if (url.includes('/flight-search')) {
+            return jsonResponse({
+              status: 'offer',
+              queried_at: '2026-01-01T00:00:00.000Z',
+              date_precision: 'month',
+              offers: [{
+                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'one_way',
+                departure_date: '2026-03-11',
+                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
+                baggage: { checked_bag_included: null, cabin_bag_included: null },
+                fare_conditions: { refundable: null, changeable: null },
+                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
+                price_found_at: '2026-01-01T00:00:00.000Z',
+                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
+              }],
+            });
+          }
+          return jsonResponse({});
+        });
+        const user = userEvent.setup();
+        await readyDashboard();
+        await user.click(screen.getByRole('button', { name: /Bookings/ }));
+        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add dates for exact fares' }).length).toBeGreaterThan(0));
+
+        await user.click(screen.getAllByRole('button', { name: 'Add dates for exact fares' })[0]);
+        expect(screen.getByText(/does not change your itinerary plan/)).toBeInTheDocument();
+        await user.type(screen.getByLabelText('Departure date'), '2026-05-01');
+        await user.click(screen.getByRole('button', { name: 'Save dates' }));
+
+        await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', {
+          bookingDateUpdate: { departure_date: '2026-05-01' },
+        }));
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Save dates' })).not.toBeInTheDocument());
+      });
+
+      it('saves a travel month via update_booking_dates from a flexible-precision card', async () => {
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+        sendTripCommand = vi.fn(async () => ({ message: null, agent_meta: null, trip: commandSnapshot }));
+        global.fetch = vi.fn(async url => {
+          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+          if (url.includes('/flight-search')) {
+            return jsonResponse({
+              status: 'offer',
+              queried_at: '2026-01-01T00:00:00.000Z',
+              date_precision: 'flexible',
+              offers: [{
+                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'one_way',
+                departure_date: '2026-03-11',
+                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
+                baggage: { checked_bag_included: null, cabin_bag_included: null },
+                fare_conditions: { refundable: null, changeable: null },
+                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
+                price_found_at: '2026-01-01T00:00:00.000Z',
+                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
+              }],
+            });
+          }
+          return jsonResponse({});
+        });
+        const user = userEvent.setup();
+        await readyDashboard();
+        await user.click(screen.getByRole('button', { name: /Bookings/ }));
+        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add travel month' }).length).toBeGreaterThan(0));
+
+        await user.click(screen.getAllByRole('button', { name: 'Add travel month' })[0]);
+        await user.type(screen.getByLabelText('Travel month'), '2026-05');
+        await user.click(screen.getByRole('button', { name: 'Save dates' }));
+
+        await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', {
+          bookingDateUpdate: { departure_month: '2026-05' },
+        }));
+      });
+
+      it('keeps existing flight cards usable and shows a recoverable error when the date save fails', async () => {
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+        sendTripCommand = vi.fn(async () => { throw new Error('Could not save dates right now.'); });
+        global.fetch = vi.fn(async url => {
+          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+          if (url.includes('/flight-search')) {
+            return jsonResponse({
+              status: 'offer',
+              queried_at: '2026-01-01T00:00:00.000Z',
+              date_precision: 'month',
+              offers: [{
+                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'one_way',
+                departure_date: '2026-03-11',
+                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
+                baggage: { checked_bag_included: null, cabin_bag_included: null },
+                fare_conditions: { refundable: null, changeable: null },
+                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
+                price_found_at: '2026-01-01T00:00:00.000Z',
+                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
+              }],
+            });
+          }
+          return jsonResponse({});
+        });
+        const user = userEvent.setup();
+        await readyDashboard();
+        await user.click(screen.getByRole('button', { name: /Bookings/ }));
+        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add dates for exact fares' }).length).toBeGreaterThan(0));
+
+        await user.click(screen.getAllByRole('button', { name: 'Add dates for exact fares' })[0]);
+        await user.type(screen.getByLabelText('Departure date'), '2026-05-01');
+        await user.click(screen.getByRole('button', { name: 'Save dates' }));
+
+        await waitFor(() => expect(screen.getByText('Could not save dates right now.')).toBeInTheDocument());
+        // the existing flight card is still rendered/usable after the failure.
+        expect(screen.getAllByText('Cached price').length).toBeGreaterThan(0);
       });
 
       it('renders the Backend-authored unavailable message safely for a flight card', async () => {

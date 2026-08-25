@@ -385,16 +385,31 @@ export function recommendedMode(feasibleOptions) {
 // guarantees the two are mutually exclusive and validated (YYYY-MM-DD /
 // YYYY-MM); this function just passes through whichever is present, or
 // both null when Atlas didn't have confirmed precision for that leg.
-export function transportLegs(days) {
+// bookingDateOverride (TWM-201): the traveler's own post-freeze booking-date
+// update (trip_context.booking_dates, via tripBookingDateContext) — applied
+// only as a fallback when a leg has no structured Atlas-provided date of its
+// own. Atlas's per-leg departure_date/departure_month still wins when
+// present, since it's a more specific, itinerary-grounded signal than the
+// trip-level precision the traveler set for booking search alone; this
+// override exists purely to give booking search a starting precision when
+// Atlas never supplied one, never to overwrite what Atlas already knows.
+export function transportLegs(days, bookingDateOverride) {
+  const overrideDate = bookingDateOverride?.precision === 'exact' ? bookingDateOverride.departure_date : null;
+  const overrideMonth = bookingDateOverride?.precision === 'month' ? bookingDateOverride.departure_month : null;
   const movements = (days || []).flatMap(day =>
     (day.timeline || [])
       .filter(item => item.kind === 'TRAVEL' && item.from_city && item.to_city)
-      .map(item => ({
-        from: item.from_city,
-        to: item.to_city,
-        departureDate: item.departure_date ?? null,
-        departureMonth: item.departure_month ?? null,
-      }))
+      .map(item => {
+        const departureDate = item.departure_date ?? null;
+        const departureMonth = item.departure_month ?? null;
+        const hasOwnDate = departureDate != null || departureMonth != null;
+        return {
+          from: item.from_city,
+          to: item.to_city,
+          departureDate: hasOwnDate ? departureDate : overrideDate,
+          departureMonth: hasOwnDate ? departureMonth : overrideMonth,
+        };
+      })
   );
   const legs = movements.map((movement, i) => ({ id: `leg-${i}`, ...movement }));
   return legs;
