@@ -164,6 +164,62 @@ describe('transportLegs', () => {
       { from: 'Bhubaneswar', to: 'Bangalore' },
     ]);
   });
+
+  // PR review, TWM-201: a single trip-level exact date must never be
+  // applied to both the outbound and return leg of a gateway trip — that
+  // would confidently misdate the return search. departure_date maps only
+  // to the outbound-from-origin leg, return_date only to the
+  // return-to-origin leg.
+  describe('bookingDateOverride (TWM-201)', () => {
+    it('applies departure_date only to the outbound-from-origin leg and return_date only to the return-to-origin leg', () => {
+      const days = [travelDay(1, 'Delhi', 'Rishikesh'), travelDay(2, 'Rishikesh', 'Delhi')];
+      const override = { precision: 'exact', departure_date: '2026-05-01', return_date: '2026-05-10' };
+      const legs = transportLegs(days, override, 'Delhi');
+      expect(legs).toEqual([
+        { id: 'leg-0', from: 'Delhi', to: 'Rishikesh', departureDate: '2026-05-01', departureMonth: null },
+        { id: 'leg-1', from: 'Rishikesh', to: 'Delhi', departureDate: '2026-05-10', departureMonth: null },
+      ]);
+    });
+
+    it('leaves the return leg dateless when only departure_date is supplied, never reusing the outbound date', () => {
+      const days = [travelDay(1, 'Delhi', 'Rishikesh'), travelDay(2, 'Rishikesh', 'Delhi')];
+      const override = { precision: 'exact', departure_date: '2026-05-01' };
+      const legs = transportLegs(days, override, 'Delhi');
+      expect(legs[0].departureDate).toBe('2026-05-01');
+      expect(legs[1].departureDate).toBeNull();
+    });
+
+    it('never applies the exact-date override to an internal (non-gateway) leg', () => {
+      const days = [
+        travelDay(1, 'Delhi', 'Rishikesh'),
+        travelDay(2, 'Rishikesh', 'Haridwar'),
+        travelDay(3, 'Haridwar', 'Delhi'),
+      ];
+      const override = { precision: 'exact', departure_date: '2026-05-01', return_date: '2026-05-10' };
+      const legs = transportLegs(days, override, 'Delhi');
+      expect(legs[0].departureDate).toBe('2026-05-01'); // Delhi -> Rishikesh (outbound)
+      expect(legs[1].departureDate).toBeNull(); // Rishikesh -> Haridwar (internal)
+      expect(legs[2].departureDate).toBe('2026-05-10'); // Haridwar -> Delhi (return)
+    });
+
+    it('still applies month precision to any dateless leg regardless of direction, unchanged from prior behavior', () => {
+      const days = [
+        travelDay(1, 'Delhi', 'Rishikesh'),
+        travelDay(2, 'Rishikesh', 'Haridwar'),
+        travelDay(3, 'Haridwar', 'Delhi'),
+      ];
+      const override = { precision: 'month', departure_month: '2026-05' };
+      const legs = transportLegs(days, override, 'Delhi');
+      expect(legs.every(leg => leg.departureMonth === '2026-05')).toBe(true);
+    });
+
+    it('never overrides a leg that already carries its own Atlas-provided date', () => {
+      const days = [travelDay(1, 'Delhi', 'Rishikesh', { departureDate: '2026-04-01' })];
+      const override = { precision: 'exact', departure_date: '2026-05-01' };
+      const legs = transportLegs(days, override, 'Delhi');
+      expect(legs[0].departureDate).toBe('2026-04-01');
+    });
+  });
 });
 
 describe('gatewayLegs', () => {
