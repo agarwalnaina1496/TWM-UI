@@ -828,7 +828,7 @@ export default function TripDashboard() {
     // booking_dates are exactly the inputs gatewayLegs/transportLegs below
     // actually depend on, so the guard is keyed on all three.
     const bookingDateContext = tripBookingDateContext(tripState?.trip_context);
-    const bookingsFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}:${bookingDateContext ? `${bookingDateContext.precision}:${bookingDateContext.departure_date || bookingDateContext.departure_month || ''}` : ''}`;
+    const bookingsFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}:${bookingDateContext ? `${bookingDateContext.precision}:${bookingDateContext.departure_date || bookingDateContext.departure_month || ''}:${bookingDateContext.return_date || ''}` : ''}`;
     if (bookingsFetchStarted.current === bookingsFetchKey) return;
     bookingsFetchStarted.current = bookingsFetchKey;
     setBookingsStatus('loading');
@@ -1169,12 +1169,21 @@ export default function TripDashboard() {
   // this matcher will silently reclassify real confirmed anchors as orphaned.
   const findAnchor = (typeAnchors, label) => typeAnchors.find(a => a.label === label);
   // TWM-200: transportLegs derives legs solely from Atlas's own structured
-  // TRAVEL.from_city/to_city movements — no origin argument, no
-  // UI-synthesized bookend leg. TWM-195 (MVP scope narrowing): render-side
-  // must filter to the same gateway-only rows the fetch effect resolved —
-  // never a wider render-side list than what was actually fetched, and
-  // (per TWM-195) no round-trip bundling either way.
-  const transportLegList = gatewayLegs(transportLegs(days), tripOriginCity(tripState?.trip_context));
+  // TRAVEL.from_city/to_city movements. TWM-195 (MVP scope narrowing):
+  // render-side must filter to the same gateway-only rows the fetch effect
+  // resolved — never a wider render-side list than what was actually
+  // fetched, and (per TWM-195) no round-trip bundling either way.
+  //
+  // PR review, TWM-201: render must build legs the same way the fetch
+  // effect above does — originCity and bookingDateContext (the traveler's
+  // saved booking-date override) computed once and threaded through both
+  // call sites, so the visible rows never diverge from what was actually
+  // searched (e.g. a leg rendered without its route-safe exact-date
+  // override, or under a stale key while the fetch effect used a newer
+  // one).
+  const originCity = tripOriginCity(tripState?.trip_context);
+  const bookingDateContext = tripBookingDateContext(tripState?.trip_context);
+  const transportLegList = gatewayLegs(transportLegs(days, bookingDateContext, originCity), originCity);
   const stayLegList = stayLegs(days);
   const activityList = activityBookings(days);
 
