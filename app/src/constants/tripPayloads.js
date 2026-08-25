@@ -23,5 +23,8 @@ export const FLIGHT_SEARCH_KEYS = Object.freeze({
   ORIGIN_PLACE: 'origin_place',
   DESTINATION_PLACE: 'destination_place',
   DEPARTURE_DATE: 'departure_date',
+  // TWM-196: month-precision search, mutually exclusive with
+  // DEPARTURE_DATE on the request — validated YYYY-MM only.
+  DEPARTURE_MONTH: 'departure_month',
   TRAVELERS: 'travelers',
 });

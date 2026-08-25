@@ -156,12 +156,16 @@ function toLiveOffer(response) {
 // (twm.services.airport_resolution). The UI must never guess a city ->
 // IATA mapping itself — this replaces the old CITY_IATA lookup entirely.
 // Rather than fabricate a date, this still sends only what is genuinely
-// known — traveler count (from AtlasTripSummary.num_travelers) and
-// departure_date when Atlas supplied one (transportLegs/routeStops
-// (atlasView.js) pass through leg.departureDate straight from the real
-// Atlas day.date when the itinerary has per-day dates; a travel-month/
-// day-count window this early — see tripDatesLabel — has no per-leg exact
-// date to send) — and lets the Backend's own typed clarification_needed
+// known: departure_date when the TRAVEL item's own structured
+// `departure_date` is present (leg.departureDate, TWM-200), else
+// departure_month when only the structured `departure_month` window is
+// present (leg.departureMonth, TWM-200/TWM-196) — the two are mutually
+// exclusive on the request, matching FlightSearchRequest's own
+// constraint. Never derived from trip-level free text (e.g. a bare
+// "October" travel-window label) — that would mean the UI guessing a
+// year, which this codebase's "never fabricate" rule forbids; a leg with
+// neither field simply sends no date at all and lets Backend's own typed
+// clarification_needed
 // outcome (FlightSearchClarification) render honestly for whatever's still
 // missing. A month-only/no-date search is not a missing_input either
 // (TWM-196): Backend returns a flexible/latest-cached result instead of
@@ -171,6 +175,7 @@ async function searchFlightOffer(tripId, leg, travelerCount) {
   if (leg.from) payload[FLIGHT_SEARCH_KEYS.ORIGIN_PLACE] = leg.from;
   if (leg.to) payload[FLIGHT_SEARCH_KEYS.DESTINATION_PLACE] = leg.to;
   if (leg.departureDate) payload[FLIGHT_SEARCH_KEYS.DEPARTURE_DATE] = leg.departureDate;
+  else if (leg.departureMonth) payload[FLIGHT_SEARCH_KEYS.DEPARTURE_MONTH] = leg.departureMonth;
   if (travelerCount) payload[FLIGHT_SEARCH_KEYS.TRAVELERS] = { adults: Math.max(1, travelerCount) };
   try {
     const response = await searchFlights(tripId, payload);
@@ -362,13 +367,23 @@ export function recommendedMode(feasibleOptions) {
 // entirely rather than falling back to display text — fail closed for that
 // movement (TWM-200 acceptance criteria), not a best-effort parse.
 //
-// departureDate: best-effort only, taken from the movement's own day.date
-// when Atlas supplied one; never fabricated.
+// departureDate/departureMonth (TWM-200): read only from the TRAVEL item's
+// own structured `departure_date`/`departure_month` fields — never the
+// day-level `day.date` (which Atlas may leave as day-offset/free text) and
+// never derived from free-text trip timing. Atlas's schema already
+// guarantees the two are mutually exclusive and validated (YYYY-MM-DD /
+// YYYY-MM); this function just passes through whichever is present, or
+// both null when Atlas didn't have confirmed precision for that leg.
 export function transportLegs(days) {
   const movements = (days || []).flatMap(day =>
     (day.timeline || [])
       .filter(item => item.kind === 'TRAVEL' && item.from_city && item.to_city)
-      .map(item => ({ from: item.from_city, to: item.to_city, departureDate: day.date ?? null }))
+      .map(item => ({
+        from: item.from_city,
+        to: item.to_city,
+        departureDate: item.departure_date ?? null,
+        departureMonth: item.departure_month ?? null,
+      }))
   );
   const legs = movements.map((movement, i) => ({ id: `leg-${i}`, ...movement }));
   return legs;
