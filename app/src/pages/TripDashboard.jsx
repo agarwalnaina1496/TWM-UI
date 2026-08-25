@@ -304,11 +304,21 @@ function ConfirmationForm({ dayOptions, fields, setFields, onSubmit, onCancel, p
 
 // TWM-201: small in-page flow for adding/updating booking-date precision on
 // a frozen trip — mirrors ConfirmationForm's scaffold (local field state,
-// pending/error, Save/Cancel). Deliberately only two fields (a mode toggle
-// and one date/month input): origin_city, route, and num_travelers are
-// never recollected here (out of scope), and the copy states the MVP
-// boundary explicitly so a traveler never mistakes this for re-planning.
-function DateEditForm({ mode, setMode, value, setValue, onSubmit, onCancel, pending, error }) {
+// pending/error, Save/Cancel). Deliberately narrow (a mode toggle, one
+// date/month input, and — PR review — an optional return date): origin_city,
+// route, and num_travelers are never recollected here (out of scope), and
+// the copy states the MVP boundary explicitly so a traveler never mistakes
+// this for re-planning.
+//
+// returnValue (PR review, TWM-201): exact precision only. A gateway trip's
+// outbound and return leg are booked independently (bookingCatalog.js's
+// gatewayLegs); collecting a return date here lets Backend map it to the
+// return leg specifically (TripBookingDateInput.return_date) instead of the
+// UI ever reusing the outbound date for a return search. Optional — a
+// traveler who only knows their departure date can still save with the
+// return field empty, and the return leg simply gets no exact-date override
+// (falls back to a flexible/indicative search, same as today).
+function DateEditForm({ mode, setMode, value, setValue, returnValue, setReturnValue, onSubmit, onCancel, pending, error }) {
   return (
     <form className="confirmation-form" onSubmit={onSubmit}>
       <p className="already-booked-note">
@@ -317,17 +327,22 @@ function DateEditForm({ mode, setMode, value, setValue, onSubmit, onCancel, pend
       <div className="confirmation-form-actions" role="radiogroup" aria-label="Date precision">
         <label>
           <input type="radio" name="booking-date-mode" checked={mode === 'exact'} disabled={pending}
-            onChange={() => { setMode('exact'); setValue(''); }} /> I know the exact date
+            onChange={() => { setMode('exact'); setValue(''); setReturnValue(''); }} /> I know the exact date
         </label>
         <label>
           <input type="radio" name="booking-date-mode" checked={mode === 'month'} disabled={pending}
-            onChange={() => { setMode('month'); setValue(''); }} /> I only know the month
+            onChange={() => { setMode('month'); setValue(''); setReturnValue(''); }} /> I only know the month
         </label>
       </div>
       {mode === 'exact' ? (
-        <label>Departure date
-          <input required type="date" value={value} disabled={pending} onChange={event => setValue(event.target.value)} />
-        </label>
+        <>
+          <label>Departure date
+            <input required type="date" value={value} disabled={pending} onChange={event => setValue(event.target.value)} />
+          </label>
+          <label>Return date (optional)
+            <input type="date" value={returnValue} disabled={pending} min={value || undefined} onChange={event => setReturnValue(event.target.value)} />
+          </label>
+        </>
       ) : (
         <label>Travel month
           <input required type="month" value={value} disabled={pending} onChange={event => setValue(event.target.value)} />
@@ -766,6 +781,7 @@ export default function TripDashboard() {
   const [dateEditOpen, setDateEditOpen] = useState(false);
   const [dateEditMode, setDateEditMode] = useState('exact');
   const [dateEditValue, setDateEditValue] = useState('');
+  const [dateEditReturnValue, setDateEditReturnValue] = useState('');
   const [dateEditPending, setDateEditPending] = useState(false);
   const [dateEditError, setDateEditError] = useState(null);
 
@@ -827,7 +843,7 @@ export default function TripDashboard() {
     // circuit/local movements never hit the network at all, not merely
     // hidden after the fact. No round-trip bundling either way.
     const legsToFetch = gatewayLegs(
-      transportLegs(bookingDays, tripBookingDateContext(tripState?.trip_context)),
+      transportLegs(bookingDays, tripBookingDateContext(tripState?.trip_context), tripOriginCity(tripState?.trip_context)),
       tripOriginCity(tripState?.trip_context),
     );
     const stays = stayLegs(bookingDays);
@@ -1003,6 +1019,7 @@ export default function TripDashboard() {
   function openDateEditForm(suggestedMode) {
     setDateEditMode(suggestedMode === 'month' ? 'month' : 'exact');
     setDateEditValue('');
+    setDateEditReturnValue('');
     setDateEditError(null);
     setDateEditOpen(true);
   }
@@ -1014,7 +1031,7 @@ export default function TripDashboard() {
     try {
       await sendTripCommand('update_booking_dates', {
         bookingDateUpdate: dateEditMode === 'exact'
-          ? { departure_date: dateEditValue }
+          ? { departure_date: dateEditValue, ...(dateEditReturnValue ? { return_date: dateEditReturnValue } : {}) }
           : { departure_month: dateEditValue },
       });
       trackEvent('booking_dates_updated', { precision: dateEditMode });
@@ -1378,6 +1395,8 @@ export default function TripDashboard() {
             setMode={setDateEditMode}
             value={dateEditValue}
             setValue={setDateEditValue}
+            returnValue={dateEditReturnValue}
+            setReturnValue={setDateEditReturnValue}
             onSubmit={submitDateEdit}
             onCancel={() => setDateEditOpen(false)}
             pending={dateEditPending}

@@ -393,9 +393,20 @@ export function recommendedMode(feasibleOptions) {
 // trip-level precision the traveler set for booking search alone; this
 // override exists purely to give booking search a starting precision when
 // Atlas never supplied one, never to overwrite what Atlas already knows.
-export function transportLegs(days, bookingDateOverride) {
-  const overrideDate = bookingDateOverride?.precision === 'exact' ? bookingDateOverride.departure_date : null;
+//
+// originCity (PR review, TWM-201): a single exact date is not route-safe on
+// a gateway trip with an independent outbound and return leg (see
+// gatewayLegs below) — applying the same date to both would confidently
+// misdate the return search. For exact precision, departure_date is only
+// ever applied to the outbound-from-origin leg (leg.from === originCity)
+// and return_date only to the return-to-origin leg (leg.to === originCity);
+// a leg on neither boundary gets no exact-date override at all. Month
+// precision stays a single coarse window applied to any dateless leg
+// regardless of direction — that scope was never in question on review.
+export function transportLegs(days, bookingDateOverride, originCity) {
   const overrideMonth = bookingDateOverride?.precision === 'month' ? bookingDateOverride.departure_month : null;
+  const outboundOverrideDate = bookingDateOverride?.precision === 'exact' ? bookingDateOverride.departure_date : null;
+  const inboundOverrideDate = bookingDateOverride?.precision === 'exact' ? (bookingDateOverride.return_date ?? null) : null;
   const movements = (days || []).flatMap(day =>
     (day.timeline || [])
       .filter(item => item.kind === 'TRAVEL' && item.from_city && item.to_city)
@@ -403,11 +414,17 @@ export function transportLegs(days, bookingDateOverride) {
         const departureDate = item.departure_date ?? null;
         const departureMonth = item.departure_month ?? null;
         const hasOwnDate = departureDate != null || departureMonth != null;
+        if (hasOwnDate) {
+          return { from: item.from_city, to: item.to_city, departureDate, departureMonth };
+        }
+        const isOutboundGateway = originCity != null && item.from_city === originCity;
+        const isInboundGateway = originCity != null && item.to_city === originCity;
+        const exactOverride = isOutboundGateway ? outboundOverrideDate : (isInboundGateway ? inboundOverrideDate : null);
         return {
           from: item.from_city,
           to: item.to_city,
-          departureDate: hasOwnDate ? departureDate : overrideDate,
-          departureMonth: hasOwnDate ? departureMonth : overrideMonth,
+          departureDate: exactOverride,
+          departureMonth: exactOverride ? null : overrideMonth,
         };
       })
   );
