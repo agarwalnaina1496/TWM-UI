@@ -31,8 +31,9 @@ export function tripTravelerCount(tripContext) {
 // TWM-201: the post-freeze booking-date precision the traveler confirmed via
 // the Bookings date-update flow — Backend-owned (written only by the
 // update_booking_dates trip command), never UI-synthesized. Shape:
-// { precision: 'exact', departure_date: 'YYYY-MM-DD' } or
-// { precision: 'month', departure_month: 'YYYY-MM' }. null when the
+// { precision: 'exact', departure_date: 'YYYY-MM-DD', return_date?: 'YYYY-MM-DD' } or
+// { precision: 'month', departure_month: 'YYYY-MM' }. return_date is
+// optional and only ever present alongside departure_date. null when the
 // traveler has never set one.
 export function tripBookingDateContext(tripContext) {
   const value = tripContext?.[TRIP_CONTEXT_KEYS.BOOKING_DATES];
