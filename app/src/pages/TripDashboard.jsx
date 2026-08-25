@@ -322,9 +322,7 @@ function ModeTag({ mode }) {
 // network-error/no_action fallback — every state renders safely, never a
 // broken link. A resolved action with no external target (CHECK_PRICES's
 // internal_capability, since no live flight-offer UI exists yet, TWM-146)
-// shows an inert note instead of linking to nothing. The affiliate
-// disclosure line is a hard requirement carried straight off
-// TrustedAction.affiliate_disclosure — never silently dropped.
+// shows an inert note instead of linking to nothing.
 // TWM-196: flight's CTA is always secondary (btn-ghost), regardless of
 // `best` — the affiliate redirect must never visually outrank the API
 // offer content above it (FlightLiveOfferInfo). Non-flight modes keep the
@@ -332,10 +330,7 @@ function ModeTag({ mode }) {
 function TrustedActionCta({ option, label, best, secondary = false }) {
   if (option.status === 'resolved' && option.url) {
     return (
-      <>
-        <a className={`btn ${best && !secondary ? 'btn-primary' : 'btn-ghost'}`} href={option.url} target="_blank" rel="noreferrer">{label}</a>
-        {option.affiliateDisclosure && <p className="affiliate-disclosure">This is an affiliate link — TWM may earn a commission.</p>}
-      </>
+      <a className={`btn ${best && !secondary ? 'btn-primary' : 'btn-ghost'}`} href={option.url} target="_blank" rel="noreferrer">{label}</a>
     );
   }
   if (option.status === 'resolved') {
@@ -553,7 +548,6 @@ function RecommendedModeCard({ option }) {
       <span className="pick-badge">Recommended</span>
       <ModeTag mode={option.mode} />
       <strong>{modeLabel(option.mode)}</strong>
-      {option.reason && <p>{option.reason}</p>}
       <TrustedActionCta option={option} label="Check ↗" best />
     </article>
   );

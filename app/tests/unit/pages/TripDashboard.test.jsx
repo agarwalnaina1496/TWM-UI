@@ -619,7 +619,10 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
 
       await waitFor(() => expect(screen.getByLabelText('Recommended mode')).toBeInTheDocument());
-      expect(within(screen.getByLabelText('Recommended mode')).getByText('Fastest option.')).toBeInTheDocument();
+      // Recommended-mode card no longer repeats the per-mode reason text —
+      // that detail lives only in the opt-in "Route details" disclosure
+      // below.
+      expect(within(screen.getByLabelText('Recommended mode')).queryByText('Fastest option.')).toBeNull();
 
       await user.click(screen.getByText('Route details for these modes'));
       const disclosure = screen.getByText('Route details for these modes').closest('details');
@@ -890,14 +893,15 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.getByText('Rafting not booked yet')).toBeInTheDocument();
     });
 
-    it('renders the affiliate disclosure line when the resolved trusted action carries it, never dropping it', async () => {
+    it('does not render an affiliate-disclosure line even when the resolved trusted action carries one', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
       await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-      await waitFor(() => expect(screen.getAllByText(/This is an affiliate link/).length).toBeGreaterThan(0));
+      await waitFor(() => expect(screen.getAllByRole('link', { name: /↗/ }).length).toBeGreaterThan(0));
+      expect(screen.queryByText(/This is an affiliate link/)).toBeNull();
     });
 
     it('shows an inert note, no broken link, when a trusted action resolves to missing_input', async () => {
