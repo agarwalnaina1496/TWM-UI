@@ -1003,6 +1003,13 @@ export default function TripDashboard() {
           : { departure_month: dateEditValue },
       });
       trackEvent('booking_dates_updated', { precision: dateEditMode });
+      // PR review: legKey has no date component, so an already-cached
+      // Transport drawer entry would otherwise keep serving pre-save
+      // (flexible/month-precision) options after the date changes. The
+      // date is trip-wide, not per-leg, so every cached entry is
+      // invalidated — the board-fetch effect's own booking_dates
+      // dependency already re-fetches boardData for the new precision.
+      setTransportData({});
       setDateEditOpen(false);
     } catch (error) {
       setDateEditError(error.message || 'Could not save those dates — your existing flight options are still available.');
@@ -1098,7 +1105,17 @@ export default function TripDashboard() {
   // day.timeline), so a plain index lookup is enough to find the matching
   // board item's is_gateway_leg/feasible_modes/date_precision for a given
   // Atlas timeline item — no from_city/to_city re-matching needed here.
-  const boardDayByNumber = Object.fromEntries((boardData?.days || []).map(day => [day.day_number, day]));
+  // PR review: that index-matching assumption only holds when boardData
+  // was fetched for this exact itinerary revision — boardData resolves
+  // asynchronously and can still lag one render behind a just-landed
+  // itineraryResult (new version renders immediately; the matching board
+  // fetch hasn't resolved yet), so an item-count/order change in that
+  // revision could otherwise silently attach a stale board item to the
+  // wrong new timeline item. Falls back to no board-derived affordances
+  // (identical to the no-boardData-yet state) until the versions agree.
+  const boardDayByNumber = boardData?.version === itineraryResult.version
+    ? Object.fromEntries((boardData.days || []).map(day => [day.day_number, day]))
+    : {};
   // TWM-206: which base/stay (if any) the selected day belongs to — Stay's
   // drawer trigger lives on the day header, once per base, not per
   // timeline item the way Transport's does. routeStops (not stayLegs,

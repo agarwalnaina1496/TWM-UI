@@ -744,6 +744,40 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // TWM-206 step 2: Set-dates moves inline onto the Itinerary item itself
   // (leg-level, never inside a drawer) — only a gateway TRAVEL leg
   // (is_gateway_leg from the Trip Board adapter) gets the affordance.
+  // PR review, TWM-206: boardData resolves asynchronously and can lag one
+  // render behind a just-landed itineraryResult revision — a stale board
+  // response (still describing the previous version) must never be
+  // index-matched against the new timeline, since a changed item order/
+  // count could silently attach the wrong gateway-leg affordance to the
+  // wrong item. Falls back to no board-derived affordances (Set-dates/
+  // Transport-options) until boardData.version actually matches.
+  it('renders no Set-dates/Transport-options affordance from a stale board response whose version does not match the current itinerary', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState({ version: 2 }), {}, { trip_context: { origin_city: 'Delhi' } });
+    itineraryFetchResponse = { version: 2, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z', result: atlasResult() };
+    sendTripCommand = vi.fn();
+    // The /board mock always reports version 1 (stale), regardless of the
+    // itinerary body already being on version 2.
+    global.fetch = vi.fn(async url => {
+      if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+      if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+      if (url.includes('/board')) {
+        const stale = boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse());
+        return jsonResponse({ ...stale, version: 1 });
+      }
+      if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+      return jsonResponse({});
+    });
+    const user = userEvent.setup();
+    await readyDashboard();
+    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+    // Day 1's "Arrival from Delhi" is a real gateway leg, but the board
+    // response describing it is stale — no affordance should render.
+    await waitFor(() => expect(screen.getByText('Arrival from Delhi')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Set dates/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Transport options/ })).not.toBeInTheDocument();
+  });
+
   describe('Itinerary inline Set-dates (TWM-206)', () => {
     it('shows a Set-dates button only on gateway TRAVEL legs, never on an internal leg or a non-TRAVEL item', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
@@ -870,6 +904,55 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
       await user.click(document.querySelector('.transport-drawer-overlay'));
       expect(screen.queryByRole('dialog', { name: /Delhi to Rishikesh/ })).not.toBeInTheDocument();
+    });
+
+    // PR review, TWM-206: legKey has no date component, so a Transport
+    // drawer entry cached before a date was set must not keep serving
+    // those (flexible-precision) options forever after Set-dates saves an
+    // exact date for the same leg — the whole point of wiring Set-dates
+    // into the drawer's date-prefill is that a later open reflects it.
+    it('refetches transport options after a booking-date save invalidates the drawer cache', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      let trustedActionCallCount = 0;
+      sendTripCommand = vi.fn(async (command, payload) => {
+        expect(command).toBe('update_booking_dates');
+        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-05-01' });
+        commandSnapshot = snapshotWith(
+          readyItineraryState(),
+          {},
+          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-05-01' } } },
+        );
+        return { message: null, agent_meta: null, trip: commandSnapshot };
+      });
+      global.fetch = vi.fn(async (url) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action')) { trustedActionCallCount += 1; return jsonResponse(resolvedActionResponse()); }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(0));
+      const callCountBeforeDateSave = trustedActionCallCount;
+      await user.click(screen.getByRole('button', { name: 'Close transport options' }));
+
+      await user.click(screen.getByRole('button', { name: /Set dates/ }));
+      await user.type(screen.getByLabelText('Departure date'), '2026-05-01');
+      await user.click(screen.getByRole('button', { name: 'Save dates' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
+
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      // A real refetch happened — the stale cached entry from before the
+      // date save was not reused.
+      await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(callCountBeforeDateSave));
     });
   });
 
