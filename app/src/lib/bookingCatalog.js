@@ -86,12 +86,38 @@ function flightPriceLabel(money) {
   return `${money.group_total_is_approximate ? 'approx. ' : ''}${money.currency} ${amount}`;
 }
 
-// Picks the Backend-ranked offer (NormalizedFlightOffer.is_recommended,
-// TWM-145's ranking) as the card's primary content; falls back to the first
-// offer defensively if none is flagged (should not happen per the backend
-// contract, but never crash the card on that assumption).
-function pickPrimaryOffer(offers) {
-  return offers.find(offer => offer.is_recommended) || offers[0];
+// TWM-206: maps one NormalizedFlightOffer into the shape
+// FlightLiveOfferInfo renders per row — used for every offer now, not just
+// a single picked one (see mapOffers below, the origin bug this story's
+// discovery started from: a real ranked list was being collapsed to one
+// row before it ever reached the card).
+function mapOffer(offer) {
+  return {
+    priceLabel: flightPriceLabel(offer.money),
+    airline: offer.airline_name || offer.airline_code || null,
+    flightNumber: offer.flight_number ?? null,
+    stopCount: offer.stop_count ?? null,
+    // No arrival time exists on this contract (twm/schemas/
+    // flight_search.py's NormalizedFlightOffer deliberately has no
+    // arrival_at field — the current Aviasales Data API generation never
+    // discloses one) — only a departure time is ever shown.
+    departureAt: offer.departure_at ?? null,
+    priceFoundAt: offer.price_found_at,
+    offerExpiresAt: offer.offer_expires_at ?? null,
+    isRecommended: !!offer.is_recommended,
+  };
+}
+
+// Maps every Backend-ranked offer (TWM-145's ranking), not just one —
+// `primary` (the recommended offer, or the first defensively if none is
+// flagged — should not happen per the backend contract, but never crash
+// the card on that assumption) still drives the card's top-level fields
+// for backward compatibility with existing single-offer consumers, but
+// `offers` carries the full list so the UI can render all of them.
+function mapOffers(rawOffers) {
+  const offers = rawOffers.map(mapOffer);
+  const primary = offers.find(offer => offer.isRecommended) || offers[0];
+  return { primary, offers };
 }
 
 // Maps a FlightSearchResponse (status-discriminated) into the shape
@@ -113,20 +139,19 @@ function toLiveOffer(response) {
   const destinationResolved = response.destination_resolved ?? null;
   const datePrecision = response.date_precision ?? null;
   if ((status === 'offer' || status === 'partial') && response.offers?.length) {
-    const offer = pickPrimaryOffer(response.offers);
+    const { primary, offers } = mapOffers(response.offers);
     return {
       status,
-      priceLabel: flightPriceLabel(offer.money),
-      airline: offer.airline_name || offer.airline_code || null,
-      flightNumber: offer.flight_number ?? null,
-      stopCount: offer.stop_count ?? null,
-      // No arrival time exists on this contract (twm/schemas/
-      // flight_search.py's NormalizedFlightOffer deliberately has no
-      // arrival_at field — the current Aviasales Data API generation
-      // never discloses one) — only a departure time is ever shown.
-      departureAt: offer.departure_at ?? null,
-      priceFoundAt: offer.price_found_at,
-      offerExpiresAt: offer.offer_expires_at ?? null,
+      priceLabel: primary.priceLabel,
+      airline: primary.airline,
+      flightNumber: primary.flightNumber,
+      stopCount: primary.stopCount,
+      departureAt: primary.departureAt,
+      priceFoundAt: primary.priceFoundAt,
+      offerExpiresAt: primary.offerExpiresAt,
+      // TWM-206: the full ranked list, not just the primary/recommended
+      // offer — FlightLiveOfferInfo renders every entry now.
+      offers,
       originResolved,
       destinationResolved,
       datePrecision,

@@ -8,7 +8,7 @@ import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary, getTripBoard } from '../lib/tripApi.js';
 import {
   anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange,
-  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
+  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount, routeStops,
 } from '../lib/atlasView.js';
 import {
   transportOptionsFor, feasibleTransportOptions,
@@ -488,8 +488,13 @@ function FlightLiveOfferInfo({ liveOffer, onAddDates }) {
     </div>
   );
   if (liveOffer.status === 'offer' || liveOffer.status === 'partial') {
-    const freshness = timeAgoLabel(liveOffer.priceFoundAt);
-    const departureTime = flightDepartureTimeLabel(liveOffer.departureAt);
+    // TWM-206: renders every ranked offer Backend returned, not just the
+    // recommended one — the origin bug this story's discovery started
+    // from (a real ranked list collapsed to a single ₹42,494 row before it
+    // ever reached the card). `offers` is always populated by
+    // bookingCatalog.js's toLiveOffer now; the single-liveOffer fallback
+    // only guards a shape from before this fix.
+    const offers = liveOffer.offers || [liveOffer];
     return (
       <div className="live-offer-block">
         {routeContext}
@@ -499,16 +504,27 @@ function FlightLiveOfferInfo({ liveOffer, onAddDates }) {
         <StatusPill tone="neutral" variant="filled">
           {liveOffer.status === 'partial' ? 'Cached price (partial)' : 'Cached price'}
         </StatusPill>
-        <strong className="live-offer-price">{liveOffer.priceLabel}</strong>
-        <span className="stay-option-tag">
-          {liveOffer.airline || 'Airline not disclosed'}
-          {liveOffer.flightNumber && ` ${liveOffer.flightNumber}`}
-          {liveOffer.stopCount != null && ` · ${liveOffer.stopCount === 0 ? 'Nonstop' : `${liveOffer.stopCount} stop${liveOffer.stopCount === 1 ? '' : 's'}`}`}
-        </span>
-        {departureTime && <span className="stay-option-tag">Departs {departureTime}</span>}
+        <div className="live-offer-list">
+          {offers.map((offer, index) => {
+            const freshness = timeAgoLabel(offer.priceFoundAt);
+            const departureTime = flightDepartureTimeLabel(offer.departureAt);
+            return (
+              <div className={`live-offer-row${offer.isRecommended ? ' recommended' : ''}`} key={index}>
+                {offer.isRecommended && offers.length > 1 && <span className="pick-badge">Our pick</span>}
+                <strong className="live-offer-price">{offer.priceLabel}</strong>
+                <span className="stay-option-tag">
+                  {offer.airline || 'Airline not disclosed'}
+                  {offer.flightNumber && ` ${offer.flightNumber}`}
+                  {offer.stopCount != null && ` · ${offer.stopCount === 0 ? 'Nonstop' : `${offer.stopCount} stop${offer.stopCount === 1 ? '' : 's'}`}`}
+                </span>
+                {departureTime && <span className="stay-option-tag">Departs {departureTime}</span>}
+                {freshness && <span className="stay-option-tag">Updated {freshness}</span>}
+                {offer.offerExpiresAt && <span className="stay-option-tag">Expires {new Date(offer.offerExpiresAt).toLocaleString()}</span>}
+              </div>
+            );
+          })}
+        </div>
         <p className="already-booked-note">Not yet confirmed available — check availability before booking.</p>
-        {freshness && <span className="stay-option-tag">Updated {freshness}</span>}
-        {liveOffer.offerExpiresAt && <span className="stay-option-tag">Expires {new Date(liveOffer.offerExpiresAt).toLocaleString()}</span>}
         {nudge}
       </div>
     );
@@ -680,6 +696,62 @@ function TransportDrawer({ leg, options, feasibility, loading, error, onClose })
               </details>
             )}
           </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+const STAY_TIER_LABEL = { budget: 'Budget', mid_range: 'Mid-range', premium: 'Premium' };
+
+// TWM-206: the Stay drawer — link-only cards per approved partner
+// (hotellook/booking_com/agoda per bookingCatalog.js's STAY_PARTNERS), no
+// fabricated price/rating on the card itself. Atlas's TWM-204 per-tier
+// estimate (stay_price_estimate, already present on the raw day object —
+// no Trip Board adapter change needed since it isn't feasibility-derived)
+// renders as its own clearly-labeled non-binding section, never merged
+// into or presented as a partner's real price.
+function StayDrawer({ stay, options, loading, error, stayPriceEstimate, onClose }) {
+  if (!stay) return null;
+  const best = options?.length ? options.find(option => option.status === 'resolved') : undefined;
+  return (
+    <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
+      <aside
+        className="transport-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Stay: ${stay.location}`}
+        onClick={event => event.stopPropagation()}
+      >
+        <div className="transport-drawer-head">
+          <h3>{stay.location} · {stay.nights} night{stay.nights === 1 ? '' : 's'}</h3>
+          <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close stay options">✕</button>
+        </div>
+        {stayPriceEstimate && (
+          <div className="stay-estimate-block">
+            <span className="stay-estimate-label">Non-binding estimate, per night</span>
+            <div className="stay-estimate-tiers">
+              {stayPriceEstimate.map(tier => (
+                <div className="stay-estimate-tier" key={tier.tier}>
+                  <span className="stay-option-tag">{STAY_TIER_LABEL[tier.tier] || tier.tier}</span>
+                  <strong>{moneyRange(tier.estimated_cost_low, tier.estimated_cost_high)}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
+        {error && <p className="already-booked-note" role="alert">{error}</p>}
+        {!loading && !error && (
+          options?.length ? (
+            <div className="stay-options-grid">
+              {options.map(option => (
+                <StayOptionCard key={option.name} option={option} best={option === best} />
+              ))}
+            </div>
+          ) : (
+            <p className="already-booked-note" role="status">No stay partners available for this location.</p>
+          )
         )}
       </aside>
     </div>
@@ -871,6 +943,13 @@ export default function TripDashboard() {
   const [transportDrawerLeg, setTransportDrawerLeg] = useState(null);
   const [transportDrawerLoading, setTransportDrawerLoading] = useState(false);
   const [transportDrawerError, setTransportDrawerError] = useState(null);
+
+  // TWM-206: the Stay drawer, same on-demand/cached pattern as Transport's
+  // above — opened per stay (base city + night count) from the Itinerary
+  // day header, resolved only when actually opened.
+  const [stayDrawerStay, setStayDrawerStay] = useState(null);
+  const [stayDrawerLoading, setStayDrawerLoading] = useState(false);
+  const [stayDrawerError, setStayDrawerError] = useState(null);
 
   // TWM-132: transportOptionsFor/stayOptionsFor/feasibility are now real
   // network calls (TWM-130/131's trusted-action + feasibility endpoints),
@@ -1288,6 +1367,20 @@ export default function TripDashboard() {
   // board item's is_gateway_leg/feasible_modes/date_precision for a given
   // Atlas timeline item — no from_city/to_city re-matching needed here.
   const boardDayByNumber = Object.fromEntries((boardData?.days || []).map(day => [day.day_number, day]));
+  // TWM-206: which base/stay (if any) the selected day belongs to — Stay's
+  // drawer trigger lives on the day header, once per base, not per
+  // timeline item the way Transport's does. routeStops (not stayLegs,
+  // whose mapped output drops dayNumbers) carries the day-run membership
+  // needed to match the selected day; the resulting shape still matches
+  // stayLegs' own {id, location, nights} convention so stayData/
+  // stayOptionsFor key identically whichever surface resolves it first.
+  const selectedDayStop = routeStops(days).find(stop => stop.dayNumbers.includes(selectedDay.day_number));
+  const selectedDayStay = selectedDayStop && {
+    id: `stay-${selectedDayStop.location}`,
+    location: selectedDayStop.location,
+    nights: selectedDayStop.dayNumbers.length,
+    dayNumbers: selectedDayStop.dayNumbers,
+  };
   // TWM-146/TWM-195/TWM-199: same canonical-then-fallback source the
   // Bookings-tab fetch effect uses, so the Transport drawer's on-demand
   // resolution never sends a different traveler_count than an eager
@@ -1321,6 +1414,25 @@ export default function TripDashboard() {
       setTransportDrawerLoading(false);
     }
   }
+
+  // TWM-206: opens the Stay drawer for a base/stay, resolving its partner
+  // options on demand the first time (cached into stayData so a second
+  // open, or the Bookings tab, never refetches the same stay).
+  async function openStayDrawer(stay) {
+    setStayDrawerStay(stay);
+    if (stayData[stay.id]) return;
+    setStayDrawerLoading(true);
+    setStayDrawerError(null);
+    try {
+      const options = await stayOptionsFor(tripId, stay);
+      setStayData(prev => ({ ...prev, [stay.id]: { options } }));
+    } catch (error) {
+      setStayDrawerError(error.message || 'Could not load stay options.');
+    } finally {
+      setStayDrawerLoading(false);
+    }
+  }
+
   const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });
   const costMin = Math.min(...allCosts, 0);
   const costMax = Math.max(...allCosts, 1);
@@ -1477,6 +1589,19 @@ export default function TripDashboard() {
               <h2>{selectedDay.title}</h2>
               <p className="atlas-day-route">📍 {selectedDay.primary_location}</p>
               <p>{selectedDay.summary}</p>
+              {/* TWM-206: Stay is information-dense (multiple partner
+                  cards, an optional tiered estimate) — same density-driven
+                  drawer pattern as Transport, opened once per base/stay
+                  rather than per timeline item. */}
+              {selectedDayStay && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-small"
+                  onClick={() => openStayDrawer(selectedDayStay)}
+                >
+                  🏨 Stay options ▾
+                </button>
+              )}
             </header>
             <AnchorList anchors={anchorsForDay(anchors, selectedDay.day_number)} />
             <div className="atlas-timeline">
@@ -1579,6 +1704,21 @@ export default function TripDashboard() {
           loading={transportDrawerLoading}
           error={transportDrawerError}
           onClose={() => setTransportDrawerLeg(null)}
+        />
+      )}
+
+      {stayDrawerStay && (
+        <StayDrawer
+          stay={stayDrawerStay}
+          options={stayData[stayDrawerStay.id]?.options}
+          loading={stayDrawerLoading}
+          error={stayDrawerError}
+          // TWM-204: stay_price_estimate lives on the raw Atlas day object,
+          // not the Trip Board adapter (it isn't feasibility-derived) —
+          // read straight from the stay's first day; Atlas is expected to
+          // keep it consistent across every day of the same base.
+          stayPriceEstimate={days.find(day => day.day_number === stayDrawerStay.dayNumbers[0])?.stay_price_estimate}
+          onClose={() => setStayDrawerStay(null)}
         />
       )}
 

@@ -252,6 +252,11 @@
 .live-offer-block{display:flex;flex-direction:column;align-items:flex-start;gap:4px;border:1px dashed var(--border);border-radius:10px;padding:10px 12px;width:100%;background:var(--bg)}
 .live-offer-price{font-size:18px;font-family:'Fraunces',serif}
 .live-offer-route-context{display:flex;flex-wrap:wrap;gap:8px}
+/* TWM-206: the full ranked offer list, not a single collapsed row. */
+.live-offer-list{display:flex;flex-direction:column;gap:10px;width:100%;}
+.live-offer-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:8px 0;border-top:1px solid var(--border);width:100%;}
+.live-offer-row:first-child{border-top:none;padding-top:0;}
+.live-offer-row.recommended{position:relative;}
 /* TWM-196: affiliate CTA/caption/nudge read as secondary, lower-weight
    content — the API offer block above (live-offer-block) stays the card's
    visual anchor. */
@@ -324,4 +329,12 @@
 .transport-drawer-not-feasible summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--tm);}
 .transport-drawer-not-feasible ul{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;}
 .transport-drawer-not-feasible li{font-size:12.5px;color:var(--tm);display:flex;align-items:center;gap:8px;}
+
+/* TWM-204/TWM-206: a clearly-labeled non-binding estimate, visually
+   distinct from the real partner-link cards below it. */
+.stay-estimate-block{border:1px dashed var(--border);border-radius:10px;padding:12px 14px;background:var(--bg);}
+.stay-estimate-label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--tm);margin-bottom:8px;}
+.stay-estimate-tiers{display:flex;flex-wrap:wrap;gap:14px;}
+.stay-estimate-tier{display:flex;flex-direction:column;gap:4px;align-items:flex-start;}
+.stay-estimate-tier strong{font-family:'Fraunces',serif;font-size:15px;}
 @media(max-width:480px){.transport-drawer{width:100%;}}

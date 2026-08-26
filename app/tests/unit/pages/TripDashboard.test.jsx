@@ -1067,6 +1067,54 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         expect(screen.getAllByText(/confirm the real fare and availability on Aviasales/).length).toBeGreaterThan(0);
       });
 
+      // TWM-206: regression guard for the origin bug this story's discovery
+      // started from -- pickPrimaryOffer used to discard every ranked
+      // offer but one before it ever reached the card.
+      it('renders every ranked flight offer, not just the recommended one', async () => {
+        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+        sendTripCommand = vi.fn();
+        global.fetch = vi.fn(async url => {
+          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+          if (url.includes('/flight-search')) {
+            return jsonResponse({
+              status: 'offer',
+              queried_at: '2026-01-01T00:00:00.000Z',
+              date_precision: 'exact',
+              offers: [
+                {
+                  origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'round_trip',
+                  departure_date: '2026-03-01', return_date: '2026-03-05',
+                  money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
+                  baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
+                  price_found_at: '2026-01-01T00:00:00.000Z', airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
+                },
+                {
+                  origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'round_trip',
+                  departure_date: '2026-03-01', return_date: '2026-03-05',
+                  money: { currency: 'INR', per_traveler_amount_minor_units: 600000, traveler_count: 2, group_total_minor_units: 1200000, group_total_is_approximate: true },
+                  baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'ref-2' },
+                  price_found_at: '2026-01-01T00:00:00.000Z', airline_name: 'Air India', stop_count: 1, is_recommended: false,
+                },
+              ],
+            });
+          }
+          return jsonResponse({});
+        });
+        const user = userEvent.setup();
+        await readyDashboard();
+        await user.click(screen.getByRole('button', { name: /Bookings/ }));
+        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+
+        await waitFor(() => expect(screen.getAllByText(/approx\. INR 8,?000\.00/).length).toBeGreaterThan(0));
+        // The second, non-recommended offer is not discarded.
+        expect(screen.getAllByText(/approx\. INR 12,?000\.00/).length).toBeGreaterThan(0);
+        expect(screen.getByText(/Air India/)).toBeInTheDocument();
+        expect(screen.getAllByText('Our pick').length).toBeGreaterThan(0);
+      });
+
       it('captions the affiliate CTA as "no TWM-resolved price" when live search has no offer to show', async () => {
         commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
         sendTripCommand = vi.fn();
@@ -1555,6 +1603,78 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
       await user.click(document.querySelector('.transport-drawer-overlay'));
       expect(screen.queryByRole('dialog', { name: /Delhi to Rishikesh/ })).not.toBeInTheDocument();
+    });
+  });
+
+  // TWM-206 step 4: Stay opens a drawer from the day header (once per
+  // base/stay), same density-driven pattern as Transport.
+  describe('Itinerary Stay drawer (TWM-206)', () => {
+    it('opens a drawer for the day\'s base, resolves and shows every approved partner as a link-only card', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+
+      const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
+      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      expect(within(drawer).getByText('Rishikesh — Hotellook')).toBeInTheDocument();
+      expect(within(drawer).getByText('Rishikesh — Booking.com')).toBeInTheDocument();
+      expect(within(drawer).getByText('Rishikesh — Agoda')).toBeInTheDocument();
+    });
+
+    it('shows the non-binding tiered estimate when Atlas provides one on the stay\'s first day', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: {
+            days: [
+              {
+                ...atlasResult().final_itinerary.days[0],
+                stay_price_estimate: [
+                  { tier: 'budget', estimated_cost_low: 1000, estimated_cost_high: 2000 },
+                  { tier: 'mid_range', estimated_cost_low: 2500, estimated_cost_high: 5000 },
+                  { tier: 'premium', estimated_cost_low: 6000, estimated_cost_high: 12000 },
+                ],
+              },
+              atlasResult().final_itinerary.days[1],
+            ],
+          },
+        }),
+      };
+      global.fetch = defaultFetchMock();
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
+      expect(within(drawer).getByText('Non-binding estimate, per night')).toBeInTheDocument();
+      expect(within(drawer).getByText('Budget')).toBeInTheDocument();
+      expect(within(drawer).getByText('₹1,000–₹2,000')).toBeInTheDocument();
+      expect(within(drawer).getByText('Premium')).toBeInTheDocument();
+    });
+
+    it('shows no estimate section when Atlas has not provided one for the stay', async () => {
+      // Default readyItineraryState() fixture carries no stay_price_estimate
+      // on either day.
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
+      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      expect(within(drawer).queryByText('Non-binding estimate, per night')).toBeNull();
     });
   });
 
