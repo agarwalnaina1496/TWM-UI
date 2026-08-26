@@ -305,3 +305,23 @@
   .atlas-timeline::before{left:37px;}
   .atlas-day-footer>div{padding:14px 16px;}
 }
+
+/* ===== TWM-206: Itinerary inline actions and Transport drawer ===== */
+.btn-small{padding:6px 12px;font-size:12px;border-radius:8px;}
+.itinerary-set-dates{margin-top:10px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;}
+.itinerary-set-dates .confirmation-form{width:100%;max-width:340px;}
+
+/* Side drawer, not a full-screen modal (TWM-206 confirmed decision):
+   dims the Itinerary behind it but keeps it visible, slides in from the
+   right, no navigation away from the page. */
+.transport-drawer-overlay{position:fixed;inset:0;background:rgba(28,22,16,0.35);z-index:210;display:flex;justify-content:flex-end;}
+.transport-drawer{width:min(420px,100%);height:100%;background:var(--surface);box-shadow:-8px 0 24px rgba(28,22,16,0.18);padding:22px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;}
+.transport-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.transport-drawer-head h3{margin:0;font-family:'Fraunces',serif;font-size:19px;}
+.transport-drawer-date{margin:0;font-size:13px;color:var(--tp);font-weight:700;}
+.transport-drawer-date-note{margin:0;font-size:12.5px;color:var(--tm);}
+.transport-drawer-not-feasible{border-top:1px solid var(--border);padding-top:12px;margin-top:4px;}
+.transport-drawer-not-feasible summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--tm);}
+.transport-drawer-not-feasible ul{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;}
+.transport-drawer-not-feasible li{font-size:12.5px;color:var(--tm);display:flex;align-items:center;gap:8px;}
+@media(max-width:480px){.transport-drawer{width:100%;}}

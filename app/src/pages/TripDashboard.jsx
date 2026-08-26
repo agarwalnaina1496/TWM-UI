@@ -615,6 +615,77 @@ function RecommendedModeCard({ option }) {
   );
 }
 
+const ALL_TRANSPORT_MODES = ['flight', 'train', 'bus', 'drive'];
+
+// TWM-206: the Transport drawer — opened inline from a gateway leg in the
+// Itinerary tab. Dims the Itinerary behind it (transport-drawer-overlay);
+// never navigates away, never a full-screen modal. Date is leg-level and
+// set on the Itinerary item itself (TWM-206 step 2) — this drawer only
+// ever reads whatever date value is already there (via `leg`), it never
+// renders a date-input control of its own (TransportOptionCard is used
+// here without an `onAddDates` handler, which is what actually suppresses
+// FlightLiveOfferInfo's "Add dates" nudge button).
+function TransportDrawer({ leg, options, feasibility, loading, error, onClose }) {
+  if (!leg) return null;
+  const resolvedOptions = feasibleTransportOptions(options || [], feasibility);
+  const feasibleModeNames = new Set((feasibility?.modes || []).map(entry => entry.mode));
+  // TWM-195 root-fix contract: Backend's `modes` list only ever contains
+  // genuinely feasible entries — there is no per-mode reason for an absent
+  // mode, so this section can only say a mode isn't available, never why.
+  const notFeasibleModes = ALL_TRANSPORT_MODES.filter(mode => !feasibleModeNames.has(mode));
+  const recommended = resolvedOptions.length ? recommendedMode(resolvedOptions) : undefined;
+  const dateLabel = leg.departureDate || leg.departureMonth || null;
+  return (
+    <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
+      <aside
+        className="transport-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Transport: ${leg.from} to ${leg.to}`}
+        onClick={event => event.stopPropagation()}
+      >
+        <div className="transport-drawer-head">
+          <h3>{leg.from} → {leg.to}</h3>
+          <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close transport options">✕</button>
+        </div>
+        {dateLabel ? (
+          <p className="transport-drawer-date">📅 {dateLabel}</p>
+        ) : (
+          <p className="transport-drawer-date-note">No date set yet — add one on the Itinerary card above for a more precise search.</p>
+        )}
+        {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
+        {error && <p className="already-booked-note" role="alert">{error}</p>}
+        {!loading && !error && (
+          <>
+            {resolvedOptions.length === 0 ? (
+              <p className="already-booked-note" role="status">No bookable transport options for this leg.</p>
+            ) : (
+              <>
+                {recommended && <RecommendedModeCard option={recommended} />}
+                <div className="stay-options-grid">
+                  {resolvedOptions.map(option => (
+                    <TransportOptionCard key={option.mode} option={option} best={recommended ? option === recommended : false} />
+                  ))}
+                </div>
+              </>
+            )}
+            {notFeasibleModes.length > 0 && (
+              <details className="transport-drawer-not-feasible">
+                <summary>Other modes ({notFeasibleModes.length} not available for this route)</summary>
+                <ul className="trip-notes-list">
+                  {notFeasibleModes.map(mode => (
+                    <li key={mode}><ModeTag mode={mode} /> Not available for this route.</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
 // TWM-195 root-fix simplification: Backend's `modes` list only ever
 // contains genuinely route-valid entries now (no more ruled_out/unknown
 // bucket to explain "why other modes aren't shown" — a non-route-valid
@@ -790,6 +861,16 @@ export default function TripDashboard() {
   // position, or 'bookings' for the original trigger) so only that one
   // spot renders the form, never every qualifying spot at once.
   const [dateEditItemKey, setDateEditItemKey] = useState(null);
+
+  // TWM-206: the Transport drawer opened inline from a gateway leg in the
+  // Itinerary tab. Resolves on demand (only when a drawer actually opens)
+  // rather than eagerly for every gateway leg, and caches into the same
+  // transportData/setTransportData map the Bookings tab already fills —
+  // whichever surface resolves a leg first, the other reuses it instead of
+  // refetching.
+  const [transportDrawerLeg, setTransportDrawerLeg] = useState(null);
+  const [transportDrawerLoading, setTransportDrawerLoading] = useState(false);
+  const [transportDrawerError, setTransportDrawerError] = useState(null);
 
   // TWM-132: transportOptionsFor/stayOptionsFor/feasibility are now real
   // network calls (TWM-130/131's trusted-action + feasibility endpoints),
@@ -1207,6 +1288,39 @@ export default function TripDashboard() {
   // board item's is_gateway_leg/feasible_modes/date_precision for a given
   // Atlas timeline item — no from_city/to_city re-matching needed here.
   const boardDayByNumber = Object.fromEntries((boardData?.days || []).map(day => [day.day_number, day]));
+  // TWM-146/TWM-195/TWM-199: same canonical-then-fallback source the
+  // Bookings-tab fetch effect uses, so the Transport drawer's on-demand
+  // resolution never sends a different traveler_count than an eager
+  // Bookings-tab fetch would have.
+  const partySize = normalizeTravelerCount(tripState?.trip_context?.num_travelers)
+    ?? travelerCount(finalItinerary.trip_summary);
+
+  // TWM-206: opens the Transport drawer for a gateway leg, resolving its
+  // options on demand the first time (cached into transportData so a
+  // second open, or the Bookings tab, never refetches the same leg).
+  async function openTransportDrawer(boardItem) {
+    const leg = {
+      from: boardItem.from_city,
+      to: boardItem.to_city,
+      departureDate: boardItem.date_precision === 'exact' ? boardItem.departure_date : null,
+      departureMonth: boardItem.date_precision === 'month' ? boardItem.departure_month : null,
+    };
+    const key = legKey(leg);
+    setTransportDrawerLeg(leg);
+    if (transportData[key]) return;
+    setTransportDrawerLoading(true);
+    setTransportDrawerError(null);
+    try {
+      const feasibility = { modes: boardItem.feasible_modes || [] };
+      const approvedModes = feasibility.modes.map(entry => entry.mode);
+      const options = await transportOptionsFor(tripId, leg, partySize, approvedModes);
+      setTransportData(prev => ({ ...prev, [key]: { options, feasibility } }));
+    } catch (error) {
+      setTransportDrawerError(error.message || 'Could not load transport options.');
+    } finally {
+      setTransportDrawerLoading(false);
+    }
+  }
   const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });
   const costMin = Math.min(...allCosts, 0);
   const costMax = Math.max(...allCosts, 1);
@@ -1418,6 +1532,19 @@ export default function TripDashboard() {
                               error={dateEditError}
                             />
                           )}
+                          {/* TWM-206: Transport is information-dense
+                              (multiple modes/options, live-vs-estimated
+                              pricing, partner links) — density decides the
+                              interaction pattern, so it opens a side
+                              drawer instead of expanding inline like
+                              Set-dates does. */}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-small"
+                            onClick={() => openTransportDrawer(boardItem)}
+                          >
+                            🚗 Transport options ▾
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1443,6 +1570,17 @@ export default function TripDashboard() {
           </article>
         </div>
       </section>}
+
+      {transportDrawerLeg && (
+        <TransportDrawer
+          leg={transportDrawerLeg}
+          options={transportData[legKey(transportDrawerLeg)]?.options}
+          feasibility={transportData[legKey(transportDrawerLeg)]?.feasibility}
+          loading={transportDrawerLoading}
+          error={transportDrawerError}
+          onClose={() => setTransportDrawerLeg(null)}
+        />
+      )}
 
       {tab === 'Bookings' && <section aria-label="Bookings">
         <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Getting to and from {tripOriginCity(tripState?.trip_context) || 'your trip'} — schedules and fares are yours to verify before you book.</p></div></div>

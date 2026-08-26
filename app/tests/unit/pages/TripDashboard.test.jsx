@@ -1482,6 +1482,82 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
   });
 
+  // TWM-206 step 3: Transport is information-dense, so it opens a side
+  // drawer instead of expanding inline — dims the Itinerary behind it,
+  // never a full-screen modal, never a date-input control of its own.
+  describe('Itinerary Transport drawer (TWM-206)', () => {
+    it('opens a drawer for the clicked gateway leg, resolves and shows feasible-mode options, and lists other modes collapsed', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      // Backend's feasibleAssessmentResponse fixture (used by the shared
+      // /board mock) returns all four modes feasible for this leg.
+      await waitFor(() => expect(within(drawer).getAllByText(/Flight|Train|Bus|Drive/).length).toBeGreaterThan(0));
+      // No date-input control inside the drawer, per the confirmed decision
+      // that Set-dates lives only on the Itinerary item itself.
+      expect(within(drawer).queryByLabelText('Departure date')).toBeNull();
+      // Every mode was feasible for this fixture, so there's nothing left
+      // to list in the collapsed "other modes" section.
+      expect(within(drawer).queryByText(/not available for this route/i)).toBeNull();
+    });
+
+    it('lists only the genuinely infeasible modes in the collapsed section, never mixed into the primary options', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const busOnlyAssessment = {
+        modes: [{ mode: 'bus', status: 'feasible', duration_source: 'computed', reason: 'Practical for this trip.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } }],
+      };
+      global.fetch = vi.fn(async (url) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, busOnlyAssessment));
+        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      await waitFor(() => expect(within(drawer).getByText('3 not available for this route', { exact: false })).toBeInTheDocument());
+      // Flight/train/drive are collapsed as not feasible; bus is the only
+      // primary, actionable option. Click the summary specifically (its
+      // count text is distinct from each item's own "Not available for
+      // this route." line) to expand, then confirm exactly the 3.
+      await user.click(within(drawer).getByText('3 not available for this route', { exact: false }));
+      expect(within(drawer).getAllByText('Not available for this route.').length).toBe(3);
+    });
+
+    it('closes on the close button and on clicking the dimmed overlay', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      const closeButton = await screen.findByRole('button', { name: 'Close transport options' });
+      await user.click(closeButton);
+      expect(screen.queryByRole('dialog', { name: /Delhi to Rishikesh/ })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      await user.click(document.querySelector('.transport-drawer-overlay'));
+      expect(screen.queryByRole('dialog', { name: /Delhi to Rishikesh/ })).not.toBeInTheDocument();
+    });
+  });
+
   it('Overview\'s day-strip jumps into that day on the Itinerary tab', async () => {
     commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor({ day_number: 2, label: 'Riverside stay' })] });
     sendTripCommand = vi.fn();
