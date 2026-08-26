@@ -452,11 +452,12 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(capturedBodies.some(body => body.traveler_count === 2)).toBe(true);
     });
 
-    // TWM-195 review comment (blocker): stay/hotel affiliate resolution must
-    // not fire eagerly in this slice — no resolveTrustedAction(domain:
-    // 'stay') / stayOptionsFor network call, and an honest "not yet
-    // available" message instead of an empty options list.
-    it('does not eagerly resolve stay trusted-actions, and shows an honest "not yet available" state for Stay', async () => {
+    // TWM-197/TWM-208: stay/hotel affiliate resolution now fires for real —
+    // Backend's trusted-action readiness no longer requires an origin/
+    // traveler-count for domain='stay', so stayOptionsFor resolves each
+    // approved partner and the Stay section renders real redirect CTAs
+    // instead of the earlier permanent "not yet available" stub.
+    it('resolves stay trusted-actions for every approved partner and renders redirect CTAs', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       let stayNetworkCalls = [];
@@ -478,8 +479,15 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const resolveButtons = screen.getAllByRole('button', { name: 'Resolve ▾' });
       // Stay section is the second block (Transport legs first, then Stay).
       await user.click(resolveButtons[resolveButtons.length - 1]);
-      await waitFor(() => expect(screen.getByText(/Stay booking isn't available here yet/)).toBeInTheDocument());
-      expect(stayNetworkCalls).toEqual([]);
+      await waitFor(() => expect(screen.getAllByText('Check stay ↗').length).toBeGreaterThan(0));
+      // One call per approved stay partner (hotellook/booking_com/agoda),
+      // never origin/traveler_count — a stay search has no such concept.
+      expect(stayNetworkCalls).toEqual([
+        expect.objectContaining({ domain: 'stay', destination: 'Rishikesh', preferred_partner: 'hotellook' }),
+        expect.objectContaining({ domain: 'stay', destination: 'Rishikesh', preferred_partner: 'booking_com' }),
+        expect.objectContaining({ domain: 'stay', destination: 'Rishikesh', preferred_partner: 'agoda' }),
+      ]);
+      expect(stayNetworkCalls.every(body => body.origin === undefined && body.traveler_count === undefined)).toBe(true);
     });
 
     // Every leg transportLegs returns renders as its own row — proven here
@@ -823,7 +831,13 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const user = userEvent.setup();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
       await waitFor(() => {
-        const trustedActionCall = global.fetch.mock.calls.find(([url]) => url.includes('/trusted-action') && !url.includes('feasibility'));
+        // TWM-197: stay's trusted-action calls never carry traveler_count
+        // (a stay search has no such concept) — find the transport call
+        // specifically, not just any non-feasibility trusted-action call.
+        const trustedActionCall = global.fetch.mock.calls.find(([url, options]) => {
+          if (!url.includes('/trusted-action') || url.includes('feasibility')) return false;
+          return JSON.parse(options.body).domain !== 'stay';
+        });
         expect(trustedActionCall).toBeTruthy();
         expect(JSON.parse(trustedActionCall[1].body)).toMatchObject({ traveler_count: 3 });
       });
