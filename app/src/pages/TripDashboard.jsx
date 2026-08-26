@@ -12,7 +12,7 @@ import {
 } from '../lib/atlasView.js';
 import {
   transportLegs, gatewayLegs, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
-  stayLegs, activityBookings, notBookedYetLabel, modeLabel, recommendedMode, normalizeTravelerCount,
+  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode, normalizeTravelerCount,
   PARTNER_LABEL,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
@@ -881,19 +881,13 @@ export default function TripDashboard() {
           const options = await transportOptionsFor(tripId, leg, partySize, approvedModes);
           return [legKey(leg), { options, feasibility }];
         })),
-        // TWM-195 review comment (blocker): stay/hotel affiliate resolution
-        // is explicitly out of scope for this first mode-visibility slice —
-        // Backend's trusted-action readiness currently requires route/date/
-        // traveler fields that a stay leg doesn't genuinely have, so eagerly
-        // calling resolveTrustedAction(domain: 'stay') here only produced
-        // noisy missing_input responses. `stayOptionsFor`/the stay-partner
-        // resolution code in bookingCatalog.js is intentionally left intact
-        // (not deleted) for the future hotel/stay affiliate story to wire
-        // back in — it is simply not called from this flow anymore. Each
-        // stay leg instead gets a stable, honest "not yet available"
-        // result (`status: 'not_available'`, no options) that the Stay
-        // section renders directly rather than an empty options list.
-        Promise.resolve(stays.map(stay => [stay.id, { options: [], notAvailable: true }])),
+        // TWM-197/TWM-208: Backend's trusted-action readiness no longer
+        // requires an origin/traveler-count for domain='stay' (a hotel
+        // search never had either concept), so stayOptionsFor now resolves
+        // for real instead of the earlier permanent "not yet available"
+        // stub. Each stay leg still isolates its own failure from Transport
+        // via the outer Promise.allSettled below.
+        Promise.all(stays.map(async stay => [stay.id, { options: await stayOptionsFor(tripId, stay) }])),
       ]);
       if (cancelled) return;
 
@@ -1428,10 +1422,7 @@ export default function TripDashboard() {
               loading={expandedBookingId === stay.id && bookingsStatus === 'loading'}
               loadError={expandedBookingId === stay.id ? stayError : null}
               options={entry?.options || []}
-              // TWM-195 review comment: stay/hotel affiliate resolution is
-              // out of scope for this slice — this is an honest "not yet
-              // available" state, not "we searched and found nothing".
-              noOptionsMessage="Stay booking isn't available here yet — check back once hotel partners are connected."
+              noOptionsMessage="No stay partners available for this location."
               renderOption={(option, best) => <StayOptionCard key={option.name} option={option} best={best} />}
               onOpenConfirm={() => openConfirmForm('stay', `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`)}
             />
