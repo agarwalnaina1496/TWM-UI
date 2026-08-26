@@ -5,13 +5,13 @@ import TripHero from '../components/TripHero.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
 import SupportContent from '../components/SupportContent.jsx';
-import { getItinerary } from '../lib/tripApi.js';
+import { getItinerary, getTripBoard } from '../lib/tripApi.js';
 import {
   anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange,
   verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
 } from '../lib/atlasView.js';
 import {
-  transportLegs, gatewayLegs, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
+  transportOptionsFor, feasibleTransportOptions,
   stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode, normalizeTravelerCount,
   PARTNER_LABEL,
 } from '../lib/bookingCatalog.js';
@@ -801,6 +801,13 @@ export default function TripDashboard() {
   const [stayError, setStayError] = useState(null);
   const [transportData, setTransportData] = useState({});
   const [stayData, setStayData] = useState({});
+  // TWM-202/TWM-206: the Trip Board adapter's response — gateway-leg
+  // identification and feasibility now come from here, computed once
+  // server-side, instead of this layer re-deriving gatewayLegs/
+  // transportLegs client-side and firing a separate feasibility call per
+  // leg. Only set on a successful fetch (see the effect below) so a board
+  // fetch failure surfaces as transportError, not a silently emptied list.
+  const [boardData, setBoardData] = useState(null);
   const bookingsFetchStarted = useRef(null); // `${tripId}:${itineraryResult.version}:${originCity}` currently/last fetched, or null
 
   const tripId = commandSnapshot?.id;
@@ -834,18 +841,6 @@ export default function TripDashboard() {
     setBookingsStatus('loading');
 
     const bookingDays = itineraryResult.result.final_itinerary.days;
-    // TWM-200: transportLegs derives every structured TRAVEL movement —
-    // solely from Atlas's own from_city/to_city, never a UI-synthesized
-    // origin bookend. TWM-195 (MVP scope narrowing): Bookings Transport is
-    // gateway-only — gatewayLegs filters that full list down to just the
-    // outbound-from-origin and return-to-origin rows BEFORE any
-    // feasibility/trusted-action/flight-search call fires, so internal/
-    // circuit/local movements never hit the network at all, not merely
-    // hidden after the fact. No round-trip bundling either way.
-    const legsToFetch = gatewayLegs(
-      transportLegs(bookingDays, tripBookingDateContext(tripState?.trip_context), tripOriginCity(tripState?.trip_context)),
-      tripOriginCity(tripState?.trip_context),
-    );
     const stays = stayLegs(bookingDays);
     // TWM-146/TWM-195/TWM-199: threaded through to flight's live-offer
     // search and Trusted Action's traveler_count so those payloads are
@@ -869,18 +864,31 @@ export default function TripDashboard() {
       // resolution or feasibility failure must never blank out or error
       // the already-fetched/fetching Stay section, and vice versa.
       const [transportOutcome, stayOutcome] = await Promise.allSettled([
-        Promise.all(legsToFetch.map(async leg => {
-          // TWM-195 root fix: feasibility must be fetched and read FIRST,
-          // and only its approved modes are ever resolved — never
-          // Promise.all-concurrent with resolution. A failed/missing
-          // feasibility fetch (caught to null here) resolves zero modes,
-          // exactly like an honest `modes: []` response — never a
-          // fallback that tries every mode.
-          const feasibility = await fetchLegFeasibility(tripId, leg).catch(() => null);
-          const approvedModes = (feasibility?.modes || []).map(entry => entry.mode);
-          const options = await transportOptionsFor(tripId, leg, partySize, approvedModes);
-          return [legKey(leg), { options, feasibility }];
-        })),
+        (async () => {
+          // TWM-202/TWM-206: the Trip Board adapter identifies gateway
+          // legs and computes feasibility once, server-side — no separate
+          // client-side gatewayLegs/transportLegs derivation or per-leg
+          // fetchLegFeasibility call. A board-fetch failure rejects this
+          // whole branch (caught by the outer Promise.allSettled below),
+          // surfacing as transportError rather than silently emptying the
+          // leg list as if there were genuinely nothing to show.
+          const board = await getTripBoard(tripId);
+          const gatewayItems = (board.days || []).flatMap(day => day.items)
+            .filter(item => item.kind === 'TRAVEL' && item.is_gateway_leg);
+          const entries = await Promise.all(gatewayItems.map(async item => {
+            const leg = {
+              from: item.from_city,
+              to: item.to_city,
+              departureDate: item.date_precision === 'exact' ? item.departure_date : null,
+              departureMonth: item.date_precision === 'month' ? item.departure_month : null,
+            };
+            const feasibility = { modes: item.feasible_modes || [] };
+            const approvedModes = feasibility.modes.map(entry => entry.mode);
+            const options = await transportOptionsFor(tripId, leg, partySize, approvedModes);
+            return [legKey(leg), { options, feasibility }];
+          }));
+          return { board, entries };
+        })(),
         // TWM-197/TWM-208: Backend's trusted-action readiness no longer
         // requires an origin/traveler-count for domain='stay' (a hotel
         // search never had either concept), so stayOptionsFor now resolves
@@ -892,7 +900,8 @@ export default function TripDashboard() {
       if (cancelled) return;
 
       if (transportOutcome.status === 'fulfilled') {
-        setTransportData(Object.fromEntries(transportOutcome.value));
+        setBoardData(transportOutcome.value.board);
+        setTransportData(Object.fromEntries(transportOutcome.value.entries));
       } else {
         setTransportError(transportOutcome.reason?.message || 'Could not load transport options.');
       }
@@ -1162,22 +1171,14 @@ export default function TripDashboard() {
   // is part of this contract — changing that formatting without updating
   // this matcher will silently reclassify real confirmed anchors as orphaned.
   const findAnchor = (typeAnchors, label) => typeAnchors.find(a => a.label === label);
-  // TWM-200: transportLegs derives legs solely from Atlas's own structured
-  // TRAVEL.from_city/to_city movements. TWM-195 (MVP scope narrowing):
-  // render-side must filter to the same gateway-only rows the fetch effect
-  // resolved — never a wider render-side list than what was actually
-  // fetched, and (per TWM-195) no round-trip bundling either way.
-  //
-  // PR review, TWM-201: render must build legs the same way the fetch
-  // effect above does — originCity and bookingDateContext (the traveler's
-  // saved booking-date override) computed once and threaded through both
-  // call sites, so the visible rows never diverge from what was actually
-  // searched (e.g. a leg rendered without its route-safe exact-date
-  // override, or under a stale key while the fetch effect used a newer
-  // one).
+  // TWM-202/TWM-206: render-side reads the same gateway-leg list the fetch
+  // effect resolved via the Trip Board adapter (boardData) — never a
+  // separately re-derived client-side list, so the visible rows can never
+  // diverge from what was actually fetched/searched.
   const originCity = tripOriginCity(tripState?.trip_context);
-  const bookingDateContext = tripBookingDateContext(tripState?.trip_context);
-  const transportLegList = gatewayLegs(transportLegs(days, bookingDateContext, originCity), originCity);
+  const transportLegList = (boardData?.days || []).flatMap(day => day.items)
+    .filter(item => item.kind === 'TRAVEL' && item.is_gateway_leg)
+    .map(item => ({ id: legKey({ from: item.from_city, to: item.to_city }), from: item.from_city, to: item.to_city }));
   const stayLegList = stayLegs(days);
   const activityList = activityBookings(days);
 

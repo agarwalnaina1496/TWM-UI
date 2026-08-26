@@ -2,6 +2,9 @@
 // boundary instead of a client-side fixture. Mocks that boundary with Playwright
 // route interception so the exact scripted conversations stay deterministic and
 // don't require a live Backend/agent deployment.
+import { transportLegs, gatewayLegs } from '../../src/lib/bookingCatalog.js';
+import { tripOriginCity, tripBookingDateContext } from '../../src/constants/tripContext.js';
+
 const TRIP_ID = 'e2e-trip-1';
 
 function tripRecord({ id = TRIP_ID, version = 1, trip_state = {}, title = 'Untitled Trip', updated_at = '2026-01-01T00:00:00.000Z' } = {}) {
@@ -75,6 +78,57 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
       const currentVersion = records.get(itineraryMatch[1]).trip_state?.itinerary_state?.current_version;
       if (!currentVersion) return route.fulfill({ status: 404, json: { detail: 'No itinerary yet.' } });
       return route.fulfill({ json: currentVersion });
+    }
+    // TWM-202/TWM-206: TripDashboard.jsx now fetches the composed Trip
+    // Board (gateway-leg identification + feasibility) from this endpoint
+    // instead of deriving it client-side and calling
+    // /trusted-action/feasibility per leg. Synthesized here the same way
+    // as /itinerary above — from the current record's own itinerary
+    // result — reusing the exact gateway-leg logic the pre-adapter client
+    // code used to, so a spec's fixture data alone still determines which
+    // rows are gateway legs; every gateway leg gets the same generic
+    // "all four modes feasible" default as the old feasibility mock did.
+    const boardMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)\/board$/);
+    if (boardMatch && records.has(boardMatch[1])) {
+      const record = records.get(boardMatch[1]);
+      const currentVersion = record.trip_state?.itinerary_state?.current_version;
+      if (!currentVersion) return route.fulfill({ status: 404, json: { detail: 'No itinerary yet.' } });
+      const days = currentVersion.result.final_itinerary.days;
+      const originCity = tripOriginCity(record.trip_state?.trip_context);
+      const bookingDateContext = tripBookingDateContext(record.trip_state?.trip_context);
+      const allLegs = transportLegs(days, bookingDateContext, originCity);
+      const gatewayKeys = new Set(gatewayLegs(allLegs, originCity).map(leg => `${leg.from}→${leg.to}`));
+      const legByKey = Object.fromEntries(allLegs.map(leg => [`${leg.from}→${leg.to}`, leg]));
+      const reference = { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
+      const feasibleModes = ['flight', 'train', 'bus', 'drive'].map(mode => ({
+        mode, status: 'feasible', duration_source: 'computed',
+        estimated_duration_minutes: 120, estimated_distance_km: null,
+        reason: 'Genuinely reachable by this mode.', verification: reference,
+      }));
+      return route.fulfill({
+        json: {
+          version: currentVersion.version,
+          days: days.map(day => ({
+            ...day,
+            items: day.timeline.map(item => {
+              if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
+                return { ...item, is_gateway_leg: false, feasible_modes: null, date_precision: null };
+              }
+              const key = `${item.from_city}→${item.to_city}`;
+              const isGateway = gatewayKeys.has(key);
+              const leg = legByKey[key] || {};
+              return {
+                ...item,
+                is_gateway_leg: isGateway,
+                feasible_modes: isGateway ? feasibleModes : null,
+                date_precision: leg.departureDate ? 'exact' : leg.departureMonth ? 'month' : 'flexible',
+                departure_date: leg.departureDate || null,
+                departure_month: leg.departureMonth || null,
+              };
+            }),
+          })),
+        },
+      });
     }
     // Bookings tab (TWM-130/131/146) resolves each transport mode's CTA,
     // per-route feasibility, and a live flight-offer search — all real

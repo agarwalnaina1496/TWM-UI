@@ -144,6 +144,17 @@ export async function getItinerary(id) {
   return request(`/${id}/itinerary`);
 }
 
+// TWM-202/TWM-206: the Trip Board adapter's composed item shape — Atlas
+// content merged with Trusted Actions feasibility for the itinerary's two
+// gateway legs, computed once server-side. GET /trips/{id}/board. This
+// replaces bookingCatalog.js's client-side gatewayLegs/transportLegs
+// derivation and per-leg fetchLegFeasibility call as the single source of
+// truth for which legs are bookable and what modes are feasible for them —
+// no separate ad-hoc merge logic in this layer per the adapter's contract.
+export async function getTripBoard(id) {
+  return request(`/${id}/board`);
+}
+
 // TWM-131/132: resolves a single trusted travel action (CHECK_PRICES /
 // PROVIDER / SEARCH_REDIRECT) for one leg/domain — POST
 // /trips/{id}/trusted-action. Returns a TrustedActionResult, status-

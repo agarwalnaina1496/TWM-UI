@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TripDashboard from '../../../src/pages/TripDashboard.jsx';
+import { transportLegs, gatewayLegs } from '../../../src/lib/bookingCatalog.js';
+import { tripOriginCity, tripBookingDateContext } from '../../../src/constants/tripContext.js';
 
 let commandSnapshot;
 let sendTripCommand;
@@ -200,11 +202,50 @@ function feasibleAssessmentResponse() {
   };
 }
 
+// TWM-202/TWM-206: synthesizes a GET /trips/{id}/board response the same
+// shape TripDashboard.jsx now consumes, computed from a test's own
+// itineraryFetchResponse/tripContext fixtures using the exact same
+// gateway-leg identification the pre-adapter client code used to (reused
+// here only for test-mock fidelity, not by the component under test any
+// more) — so a test only has to say what feasibility a gateway leg should
+// carry, not hand-author a full board payload.
+function boardResponseFor(itineraryResult, tripContext, feasibility = feasibleAssessmentResponse()) {
+  const days = itineraryResult.result.final_itinerary.days;
+  const originCity = tripOriginCity(tripContext);
+  const bookingDateContext = tripBookingDateContext(tripContext);
+  const allLegs = transportLegs(days, bookingDateContext, originCity);
+  const gatewayKeys = new Set(gatewayLegs(allLegs, originCity).map(leg => `${leg.from}→${leg.to}`));
+  const legByKey = Object.fromEntries(allLegs.map(leg => [`${leg.from}→${leg.to}`, leg]));
+  return {
+    version: itineraryResult.version,
+    days: days.map(day => ({
+      ...day,
+      items: day.timeline.map(item => {
+        if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
+          return { ...item, is_gateway_leg: false, feasible_modes: null, date_precision: null };
+        }
+        const key = `${item.from_city}→${item.to_city}`;
+        const isGateway = gatewayKeys.has(key);
+        const leg = legByKey[key] || {};
+        return {
+          ...item,
+          is_gateway_leg: isGateway,
+          feasible_modes: isGateway ? (feasibility?.modes || []) : null,
+          date_precision: leg.departureDate ? 'exact' : leg.departureMonth ? 'month' : 'flexible',
+          departure_date: leg.departureDate || null,
+          departure_month: leg.departureMonth || null,
+        };
+      }),
+    })),
+  };
+}
+
 function defaultFetchMock() {
   return vi.fn(async (url) => {
     if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
     if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-    if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+    if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
     if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
     if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
     return jsonResponse({});
@@ -415,6 +456,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
         if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
         if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
@@ -438,6 +480,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
         if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
         if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
@@ -464,6 +507,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
         if (url.includes('/trusted-action')) {
           const body = JSON.parse(options.body);
@@ -544,6 +588,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action/feasibility')) {
           feasibilityCalls.push(JSON.parse(options.body));
           return jsonResponse(feasibleAssessmentResponse());
@@ -560,29 +605,32 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.getByText('Haridwar → Delhi')).toBeInTheDocument();
       expect(screen.queryByText('Rishikesh → Haridwar')).not.toBeInTheDocument();
       expect(screen.queryByText(/round trip/)).not.toBeInTheDocument();
-      await waitFor(() => expect(feasibilityCalls.length).toBeGreaterThan(0));
-      expect(feasibilityCalls.some(body => body.origin === 'Rishikesh' && body.destination === 'Haridwar')).toBe(false);
+      // TWM-206: feasibility now arrives embedded in the /board response
+      // (one call, not per-leg), so there is no separate feasibility call
+      // to assert zero-for-the-internal-leg on any more — the row-absence
+      // assertions above are the surviving proof the internal leg is never
+      // surfaced as a bookable Transport row.
     });
 
     it('expanding a segment shows mode-tagged options; a route-absurd mode is genuinely absent because Backend never returned it', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       let trustedActionCalls = [];
+      // TWM-195 root-fix contract: Backend simply omits a route-absurd mode
+      // (bus) from `modes` entirely — there is no ruled_out entry to send,
+      // and no excluded_modes field at all.
+      const noBusAssessment = {
+        modes: [
+          { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+          { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+          { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        ],
+      };
       global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/trusted-action/feasibility')) {
-          // TWM-195 root-fix contract: Backend simply omits a route-absurd
-          // mode (bus) from `modes` entirely — there is no ruled_out entry
-          // to send, and no excluded_modes field at all.
-          return jsonResponse({
-            modes: [
-              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-            ],
-          });
-        }
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, noBusAssessment));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(noBusAssessment);
         if (url.includes('/trusted-action')) {
           trustedActionCalls.push(JSON.parse(options.body));
           return jsonResponse(resolvedActionResponse());
@@ -606,18 +654,18 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows a recommended-mode card and a route-details disclosure with a GENERAL_GUIDANCE tag for the returned modes', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
+      const threeModeAssessment = {
+        modes: [
+          { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+          { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+          { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
+        ],
+      };
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/trusted-action/feasibility')) {
-          return jsonResponse({
-            modes: [
-              { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-              { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-            ],
-          });
-        }
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, threeModeAssessment));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(threeModeAssessment);
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
         return jsonResponse({});
       });
@@ -645,6 +693,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, { modes: [] }));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse({ modes: [] });
         if (url.includes('/trusted-action')) {
           // Distinguish the transport leg's own calls (domain
@@ -737,14 +786,10 @@ describe('Trip Dashboard (real Atlas contract)', () => {
           },
         }),
       };
-      let feasibilityCalls = [];
       global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/trusted-action/feasibility')) {
-          feasibilityCalls.push(JSON.parse(options.body));
-          return jsonResponse(feasibleAssessmentResponse());
-        }
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
         if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
         return jsonResponse({});
@@ -758,11 +803,10 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.queryByText('Bhubaneswar → Puri')).not.toBeInTheDocument();
       expect(screen.queryByText('Puri → Konark')).not.toBeInTheDocument();
       expect(screen.queryByText('Konark → Bhubaneswar')).not.toBeInTheDocument();
-      await waitFor(() => expect(feasibilityCalls.length).toBeGreaterThan(0));
-      const internalPairs = [['Bhubaneswar', 'Puri'], ['Puri', 'Konark'], ['Konark', 'Bhubaneswar']];
-      for (const [origin, destination] of internalPairs) {
-        expect(feasibilityCalls.some(body => body.origin === origin && body.destination === destination)).toBe(false);
-      }
+      // TWM-206: feasibility now arrives embedded in the single /board
+      // response, computed server-side from the same gateway-only rule —
+      // the row-absence assertions above are the surviving proof the three
+      // internal legs are never surfaced as bookable Transport rows.
     });
 
     // Regression: bookingsFetchStarted used to be keyed only by tripId, so
@@ -793,11 +837,14 @@ describe('Trip Dashboard (real Atlas contract)', () => {
           final_itinerary: { days: [travelDay(1, 'Delhi', 'Agra'), travelDay(2, 'Agra', 'Mumbai')] },
         }),
       };
-      let feasibilityCallCount = 0;
+      let boardCallCount = 0;
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/trusted-action/feasibility')) { feasibilityCallCount += 1; return jsonResponse(feasibleAssessmentResponse()); }
+        if (url.includes('/board')) {
+          boardCallCount += 1;
+          return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        }
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
         if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
         return jsonResponse({});
@@ -807,8 +854,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const view = await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Bookings/ }));
       await waitFor(() => expect(screen.getByText('Delhi → Agra')).toBeInTheDocument());
-      await waitFor(() => expect(feasibilityCallCount).toBeGreaterThan(0));
-      const callCountBeforeOriginChange = feasibilityCallCount;
+      await waitFor(() => expect(boardCallCount).toBeGreaterThan(0));
+      const callCountBeforeOriginChange = boardCallCount;
 
       // origin_city changes underneath the same mounted trip — force a
       // re-render so the mocked useTrip() picks up the new commandSnapshot,
@@ -818,7 +865,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
       await waitFor(() => expect(screen.getByText('Agra → Mumbai')).toBeInTheDocument());
       expect(screen.queryByText('Delhi → Agra')).not.toBeInTheDocument();
-      await waitFor(() => expect(feasibilityCallCount).toBeGreaterThan(callCountBeforeOriginChange));
+      await waitFor(() => expect(boardCallCount).toBeGreaterThan(callCountBeforeOriginChange));
     });
 
     it('sources the Trusted Action traveler_count from canonical trip_context.num_travelers, not Atlas trip_summary (TWM-199)', async () => {
@@ -924,11 +971,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/trusted-action/feasibility')) {
-          return jsonResponse({
-            modes: [{ mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } }],
-          });
-        }
+        const flightOnlyAssessment = {
+          modes: [{ mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } }],
+        };
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, flightOnlyAssessment));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(flightOnlyAssessment);
         if (url.includes('/trusted-action')) return jsonResponse({ status: 'missing_input', generated_at: '2026-01-01T00:00:00.000Z', missing_input: { missing_fields: ['origin'], message: 'Tell us the missing details.' } });
         return jsonResponse({});
       });
@@ -976,7 +1023,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({
@@ -1025,7 +1073,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({
@@ -1054,7 +1103,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({
@@ -1101,7 +1151,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({
@@ -1148,7 +1199,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({
@@ -1191,7 +1243,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({
@@ -1233,7 +1286,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({
@@ -1275,7 +1329,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         global.fetch = vi.fn(async url => {
           if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
           if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
           if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
           if (url.includes('/flight-search')) {
             return jsonResponse({ status: 'unavailable', queried_at: '2026-01-01T00:00:00.000Z', unavailable: { code: 'provider_timeout', message: 'The flight provider timed out — try again shortly.' } });
