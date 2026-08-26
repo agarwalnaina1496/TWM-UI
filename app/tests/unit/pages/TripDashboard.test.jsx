@@ -851,6 +851,28 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       // booking_dates) and the button now shows the saved date.
       await waitFor(() => expect(screen.getByRole('button', { name: /2026-05-01 · Change dates/ })).toBeInTheDocument());
     });
+
+    // PR review, TWM-206: "Change dates" already advertises the saved
+    // value on its own face -- it must open pre-filled with that value,
+    // not blank, or a traveler adding just a return date has to retype
+    // the departure date from memory before Save unlocks.
+    it('seeds "Change dates" with the already-saved date instead of opening blank', async () => {
+      commandSnapshot = snapshotWith(
+        readyItineraryState(),
+        {},
+        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-05-01' } } },
+      );
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /2026-05-01 · Change dates/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /2026-05-01 · Change dates/ }));
+      expect(screen.getByLabelText('Departure date')).toHaveValue('2026-05-01');
+      // Save is immediately usable — not blocked on retyping the already-saved value.
+      expect(screen.getByRole('button', { name: 'Save dates' })).not.toBeDisabled();
+    });
   });
 
   // TWM-206 step 3: Transport is information-dense, so it opens a side
@@ -976,6 +998,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       // date save was not reused.
       await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(callCountBeforeDateSave));
     });
+
   });
 
   // TWM-206 step 4: Stay opens a drawer from the day header (once per
@@ -1047,6 +1070,24 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
       await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
       expect(within(drawer).queryByText('Non-binding estimate, per night')).toBeNull();
+    });
+
+    // PR review, TWM-206: the three stay partners are functionally
+    // equivalent link-only redirects with no price/rating behind them —
+    // picking the first-resolved one as "Our pick" would be exactly the
+    // fabricated ranking indicator this drawer's own comment disclaims.
+    it('never shows an "Our pick" badge on a stay partner card', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
+      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      expect(within(drawer).queryByText('Our pick')).not.toBeInTheDocument();
     });
   });
 

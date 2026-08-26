@@ -13,7 +13,7 @@ import {
 import {
   transportOptionsFor, feasibleTransportOptions,
   stayOptionsFor, modeLabel, recommendedMode, normalizeTravelerCount,
-  PARTNER_LABEL,
+  PARTNER_LABEL, MODES,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
@@ -601,8 +601,6 @@ function RecommendedModeCard({ option }) {
   );
 }
 
-const ALL_TRANSPORT_MODES = ['flight', 'train', 'bus', 'drive'];
-
 // TWM-206: the Transport drawer — opened inline from a gateway leg in the
 // Itinerary tab. Dims the Itinerary behind it (transport-drawer-overlay);
 // never navigates away, never a full-screen modal. Date is leg-level and
@@ -618,7 +616,7 @@ function TransportDrawer({ leg, options, feasibility, loading, error, onClose })
   // TWM-195 root-fix contract: Backend's `modes` list only ever contains
   // genuinely feasible entries — there is no per-mode reason for an absent
   // mode, so this section can only say a mode isn't available, never why.
-  const notFeasibleModes = ALL_TRANSPORT_MODES.filter(mode => !feasibleModeNames.has(mode));
+  const notFeasibleModes = MODES.filter(mode => !feasibleModeNames.has(mode));
   const recommended = resolvedOptions.length ? recommendedMode(resolvedOptions) : undefined;
   const dateLabel = leg.departureDate || leg.departureMonth || null;
   return (
@@ -683,7 +681,6 @@ const STAY_TIER_LABEL = { budget: 'Budget', mid_range: 'Mid-range', premium: 'Pr
 // into or presented as a partner's real price.
 function StayDrawer({ stay, options, loading, error, stayPriceEstimate, onClose }) {
   if (!stay) return null;
-  const best = options?.length ? options.find(option => option.status === 'resolved') : undefined;
   return (
     <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
       <aside
@@ -716,7 +713,11 @@ function StayDrawer({ stay, options, loading, error, stayPriceEstimate, onClose 
           options?.length ? (
             <div className="stay-options-grid">
               {options.map(option => (
-                <StayOptionCard key={option.name} option={option} best={option === best} />
+                // PR review: partner order (hotellook/booking_com/agoda) has
+                // no price/rating basis to prefer one — a "best" pick here
+                // would be a fabricated ranking indicator, contradicting
+                // this drawer's own no-fabricated-price/rating principle.
+                <StayOptionCard key={option.name} option={option} best={false} />
               ))}
             </div>
           ) : (
@@ -851,6 +852,13 @@ export default function TripDashboard() {
   // gatewayLegs/transportLegs client-side and firing a separate feasibility
   // call per leg.
   const [boardData, setBoardData] = useState(null);
+  // PR review: version alone isn't enough to prove boardData matches the
+  // current itineraryResult -- a freshly-generated trip always starts at
+  // itinerary version 1, so switching trips in-app (viewTrip on a
+  // ?tripId= change, without unmounting) could otherwise pass a stale
+  // same-version check with a *different* trip's board data for one
+  // render. Tracked alongside boardData so both are always read together.
+  const [boardDataTripId, setBoardDataTripId] = useState(null);
   const boardFetchStarted = useRef(null); // `${tripId}:${itineraryResult.version}:${originCity}:${bookingDates}` currently/last fetched, or null
 
   const tripId = commandSnapshot?.id;
@@ -881,7 +889,9 @@ export default function TripDashboard() {
     boardFetchStarted.current = boardFetchKey;
     let cancelled = false;
     getTripBoard(tripId).then(board => {
-      if (!cancelled) setBoardData(board);
+      if (cancelled) return;
+      setBoardData(board);
+      setBoardDataTripId(tripId);
     }).catch(() => {
       // No dedicated error surface for this light fetch — Itinerary's
       // Set-dates/Transport-options affordances simply won't render for a
@@ -984,9 +994,23 @@ export default function TripDashboard() {
   }
 
   function openDateEditForm(suggestedMode, itemKey) {
-    setDateEditMode(suggestedMode === 'month' ? 'month' : 'exact');
-    setDateEditValue('');
-    setDateEditReturnValue('');
+    const mode = suggestedMode === 'month' ? 'month' : 'exact';
+    setDateEditMode(mode);
+    // PR review: seed from whatever's already saved, when it matches the
+    // mode being opened, instead of always clearing -- the trigger button
+    // already advertises the saved value ("<date> · Change dates"), so
+    // "Change" starting blank forced retyping the departure date from
+    // memory just to add/edit a return date. Only starts blank when
+    // there's genuinely nothing saved yet, or the traveler is switching
+    // precision (exact <-> month has no shared field to seed from).
+    const existing = tripBookingDateContext(tripState?.trip_context);
+    if (existing?.precision === mode) {
+      setDateEditValue((mode === 'exact' ? existing.departure_date : existing.departure_month) || '');
+      setDateEditReturnValue((mode === 'exact' ? existing.return_date : '') || '');
+    } else {
+      setDateEditValue('');
+      setDateEditReturnValue('');
+    }
     setDateEditError(null);
     setDateEditItemKey(itemKey);
     setDateEditOpen(true);
@@ -1113,7 +1137,10 @@ export default function TripDashboard() {
   // revision could otherwise silently attach a stale board item to the
   // wrong new timeline item. Falls back to no board-derived affordances
   // (identical to the no-boardData-yet state) until the versions agree.
-  const boardDayByNumber = boardData?.version === itineraryResult.version
+  // PR review: version alone doesn't rule out a cross-trip mismatch after
+  // switching trips in-app (fresh trips all start at version 1) — gate on
+  // boardDataTripId too.
+  const boardDayByNumber = boardData?.version === itineraryResult.version && boardDataTripId === tripId
     ? Object.fromEntries((boardData.days || []).map(day => [day.day_number, day]))
     : {};
   // TWM-206: which base/stay (if any) the selected day belongs to — Stay's
@@ -1149,9 +1176,14 @@ export default function TripDashboard() {
     };
     const key = legKey(leg);
     setTransportDrawerLeg(leg);
+    // PR review: reset before the cache-hit early return, not just before
+    // a real fetch — onClose never clears these, so a stale error/loading
+    // state from a previously failed leg would otherwise still be showing
+    // when a different, already-cached leg opens next.
+    setTransportDrawerError(null);
+    setTransportDrawerLoading(false);
     if (transportData[key]) return;
     setTransportDrawerLoading(true);
-    setTransportDrawerError(null);
     try {
       const feasibility = { modes: boardItem.feasible_modes || [] };
       const approvedModes = feasibility.modes.map(entry => entry.mode);
@@ -1169,9 +1201,11 @@ export default function TripDashboard() {
   // open, or the Bookings tab, never refetches the same stay).
   async function openStayDrawer(stay) {
     setStayDrawerStay(stay);
+    // PR review: same reset-before-cache-hit fix as openTransportDrawer.
+    setStayDrawerError(null);
+    setStayDrawerLoading(false);
     if (stayData[stay.id]) return;
     setStayDrawerLoading(true);
-    setStayDrawerError(null);
     try {
       const options = await stayOptionsFor(tripId, stay);
       setStayData(prev => ({ ...prev, [stay.id]: { options } }));
