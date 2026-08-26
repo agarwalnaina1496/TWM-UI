@@ -240,11 +240,12 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
   await page.getByRole('button', { name: /Resolve/ }).first().click();
   await expect(page.getByRole('link', { name: 'Check ↗' }).first()).toBeVisible();
 
-  // Stay (TWM-195 review comment blocker): out of scope for this slice —
-  // no partner options resolve, just an honest "not yet available" state.
+  // Stay (TWM-197/TWM-208): resolves for real now — one redirect CTA per
+  // approved partner (hotellook/booking_com/agoda), via the shared
+  // domain-agnostic /trusted-action mock in testUtils.js.
   const stayResolveButtons = page.getByRole('button', { name: /Resolve/ });
   await stayResolveButtons.last().click();
-  await expect(page.getByText(/Stay booking isn't available here yet/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Check stay ↗' }).first()).toBeVisible();
 
   // Activity: only the Atlas-flagged Wayanad safari appears, framed as the exception.
   await expect(page.getByText(/the exception, not the norm/)).toBeVisible();
