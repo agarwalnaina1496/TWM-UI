@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   transportOptionsFor, feasibleTransportOptions, transportLegs, gatewayLegs,
-  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode,
-  fetchLegFeasibility, MODES, normalizeTravelerCount,
+  stayOptionsFor, modeLabel, recommendedMode,
+  MODES, normalizeTravelerCount,
 } from '../../../src/lib/bookingCatalog.js';
 
 function flightSearchResponse(overrides = {}) {
@@ -721,30 +721,7 @@ describe('recommendedMode', () => {
   });
 });
 
-describe('fetchLegFeasibility', () => {
-  it('posts origin/destination to the feasibility endpoint', async () => {
-    global.fetch = vi.fn(async () => jsonResponse({ modes: [] }));
-    await fetchLegFeasibility('trip-1', { from: 'Delhi', to: 'Gwalior' });
-    expect(global.fetch).toHaveBeenCalledWith('/api/trips/trip-1/trusted-action/feasibility', expect.objectContaining({
-      method: 'POST', body: JSON.stringify({ origin: 'Delhi', destination: 'Gwalior' }),
-    }));
-  });
-});
-
-describe('stayLegs / stayOptionsFor', () => {
-  it('one stay per distinct consecutive location', () => {
-    const days = [
-      { day_number: 1, primary_location: 'Gwalior' },
-      { day_number: 2, primary_location: 'Gwalior' },
-      { day_number: 3, primary_location: 'Orchha' },
-    ];
-    const stays = stayLegs(days);
-    expect(stays).toEqual([
-      { id: 'stay-Gwalior', location: 'Gwalior', nights: 2 },
-      { id: 'stay-Orchha', location: 'Orchha', nights: 1 },
-    ]);
-  });
-
+describe('stayOptionsFor', () => {
   it('resolves one trusted action per approved stay partner', async () => {
     const options = await stayOptionsFor('trip-1', { id: 'stay-Gwalior', location: 'Gwalior', nights: 2 });
     expect(options.length).toBeGreaterThan(1);
@@ -758,31 +735,3 @@ describe('stayLegs / stayOptionsFor', () => {
   });
 });
 
-describe('activityBookings', () => {
-  it('only includes ACTIVITY items genuinely flagged requires_advance_booking, never a mock', () => {
-    const days = [
-      {
-        day_number: 1,
-        timeline: [
-          { kind: 'ACTIVITY', title: 'Safari', requires_advance_booking: true, detail: 'Book ahead.' },
-          { kind: 'ACTIVITY', title: 'Free walk', requires_advance_booking: false, detail: 'Drop in.' },
-          { kind: 'TRAVEL', title: 'Transfer', requires_advance_booking: true, detail: 'x' },
-        ],
-      },
-    ];
-    const activities = activityBookings(days);
-    expect(activities).toEqual([{ id: 'activity-1-Safari', dayNumber: 1, title: 'Safari', detail: 'Book ahead.' }]);
-  });
-
-  it('is empty when nothing requires advance booking — never renders as an empty section', () => {
-    const days = [{ day_number: 1, timeline: [{ kind: 'ACTIVITY', title: 'Walk', requires_advance_booking: false }] }];
-    expect(activityBookings(days)).toEqual([]);
-  });
-});
-
-describe('notBookedYetLabel', () => {
-  it('names the specific segment, never a bare generic label', () => {
-    expect(notBookedYetLabel('Delhi → Gwalior')).toBe('Delhi → Gwalior not booked yet');
-    expect(notBookedYetLabel('Gwalior stay')).toBe('Gwalior stay not booked yet');
-  });
-});

@@ -1,12 +1,11 @@
 import { FLIGHT_SEARCH_KEYS, TRUSTED_ACTION_KEYS } from '../constants/tripPayloads.js';
-import { routeStops } from './atlasView.js';
-import { resolveTrustedAction, getTripFeasibility, searchFlights } from './tripApi.js';
+import { resolveTrustedAction, searchFlights } from './tripApi.js';
 
 // TWM-176/TWM-132: booking data built directly against the real Atlas
 // schema shape (primary_location, day_number, timeline, kind,
 // requires_advance_booking) — deliberately NOT reusing mockAtlasTrip.js's
 // structurally different shape (cost_inr, base, number, items).
-// Search/ranking/reasoning here (transportLegs/stayLegs) are
+// Search/ranking/reasoning here (transportLegs/gatewayLegs) are
 // permanent, pure route-derivation from Atlas days with no Backend
 // dependency. TWM-132 is the transition promised in the old header comment:
 // the terminal action (transportOptionsFor/feasibleTransportOptions/
@@ -326,19 +325,6 @@ export async function transportOptionsFor(tripId, leg, travelerCount, approvedMo
   return Promise.all(modes.map(mode => resolveTransportOption(tripId, leg, mode, travelerCount)));
 }
 
-// Fetches the real per-route TripFeasibilityAssessment for a leg. Callers
-// MUST fetch this and read `.modes` BEFORE calling transportOptionsFor —
-// never resolve-then-filter (TWM-195 Root Fix Requirement). May resolve to
-// null on a request failure, which callers must treat identically to an
-// empty `modes: []` response: no bookable modes, never a fallback to "try
-// every mode".
-// Trip Feasibility is its own contract, independent of Trusted Action —
-// same field names on this occasion, but not the same payload, so this
-// intentionally builds a plain object rather than importing TRUSTED_ACTION_KEYS.
-export async function fetchLegFeasibility(tripId, leg) {
-  return getTripFeasibility(tripId, { origin: leg.from, destination: leg.to });
-}
-
 // TWM-195 root-fix simplification: Backend's TripFeasibilityAssessment now
 // only ever contains genuinely feasible/route-valid entries (no more
 // excluded_modes / per-mode ruled_out / unknown to bucket) — so this no
@@ -493,10 +479,6 @@ export function gatewayLegs(legs, originCity) {
   return gateways;
 }
 
-export function stayLegs(days) {
-  return routeStops(days).map(stop => ({ id: `stay-${stop.location}`, location: stop.location, nights: stop.dayNumbers.length }));
-}
-
 // Approved stay partners (twm/schemas/trusted_action.py's
 // _ALLOWED_PARTNERS_BY_DOMAIN["stay"]), capped to 3 so the Bookings tab
 // still shows a tiered comparison rather than every approved partner.
@@ -540,17 +522,3 @@ export async function stayOptionsFor(tripId, stay) {
   return Promise.all(STAY_PARTNERS.map(partner => resolveStayOption(tripId, stay, partner)));
 }
 
-// Activity bookings are never mock — only real Atlas-flagged items, the
-// exception for that day, not the norm.
-export function activityBookings(days) {
-  return (days || []).flatMap(day =>
-    (day.timeline || [])
-      .filter(item => item.kind === 'ACTIVITY' && item.requires_advance_booking)
-      .map(item => ({ id: `activity-${day.day_number}-${item.title}`, dayNumber: day.day_number, title: item.title, detail: item.detail }))
-  );
-}
-
-// Never a bare status word — states exactly what's missing.
-export function notBookedYetLabel(name) {
-  return `${name} not booked yet`;
-}
