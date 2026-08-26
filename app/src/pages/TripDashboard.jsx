@@ -5,15 +5,15 @@ import TripHero from '../components/TripHero.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
 import SupportContent from '../components/SupportContent.jsx';
-import { getItinerary } from '../lib/tripApi.js';
+import { getItinerary, getTripBoard } from '../lib/tripApi.js';
 import {
-  anchorsByType, anchorsForDay, bookingReadinessLabel, dayCostRange,
-  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
+  anchorsForDay, bookingReadinessLabel, dayCostRange,
+  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount, routeStops,
 } from '../lib/atlasView.js';
 import {
-  transportLegs, gatewayLegs, transportOptionsFor, feasibleTransportOptions, fetchLegFeasibility,
-  stayLegs, stayOptionsFor, activityBookings, notBookedYetLabel, modeLabel, recommendedMode, normalizeTravelerCount,
-  PARTNER_LABEL,
+  transportOptionsFor, feasibleTransportOptions,
+  stayOptionsFor, modeLabel, recommendedMode, normalizeTravelerCount,
+  PARTNER_LABEL, MODES,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
@@ -24,15 +24,17 @@ import { withTripId } from '../lib/tripUrl.js';
 import { useTripFromUrl } from '../lib/useTripFromUrl.js';
 import '../styles/dashboard.css';
 
-// TWM-175: 5 tabs, down from 7 — Map folds into Overview's day-strip (it
-// was never a real map, just route order), Stays+Transport merge into the
-// Bookings story that lands next (this story only adds an inert placeholder
-// for that tab, not its real content).
+// TWM-175: down from 7 tabs originally — Map folds into Overview's
+// day-strip (it was never a real map, just route order). TWM-198: Docs
+// parked/hidden for MVP — it only ever rendered an inert "Coming soon"
+// placeholder with no real product decision behind it. TWM-206: Bookings
+// retired too — Transport/Stay resolution and Set-dates now live inline on
+// the Itinerary item itself (drawer or accordion, by information density),
+// so a separate tab re-deriving the same legs was a parallel path to the
+// same data, not a distinct feature.
 const TABS = [
   { name: 'Overview', icon: '📊' },
   { name: 'Itinerary', icon: '📅' },
-  { name: 'Bookings', icon: '🧳' },
-  { name: 'Docs', icon: '📁' },
   { name: 'Support', icon: '💬' },
 ];
 
@@ -270,40 +272,8 @@ function TrustStrip({ counts }) {
   );
 }
 
-const EMPTY_CONFIRM_FIELDS = { label: '', detail: '', dayNumber: '', reference: '', notes: '' };
-
-function ConfirmationForm({ dayOptions, fields, setFields, onSubmit, onCancel, pending, error }) {
-  return (
-    <form className="confirmation-form" onSubmit={onSubmit}>
-      <label>What's confirmed?
-        <input required value={fields.label} disabled={pending} placeholder="e.g. Delhi to Gwalior train" onChange={event => setFields(previous => ({ ...previous, label: event.target.value }))} />
-      </label>
-      <label>Details
-        <textarea required value={fields.detail} disabled={pending} placeholder="e.g. Confirmed arrival at 2:00 PM via train 12050" onChange={event => setFields(previous => ({ ...previous, detail: event.target.value }))} />
-      </label>
-      <label>Day
-        <select value={fields.dayNumber} disabled={pending} onChange={event => setFields(previous => ({ ...previous, dayNumber: event.target.value }))}>
-          <option value="">Not day-specific</option>
-          {dayOptions.map(day => <option key={day} value={day}>Day {day}</option>)}
-        </select>
-      </label>
-      <label>Confirmation code (optional)
-        <input value={fields.reference} disabled={pending} onChange={event => setFields(previous => ({ ...previous, reference: event.target.value }))} />
-      </label>
-      <label>Notes (optional)
-        <input value={fields.notes} disabled={pending} onChange={event => setFields(previous => ({ ...previous, notes: event.target.value }))} />
-      </label>
-      {error && <p className="confirm-error" role="alert">{error}</p>}
-      <div className="confirmation-form-actions">
-        <button type="button" className="btn btn-ghost" disabled={pending} onClick={onCancel}>Cancel</button>
-        <button type="submit" className="btn btn-primary" disabled={pending || !fields.label.trim() || !fields.detail.trim()}>Save confirmation</button>
-      </div>
-    </form>
-  );
-}
-
 // TWM-201: small in-page flow for adding/updating booking-date precision on
-// a frozen trip — mirrors ConfirmationForm's scaffold (local field state,
+// a frozen trip — mirrors the (TWM-198-removed) ConfirmationForm's scaffold (local field state,
 // pending/error, Save/Cancel). Deliberately narrow (a mode toggle, one
 // date/month input, and — PR review — an optional return date): origin_city,
 // route, and num_travelers are never recollected here (out of scope), and
@@ -488,8 +458,13 @@ function FlightLiveOfferInfo({ liveOffer, onAddDates }) {
     </div>
   );
   if (liveOffer.status === 'offer' || liveOffer.status === 'partial') {
-    const freshness = timeAgoLabel(liveOffer.priceFoundAt);
-    const departureTime = flightDepartureTimeLabel(liveOffer.departureAt);
+    // TWM-206: renders every ranked offer Backend returned, not just the
+    // recommended one — the origin bug this story's discovery started
+    // from (a real ranked list collapsed to a single ₹42,494 row before it
+    // ever reached the card). `offers` is always populated by
+    // bookingCatalog.js's toLiveOffer now; the single-liveOffer fallback
+    // only guards a shape from before this fix.
+    const offers = liveOffer.offers || [liveOffer];
     return (
       <div className="live-offer-block">
         {routeContext}
@@ -499,16 +474,27 @@ function FlightLiveOfferInfo({ liveOffer, onAddDates }) {
         <StatusPill tone="neutral" variant="filled">
           {liveOffer.status === 'partial' ? 'Cached price (partial)' : 'Cached price'}
         </StatusPill>
-        <strong className="live-offer-price">{liveOffer.priceLabel}</strong>
-        <span className="stay-option-tag">
-          {liveOffer.airline || 'Airline not disclosed'}
-          {liveOffer.flightNumber && ` ${liveOffer.flightNumber}`}
-          {liveOffer.stopCount != null && ` · ${liveOffer.stopCount === 0 ? 'Nonstop' : `${liveOffer.stopCount} stop${liveOffer.stopCount === 1 ? '' : 's'}`}`}
-        </span>
-        {departureTime && <span className="stay-option-tag">Departs {departureTime}</span>}
+        <div className="live-offer-list">
+          {offers.map((offer, index) => {
+            const freshness = timeAgoLabel(offer.priceFoundAt);
+            const departureTime = flightDepartureTimeLabel(offer.departureAt);
+            return (
+              <div className={`live-offer-row${offer.isRecommended ? ' recommended' : ''}`} key={index}>
+                {offer.isRecommended && offers.length > 1 && <span className="pick-badge">Our pick</span>}
+                <strong className="live-offer-price">{offer.priceLabel}</strong>
+                <span className="stay-option-tag">
+                  {offer.airline || 'Airline not disclosed'}
+                  {offer.flightNumber && ` ${offer.flightNumber}`}
+                  {offer.stopCount != null && ` · ${offer.stopCount === 0 ? 'Nonstop' : `${offer.stopCount} stop${offer.stopCount === 1 ? '' : 's'}`}`}
+                </span>
+                {departureTime && <span className="stay-option-tag">Departs {departureTime}</span>}
+                {freshness && <span className="stay-option-tag">Updated {freshness}</span>}
+                {offer.offerExpiresAt && <span className="stay-option-tag">Expires {new Date(offer.offerExpiresAt).toLocaleString()}</span>}
+              </div>
+            );
+          })}
+        </div>
         <p className="already-booked-note">Not yet confirmed available — check availability before booking.</p>
-        {freshness && <span className="stay-option-tag">Updated {freshness}</span>}
-        {liveOffer.offerExpiresAt && <span className="stay-option-tag">Expires {new Date(liveOffer.offerExpiresAt).toLocaleString()}</span>}
         {nudge}
       </div>
     );
@@ -615,6 +601,134 @@ function RecommendedModeCard({ option }) {
   );
 }
 
+// TWM-206: the Transport drawer — opened inline from a gateway leg in the
+// Itinerary tab. Dims the Itinerary behind it (transport-drawer-overlay);
+// never navigates away, never a full-screen modal. Date is leg-level and
+// set on the Itinerary item itself (TWM-206 step 2) — this drawer only
+// ever reads whatever date value is already there (via `leg`), it never
+// renders a date-input control of its own (TransportOptionCard is used
+// here without an `onAddDates` handler, which is what actually suppresses
+// FlightLiveOfferInfo's "Add dates" nudge button).
+function TransportDrawer({ leg, options, feasibility, loading, error, onClose }) {
+  if (!leg) return null;
+  const resolvedOptions = feasibleTransportOptions(options || [], feasibility);
+  const feasibleModeNames = new Set((feasibility?.modes || []).map(entry => entry.mode));
+  // TWM-195 root-fix contract: Backend's `modes` list only ever contains
+  // genuinely feasible entries — there is no per-mode reason for an absent
+  // mode, so this section can only say a mode isn't available, never why.
+  const notFeasibleModes = MODES.filter(mode => !feasibleModeNames.has(mode));
+  const recommended = resolvedOptions.length ? recommendedMode(resolvedOptions) : undefined;
+  const dateLabel = leg.departureDate || leg.departureMonth || null;
+  return (
+    <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
+      <aside
+        className="transport-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Transport: ${leg.from} to ${leg.to}`}
+        onClick={event => event.stopPropagation()}
+      >
+        <div className="transport-drawer-head">
+          <h3>{leg.from} → {leg.to}</h3>
+          <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close transport options">✕</button>
+        </div>
+        {dateLabel ? (
+          <p className="transport-drawer-date">📅 {dateLabel}</p>
+        ) : (
+          <p className="transport-drawer-date-note">No date set yet — add one on the Itinerary card above for a more precise search.</p>
+        )}
+        {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
+        {error && <p className="already-booked-note" role="alert">{error}</p>}
+        {!loading && !error && (
+          <>
+            {resolvedOptions.length === 0 ? (
+              <p className="already-booked-note" role="status">No bookable transport options for this leg.</p>
+            ) : (
+              <>
+                {recommended && <RecommendedModeCard option={recommended} />}
+                <div className="stay-options-grid">
+                  {resolvedOptions.map(option => (
+                    <TransportOptionCard key={option.mode} option={option} best={recommended ? option === recommended : false} />
+                  ))}
+                </div>
+              </>
+            )}
+            {notFeasibleModes.length > 0 && (
+              <details className="transport-drawer-not-feasible">
+                <summary>Other modes ({notFeasibleModes.length} not available for this route)</summary>
+                <ul className="trip-notes-list">
+                  {notFeasibleModes.map(mode => (
+                    <li key={mode}><ModeTag mode={mode} /> Not available for this route.</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+const STAY_TIER_LABEL = { budget: 'Budget', mid_range: 'Mid-range', premium: 'Premium' };
+
+// TWM-206: the Stay drawer — link-only cards per approved partner
+// (hotellook/booking_com/agoda per bookingCatalog.js's STAY_PARTNERS), no
+// fabricated price/rating on the card itself. Atlas's TWM-204 per-tier
+// estimate (stay_price_estimate, already present on the raw day object —
+// no Trip Board adapter change needed since it isn't feasibility-derived)
+// renders as its own clearly-labeled non-binding section, never merged
+// into or presented as a partner's real price.
+function StayDrawer({ stay, options, loading, error, stayPriceEstimate, onClose }) {
+  if (!stay) return null;
+  return (
+    <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
+      <aside
+        className="transport-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Stay: ${stay.location}`}
+        onClick={event => event.stopPropagation()}
+      >
+        <div className="transport-drawer-head">
+          <h3>{stay.location} · {stay.nights} night{stay.nights === 1 ? '' : 's'}</h3>
+          <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close stay options">✕</button>
+        </div>
+        {stayPriceEstimate && (
+          <div className="stay-estimate-block">
+            <span className="stay-estimate-label">Non-binding estimate, per night</span>
+            <div className="stay-estimate-tiers">
+              {stayPriceEstimate.map(tier => (
+                <div className="stay-estimate-tier" key={tier.tier}>
+                  <span className="stay-option-tag">{STAY_TIER_LABEL[tier.tier] || tier.tier}</span>
+                  <strong>{moneyRange(tier.estimated_cost_low, tier.estimated_cost_high)}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
+        {error && <p className="already-booked-note" role="alert">{error}</p>}
+        {!loading && !error && (
+          options?.length ? (
+            <div className="stay-options-grid">
+              {options.map(option => (
+                // PR review: partner order (hotellook/booking_com/agoda) has
+                // no price/rating basis to prefer one — a "best" pick here
+                // would be a fabricated ranking indicator, contradicting
+                // this drawer's own no-fabricated-price/rating principle.
+                <StayOptionCard key={option.name} option={option} best={false} />
+              ))}
+            </div>
+          ) : (
+            <p className="already-booked-note" role="status">No stay partners available for this location.</p>
+          )
+        )}
+      </aside>
+    </div>
+  );
+}
+
 // TWM-195 root-fix simplification: Backend's `modes` list only ever
 // contains genuinely route-valid entries now (no more ruled_out/unknown
 // bucket to explain "why other modes aren't shown" — a non-route-valid
@@ -642,86 +756,12 @@ function FeasibilityDisclosure({ modes }) {
   );
 }
 
-// TWM-176: the shared inline-expansion pattern for an unresolved Transport
-// or Stay segment — tapping "Resolve" expands ranked options right here, no
-// navigation, no separate Logistics page. Confirmed segments (an anchor
-// already exists) skip straight to the 🔒-confirmed treatment.
-function BookingSegment({
-  label, anchor, expanded, onToggleExpand, loading, loadError, options, renderOption, onOpenConfirm,
-  recommended, feasibilityModes, noOptionsMessage,
-}) {
-  if (anchor) {
-    return (
-      <article className="dashboard-card anchor-card">
-        <div>
-          <span className="badge badge-confirmed">🔒 confirmed</span>
-          <h3>{anchor.label}</h3>
-          <p>{anchor.detail}</p>
-          {anchor.reference && <div className="confirmation-chip">✓ {anchor.reference}</div>}
-        </div>
-      </article>
-    );
-  }
-  return (
-    <div className="stay-block">
-      <div className="stay-block-head">
-        <div>
-          <span className="state suggested">{notBookedYetLabel(label)}</span>
-          <h3 className="route-title">{label}</h3>
-        </div>
-        <button type="button" className="btn btn-ghost" onClick={onToggleExpand} aria-expanded={expanded}>{expanded ? 'Hide options ▴' : 'Resolve ▾'}</button>
-      </div>
-      {expanded && (
-        <>
-          {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
-          {loadError && <p className="already-booked-note" role="alert">{loadError}</p>}
-          {!loading && !loadError && (options || []).length === 0 && (
-            <p className="already-booked-note" role="status">{noOptionsMessage || 'No bookable transport options for this leg.'}</p>
-          )}
-          {!loading && !loadError && (options || []).length > 0 && (
-            <>
-              {recommended !== undefined && <RecommendedModeCard option={recommended} />}
-              <div className="stay-options-grid">{(options || []).map((option, index) => renderOption(option, recommended ? option === recommended : index === 0))}</div>
-              {feasibilityModes && <FeasibilityDisclosure modes={feasibilityModes} />}
-            </>
-          )}
-          <p className="already-booked-note">Already booked this yourself? <button type="button" className="link-button" onClick={onOpenConfirm}>Add a confirmation →</button></p>
-        </>
-      )}
-    </div>
-  );
-}
-
-// TWM-176: Activity bookings only ever come from real Atlas-flagged
-// requires_advance_booking items — no mock options catalog, since there's
-// no realistic "shop for an activity" search to fabricate. Just a
-// self-confirm affordance, framed as the exception for that day.
-function ActivitySegment({ activity, anchor, onOpenConfirm }) {
-  if (anchor) {
-    return (
-      <article className="dashboard-card anchor-card">
-        <div>
-          <span className="badge badge-confirmed">🔒 confirmed</span>
-          <h3>{anchor.label}</h3>
-          <p>{anchor.detail}</p>
-          {anchor.reference && <div className="confirmation-chip">✓ {anchor.reference}</div>}
-        </div>
-      </article>
-    );
-  }
-  return (
-    <div className="stay-block">
-      <div className="stay-block-head">
-        <div>
-          <span className="state suggested">{notBookedYetLabel(activity.title)}</span>
-          <h3 className="route-title">{activity.title} · Day {activity.dayNumber}</h3>
-          <p>{activity.detail}</p>
-        </div>
-      </div>
-      <p className="already-booked-note">Already booked this yourself? <button type="button" className="link-button" onClick={onOpenConfirm}>Add a confirmation →</button></p>
-    </div>
-  );
-}
+// TWM-206: BookingSegment/ActivitySegment (the Bookings-tab-only "Resolve ▾"
+// inline-expansion pattern) were retired along with the Bookings tab itself —
+// Transport/Stay resolution now happens via the Itinerary item's own
+// drawer/inline affordances (TransportDrawer/StayDrawer/DateEditForm below),
+// and a day's AnchorList already surfaces its own confirmed anchors without
+// a separate per-segment confirmed-card duplicate.
 
 export default function TripDashboard() {
   const { commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState, viewTrip } = useTrip();
@@ -767,41 +807,59 @@ export default function TripDashboard() {
   const [revisionPending, setRevisionPending] = useState(false);
   const [revisionError, setRevisionError] = useState(null);
 
-  const [expandedBookingId, setExpandedBookingId] = useState(null);
-  const [confirmType, setConfirmType] = useState(null); // 'transport' | 'stay' | 'activity' | null
-  const [confirmFields, setConfirmFields] = useState(EMPTY_CONFIRM_FIELDS);
-  const [confirmPending, setConfirmPending] = useState(false);
-  const [confirmError, setConfirmError] = useState(null);
-
-  // TWM-201: booking-date update flow — open across the whole Bookings tab
-  // (not per-leg), since it saves one trip-level precision, not a per-leg
-  // fact. A save failure never clears/hides the flight cards already
-  // rendered from the last successful bookings fetch (acceptance criteria);
-  // it only surfaces inline in the form itself.
+  // TWM-201: booking-date update flow — trip-wide (it saves one trip-level
+  // precision, not a per-leg fact). A save failure never clears/hides the
+  // flight cards already rendered from the last successful resolution
+  // (acceptance criteria); it only surfaces inline in the form itself.
   const [dateEditOpen, setDateEditOpen] = useState(false);
   const [dateEditMode, setDateEditMode] = useState('exact');
   const [dateEditValue, setDateEditValue] = useState('');
   const [dateEditReturnValue, setDateEditReturnValue] = useState('');
   const [dateEditPending, setDateEditPending] = useState(false);
   const [dateEditError, setDateEditError] = useState(null);
+  // TWM-206: the same trip-wide form now also opens inline from a gateway
+  // TRAVEL item in the Itinerary tab, not just from the Bookings tab's
+  // flight card — this key says which trigger point opened it (a day/item
+  // position, or 'bookings' for the original trigger) so only that one
+  // spot renders the form, never every qualifying spot at once.
+  const [dateEditItemKey, setDateEditItemKey] = useState(null);
 
-  // TWM-132: transportOptionsFor/stayOptionsFor/feasibility are now real
-  // network calls (TWM-130/131's trusted-action + feasibility endpoints),
-  // so the Bookings tab's data is fetched lazily here instead of computed
-  // synchronously during render — mirrors the itinerary fetch's
-  // loading/ready/error pattern above. Keyed by a leg's "from→to" string
-  // (transportData) or a stay's id (stayData) so lookups don't depend on
-  // the round-trip bundle's synthetic id.
-  const [bookingsStatus, setBookingsStatus] = useState('idle'); // idle | loading | ready | error
-  // TWM-195: a transport-section resolution/feasibility failure must stay
-  // local to Transport and never take down the already-independent Stay
-  // section (or vice versa) — split out of the single shared bookingsError
-  // so one section's failure can never surface as the other's loadError.
-  const [transportError, setTransportError] = useState(null);
-  const [stayError, setStayError] = useState(null);
+  // TWM-206: the Transport drawer opened inline from a gateway leg in the
+  // Itinerary tab. Resolves on demand (only when a drawer actually opens),
+  // caching into transportData so a second open of the same leg never
+  // refetches.
+  const [transportDrawerLeg, setTransportDrawerLeg] = useState(null);
+  const [transportDrawerLoading, setTransportDrawerLoading] = useState(false);
+  const [transportDrawerError, setTransportDrawerError] = useState(null);
+
+  // TWM-206: the Stay drawer, same on-demand/cached pattern as Transport's
+  // above — opened per stay (base city + night count) from the Itinerary
+  // day header, resolved only when actually opened.
+  const [stayDrawerStay, setStayDrawerStay] = useState(null);
+  const [stayDrawerLoading, setStayDrawerLoading] = useState(false);
+  const [stayDrawerError, setStayDrawerError] = useState(null);
+
+  // TWM-132: transportOptionsFor/stayOptionsFor (TWM-130/131's trusted-action
+  // + feasibility endpoints) are real network calls, resolved on demand by
+  // the drawer-open functions below rather than eagerly for every leg/stay.
+  // Keyed by a leg's "from→to" string (transportData) or a stay's id
+  // (stayData) so lookups don't depend on any synthetic bundle id.
   const [transportData, setTransportData] = useState({});
   const [stayData, setStayData] = useState({});
-  const bookingsFetchStarted = useRef(null); // `${tripId}:${itineraryResult.version}:${originCity}` currently/last fetched, or null
+  // TWM-202/TWM-206: the Trip Board adapter's response — gateway-leg
+  // identification, feasibility, and date-precision per item come from
+  // here, computed once server-side, instead of this layer re-deriving
+  // gatewayLegs/transportLegs client-side and firing a separate feasibility
+  // call per leg.
+  const [boardData, setBoardData] = useState(null);
+  // PR review: version alone isn't enough to prove boardData matches the
+  // current itineraryResult -- a freshly-generated trip always starts at
+  // itinerary version 1, so switching trips in-app (viewTrip on a
+  // ?tripId= change, without unmounting) could otherwise pass a stale
+  // same-version check with a *different* trip's board data for one
+  // render. Tracked alongside boardData so both are always read together.
+  const [boardDataTripId, setBoardDataTripId] = useState(null);
+  const boardFetchStarted = useRef(null); // `${tripId}:${itineraryResult.version}:${originCity}:${bookingDates}` currently/last fetched, or null
 
   const tripId = commandSnapshot?.id;
 
@@ -816,99 +874,37 @@ export default function TripDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlTripId, tripLoadStatus, tripState, navigate]);
 
+  // TWM-206: fetches the Trip Board once the itinerary is ready — Itinerary's
+  // inline Set-dates/Transport-options/Stay-options affordances all need
+  // is_gateway_leg/date_precision/feasible_modes per item. Deliberately
+  // lightweight (one GET, no per-mode/per-partner resolution) — actual
+  // transport/stay option resolution happens on demand in
+  // openTransportDrawer/openStayDrawer below, only for whichever leg/stay
+  // the traveler actually opens.
   useEffect(() => {
-    if (tab !== 'Bookings' || itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
-    // Keyed by more than just tripId — a bare tripId key means this guard
-    // never resets while the same trip stays mounted, even when the
-    // itinerary is revised (resolveRevision -> a new itineraryResult),
-    // origin_city changes, or (TWM-201) the traveler saves a booking-date
-    // update, so Bookings would keep serving stale transport/stay data
-    // until a full reload. itineraryResult.version (the itinerary body's
-    // own revision number, not commandSnapshot's), origin_city, and
-    // booking_dates are exactly the inputs gatewayLegs/transportLegs below
-    // actually depend on, so the guard is keyed on all three.
+    if (itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
     const bookingDateContext = tripBookingDateContext(tripState?.trip_context);
-    const bookingsFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}:${bookingDateContext ? `${bookingDateContext.precision}:${bookingDateContext.departure_date || bookingDateContext.departure_month || ''}:${bookingDateContext.return_date || ''}` : ''}`;
-    if (bookingsFetchStarted.current === bookingsFetchKey) return;
-    bookingsFetchStarted.current = bookingsFetchKey;
-    setBookingsStatus('loading');
-
-    const bookingDays = itineraryResult.result.final_itinerary.days;
-    // TWM-200: transportLegs derives every structured TRAVEL movement —
-    // solely from Atlas's own from_city/to_city, never a UI-synthesized
-    // origin bookend. TWM-195 (MVP scope narrowing): Bookings Transport is
-    // gateway-only — gatewayLegs filters that full list down to just the
-    // outbound-from-origin and return-to-origin rows BEFORE any
-    // feasibility/trusted-action/flight-search call fires, so internal/
-    // circuit/local movements never hit the network at all, not merely
-    // hidden after the fact. No round-trip bundling either way.
-    const legsToFetch = gatewayLegs(
-      transportLegs(bookingDays, tripBookingDateContext(tripState?.trip_context), tripOriginCity(tripState?.trip_context)),
-      tripOriginCity(tripState?.trip_context),
-    );
-    const stays = stayLegs(bookingDays);
-    // TWM-146/TWM-195/TWM-199: threaded through to flight's live-offer
-    // search and Trusted Action's traveler_count so those payloads are
-    // populated whenever it's known, instead of always hitting
-    // clarification_needed for a field we actually have — see
-    // bookingCatalog.searchFlightOffer's comment for why departure_date/
-    // IATA still aren't threaded through today. Canonical
-    // trip_context.num_travelers (normalized — it can arrive as a
-    // chat-entered string like '2') is the primary source, with Atlas's own
-    // trip_summary.num_travelers kept as a fallback — the review comment
-    // only demanded removing the *origin* fallback, not this one.
-    const partySize = normalizeTravelerCount(tripState?.trip_context?.num_travelers)
-      ?? travelerCount(itineraryResult.result.final_itinerary.trip_summary);
-
+    const boardFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}:${bookingDateContext ? `${bookingDateContext.precision}:${bookingDateContext.departure_date || bookingDateContext.departure_month || ''}:${bookingDateContext.return_date || ''}` : ''}`;
+    if (boardFetchStarted.current === boardFetchKey) return;
+    boardFetchStarted.current = boardFetchKey;
     let cancelled = false;
-    setTransportError(null);
-    setStayError(null);
-    (async () => {
-      // TWM-195: Transport and Stay are fetched and error-isolated
-      // independently (Promise.allSettled, not Promise.all) — a transport
-      // resolution or feasibility failure must never blank out or error
-      // the already-fetched/fetching Stay section, and vice versa.
-      const [transportOutcome, stayOutcome] = await Promise.allSettled([
-        Promise.all(legsToFetch.map(async leg => {
-          // TWM-195 root fix: feasibility must be fetched and read FIRST,
-          // and only its approved modes are ever resolved — never
-          // Promise.all-concurrent with resolution. A failed/missing
-          // feasibility fetch (caught to null here) resolves zero modes,
-          // exactly like an honest `modes: []` response — never a
-          // fallback that tries every mode.
-          const feasibility = await fetchLegFeasibility(tripId, leg).catch(() => null);
-          const approvedModes = (feasibility?.modes || []).map(entry => entry.mode);
-          const options = await transportOptionsFor(tripId, leg, partySize, approvedModes);
-          return [legKey(leg), { options, feasibility }];
-        })),
-        // TWM-197/TWM-208: Backend's trusted-action readiness no longer
-        // requires an origin/traveler-count for domain='stay' (a hotel
-        // search never had either concept), so stayOptionsFor now resolves
-        // for real instead of the earlier permanent "not yet available"
-        // stub. Each stay leg still isolates its own failure from Transport
-        // via the outer Promise.allSettled below.
-        Promise.all(stays.map(async stay => [stay.id, { options: await stayOptionsFor(tripId, stay) }])),
-      ]);
+    getTripBoard(tripId).then(board => {
       if (cancelled) return;
-
-      if (transportOutcome.status === 'fulfilled') {
-        setTransportData(Object.fromEntries(transportOutcome.value));
-      } else {
-        setTransportError(transportOutcome.reason?.message || 'Could not load transport options.');
-      }
-
-      if (stayOutcome.status === 'fulfilled') {
-        setStayData(Object.fromEntries(stayOutcome.value));
-      } else {
-        setStayError(stayOutcome.reason?.message || 'Could not load stay options.');
-      }
-
-      setBookingsStatus(
-        transportOutcome.status === 'rejected' && stayOutcome.status === 'rejected' ? 'error' : 'ready'
-      );
-    })();
+      setBoardData(board);
+      setBoardDataTripId(tripId);
+    }).catch(() => {
+      // No dedicated error surface for this light fetch — Itinerary's
+      // Set-dates/Transport-options affordances simply won't render for a
+      // gateway leg without it.
+    });
     return () => { cancelled = true; };
-  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city]);
+    // PR review, TWM-206: trip_context.booking_dates must be a dependency,
+    // not just part of the ref-keyed guard inside — an effect only
+    // re-fires when a listed dependency actually changes, so a
+    // booking-date save (which changes booking_dates but not origin_city)
+    // was silently never triggering a refetch until an unrelated
+    // dependency also changed or the page reloaded.
+  }, [itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city, tripState?.trip_context?.booking_dates]);
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -997,24 +993,26 @@ export default function TripDashboard() {
     }
   }
 
-  // TWM-195 review comment: round-trip bundling is gone — every segment is
-  // its own directional row now, so there's no longer an is_round_trip_bundle
-  // distinction to track here.
-  function toggleExpandedBooking(id, segmentType) {
-    setExpandedBookingId(previous => {
-      const next = previous === id ? null : id;
-      if (next) {
-        trackEvent('booking_intent', { booking_type: 'browse_options', segment_type: segmentType });
-      }
-      return next;
-    });
-  }
-
-  function openDateEditForm(suggestedMode) {
-    setDateEditMode(suggestedMode === 'month' ? 'month' : 'exact');
-    setDateEditValue('');
-    setDateEditReturnValue('');
+  function openDateEditForm(suggestedMode, itemKey) {
+    const mode = suggestedMode === 'month' ? 'month' : 'exact';
+    setDateEditMode(mode);
+    // PR review: seed from whatever's already saved, when it matches the
+    // mode being opened, instead of always clearing -- the trigger button
+    // already advertises the saved value ("<date> · Change dates"), so
+    // "Change" starting blank forced retyping the departure date from
+    // memory just to add/edit a return date. Only starts blank when
+    // there's genuinely nothing saved yet, or the traveler is switching
+    // precision (exact <-> month has no shared field to seed from).
+    const existing = tripBookingDateContext(tripState?.trip_context);
+    if (existing?.precision === mode) {
+      setDateEditValue((mode === 'exact' ? existing.departure_date : existing.departure_month) || '');
+      setDateEditReturnValue((mode === 'exact' ? existing.return_date : '') || '');
+    } else {
+      setDateEditValue('');
+      setDateEditReturnValue('');
+    }
     setDateEditError(null);
+    setDateEditItemKey(itemKey);
     setDateEditOpen(true);
   }
 
@@ -1029,6 +1027,13 @@ export default function TripDashboard() {
           : { departure_month: dateEditValue },
       });
       trackEvent('booking_dates_updated', { precision: dateEditMode });
+      // PR review: legKey has no date component, so an already-cached
+      // Transport drawer entry would otherwise keep serving pre-save
+      // (flexible/month-precision) options after the date changes. The
+      // date is trip-wide, not per-leg, so every cached entry is
+      // invalidated — the board-fetch effect's own booking_dates
+      // dependency already re-fetches boardData for the new precision.
+      setTransportData({});
       setDateEditOpen(false);
     } catch (error) {
       setDateEditError(error.message || 'Could not save those dates — your existing flight options are still available.');
@@ -1037,39 +1042,13 @@ export default function TripDashboard() {
     }
   }
 
-  function openConfirmForm(type, label, dayNumber) {
-    setConfirmType(type);
-    setConfirmFields({ ...EMPTY_CONFIRM_FIELDS, label, dayNumber: dayNumber ? String(dayNumber) : '' });
-    setConfirmError(null);
-  }
-
-  async function submitConfirmForm(event) {
-    event.preventDefault();
-    setConfirmPending(true);
-    setConfirmError(null);
-    try {
-      await sendTripCommand('confirm_logistics', {
-        logisticsConfirmation: {
-          type: confirmType,
-          label: confirmFields.label.trim(),
-          detail: confirmFields.detail.trim(),
-          day_number: confirmFields.dayNumber ? Number(confirmFields.dayNumber) : null,
-          reference: confirmFields.reference.trim() || null,
-          notes: confirmFields.notes.trim() || null,
-        },
-      });
-      setConfirmType(null);
-    } catch (error) {
-      setConfirmError(error.message || 'Could not save that confirmation.');
-    } finally {
-      setConfirmPending(false);
-    }
-  }
-
   function resolveBookingPrompt(destination) {
     trackEvent('booking_prompt_choice', { choice: destination });
     setShowBookingPrompt(false);
-    if (destination === 'bookings') setTab('Bookings');
+    // TWM-206: 'bookings' names the analytics choice, not a tab anymore —
+    // Bookings was retired, so "sort out bookings now" lands on Itinerary,
+    // where Transport/Stay resolution and Set-dates now actually live.
+    if (destination === 'bookings') setTab('Itinerary');
   }
 
   // TWM-182: viewTrip's cache-only render (see TripContext.jsx) still fires
@@ -1145,52 +1124,117 @@ export default function TripDashboard() {
   const days = finalItinerary.days;
   const selectedDay = days.find(day => day.day_number === activeDay) || days[0];
   const selectedDayCost = dayCostRange(selectedDay);
+  // TWM-206: board items mirror Atlas's own timeline order 1:1 per day
+  // (twm/services/trip_board/service.py builds them by iterating the same
+  // day.timeline), so a plain index lookup is enough to find the matching
+  // board item's is_gateway_leg/feasible_modes/date_precision for a given
+  // Atlas timeline item — no from_city/to_city re-matching needed here.
+  // PR review: that index-matching assumption only holds when boardData
+  // was fetched for this exact itinerary revision — boardData resolves
+  // asynchronously and can still lag one render behind a just-landed
+  // itineraryResult (new version renders immediately; the matching board
+  // fetch hasn't resolved yet), so an item-count/order change in that
+  // revision could otherwise silently attach a stale board item to the
+  // wrong new timeline item. Falls back to no board-derived affordances
+  // (identical to the no-boardData-yet state) until the versions agree.
+  // PR review: version alone doesn't rule out a cross-trip mismatch after
+  // switching trips in-app (fresh trips all start at version 1) — gate on
+  // boardDataTripId too.
+  const boardDayByNumber = boardData?.version === itineraryResult.version && boardDataTripId === tripId
+    ? Object.fromEntries((boardData.days || []).map(day => [day.day_number, day]))
+    : {};
+  // TWM-206: which base/stay (if any) the selected day belongs to — Stay's
+  // drawer trigger lives on the day header, once per base, not per
+  // timeline item the way Transport's does. routeStops (not stayLegs,
+  // whose mapped output drops dayNumbers) carries the day-run membership
+  // needed to match the selected day; the resulting shape still matches
+  // stayLegs' own {id, location, nights} convention so stayData/
+  // stayOptionsFor key identically whichever surface resolves it first.
+  const selectedDayStop = routeStops(days).find(stop => stop.dayNumbers.includes(selectedDay.day_number));
+  const selectedDayStay = selectedDayStop && {
+    id: `stay-${selectedDayStop.location}`,
+    location: selectedDayStop.location,
+    nights: selectedDayStop.dayNumbers.length,
+    dayNumbers: selectedDayStop.dayNumbers,
+  };
+  // TWM-146/TWM-195/TWM-199: same canonical-then-fallback source the
+  // Bookings-tab fetch effect uses, so the Transport drawer's on-demand
+  // resolution never sends a different traveler_count than an eager
+  // Bookings-tab fetch would have.
+  const partySize = normalizeTravelerCount(tripState?.trip_context?.num_travelers)
+    ?? travelerCount(finalItinerary.trip_summary);
+
+  // TWM-206: opens the Transport drawer for a gateway leg, resolving its
+  // options on demand the first time (cached into transportData so a
+  // second open, or the Bookings tab, never refetches the same leg).
+  async function openTransportDrawer(boardItem) {
+    const leg = {
+      from: boardItem.from_city,
+      to: boardItem.to_city,
+      departureDate: boardItem.date_precision === 'exact' ? boardItem.departure_date : null,
+      departureMonth: boardItem.date_precision === 'month' ? boardItem.departure_month : null,
+    };
+    const key = legKey(leg);
+    setTransportDrawerLeg(leg);
+    // PR review: reset before the cache-hit early return, not just before
+    // a real fetch — onClose never clears these, so a stale error/loading
+    // state from a previously failed leg would otherwise still be showing
+    // when a different, already-cached leg opens next.
+    setTransportDrawerError(null);
+    setTransportDrawerLoading(false);
+    if (transportData[key]) return;
+    setTransportDrawerLoading(true);
+    try {
+      const feasibility = { modes: boardItem.feasible_modes || [] };
+      const approvedModes = feasibility.modes.map(entry => entry.mode);
+      const options = await transportOptionsFor(tripId, leg, partySize, approvedModes);
+      setTransportData(prev => ({ ...prev, [key]: { options, feasibility } }));
+    } catch (error) {
+      setTransportDrawerError(error.message || 'Could not load transport options.');
+    } finally {
+      setTransportDrawerLoading(false);
+    }
+  }
+
+  // TWM-206: opens the Stay drawer for a base/stay, resolving its partner
+  // options on demand the first time (cached into stayData so a second
+  // open, or the Bookings tab, never refetches the same stay).
+  async function openStayDrawer(stay) {
+    setStayDrawerStay(stay);
+    // PR review: same reset-before-cache-hit fix as openTransportDrawer.
+    setStayDrawerError(null);
+    setStayDrawerLoading(false);
+    if (stayData[stay.id]) return;
+    setStayDrawerLoading(true);
+    try {
+      const options = await stayOptionsFor(tripId, stay);
+      setStayData(prev => ({ ...prev, [stay.id]: { options } }));
+    } catch (error) {
+      setStayDrawerError(error.message || 'Could not load stay options.');
+    } finally {
+      setStayDrawerLoading(false);
+    }
+  }
+
   const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });
   const costMin = Math.min(...allCosts, 0);
   const costMax = Math.max(...allCosts, 1);
   const proposedRevision = itineraryState.proposed_revision;
   const trustCounts = trustStripCounts(finalItinerary, result);
   const readiness = bookingReadinessRollup(days, anchors);
-
-  const dayNumbers = days.map(day => day.day_number);
-  const transportAnchors = anchorsByType(anchors, 'transport');
-  const stayAnchors = anchorsByType(anchors, 'stay');
-  const activityAnchors = anchorsByType(anchors, 'activity');
-  // Matches by exact string equality against the anchor's stored `.label`
-  // (anchors have no stable id linking them back to a computed segment).
-  // Every call site below that builds a `label` for a segment/confirm form
-  // is part of this contract — changing that formatting without updating
-  // this matcher will silently reclassify real confirmed anchors as orphaned.
-  const findAnchor = (typeAnchors, label) => typeAnchors.find(a => a.label === label);
-  // TWM-200: transportLegs derives legs solely from Atlas's own structured
-  // TRAVEL.from_city/to_city movements. TWM-195 (MVP scope narrowing):
-  // render-side must filter to the same gateway-only rows the fetch effect
-  // resolved — never a wider render-side list than what was actually
-  // fetched, and (per TWM-195) no round-trip bundling either way.
-  //
-  // PR review, TWM-201: render must build legs the same way the fetch
-  // effect above does — originCity and bookingDateContext (the traveler's
-  // saved booking-date override) computed once and threaded through both
-  // call sites, so the visible rows never diverge from what was actually
-  // searched (e.g. a leg rendered without its route-safe exact-date
-  // override, or under a stale key while the fetch effect used a newer
-  // one).
-  const originCity = tripOriginCity(tripState?.trip_context);
-  const bookingDateContext = tripBookingDateContext(tripState?.trip_context);
-  const transportLegList = gatewayLegs(transportLegs(days, bookingDateContext, originCity), originCity);
-  const stayLegList = stayLegs(days);
-  const activityList = activityBookings(days);
-
-  // Orphan anchors: confirmations left over from a route the current
-  // itinerary no longer computes (e.g. after a regeneration). Segments
-  // already show their own matching anchor inline, so only anchors with
-  // no matching segment need the generic AnchorList fallback here.
-  const transportLabels = new Set(transportLegList.map(leg => `${leg.from} → ${leg.to}`));
-  const stayLabels = new Set(stayLegList.map(stay => `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`));
-  const activityLabels = new Set(activityList.map(activity => activity.title));
-  const orphanTransportAnchors = transportAnchors.filter(a => !transportLabels.has(a.label));
-  const orphanStayAnchors = stayAnchors.filter(a => !stayLabels.has(a.label));
-  const orphanActivityAnchors = activityAnchors.filter(a => !activityLabels.has(a.label));
+  // TWM-198: a confirmed logistics anchor whose day_number no longer
+  // exists in the current itinerary (e.g. after a regeneration that
+  // changed the day count/structure) never matches anchorsForDay on any
+  // day any more — TWM-206 retired the Bookings tab's generic
+  // orphanTransportAnchors/orphanStayAnchors/orphanActivityAnchors
+  // catch-all along with the tab itself, so this is the only remaining
+  // surface a genuinely orphaned anchor gets, rather than becoming
+  // silently invisible. Day-number membership (not the old label-string
+  // match) is the check here: anchors have no stable id to re-match
+  // against a computed segment, but day-number existence is a simple,
+  // robust proxy for "does this confirmation still belong somewhere."
+  const currentDayNumbers = new Set(days.map(day => day.day_number));
+  const orphanAnchors = anchors.filter(anchor => !currentDayNumbers.has(anchor.day_number));
 
   return (
     <main className="wrap dashboard">
@@ -1205,7 +1249,9 @@ export default function TripDashboard() {
         finalItinerary={finalItinerary}
         actions={<>
           <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
-          <button className="btn btn-ghost" type="button" onClick={() => alert('Sharing is not available yet.')}>🔗 Share</button>
+          {/* TWM-198: Share hidden for MVP rather than left as an
+              alert-only fake action — no real share capability exists yet.
+              PDF is unchanged here; it's tracked separately (TWM-98). */}
         </>}
       />
 
@@ -1243,9 +1289,17 @@ export default function TripDashboard() {
         <div className="readiness-row">
           <span>{readiness.ready} of {readiness.total} bookable items ready</span>
           {readiness.total > readiness.ready && (
-            <button type="button" className="btn btn-ghost" onClick={() => setTab('Bookings')}>Resolve bookings →</button>
+            <button type="button" className="btn btn-ghost" onClick={() => setTab('Itinerary')}>Resolve bookings →</button>
           )}
         </div>
+
+        {orphanAnchors.length > 0 && (
+          <div className="tab-intro"><div>
+            <h2>Other confirmed items</h2>
+            <p>Confirmed earlier, from a day this itinerary no longer has — still on file.</p>
+          </div></div>
+        )}
+        <AnchorList anchors={orphanAnchors} />
 
         <div className="sources-list">
           <h3>Sources</h3>
@@ -1286,15 +1340,6 @@ export default function TripDashboard() {
         )}
       </section>}
 
-      {tab === 'Docs' && <section aria-label="Trip documents">
-        <div className="tab-intro"><div><h2>📁 Documents</h2><p>Flight tickets, hotel confirmations, and other trip documents.</p></div></div>
-        <div className="docs-placeholder">
-          <span className="docs-placeholder-icon">📁</span>
-          <strong>Coming soon</strong>
-          <p>Once this is ready, you'll be able to collect everything for this trip in one place — flight and train tickets, hotel confirmations, and copies of IDs you'll need on the road.</p>
-        </div>
-      </section>}
-
       {tab === 'Itinerary' && selectedDay && <section aria-label="Detailed days" className="dashboard-days-wrap">
         <nav className="dashboard-day-nav" aria-label="Select a day">
           {days.map(day => <button type="button" key={day.day_number} className={`dashboard-day-pill${day.day_number === selectedDay.day_number ? ' active' : ''}`} aria-current={day.day_number === selectedDay.day_number ? 'page' : undefined} onClick={() => setActiveDay(day.day_number)}>
@@ -1309,23 +1354,93 @@ export default function TripDashboard() {
               <h2>{selectedDay.title}</h2>
               <p className="atlas-day-route">📍 {selectedDay.primary_location}</p>
               <p>{selectedDay.summary}</p>
+              {/* TWM-206: Stay is information-dense (multiple partner
+                  cards, an optional tiered estimate) — same density-driven
+                  drawer pattern as Transport, opened once per base/stay
+                  rather than per timeline item. */}
+              {selectedDayStay && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-small"
+                  onClick={() => openStayDrawer(selectedDayStay)}
+                >
+                  🏨 Stay options ▾
+                </button>
+              )}
             </header>
             <AnchorList anchors={anchorsForDay(anchors, selectedDay.day_number)} />
             <div className="atlas-timeline">
-              {selectedDay.timeline.map((item, index) => <div className="atlas-item" key={index}>
-                <span className="atlas-dot">{item.kind === 'TRAVEL' ? '🚗' : item.kind === 'STAY' ? '🏨' : item.kind === 'MEAL' ? '🍽️' : item.kind === 'FREE_TIME' ? '🕒' : '📍'}</span>
-                <div>
-                  <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
-                  <div className="item-summary-row">
-                    <strong>{item.title}</strong>
-                    {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
-                    <VerificationTag status={item.reference?.status} />
-                    <BookingReadinessBadge status={item.booking_readiness} />
+              {selectedDay.timeline.map((item, index) => {
+                const boardItem = boardDayByNumber[selectedDay.day_number]?.items?.[index];
+                const itemDateKey = `${selectedDay.day_number}-${index}`;
+                const isGatewayLeg = item.kind === 'TRAVEL' && boardItem?.is_gateway_leg;
+                return (
+                  <div className="atlas-item" key={index}>
+                    <span className="atlas-dot">{item.kind === 'TRAVEL' ? '🚗' : item.kind === 'STAY' ? '🏨' : item.kind === 'MEAL' ? '🍽️' : item.kind === 'FREE_TIME' ? '🕒' : '📍'}</span>
+                    <div>
+                      <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
+                      <div className="item-summary-row">
+                        <strong>{item.title}</strong>
+                        {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
+                        <VerificationTag status={item.reference?.status} />
+                        <BookingReadinessBadge status={item.booking_readiness} />
+                      </div>
+                      <p>{item.detail}</p>
+                      {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
+                      {/* TWM-206: Set-dates is leg-level, inline on the
+                          Itinerary item itself — never inside the Transport
+                          drawer (that only ever reads whatever date is
+                          already set here). Only a gateway leg is
+                          bookable, so only a gateway leg gets this
+                          affordance; date is trip-wide (TWM-201), so
+                          opening it from any gateway leg edits the same
+                          underlying value. */}
+                      {isGatewayLeg && (
+                        <div className="itinerary-set-dates">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-small"
+                            onClick={() => openDateEditForm(boardItem.date_precision === 'month' ? 'month' : 'exact', itemDateKey)}
+                          >
+                            📅 {boardItem.date_precision === 'exact' && boardItem.departure_date
+                              ? `${boardItem.departure_date} · Change dates`
+                              : boardItem.date_precision === 'month' && boardItem.departure_month
+                              ? `${boardItem.departure_month} · Change dates`
+                              : 'Set dates'}
+                          </button>
+                          {dateEditOpen && dateEditItemKey === itemDateKey && (
+                            <DateEditForm
+                              mode={dateEditMode}
+                              setMode={setDateEditMode}
+                              value={dateEditValue}
+                              setValue={setDateEditValue}
+                              returnValue={dateEditReturnValue}
+                              setReturnValue={setDateEditReturnValue}
+                              onSubmit={submitDateEdit}
+                              onCancel={() => setDateEditOpen(false)}
+                              pending={dateEditPending}
+                              error={dateEditError}
+                            />
+                          )}
+                          {/* TWM-206: Transport is information-dense
+                              (multiple modes/options, live-vs-estimated
+                              pricing, partner links) — density decides the
+                              interaction pattern, so it opens a side
+                              drawer instead of expanding inline like
+                              Set-dates does. */}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-small"
+                            onClick={() => openTransportDrawer(boardItem)}
+                          >
+                            🚗 Transport options ▾
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <p>{item.detail}</p>
-                  {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
-                </div>
-              </div>)}
+                );
+              })}
             </div>
             <div className="atlas-day-footer">
               <div className="footer-budget">
@@ -1346,114 +1461,35 @@ export default function TripDashboard() {
         </div>
       </section>}
 
-      {tab === 'Bookings' && <section aria-label="Bookings">
-        <div className="tab-intro"><div><h2>🚗 Transport</h2><p>Getting to and from {tripOriginCity(tripState?.trip_context) || 'your trip'} — schedules and fares are yours to verify before you book.</p></div></div>
-        <AnchorList anchors={orphanTransportAnchors} />
-        {transportError && <p className="already-booked-note" role="alert">{transportError}</p>}
-        {/* TWM-195 (MVP scope narrowing): Bookings Transport is gateway-only
-            — transportLegList is already filtered to just the outbound-
-            from-origin and return-to-origin rows (gatewayLegs), each its
-            own explicit directional row, no round-trip bundling. Internal/
-            circuit/local legs stay out of this list entirely. */}
-        {transportLegList.map(leg => {
-          const label = `${leg.from} → ${leg.to}`;
-          const entry = transportData[legKey(leg)];
-          const options = entry ? feasibleTransportOptions(entry.options, entry.feasibility) : [];
-          const recommended = entry ? recommendedMode(options) : undefined;
-          return (
-            <BookingSegment
-              key={leg.id}
-              label={label}
-              anchor={findAnchor(transportAnchors, label)}
-              expanded={expandedBookingId === leg.id}
-              onToggleExpand={() => toggleExpandedBooking(leg.id, 'transport')}
-              loading={expandedBookingId === leg.id && bookingsStatus === 'loading'}
-              loadError={expandedBookingId === leg.id ? transportError : null}
-              options={options}
-              recommended={recommended}
-              feasibilityModes={entry?.feasibility?.modes}
-              noOptionsMessage="No bookable transport options for this leg."
-              renderOption={(option, best) => (
-                <TransportOptionCard
-                  key={option.mode}
-                  option={option}
-                  best={best}
-                  onAddDates={
-                    option.mode === 'flight'
-                      ? () => openDateEditForm(option.liveOffer?.datePrecision === 'flexible' ? 'month' : 'exact')
-                      : undefined
-                  }
-                />
-              )}
-              onOpenConfirm={() => openConfirmForm('transport', label)}
-            />
-          );
-        })}
-        {confirmType === 'transport' && (
-          <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
-        )}
-        {dateEditOpen && (
-          <DateEditForm
-            mode={dateEditMode}
-            setMode={setDateEditMode}
-            value={dateEditValue}
-            setValue={setDateEditValue}
-            returnValue={dateEditReturnValue}
-            setReturnValue={setDateEditReturnValue}
-            onSubmit={submitDateEdit}
-            onCancel={() => setDateEditOpen(false)}
-            pending={dateEditPending}
-            error={dateEditError}
-          />
-        )}
+      {transportDrawerLeg && (
+        <TransportDrawer
+          leg={transportDrawerLeg}
+          options={transportData[legKey(transportDrawerLeg)]?.options}
+          feasibility={transportData[legKey(transportDrawerLeg)]?.feasibility}
+          loading={transportDrawerLoading}
+          error={transportDrawerError}
+          onClose={() => setTransportDrawerLeg(null)}
+        />
+      )}
 
-        <div className="tab-intro"><div><h2>🏨 Stay</h2><p>Real properties for every base — check dates and price before booking.</p></div></div>
-        <AnchorList anchors={orphanStayAnchors} />
-        {stayError && <p className="already-booked-note" role="alert">{stayError}</p>}
-        {stayLegList.map(stay => {
-          const entry = stayData[stay.id];
-          return (
-            <BookingSegment
-              key={stay.id}
-              label={`${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`}
-              anchor={findAnchor(stayAnchors, `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`)}
-              expanded={expandedBookingId === stay.id}
-              onToggleExpand={() => toggleExpandedBooking(stay.id, 'stay')}
-              loading={expandedBookingId === stay.id && bookingsStatus === 'loading'}
-              loadError={expandedBookingId === stay.id ? stayError : null}
-              options={entry?.options || []}
-              noOptionsMessage="No stay partners available for this location."
-              renderOption={(option, best) => <StayOptionCard key={option.name} option={option} best={best} />}
-              onOpenConfirm={() => openConfirmForm('stay', `${stay.location} · ${stay.nights} night${stay.nights === 1 ? '' : 's'}`)}
-            />
-          );
-        })}
-        {confirmType === 'stay' && (
-          <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
-        )}
-
-        {activityList.length > 0 && (
-          <>
-            <div className="tab-intro"><div><h2>🎟️ Activity</h2><p>Only shown when advance booking is genuinely required — the exception, not the norm, for this trip.</p></div></div>
-            <AnchorList anchors={orphanActivityAnchors} />
-            {activityList.map(activity => (
-              <ActivitySegment
-                key={activity.id}
-                activity={activity}
-                anchor={findAnchor(activityAnchors, activity.title)}
-                onOpenConfirm={() => openConfirmForm('activity', activity.title, activity.dayNumber)}
-              />
-            ))}
-            {confirmType === 'activity' && (
-              <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
-            )}
-          </>
-        )}
-      </section>}
+      {stayDrawerStay && (
+        <StayDrawer
+          stay={stayDrawerStay}
+          options={stayData[stayDrawerStay.id]?.options}
+          loading={stayDrawerLoading}
+          error={stayDrawerError}
+          // TWM-204: stay_price_estimate lives on the raw Atlas day object,
+          // not the Trip Board adapter (it isn't feasibility-derived) —
+          // read straight from the stay's first day; Atlas is expected to
+          // keep it consistent across every day of the same base.
+          stayPriceEstimate={days.find(day => day.day_number === stayDrawerStay.dayNumbers[0])?.stay_price_estimate}
+          onClose={() => setStayDrawerStay(null)}
+        />
+      )}
 
       {tab === 'Support' && <section>
         <div className="tab-intro"><div><h2>💬 Support</h2><p>Get help with this specific itinerary.</p></div></div>
-        <SupportContent intro="Swapping something, adjusting dates, or anything unclear about the plan you've already received — this is the place." />
+        <SupportContent intro="Swapping something, adjusting dates, or anything unclear about the plan you've already received — the answers below cover the most common cases." />
       </section>}
     </main>
   );
