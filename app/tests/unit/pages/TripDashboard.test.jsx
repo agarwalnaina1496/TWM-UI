@@ -414,553 +414,176 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.getByText(/Check schedules closer to travel\./)).toBeInTheDocument();
   });
 
-  // TWM-175: Stays/Transport tabs (and their confirm-logistics form UI) are
-  // intentionally removed this story — Bookings is a real, deliberate inert
-  // placeholder until the Bookings, Docs & Support story lands next. The
-  // underlying confirm_logistics command is unchanged and untested here on
-  // purpose; that coverage returns with the real Bookings tab.
-  // TWM-176: real Bookings content, replacing TWM-175's inert placeholder.
-  describe('Bookings tab (TWM-176)', () => {
-    // TWM-195 review comment: no more round-trip bundling (also independently
-    // removed by TWM-199) — the outbound and return legs each render as
-    // their own explicit directional row.
-    it('shows explicit directional outbound and return transport legs, never a bundled round-trip row', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      sendTripCommand = vi.fn();
+  // TWM-206: the Bookings tab itself is retired — Transport/Stay resolution
+  // now happens via the Itinerary item's own drawer (opened below through
+  // "Transport options"/"Stay options" instead of a Bookings tab + "Resolve
+  // ▾"). Structural Bookings-tab-only tests (gateway-leg listing, the
+  // BookingSegment "not booked yet"/🔒-confirmed treatment, the Activity
+  // category display) were retired outright — that UI no longer exists and
+  // gateway-leg-only rendering is already covered by "Itinerary inline
+  // Set-dates (TWM-206)" below. The FlightLiveOfferInfo/date-nudge tests
+  // that exercised real component-level bugs (not just tab shape) are kept,
+  // migrated to open via the Transport drawer; the two nudge-driven
+  // date-update-flow tests were dropped rather than migrated because
+  // TransportDrawer deliberately never passes onAddDates (see its own
+  // comment) — the nudge button doesn't render in the drawer by design,
+  // Set-dates being leg-level and already inline on the Itinerary item.
+  describe('flight live-offer card (TWM-146), via the Transport drawer', () => {
+    async function openDrawer() {
       const user = userEvent.setup();
       await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      // Fixture: both days are Rishikesh with no real inner movement, so the
-      // only legs are the outbound and return bookends, as two separate rows.
-      expect(screen.getByText('Delhi → Rishikesh')).toBeInTheDocument();
-      expect(screen.getByText('Rishikesh → Delhi')).toBeInTheDocument();
-      expect(screen.queryByText(/round trip/)).not.toBeInTheDocument();
-      expect(screen.queryByText('Delhi ⇄ Rishikesh round trip')).not.toBeInTheDocument();
-    });
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      return user;
+    }
 
-    // TWM-200: transportLegs derives legs solely from Atlas's own
-    // structured TRAVEL.from_city/to_city — trip_context.origin/origin_city
-    // has no effect on Bookings leg labels at all any more (the shared
-    // fixture's TRAVEL items hardcode Delhi/Rishikesh regardless of
-    // trip_context), so there is no origin-vs-origin_city leg-label
-    // behavior left to test here; see the "fails closed when Atlas has not
-    // emitted a structured movement" test below for the current contract.
-
-    // TWM-195 review comment: canonical trip_context.num_travelers (which
-    // can arrive as a chat-entered string) is the primary traveler-count
-    // source for transport CTA payloads, normalized to a number.
-    it('derives traveler_count from trip_context.num_travelers (normalizing a string like "3") for transport CTA payloads', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', num_travelers: '3' } });
-      sendTripCommand = vi.fn();
-      let capturedBodies = [];
-      global.fetch = vi.fn(async (url, options) => {
-        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-        if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
-        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
-        return jsonResponse({});
-      });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(0));
-      expect(capturedBodies.some(body => body.traveler_count === 3)).toBe(true);
-    });
-
-    // Falls back to Atlas trip_summary.num_travelers (fixture: 2) only when
-    // trip_context.num_travelers itself is absent — the review comment only
-    // demanded removing the *origin* fallback, not this one.
-    it('falls back to Atlas trip_summary.num_travelers when trip_context.num_travelers is absent', async () => {
+    it('renders a specific clarification prompt (not a generic error) when flight-search needs more info', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
-      let capturedBodies = [];
-      global.fetch = vi.fn(async (url, options) => {
-        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-        if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
-        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
-        return jsonResponse({});
-      });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(0));
-      // atlasResult()'s trip_summary.num_travelers fixture value is 2.
-      expect(capturedBodies.some(body => body.traveler_count === 2)).toBe(true);
+      global.fetch = defaultFetchMock(); // flight-search defaults to clarification_needed
+      await openDrawer();
+      await waitFor(() => expect(screen.getAllByText(/Tell us your exact route to search live prices\./).length).toBeGreaterThan(0));
     });
 
-    // TWM-197/TWM-208: stay/hotel affiliate resolution now fires for real —
-    // Backend's trusted-action readiness no longer requires an origin/
-    // traveler-count for domain='stay', so stayOptionsFor resolves each
-    // approved partner and the Stay section renders real redirect CTAs
-    // instead of the earlier permanent "not yet available" stub.
-    it('resolves stay trusted-actions for every approved partner and renders redirect CTAs', async () => {
+    it('renders live-offer price/airline/stops distinctly from the plain redirect-only cards, and still keeps the CTA link separate', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
-      let stayNetworkCalls = [];
-      global.fetch = vi.fn(async (url, options) => {
-        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-        if (url.includes('/trusted-action')) {
-          const body = JSON.parse(options.body);
-          if (body.domain === 'stay') stayNetworkCalls.push(body);
-          return jsonResponse(resolvedActionResponse());
-        }
-        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
-        return jsonResponse({});
-      });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      const resolveButtons = screen.getAllByRole('button', { name: 'Resolve ▾' });
-      // Stay section is the second block (Transport legs first, then Stay).
-      await user.click(resolveButtons[resolveButtons.length - 1]);
-      await waitFor(() => expect(screen.getAllByText('Check stay ↗').length).toBeGreaterThan(0));
-      // One call per approved stay partner (hotellook/booking_com/agoda),
-      // never origin/traveler_count — a stay search has no such concept.
-      expect(stayNetworkCalls).toEqual([
-        expect.objectContaining({ domain: 'stay', destination: 'Rishikesh', preferred_partner: 'hotellook' }),
-        expect.objectContaining({ domain: 'stay', destination: 'Rishikesh', preferred_partner: 'booking_com' }),
-        expect.objectContaining({ domain: 'stay', destination: 'Rishikesh', preferred_partner: 'agoda' }),
-      ]);
-      expect(stayNetworkCalls.every(body => body.origin === undefined && body.traveler_count === undefined)).toBe(true);
-    });
-
-    // Every leg transportLegs returns renders as its own row — proven here
-    // with a 3-city fixture (no bundling of any kind, not just the
-    // 2-city/round-trip case above). TWM-200: legs come solely from each
-    // day's own structured TRAVEL.from_city/to_city now, not an inferred
-    // origin bookend.
-    // TWM-195 (MVP scope narrowing): Bookings Transport is gateway-only —
-    // only the outbound-from-origin and return-to-origin legs render; the
-    // internal Rishikesh->Haridwar leg is genuinely omitted, and never
-    // resolved (no trusted-action/feasibility call for it at all).
-    it('renders only the gateway legs (outbound from and return to origin_city), hiding the internal leg entirely, with no bundled heading', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      itineraryFetchResponse = {
-        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
-        result: atlasResult({
-          final_itinerary: {
-            days: [
-              {
-                day_number: 1, date: null, title: 'Arrival', primary_location: 'Rishikesh', summary: 'x',
-                timeline: [{
-                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Arrival', location: 'Rishikesh',
-                  detail: 'Arrive from Delhi.', movement_guidance: null, from_city: 'Delhi', to_city: 'Rishikesh', display_label: null,
-                  estimated_cost_low: 0, estimated_cost_high: 0,
-                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
-                }],
-                seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
-              },
-              {
-                day_number: 2, date: null, title: 'Onward', primary_location: 'Haridwar', summary: 'x',
-                timeline: [{
-                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Onward', location: 'Haridwar',
-                  detail: 'Move to Haridwar.', movement_guidance: null, from_city: 'Rishikesh', to_city: 'Haridwar', display_label: null,
-                  estimated_cost_low: 0, estimated_cost_high: 0,
-                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
-                }],
-                seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
-              },
-              {
-                day_number: 3, date: null, title: 'Return', primary_location: 'Delhi', summary: 'x',
-                timeline: [{
-                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Return', location: 'Delhi',
-                  detail: 'Return to Delhi.', movement_guidance: null, from_city: 'Haridwar', to_city: 'Delhi', display_label: null,
-                  estimated_cost_low: 0, estimated_cost_high: 0,
-                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
-                }],
-                seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
-              },
-            ],
-          },
-        }),
-      };
-      let feasibilityCalls = [];
-      global.fetch = vi.fn(async (url, options) => {
-        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) {
-          feasibilityCalls.push(JSON.parse(options.body));
-          return jsonResponse(feasibleAssessmentResponse());
-        }
-        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
-        return jsonResponse({});
-      });
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.getByText('Delhi → Rishikesh')).toBeInTheDocument();
-      expect(screen.getByText('Haridwar → Delhi')).toBeInTheDocument();
-      expect(screen.queryByText('Rishikesh → Haridwar')).not.toBeInTheDocument();
-      expect(screen.queryByText(/round trip/)).not.toBeInTheDocument();
-      // TWM-206: feasibility now arrives embedded in the /board response
-      // (one call, not per-leg), so there is no separate feasibility call
-      // to assert zero-for-the-internal-leg on any more — the row-absence
-      // assertions above are the surviving proof the internal leg is never
-      // surfaced as a bookable Transport row.
-    });
-
-    it('expanding a segment shows mode-tagged options; a route-absurd mode is genuinely absent because Backend never returned it', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      sendTripCommand = vi.fn();
-      let trustedActionCalls = [];
-      // TWM-195 root-fix contract: Backend simply omits a route-absurd mode
-      // (bus) from `modes` entirely — there is no ruled_out entry to send,
-      // and no excluded_modes field at all.
-      const noBusAssessment = {
-        modes: [
-          { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-          { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-          { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-        ],
-      };
-      global.fetch = vi.fn(async (url, options) => {
-        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, noBusAssessment));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(noBusAssessment);
-        if (url.includes('/trusted-action')) {
-          trustedActionCalls.push(JSON.parse(options.body));
-          return jsonResponse(resolvedActionResponse());
-        }
-        return jsonResponse({});
-      });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-
-      await waitFor(() => expect(screen.getAllByText(/Flight/).length).toBeGreaterThan(0));
-      // Bus is absent from the options grid...
-      expect(screen.queryByText(/^Bus:/)).not.toBeInTheDocument();
-      // ...and, critically, the UI never even called trusted-action for it —
-      // proving mode resolution is gated by Backend's returned list, not a
-      // resolve-then-filter pattern.
-      expect(trustedActionCalls.some(call => call.domain === 'bus')).toBe(false);
-    });
-
-    it('shows a recommended-mode card and a route-details disclosure with a GENERAL_GUIDANCE tag for the returned modes', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      sendTripCommand = vi.fn();
-      const threeModeAssessment = {
-        modes: [
-          { mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', estimated_duration_minutes: 90, verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-          { mode: 'train', status: 'feasible', duration_source: 'computed', reason: 'A comfortable overland option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-          { mode: 'drive', status: 'feasible', duration_source: 'computed', reason: 'Also drivable.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } },
-        ],
-      };
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, threeModeAssessment));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(threeModeAssessment);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-        return jsonResponse({});
-      });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-
-      await waitFor(() => expect(screen.getByLabelText('Recommended mode')).toBeInTheDocument());
-      // Recommended-mode card no longer repeats the per-mode reason text —
-      // that detail lives only in the opt-in "Route details" disclosure
-      // below.
-      expect(within(screen.getByLabelText('Recommended mode')).queryByText('Fastest option.')).toBeNull();
-
-      await user.click(screen.getByText('Route details for these modes'));
-      const disclosure = screen.getByText('Route details for these modes').closest('details');
-      expect(within(disclosure).getByText('A comfortable overland option.')).toBeInTheDocument();
-      expect(within(disclosure).getAllByText('General guidance').length).toBeGreaterThan(0);
-    });
-
-    it('renders an honest "no bookable transport options" state and makes zero trusted-action/flight-search calls when Backend returns modes: []', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      sendTripCommand = vi.fn();
-      let transportNetworkCalls = [];
-      global.fetch = vi.fn(async (url, options) => {
-        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, { modes: [] }));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse({ modes: [] });
-        if (url.includes('/trusted-action')) {
-          // Distinguish the transport leg's own calls (domain
-          // flight/train/bus) from the independent Stay section's calls
-          // (domain stay), which are unaffected by this leg's empty
-          // feasibility — only transport calls must be zero here.
-          const body = JSON.parse(options.body);
-          if (['flight', 'train', 'bus'].includes(body.domain)) transportNetworkCalls.push(body);
-          return jsonResponse(resolvedActionResponse());
-        }
         if (url.includes('/flight-search')) {
-          transportNetworkCalls.push({ url });
-          return jsonResponse(resolvedActionResponse());
+          return jsonResponse({
+            status: 'offer',
+            queried_at: '2026-01-01T00:00:00.000Z',
+            date_precision: 'exact',
+            offers: [{
+              origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'round_trip',
+              departure_date: '2026-03-01', return_date: '2026-03-05',
+              money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
+              baggage: { checked_bag_included: null, cabin_bag_included: null },
+              fare_conditions: { refundable: null, changeable: null },
+              provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
+              price_found_at: '2026-01-01T00:00:00.000Z',
+              airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
+            }],
+          });
         }
         return jsonResponse({});
       });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+      await openDrawer();
 
-      await waitFor(() => expect(screen.getByText('No bookable transport options for this leg.')).toBeInTheDocument());
-      expect(transportNetworkCalls).toEqual([]);
+      // TWM-196 UX review: the Aviasales Data API is a cached lookup,
+      // never a confirmed-availability check, so the primary offer block
+      // reads "Cached price", not "Live offer".
+      await waitFor(() => expect(screen.getAllByText('Cached price').length).toBeGreaterThan(0));
+      expect(screen.getAllByText(/approx\. INR 8,?000\.00/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/IndiGo/).length).toBeGreaterThan(0);
+      // The trusted-action CTA (Aviasales redirect) is still present and
+      // separate from the offer data block — the offer itself carries no
+      // url.
+      expect(document.querySelector('a[href*="aviasales"]')).not.toBeNull();
+      // TWM-196: the affiliate CTA names the actual Backend-resolved
+      // partner rather than a generic "Search flights" label, so it's
+      // never confused with the TWM-resolved offer block above it.
+      expect(screen.getAllByText('Check availability on Aviasales ↗').length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/confirm the real fare and availability on Aviasales/).length).toBeGreaterThan(0);
     });
 
-    it('fails closed (no synthesized leg) when Atlas has not emitted a structured movement, never inferring one from trip_context (TWM-200)', async () => {
-      // Neither trip_context.origin (noncanonical) nor trip_context.origin_city
-      // can produce a leg on their own anymore — transportLegs no longer
-      // accepts an origin at all. Only a TRAVEL item's own from_city/to_city
-      // can, and this fixture's TRAVEL item carries none.
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin: 'Mumbai', origin_city: 'Delhi' } });
-      itineraryFetchResponse = {
-        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
-        result: atlasResult({
-          final_itinerary: {
-            days: [
-              {
-                day_number: 1, date: null, title: 'Arrival and ghats', primary_location: 'Rishikesh',
-                summary: 'Settle in and explore.',
-                timeline: [{
-                  start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Arrival', location: 'Rishikesh',
-                  detail: 'Arrive and settle in.', movement_guidance: null, from_city: null, to_city: null, display_label: null,
-                  estimated_cost_low: 0, estimated_cost_high: 0,
-                  reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
-                }],
-                seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'None required.', backup_plan: null,
-              },
-            ],
-          },
-        }),
-      };
+    // TWM-206: regression guard for the origin bug this story's discovery
+    // started from -- pickPrimaryOffer used to discard every ranked
+    // offer but one before it ever reached the card.
+    it('renders every ranked flight offer, not just the recommended one', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
-      await readyDashboard();
-      const user = userEvent.setup();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.queryByText(/Mumbai ⇄ Rishikesh/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Delhi ⇄ Rishikesh/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Home ⇄ Rishikesh/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/⇄/)).not.toBeInTheDocument();
-    });
-
-    // TWM-195 review-example regression: the Odisha itinerary's five real
-    // structured legs (Bangalore->Bhubaneswar->Puri->Konark->Bhubaneswar->
-    // Bangalore) must render only the two gateway rows touching
-    // origin_city, and must never call feasibility for the three internal
-    // legs at all.
-    it('Odisha regression: renders only Bangalore<->Bhubaneswar gateway rows, never resolving the three internal legs', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Bangalore' } });
-      const travelDay = (dayNumber, fromCity, toCity) => ({
-        day_number: dayNumber, date: null, title: `${fromCity} to ${toCity}`, primary_location: toCity, summary: 'x',
-        timeline: [{
-          start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: `${fromCity} to ${toCity}`, location: toCity,
-          detail: 'Travel.', movement_guidance: null, from_city: fromCity, to_city: toCity, display_label: null,
-          estimated_cost_low: 0, estimated_cost_high: 0,
-          reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
-        }],
-        seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
-      });
-      itineraryFetchResponse = {
-        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
-        result: atlasResult({
-          final_itinerary: {
-            days: [
-              travelDay(1, 'Bangalore', 'Bhubaneswar'),
-              travelDay(2, 'Bhubaneswar', 'Puri'),
-              travelDay(3, 'Puri', 'Konark'),
-              travelDay(4, 'Konark', 'Bhubaneswar'),
-              travelDay(5, 'Bhubaneswar', 'Bangalore'),
-            ],
-          },
-        }),
-      };
-      global.fetch = vi.fn(async (url, options) => {
+      global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
         if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        if (url.includes('/flight-search')) {
+          return jsonResponse({
+            status: 'offer',
+            queried_at: '2026-01-01T00:00:00.000Z',
+            date_precision: 'exact',
+            offers: [
+              {
+                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'round_trip',
+                departure_date: '2026-03-01', return_date: '2026-03-05',
+                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
+                baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
+                price_found_at: '2026-01-01T00:00:00.000Z', airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
+              },
+              {
+                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'round_trip',
+                departure_date: '2026-03-01', return_date: '2026-03-05',
+                money: { currency: 'INR', per_traveler_amount_minor_units: 600000, traveler_count: 2, group_total_minor_units: 1200000, group_total_is_approximate: true },
+                baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'ref-2' },
+                price_found_at: '2026-01-01T00:00:00.000Z', airline_name: 'Air India', stop_count: 1, is_recommended: false,
+              },
+            ],
+          });
+        }
         return jsonResponse({});
       });
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.getByText('Bangalore → Bhubaneswar')).toBeInTheDocument();
-      expect(screen.getByText('Bhubaneswar → Bangalore')).toBeInTheDocument();
-      expect(screen.queryByText('Bhubaneswar → Puri')).not.toBeInTheDocument();
-      expect(screen.queryByText('Puri → Konark')).not.toBeInTheDocument();
-      expect(screen.queryByText('Konark → Bhubaneswar')).not.toBeInTheDocument();
-      // TWM-206: feasibility now arrives embedded in the single /board
-      // response, computed server-side from the same gateway-only rule —
-      // the row-absence assertions above are the surviving proof the three
-      // internal legs are never surfaced as bookable Transport rows.
+      await openDrawer();
+
+      await waitFor(() => expect(screen.getAllByText(/approx\. INR 8,?000\.00/).length).toBeGreaterThan(0));
+      // The second, non-recommended offer is not discarded.
+      expect(screen.getAllByText(/approx\. INR 12,?000\.00/).length).toBeGreaterThan(0);
+      expect(screen.getByText(/Air India/)).toBeInTheDocument();
+      expect(screen.getAllByText('Our pick').length).toBeGreaterThan(0);
     });
 
-    // Regression: bookingsFetchStarted used to be keyed only by tripId, so
-    // once Bookings fetched for a trip it would never refetch while that
-    // trip stayed mounted — even if origin_city (or the itinerary itself)
-    // changed underneath it. The guard is now keyed on
-    // tripId+itineraryResult.version+originCity, so a genuine origin_city
-    // change re-derives gateway legs and re-fetches for them.
-    it('refetches Bookings transport when trip_context.origin_city changes while the same trip stays mounted', async () => {
+    it('captions the affiliate CTA as "no TWM-resolved price" when live search has no offer to show', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      const travelDay = (dayNumber, fromCity, toCity) => ({
-        day_number: dayNumber, date: null, title: `${fromCity} to ${toCity}`, primary_location: toCity, summary: 'x',
-        timeline: [{
-          start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: `${fromCity} to ${toCity}`, location: toCity,
-          detail: 'Travel.', movement_guidance: null, from_city: fromCity, to_city: toCity, display_label: null,
-          estimated_cost_low: 0, estimated_cost_high: 0,
-          reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
-        }],
-        seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
-      });
-      // Delhi -> Agra -> Mumbai: with origin=Delhi, the outbound gateway is
-      // Delhi->Agra (no leg returns to Delhi, so no inbound gateway); with
-      // origin=Mumbai, the inbound gateway is Agra->Mumbai instead (no leg
-      // departs Mumbai) — genuinely different visible content either way.
-      itineraryFetchResponse = {
-        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
-        result: atlasResult({
-          final_itinerary: { days: [travelDay(1, 'Delhi', 'Agra'), travelDay(2, 'Agra', 'Mumbai')] },
-        }),
-      };
-      let boardCallCount = 0;
+      sendTripCommand = vi.fn();
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) {
-          boardCallCount += 1;
-          return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        }
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        if (url.includes('/flight-search')) {
+          return jsonResponse({
+            status: 'unavailable',
+            queried_at: '2026-01-01T00:00:00.000Z',
+            unavailable: { code: 'provider_not_configured', message: 'Live flight search is not available yet for this trip.' },
+          });
+        }
         return jsonResponse({});
       });
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      const view = await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      await waitFor(() => expect(screen.getByText('Delhi → Agra')).toBeInTheDocument());
-      await waitFor(() => expect(boardCallCount).toBeGreaterThan(0));
-      const callCountBeforeOriginChange = boardCallCount;
+      await openDrawer();
 
-      // origin_city changes underneath the same mounted trip — force a
-      // re-render so the mocked useTrip() picks up the new commandSnapshot,
-      // exactly as a real trip_context update would.
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Mumbai' } });
-      view.rerender(<MemoryRouter initialEntries={['/dashboard']}><TripDashboard /></MemoryRouter>);
-
-      await waitFor(() => expect(screen.getByText('Agra → Mumbai')).toBeInTheDocument());
-      expect(screen.queryByText('Delhi → Agra')).not.toBeInTheDocument();
-      await waitFor(() => expect(boardCallCount).toBeGreaterThan(callCountBeforeOriginChange));
+      await waitFor(() => expect(screen.getAllByText('Check availability on Aviasales ↗').length).toBeGreaterThan(0));
+      expect(screen.getAllByText(/No TWM-resolved price yet — search directly on Aviasales/).length).toBeGreaterThan(0);
     });
 
-    it('sources the Trusted Action traveler_count from canonical trip_context.num_travelers, not Atlas trip_summary (TWM-199)', async () => {
-      // Atlas trip_summary.num_travelers is 2 (atlasResult's default) — a
-      // deliberately different value than trip_context.num_travelers below,
-      // so the assertion can only pass if trip_context is the source used.
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', num_travelers: '3' } });
-      sendTripCommand = vi.fn();
-      await readyDashboard();
-      const user = userEvent.setup();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      await waitFor(() => {
-        // TWM-197: stay's trusted-action calls never carry traveler_count
-        // (a stay search has no such concept) — find the transport call
-        // specifically, not just any non-feasibility trusted-action call.
-        const trustedActionCall = global.fetch.mock.calls.find(([url, options]) => {
-          if (!url.includes('/trusted-action') || url.includes('feasibility')) return false;
-          return JSON.parse(options.body).domain !== 'stay';
-        });
-        expect(trustedActionCall).toBeTruthy();
-        expect(JSON.parse(trustedActionCall[1].body)).toMatchObject({ traveler_count: 3 });
-      });
-    });
-
-    it('shows a specific "not booked yet" label per segment, never a bare generic one', async () => {
+    it('renders the Backend-authored unavailable message safely for a flight card', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
-      await readyDashboard();
-      const user = userEvent.setup();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.getByText('Delhi → Rishikesh not booked yet')).toBeInTheDocument();
-      expect(screen.getByText('Rishikesh → Delhi not booked yet')).toBeInTheDocument();
-      expect(screen.queryByText('Not booked yet')).not.toBeInTheDocument();
-    });
-
-    it('shows a confirmed segment with the 🔒-confirmed treatment — property/service name, price/detail, and confirmation number, never a bare status word', async () => {
-      commandSnapshot = snapshotWith(
-        readyItineraryState(), { anchors: [anchor({ type: 'stay', label: 'Rishikesh · 2 nights', detail: 'Riverside Cottage, ₹4,200/night', reference: 'CONF-9921' })] },
-        { trip_context: { origin_city: 'Delhi' } },
-      );
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.getByText('🔒 confirmed')).toBeInTheDocument();
-      expect(screen.getByText('Riverside Cottage, ₹4,200/night')).toBeInTheDocument();
-      expect(screen.getByText('✓ CONF-9921')).toBeInTheDocument();
-    });
-
-    it('Activity category only appears when a real Atlas item genuinely requires advance booking — never as an empty section', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState());
-      sendTripCommand = vi.fn();
-      await readyDashboard();
-      const user = userEvent.setup();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      // Fixture has no ACTIVITY item with requires_advance_booking: true.
-      expect(screen.queryByRole('heading', { name: /Activity/ })).not.toBeInTheDocument();
-    });
-
-    it('shows the Activity category with a real Atlas-flagged item, framed as the exception not the norm', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState());
-      itineraryFetchResponse = {
-        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
-        result: atlasResult({
-          final_itinerary: {
-            days: [{
-              day_number: 1, date: null, title: 'Arrival', primary_location: 'Rishikesh', summary: 'x',
-              timeline: [{
-                start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Rafting', location: 'Rishikesh',
-                detail: 'Book a slot ahead — limited daily capacity.', movement_guidance: null,
-                estimated_cost_low: null, estimated_cost_high: null,
-                reference: generalReference(), requires_advance_booking: true, booking_readiness: 'needs_advance_booking',
-              }],
-              seasonal_guidance: 'x', permit_or_ticket_guidance: 'x', backup_plan: null,
-            }],
-          },
-        }),
-      };
-      global.fetch = defaultFetchMock();
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      expect(screen.getByRole('heading', { name: /Activity/ })).toBeInTheDocument();
-      expect(screen.getByText(/the exception, not the norm/)).toBeInTheDocument();
-      expect(screen.getByText('Rafting not booked yet')).toBeInTheDocument();
+      global.fetch = vi.fn(async url => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+        if (url.includes('/flight-search')) {
+          return jsonResponse({ status: 'unavailable', queried_at: '2026-01-01T00:00:00.000Z', unavailable: { code: 'provider_timeout', message: 'The flight provider timed out — try again shortly.' } });
+        }
+        return jsonResponse({});
+      });
+      await openDrawer();
+      await waitFor(() => expect(screen.getAllByText(/The flight provider timed out — try again shortly\./).length).toBeGreaterThan(0));
     });
 
     it('does not render an affiliate-disclosure line even when the resolved trusted action carries one', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+      await openDrawer();
       await waitFor(() => expect(screen.getAllByRole('link', { name: /↗/ }).length).toBeGreaterThan(0));
       expect(screen.queryByText(/This is an affiliate link/)).toBeNull();
     });
@@ -968,430 +591,68 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows an inert note, no broken link, when a trusted action resolves to missing_input', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
+      const flightOnlyAssessment = {
+        modes: [{ mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } }],
+      };
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        const flightOnlyAssessment = {
-          modes: [{ mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'Fastest option.', verification: { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null } }],
-        };
         if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, flightOnlyAssessment));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse(flightOnlyAssessment);
         if (url.includes('/trusted-action')) return jsonResponse({ status: 'missing_input', generated_at: '2026-01-01T00:00:00.000Z', missing_input: { missing_fields: ['origin'], message: 'Tell us the missing details.' } });
         return jsonResponse({});
       });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
+      await openDrawer();
       await waitFor(() => expect(screen.getAllByText(/Flight/).length).toBeGreaterThan(0));
       expect(document.querySelector('a[href*="ixigo"]')).toBeNull();
     });
+  });
 
-    it('the confirm-it-yourself flow is reachable per segment, and submits a real confirm_logistics command', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      sendTripCommand = vi.fn(async () => ({ message: 'Noted.', agent_meta: null, trip: commandSnapshot }));
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Bookings/ }));
-      await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-      await user.click(screen.getByText('Add a confirmation →'));
-      await user.type(screen.getByLabelText('Details'), 'Confirmed 8:00 AM flight, PNR ABC123.');
-      await user.click(screen.getByRole('button', { name: 'Save confirmation' }));
-
-      expect(sendTripCommand).toHaveBeenCalledWith('confirm_logistics', expect.objectContaining({
-        logisticsConfirmation: expect.objectContaining({ type: 'transport', label: 'Delhi → Rishikesh' }),
-      }));
+  // TWM-195 review comment: canonical trip_context.num_travelers (which
+  // can arrive as a chat-entered string) is the primary traveler-count
+  // source for transport CTA payloads, normalized to a number. Migrated
+  // (TWM-206) to resolve via the Transport drawer instead of the retired
+  // Bookings tab.
+  it('derives traveler_count from trip_context.num_travelers (normalizing a string like "3") for transport CTA payloads', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', num_travelers: '3' } });
+    sendTripCommand = vi.fn();
+    let capturedBodies = [];
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+      if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+      if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+      if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
+      if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+      return jsonResponse({});
     });
+    const user = userEvent.setup();
+    await readyDashboard();
+    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Transport options/ }));
+    await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(0));
+    expect(capturedBodies.some(body => body.traveler_count === 3)).toBe(true);
+  });
 
-    // TWM-146: live flight-offer cards on the flight TransportOptionCard —
-    // distinct from the plain redirect-only cards train/bus still use.
-    describe('flight live-offer card (TWM-146)', () => {
-      it('renders a specific clarification prompt (not a generic error) when flight-search needs more info', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-        sendTripCommand = vi.fn();
-        global.fetch = defaultFetchMock(); // flight-search defaults to clarification_needed
-        const user = userEvent.setup();
-        await readyDashboard();
-        await user.click(screen.getByRole('button', { name: /Bookings/ }));
-        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-        await waitFor(() => expect(screen.getAllByText(/Tell us your exact route to search live prices\./).length).toBeGreaterThan(0));
-      });
+  // TWM-198: the self-confirm-yourself flow (fieldless "mark as booked"
+  // via confirm_logistics with placeholder detail) is removed from
+  // Bookings MVP entirely -- confirm_logistics requires a genuine,
+  // mandatory non-empty detail and triggers a full itinerary revision
+  // proposal, so it is never a lightweight toggle Bookings MVP should
+  // fake its way into calling. Migrated (TWM-206) off the retired Bookings
+  // tab onto the Itinerary/Transport-drawer surface.
+  it('never shows "Add a confirmation" or calls confirm_logistics from a transport/stay/activity row', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn();
+    const user = userEvent.setup();
+    await readyDashboard();
+    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Transport options/ }));
 
-      it('renders live-offer price/airline/stops distinctly from the plain redirect-only cards, and still keeps the CTA link separate', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-        sendTripCommand = vi.fn();
-        global.fetch = vi.fn(async url => {
-          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-          if (url.includes('/flight-search')) {
-            return jsonResponse({
-              status: 'offer',
-              queried_at: '2026-01-01T00:00:00.000Z',
-              date_precision: 'exact',
-              offers: [{
-                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'round_trip',
-                departure_date: '2026-03-01', return_date: '2026-03-05',
-                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
-                baggage: { checked_bag_included: null, cabin_bag_included: null },
-                fare_conditions: { refundable: null, changeable: null },
-                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
-                price_found_at: '2026-01-01T00:00:00.000Z',
-                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
-              }],
-            });
-          }
-          return jsonResponse({});
-        });
-        const user = userEvent.setup();
-        await readyDashboard();
-        await user.click(screen.getByRole('button', { name: /Bookings/ }));
-        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-
-        // TWM-196 UX review: the Aviasales Data API is a cached lookup,
-        // never a confirmed-availability check, so the primary offer block
-        // reads "Cached price", not "Live offer".
-        await waitFor(() => expect(screen.getAllByText('Cached price').length).toBeGreaterThan(0));
-        expect(screen.getAllByText(/approx\. INR 8,?000\.00/).length).toBeGreaterThan(0);
-        expect(screen.getAllByText(/IndiGo/).length).toBeGreaterThan(0);
-        // The trusted-action CTA (Aviasales redirect) is still present and
-        // separate from the offer data block — the offer itself carries no
-        // url.
-        expect(document.querySelector('a[href*="aviasales"]')).not.toBeNull();
-        // TWM-196: the affiliate CTA names the actual Backend-resolved
-        // partner rather than a generic "Search flights" label, so it's
-        // never confused with the TWM-resolved offer block above it.
-        expect(screen.getAllByText('Check availability on Aviasales ↗').length).toBeGreaterThan(0);
-        expect(screen.getAllByText(/confirm the real fare and availability on Aviasales/).length).toBeGreaterThan(0);
-      });
-
-      // TWM-206: regression guard for the origin bug this story's discovery
-      // started from -- pickPrimaryOffer used to discard every ranked
-      // offer but one before it ever reached the card.
-      it('renders every ranked flight offer, not just the recommended one', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-        sendTripCommand = vi.fn();
-        global.fetch = vi.fn(async url => {
-          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-          if (url.includes('/flight-search')) {
-            return jsonResponse({
-              status: 'offer',
-              queried_at: '2026-01-01T00:00:00.000Z',
-              date_precision: 'exact',
-              offers: [
-                {
-                  origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'round_trip',
-                  departure_date: '2026-03-01', return_date: '2026-03-05',
-                  money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
-                  baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
-                  price_found_at: '2026-01-01T00:00:00.000Z', airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
-                },
-                {
-                  origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'round_trip',
-                  departure_date: '2026-03-01', return_date: '2026-03-05',
-                  money: { currency: 'INR', per_traveler_amount_minor_units: 600000, traveler_count: 2, group_total_minor_units: 1200000, group_total_is_approximate: true },
-                  baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'ref-2' },
-                  price_found_at: '2026-01-01T00:00:00.000Z', airline_name: 'Air India', stop_count: 1, is_recommended: false,
-                },
-              ],
-            });
-          }
-          return jsonResponse({});
-        });
-        const user = userEvent.setup();
-        await readyDashboard();
-        await user.click(screen.getByRole('button', { name: /Bookings/ }));
-        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-
-        await waitFor(() => expect(screen.getAllByText(/approx\. INR 8,?000\.00/).length).toBeGreaterThan(0));
-        // The second, non-recommended offer is not discarded.
-        expect(screen.getAllByText(/approx\. INR 12,?000\.00/).length).toBeGreaterThan(0);
-        expect(screen.getByText(/Air India/)).toBeInTheDocument();
-        expect(screen.getAllByText('Our pick').length).toBeGreaterThan(0);
-      });
-
-      it('captions the affiliate CTA as "no TWM-resolved price" when live search has no offer to show', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-        sendTripCommand = vi.fn();
-        global.fetch = vi.fn(async url => {
-          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-          if (url.includes('/flight-search')) {
-            return jsonResponse({
-              status: 'unavailable',
-              queried_at: '2026-01-01T00:00:00.000Z',
-              unavailable: { code: 'provider_not_configured', message: 'Live flight search is not available yet for this trip.' },
-            });
-          }
-          return jsonResponse({});
-        });
-        const user = userEvent.setup();
-        await readyDashboard();
-        await user.click(screen.getByRole('button', { name: /Bookings/ }));
-        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-
-        await waitFor(() => expect(screen.getAllByText('Check availability on Aviasales ↗').length).toBeGreaterThan(0));
-        expect(screen.getAllByText(/No TWM-resolved price yet — search directly on Aviasales/).length).toBeGreaterThan(0);
-      });
-
-      // TWM-196: a month/flexible-precision offer must be labeled honestly,
-      // never presented with the same certainty as an exact-date result —
-      // and never implying confirmed availability regardless of precision.
-      it('labels a month-precision offer honestly and shows resolved airport context plus a date nudge', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-        sendTripCommand = vi.fn();
-        global.fetch = vi.fn(async url => {
-          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-          if (url.includes('/flight-search')) {
-            return jsonResponse({
-              status: 'offer',
-              queried_at: '2026-01-01T00:00:00.000Z',
-              date_precision: 'month',
-              origin_resolved: { input_label: 'Delhi', iata: 'DEL', airport_name: 'Indira Gandhi International Airport', source: 'ourairports', confidence: 'high' },
-              destination_resolved: { input_label: 'Dehradun', iata: 'DED', airport_name: 'Dehradun Airport', source: 'ourairports', confidence: 'high' },
-              offers: [{
-                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'one_way',
-                departure_date: '2026-03-11',
-                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
-                baggage: { checked_bag_included: null, cabin_bag_included: null },
-                fare_conditions: { refundable: null, changeable: null },
-                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
-                price_found_at: '2026-01-01T00:00:00.000Z',
-                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
-              }],
-            });
-          }
-          return jsonResponse({});
-        });
-        const user = userEvent.setup();
-        await readyDashboard();
-        await user.click(screen.getByRole('button', { name: /Bookings/ }));
-        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-
-        await waitFor(() => expect(screen.getAllByText('Cached price').length).toBeGreaterThan(0));
-        expect(screen.queryAllByText('Live offer').length).toBe(0);
-        expect(screen.getAllByText(/Flexible dates/).length).toBeGreaterThan(0);
-        expect(screen.getAllByText('Flights from DEL to DED').length).toBeGreaterThan(0);
-        // TWM-196 UX review: month/flexible precision gets a non-blocking
-        // nudge, never a hard block. TWM-201: the nudge is now an actionable
-        // button, not copy-only text.
-        expect(screen.getAllByRole('button', { name: 'Add dates for exact fares' }).length).toBeGreaterThan(0);
-      });
-
-      // TWM-201: the Bookings date nudge opens an explicit save flow that
-      // goes through the canonical update_booking_dates trip command, never
-      // local-only state.
-      it('opens the date-update flow from the nudge and saves an exact date via update_booking_dates', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-        sendTripCommand = vi.fn(async () => ({ message: null, agent_meta: null, trip: commandSnapshot }));
-        global.fetch = vi.fn(async url => {
-          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-          if (url.includes('/flight-search')) {
-            return jsonResponse({
-              status: 'offer',
-              queried_at: '2026-01-01T00:00:00.000Z',
-              date_precision: 'month',
-              offers: [{
-                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'one_way',
-                departure_date: '2026-03-11',
-                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
-                baggage: { checked_bag_included: null, cabin_bag_included: null },
-                fare_conditions: { refundable: null, changeable: null },
-                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
-                price_found_at: '2026-01-01T00:00:00.000Z',
-                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
-              }],
-            });
-          }
-          return jsonResponse({});
-        });
-        const user = userEvent.setup();
-        await readyDashboard();
-        await user.click(screen.getByRole('button', { name: /Bookings/ }));
-        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add dates for exact fares' }).length).toBeGreaterThan(0));
-
-        await user.click(screen.getAllByRole('button', { name: 'Add dates for exact fares' })[0]);
-        expect(screen.getByText(/does not change your itinerary plan/)).toBeInTheDocument();
-        await user.type(screen.getByLabelText('Departure date'), '2026-05-01');
-        await user.click(screen.getByRole('button', { name: 'Save dates' }));
-
-        await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', {
-          bookingDateUpdate: { departure_date: '2026-05-01' },
-        }));
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'Save dates' })).not.toBeInTheDocument());
-      });
-
-      // PR review, TWM-201: an optional return date lets Backend map it to
-      // the return leg specifically instead of the departure date ever
-      // being reused for a return search.
-      it('includes an optional return date in the saved payload when provided', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-        sendTripCommand = vi.fn(async () => ({ message: null, agent_meta: null, trip: commandSnapshot }));
-        global.fetch = vi.fn(async url => {
-          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-          if (url.includes('/flight-search')) {
-            return jsonResponse({
-              status: 'offer',
-              queried_at: '2026-01-01T00:00:00.000Z',
-              date_precision: 'month',
-              offers: [{
-                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'one_way',
-                departure_date: '2026-03-11',
-                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
-                baggage: { checked_bag_included: null, cabin_bag_included: null },
-                fare_conditions: { refundable: null, changeable: null },
-                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
-                price_found_at: '2026-01-01T00:00:00.000Z',
-                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
-              }],
-            });
-          }
-          return jsonResponse({});
-        });
-        const user = userEvent.setup();
-        await readyDashboard();
-        await user.click(screen.getByRole('button', { name: /Bookings/ }));
-        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add dates for exact fares' }).length).toBeGreaterThan(0));
-
-        await user.click(screen.getAllByRole('button', { name: 'Add dates for exact fares' })[0]);
-        await user.type(screen.getByLabelText('Departure date'), '2026-05-01');
-        await user.type(screen.getByLabelText('Return date (optional)'), '2026-05-10');
-        await user.click(screen.getByRole('button', { name: 'Save dates' }));
-
-        await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', {
-          bookingDateUpdate: { departure_date: '2026-05-01', return_date: '2026-05-10' },
-        }));
-      });
-
-      it('saves a travel month via update_booking_dates from a flexible-precision card', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-        sendTripCommand = vi.fn(async () => ({ message: null, agent_meta: null, trip: commandSnapshot }));
-        global.fetch = vi.fn(async url => {
-          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-          if (url.includes('/flight-search')) {
-            return jsonResponse({
-              status: 'offer',
-              queried_at: '2026-01-01T00:00:00.000Z',
-              date_precision: 'flexible',
-              offers: [{
-                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'one_way',
-                departure_date: '2026-03-11',
-                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
-                baggage: { checked_bag_included: null, cabin_bag_included: null },
-                fare_conditions: { refundable: null, changeable: null },
-                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
-                price_found_at: '2026-01-01T00:00:00.000Z',
-                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
-              }],
-            });
-          }
-          return jsonResponse({});
-        });
-        const user = userEvent.setup();
-        await readyDashboard();
-        await user.click(screen.getByRole('button', { name: /Bookings/ }));
-        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add travel month' }).length).toBeGreaterThan(0));
-
-        await user.click(screen.getAllByRole('button', { name: 'Add travel month' })[0]);
-        await user.type(screen.getByLabelText('Travel month'), '2026-05');
-        await user.click(screen.getByRole('button', { name: 'Save dates' }));
-
-        await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', {
-          bookingDateUpdate: { departure_month: '2026-05' },
-        }));
-      });
-
-      it('keeps existing flight cards usable and shows a recoverable error when the date save fails', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-        sendTripCommand = vi.fn(async () => { throw new Error('Could not save dates right now.'); });
-        global.fetch = vi.fn(async url => {
-          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-          if (url.includes('/flight-search')) {
-            return jsonResponse({
-              status: 'offer',
-              queried_at: '2026-01-01T00:00:00.000Z',
-              date_precision: 'month',
-              offers: [{
-                origin_iata: 'DEL', destination_iata: 'DED', trip_type: 'one_way',
-                departure_date: '2026-03-11',
-                money: { currency: 'INR', per_traveler_amount_minor_units: 400000, traveler_count: 2, group_total_minor_units: 800000, group_total_is_approximate: true },
-                baggage: { checked_bag_included: null, cabin_bag_included: null },
-                fare_conditions: { refundable: null, changeable: null },
-                provenance: { provider_name: 'aviasales', provider_reference: 'ref-1' },
-                price_found_at: '2026-01-01T00:00:00.000Z',
-                airline_name: 'IndiGo', stop_count: 0, is_recommended: true,
-              }],
-            });
-          }
-          return jsonResponse({});
-        });
-        const user = userEvent.setup();
-        await readyDashboard();
-        await user.click(screen.getByRole('button', { name: /Bookings/ }));
-        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-        await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add dates for exact fares' }).length).toBeGreaterThan(0));
-
-        await user.click(screen.getAllByRole('button', { name: 'Add dates for exact fares' })[0]);
-        await user.type(screen.getByLabelText('Departure date'), '2026-05-01');
-        await user.click(screen.getByRole('button', { name: 'Save dates' }));
-
-        await waitFor(() => expect(screen.getByText('Could not save dates right now.')).toBeInTheDocument());
-        // the existing flight card is still rendered/usable after the failure.
-        expect(screen.getAllByText('Cached price').length).toBeGreaterThan(0);
-      });
-
-      it('renders the Backend-authored unavailable message safely for a flight card', async () => {
-        commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-        sendTripCommand = vi.fn();
-        global.fetch = vi.fn(async url => {
-          if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-          if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-          if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-          if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
-          if (url.includes('/flight-search')) {
-            return jsonResponse({ status: 'unavailable', queried_at: '2026-01-01T00:00:00.000Z', unavailable: { code: 'provider_timeout', message: 'The flight provider timed out — try again shortly.' } });
-          }
-          return jsonResponse({});
-        });
-        const user = userEvent.setup();
-        await readyDashboard();
-        await user.click(screen.getByRole('button', { name: /Bookings/ }));
-        await user.click(screen.getAllByRole('button', { name: 'Resolve ▾' })[0]);
-        await waitFor(() => expect(screen.getAllByText(/The flight provider timed out — try again shortly\./).length).toBeGreaterThan(0));
-      });
-    });
+    expect(screen.queryByText('Add a confirmation →')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Details')).not.toBeInTheDocument();
+    expect(sendTripCommand).not.toHaveBeenCalledWith('confirm_logistics', expect.anything());
   });
 
   it('has no remaining reference to /logistics?tab=... anywhere on the redesigned Dashboard', async () => {
@@ -1462,16 +723,22 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
   // TWM-175: the Map tab is gone — it was never a real map, just route
   // order, which now folds into Overview's day-strip instead.
-  it('shows all 5 tabs, never the old Stays/Transport/Map ones', async () => {
+  it('shows all 3 tabs, never the old Stays/Transport/Map/Docs/Bookings ones', async () => {
     commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     await readyDashboard();
-    for (const name of ['Overview', 'Itinerary', 'Bookings', 'Docs', 'Support']) {
+    for (const name of ['Overview', 'Itinerary', 'Support']) {
       expect(screen.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: /Stays/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Transport/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Map/ })).not.toBeInTheDocument();
+    // TWM-206: Bookings retired — Transport/Stay resolution and Set-dates
+    // now live inline on the Itinerary item itself.
+    expect(screen.queryByRole('button', { name: /Bookings/ })).not.toBeInTheDocument();
+    // TWM-198: Docs was a permanent "Coming soon" placeholder with no
+    // real content behind it -- removed rather than shipped fake.
+    expect(screen.queryByRole('button', { name: /Docs/ })).not.toBeInTheDocument();
   });
 
   // TWM-206 step 2: Set-dates moves inline onto the Itinerary item itself
@@ -1836,7 +1103,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
       await user.click(within(prompt).getByText('Sort out bookings now'));
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Bookings/ })).toHaveClass('active');
+      // TWM-206: Bookings retired — "sort out bookings now" lands on
+      // Itinerary, where Transport/Stay resolution now actually lives.
+      expect(screen.getByRole('button', { name: /Itinerary/ })).toHaveClass('active');
     });
 
     it('never shows the booking prompt again once ui_state already recorded it as shown', async () => {
@@ -1887,12 +1156,12 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const tabs = await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
       expect(within(tabs).getByText('Overview')).toBeInTheDocument();
       expect(within(tabs).getByText('Itinerary')).toBeInTheDocument();
-      expect(within(tabs).getByText('Bookings')).toBeInTheDocument();
-      expect(within(tabs).getByText('Docs')).toBeInTheDocument();
       expect(within(tabs).getByText('Support')).toBeInTheDocument();
+      expect(within(tabs).queryByText('Docs')).not.toBeInTheDocument();
+      expect(within(tabs).queryByText('Bookings')).not.toBeInTheDocument();
 
       const user = userEvent.setup();
-      await user.click(within(tabs).getByText('Docs'));
+      await user.click(within(tabs).getByText('Support'));
 
       expect(screen.getByText('Available once your itinerary is ready.')).toBeInTheDocument();
       expect(screen.queryByText('Your trip so far')).not.toBeInTheDocument();

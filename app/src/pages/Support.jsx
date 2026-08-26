@@ -10,7 +10,7 @@ export default function Support() {
   return (
     <Layout className="dashboard" footer>
       <h1 className="hero-title">We're here to <em>help</em></h1>
-      <SupportContent intro={<>Have a question about your account or how TravelWithMe works?<br />Reach out any time, whether or not you have a trip open.</>} />
+      <SupportContent intro={<>Have a question about your account or how TravelWithMe works?<br />The answers below cover the most common cases.</>} />
     </Layout>
   );
 }

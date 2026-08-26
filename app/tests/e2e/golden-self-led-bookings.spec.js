@@ -2,8 +2,9 @@ import { test, expect } from '@playwright/test';
 import { GOLDEN_QUERY } from '../../src/data/entryCommandFixtures.js';
 import { commandResponse, mockTripCommandFlow, tripRecord } from './testUtils.js';
 
-// TWM-176: Dashboard Bookings tab replaces the standalone /logistics route
-// with inline resolve for Transport/Stay/Activity. This spec exercises a
+// TWM-206: Transport/Stay resolution lives inline on the Itinerary item
+// itself (drawer, gateway-leg-only) — the separate Bookings tab this spec
+// originally exercised (TWM-176) was retired. This spec exercises a
 // two-stop trip (so a real transport leg exists) with one Atlas-flagged
 // requires_advance_booking activity, and the trip-independent Support link.
 function twoStopAtlasResult() {
@@ -75,7 +76,7 @@ function twoStopAtlasResult() {
   };
 }
 
-test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and Support is reachable with no trip open', async ({ page }) => {
+test('Itinerary resolves a gateway transport leg and a stay via their drawers, surfaces the flagged Activity, and Support is reachable with no trip open', async ({ page }) => {
   await mockTripCommandFlow(page, [
     {
       // A real entry_intent="discover" response always carries at least the
@@ -224,37 +225,50 @@ test('Bookings tab resolves a transport leg, surfaces the flagged Activity, and 
   // TWM-175: a one-time "itinerary ready" prompt covers the tab nav the
   // first time a trip's itinerary is generated — dismiss it first.
   await page.getByRole('button', { name: 'Take a look at the trip first' }).click();
-  await page.getByRole('navigation', { name: 'Trip Dashboard tabs' }).getByRole('button', { name: 'Bookings' }).click();
+  // TWM-206: Bookings retired — Transport/Stay resolution now happens
+  // inline on the Itinerary item itself (drawer, gateway-leg-only), not a
+  // separate tab.
+  await page.getByRole('navigation', { name: 'Trip Dashboard tabs' }).getByRole('button', { name: 'Itinerary' }).click();
 
-  // Transport (TWM-195 MVP scope narrowing): Bookings Transport is
-  // gateway-only — the Delhi -> Coorg -> Wayanad -> Delhi route renders
-  // only the two gateway rows touching origin_city (Delhi -> Coorg,
-  // Wayanad -> Delhi); the internal Coorg -> Wayanad leg is hidden
-  // entirely (still real itinerary guidance elsewhere, just not a
-  // Bookings row), with no round-trip bundling either way.
-  await expect(page.getByText('🚗 Transport')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Delhi → Coorg' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Wayanad → Delhi' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Coorg → Wayanad' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: /round trip/ })).toHaveCount(0);
-  await page.getByRole('button', { name: /Resolve/ }).first().click();
-  await expect(page.getByRole('link', { name: 'Check ↗' }).first()).toBeVisible();
+  // Transport (TWM-195 MVP scope narrowing): only a gateway leg (touching
+  // origin_city) gets the affordance — Day 1's Delhi -> Coorg arrival leg.
+  // The internal Coorg -> Wayanad leg (Day 2) never gets a Transport
+  // options trigger at all.
+  await expect(page.getByRole('button', { name: /Transport options/ })).toBeVisible();
+  await page.getByRole('button', { name: /Transport options/ }).click();
+  const transportDrawer = page.getByRole('dialog', { name: /Delhi to Coorg/ });
+  await expect(transportDrawer).toBeVisible();
+  await expect(transportDrawer.getByRole('link', { name: /Check/ }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Close transport options' }).click();
+
+  // Return leg (Day 2, Wayanad -> Delhi) is a gateway leg too.
+  await page.getByRole('button', { name: /Day 2/ }).click();
+  await expect(page.getByRole('button', { name: /Transport options/ })).toBeVisible();
+  await page.getByRole('button', { name: /Transport options/ }).click();
+  await expect(page.getByRole('dialog', { name: /Wayanad to Delhi/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Close transport options' }).click();
 
   // Stay (TWM-197/TWM-208): resolves for real now — one redirect CTA per
   // approved partner (hotellook/booking_com/agoda), via the shared
-  // domain-agnostic /trusted-action mock in testUtils.js.
-  const stayResolveButtons = page.getByRole('button', { name: /Resolve/ });
-  await stayResolveButtons.last().click();
-  await expect(page.getByRole('link', { name: 'Check stay ↗' }).first()).toBeVisible();
+  // domain-agnostic /trusted-action mock in testUtils.js. Day 1 is
+  // Coorg's base.
+  await page.getByRole('button', { name: /Day 1/ }).click();
+  await page.getByRole('button', { name: /Stay options/ }).click();
+  const stayDrawer = page.getByRole('dialog', { name: /Stay: Coorg/ });
+  await expect(stayDrawer.getByRole('link', { name: 'Check stay ↗' }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Close stay options' }).click();
 
-  // Activity: only the Atlas-flagged Wayanad safari appears, framed as the exception.
-  await expect(page.getByText(/the exception, not the norm/)).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Wildlife safari/ })).toBeVisible();
-  await expect(page.getByText('Abbey Falls')).toHaveCount(0);
+  // Activity: the Atlas-flagged Wayanad safari still renders on its day's
+  // timeline — Bookings' separate "exception, not the norm" summary card
+  // was retired along with the tab, but the item itself isn't lost.
+  await page.getByRole('button', { name: /Day 2/ }).click();
+  await expect(page.getByText('Wildlife safari')).toBeVisible();
 
-  // Support: no TWM-Led upsell language anywhere on the tab.
+  // Support: no TWM-Led upsell language anywhere on the tab, and no fake
+  // contact CTA (TWM-198 removed the alert-only "Talk to the team" button).
   await page.getByRole('button', { name: 'Support' }).click();
-  await expect(page.getByText('Talk to the TravelWithMe team')).toBeVisible();
+  await expect(page.getByText('Questions?')).toBeVisible();
+  await expect(page.getByText('Talk to the TravelWithMe team')).toHaveCount(0);
   await expect(page.getByText('Get booking help')).toHaveCount(0);
 });
 
@@ -264,6 +278,7 @@ test('Support is reachable from Home with zero trips in progress', async ({ page
   await expect(page.getByText('No trips yet')).toBeVisible();
   await page.getByRole('link', { name: 'Support' }).click();
   await expect(page).toHaveURL(/\/support/);
-  await expect(page.getByText('Talk to the TravelWithMe team')).toBeVisible();
+  await expect(page.getByText('Questions?')).toBeVisible();
+  await expect(page.getByText('Talk to the TravelWithMe team')).toHaveCount(0);
   await expect(page.getByText('Get booking help')).toHaveCount(0);
 });
