@@ -721,6 +721,28 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.getByText('Riverside stay')).toBeInTheDocument();
   });
 
+  // TWM-198: a confirmed anchor whose day_number no longer exists in the
+  // current itinerary (regeneration changed the day count) must not become
+  // silently invisible now that the Bookings tab's generic orphan-anchor
+  // catch-all is gone — Overview surfaces it under "Other confirmed items".
+  it('shows an orphaned anchor (day_number no longer in the itinerary) under "Other confirmed items" on Overview', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), {
+      anchors: [anchor({ day_number: 99, label: 'Old riverside stay', detail: 'Riverside Cottage, ₹4,200/night' })],
+    });
+    sendTripCommand = vi.fn();
+    await readyDashboard();
+    expect(screen.getByText('Other confirmed items')).toBeInTheDocument();
+    expect(screen.getByText('Old riverside stay')).toBeInTheDocument();
+    expect(screen.getByText('Riverside Cottage, ₹4,200/night')).toBeInTheDocument();
+  });
+
+  it('does not show "Other confirmed items" when every anchor still matches a current day', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor({ day_number: 2, label: 'Riverside stay' })] });
+    sendTripCommand = vi.fn();
+    await readyDashboard();
+    expect(screen.queryByText('Other confirmed items')).not.toBeInTheDocument();
+  });
+
   // TWM-175: the Map tab is gone — it was never a real map, just route
   // order, which now folds into Overview's day-strip instead.
   it('shows all 3 tabs, never the old Stays/Transport/Map/Docs/Bookings ones', async () => {

@@ -1188,6 +1188,19 @@ export default function TripDashboard() {
   const proposedRevision = itineraryState.proposed_revision;
   const trustCounts = trustStripCounts(finalItinerary, result);
   const readiness = bookingReadinessRollup(days, anchors);
+  // TWM-198: a confirmed logistics anchor whose day_number no longer
+  // exists in the current itinerary (e.g. after a regeneration that
+  // changed the day count/structure) never matches anchorsForDay on any
+  // day any more — TWM-206 retired the Bookings tab's generic
+  // orphanTransportAnchors/orphanStayAnchors/orphanActivityAnchors
+  // catch-all along with the tab itself, so this is the only remaining
+  // surface a genuinely orphaned anchor gets, rather than becoming
+  // silently invisible. Day-number membership (not the old label-string
+  // match) is the check here: anchors have no stable id to re-match
+  // against a computed segment, but day-number existence is a simple,
+  // robust proxy for "does this confirmation still belong somewhere."
+  const currentDayNumbers = new Set(days.map(day => day.day_number));
+  const orphanAnchors = anchors.filter(anchor => !currentDayNumbers.has(anchor.day_number));
 
   return (
     <main className="wrap dashboard">
@@ -1245,6 +1258,14 @@ export default function TripDashboard() {
             <button type="button" className="btn btn-ghost" onClick={() => setTab('Itinerary')}>Resolve bookings →</button>
           )}
         </div>
+
+        {orphanAnchors.length > 0 && (
+          <div className="tab-intro"><div>
+            <h2>Other confirmed items</h2>
+            <p>Confirmed earlier, from a day this itinerary no longer has — still on file.</p>
+          </div></div>
+        )}
+        <AnchorList anchors={orphanAnchors} />
 
         <div className="sources-list">
           <h3>Sources</h3>
