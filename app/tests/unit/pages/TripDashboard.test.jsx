@@ -1426,6 +1426,62 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.queryByRole('button', { name: /^Map/ })).not.toBeInTheDocument();
   });
 
+  // TWM-206 step 2: Set-dates moves inline onto the Itinerary item itself
+  // (leg-level, never inside a drawer) — only a gateway TRAVEL leg
+  // (is_gateway_leg from the Trip Board adapter) gets the affordance.
+  describe('Itinerary inline Set-dates (TWM-206)', () => {
+    it('shows a Set-dates button only on gateway TRAVEL legs, never on an internal leg or a non-TRAVEL item', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      // Day 1's "Arrival from Delhi" is the outbound gateway leg.
+      await waitFor(() => expect(screen.getByRole('button', { name: /Set dates/ })).toBeInTheDocument());
+      // Day 1's ACTIVITY item never gets the affordance.
+      expect(screen.getByText('Triveni Ghat')).toBeInTheDocument();
+
+      const dayNav = screen.getByRole('navigation', { name: 'Select a day' });
+      await user.click(within(dayNav).getByText('2'));
+      // Day 2's "Return to Delhi" is the inbound gateway leg — its own
+      // "Set dates" button (a second one distinct from day 1's).
+      await waitFor(() => expect(screen.getAllByRole('button', { name: /Set dates/ }).length).toBeGreaterThan(0));
+    });
+
+    it('expands the date-edit form inline under the clicked leg, saves via update_booking_dates, and reflects the saved date on the button', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      let savedCommandSnapshot = commandSnapshot;
+      sendTripCommand = vi.fn(async (command, payload) => {
+        expect(command).toBe('update_booking_dates');
+        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-05-01' });
+        savedCommandSnapshot = snapshotWith(
+          readyItineraryState(),
+          {},
+          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-05-01' } } },
+        );
+        commandSnapshot = savedCommandSnapshot;
+        return { message: null, agent_meta: null, trip: savedCommandSnapshot };
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Set dates/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Set dates/ }));
+      expect(screen.getByLabelText('Departure date')).toBeInTheDocument();
+
+      await user.type(screen.getByLabelText('Departure date'), '2026-05-01');
+      await user.click(screen.getByRole('button', { name: 'Save dates' }));
+
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
+      // Re-render picks up the saved booking_dates from the new
+      // commandSnapshot; the light board-fetch effect refetches (keyed on
+      // booking_dates) and the button now shows the saved date.
+      await waitFor(() => expect(screen.getByRole('button', { name: /2026-05-01 · Change dates/ })).toBeInTheDocument());
+    });
+  });
+
   it('Overview\'s day-strip jumps into that day on the Itinerary tab', async () => {
     commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor({ day_number: 2, label: 'Riverside stay' })] });
     sendTripCommand = vi.fn();

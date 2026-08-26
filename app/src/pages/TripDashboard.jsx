@@ -784,6 +784,12 @@ export default function TripDashboard() {
   const [dateEditReturnValue, setDateEditReturnValue] = useState('');
   const [dateEditPending, setDateEditPending] = useState(false);
   const [dateEditError, setDateEditError] = useState(null);
+  // TWM-206: the same trip-wide form now also opens inline from a gateway
+  // TRAVEL item in the Itinerary tab, not just from the Bookings tab's
+  // flight card — this key says which trigger point opened it (a day/item
+  // position, or 'bookings' for the original trigger) so only that one
+  // spot renders the form, never every qualifying spot at once.
+  const [dateEditItemKey, setDateEditItemKey] = useState(null);
 
   // TWM-132: transportOptionsFor/stayOptionsFor/feasibility are now real
   // network calls (TWM-130/131's trusted-action + feasibility endpoints),
@@ -802,12 +808,18 @@ export default function TripDashboard() {
   const [transportData, setTransportData] = useState({});
   const [stayData, setStayData] = useState({});
   // TWM-202/TWM-206: the Trip Board adapter's response — gateway-leg
-  // identification and feasibility now come from here, computed once
+  // identification and feasibility come from here, computed once
   // server-side, instead of this layer re-deriving gatewayLegs/
   // transportLegs client-side and firing a separate feasibility call per
-  // leg. Only set on a successful fetch (see the effect below) so a board
-  // fetch failure surfaces as transportError, not a silently emptied list.
+  // leg. Fetched independently of which tab is active (see the light
+  // effect below) so Itinerary's inline Set-dates affordance can tell a
+  // gateway leg apart from an internal one without opening Bookings first;
+  // the heavier Bookings-tab effect further down fetches its own copy
+  // (needed regardless, to resolve per-mode/per-partner CTAs) and that one
+  // failing surfaces as transportError rather than silently emptying the
+  // Bookings leg list.
   const [boardData, setBoardData] = useState(null);
+  const boardFetchStarted = useRef(null); // `${tripId}:${itineraryResult.version}:${originCity}:${bookingDates}` currently/last fetched, or null
   const bookingsFetchStarted = useRef(null); // `${tripId}:${itineraryResult.version}:${originCity}` currently/last fetched, or null
 
   const tripId = commandSnapshot?.id;
@@ -822,6 +834,36 @@ export default function TripDashboard() {
     navigate('/', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlTripId, tripLoadStatus, tripState, navigate]);
+
+  // TWM-206: fetches the Trip Board independent of which tab is active —
+  // Itinerary's inline Set-dates affordance needs is_gateway_leg/
+  // date_precision per item regardless of whether the traveler has ever
+  // opened Bookings. Deliberately lightweight (one GET, no per-mode/
+  // per-partner resolution) — the heavier resolution stays gated to the
+  // Bookings tab below.
+  useEffect(() => {
+    if (itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
+    const bookingDateContext = tripBookingDateContext(tripState?.trip_context);
+    const boardFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}:${bookingDateContext ? `${bookingDateContext.precision}:${bookingDateContext.departure_date || bookingDateContext.departure_month || ''}:${bookingDateContext.return_date || ''}` : ''}`;
+    if (boardFetchStarted.current === boardFetchKey) return;
+    boardFetchStarted.current = boardFetchKey;
+    let cancelled = false;
+    getTripBoard(tripId).then(board => {
+      if (!cancelled) setBoardData(board);
+    }).catch(() => {
+      // No dedicated error surface for this light fetch — Itinerary's
+      // Set-dates affordance simply won't render for a gateway leg without
+      // it, and the Bookings-tab effect below has its own transportError
+      // handling for anything that needs to be visible.
+    });
+    return () => { cancelled = true; };
+    // PR review, TWM-206: trip_context.booking_dates must be a dependency,
+    // not just part of the ref-keyed guard inside — an effect only
+    // re-fires when a listed dependency actually changes, so a
+    // booking-date save (which changes booking_dates but not origin_city)
+    // was silently never triggering a refetch until an unrelated
+    // dependency also changed or the page reloaded.
+  }, [itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city, tripState?.trip_context?.booking_dates]);
 
   useEffect(() => {
     if (tab !== 'Bookings' || itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
@@ -917,7 +959,11 @@ export default function TripDashboard() {
       );
     })();
     return () => { cancelled = true; };
-  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city]);
+    // PR review, TWM-206: same fix as the light board effect above — this
+    // effect's own comment already documented the intent to refetch on a
+    // booking-date save, but booking_dates was never actually in the
+    // dependency array, so that refetch never fired.
+  }, [tab, itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city, tripState?.trip_context?.booking_dates]);
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -1019,11 +1065,12 @@ export default function TripDashboard() {
     });
   }
 
-  function openDateEditForm(suggestedMode) {
+  function openDateEditForm(suggestedMode, itemKey = 'bookings') {
     setDateEditMode(suggestedMode === 'month' ? 'month' : 'exact');
     setDateEditValue('');
     setDateEditReturnValue('');
     setDateEditError(null);
+    setDateEditItemKey(itemKey);
     setDateEditOpen(true);
   }
 
@@ -1154,6 +1201,12 @@ export default function TripDashboard() {
   const days = finalItinerary.days;
   const selectedDay = days.find(day => day.day_number === activeDay) || days[0];
   const selectedDayCost = dayCostRange(selectedDay);
+  // TWM-206: board items mirror Atlas's own timeline order 1:1 per day
+  // (twm/services/trip_board/service.py builds them by iterating the same
+  // day.timeline), so a plain index lookup is enough to find the matching
+  // board item's is_gateway_leg/feasible_modes/date_precision for a given
+  // Atlas timeline item — no from_city/to_city re-matching needed here.
+  const boardDayByNumber = Object.fromEntries((boardData?.days || []).map(day => [day.day_number, day]));
   const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });
   const costMin = Math.min(...allCosts, 0);
   const costMax = Math.max(...allCosts, 1);
@@ -1313,20 +1366,64 @@ export default function TripDashboard() {
             </header>
             <AnchorList anchors={anchorsForDay(anchors, selectedDay.day_number)} />
             <div className="atlas-timeline">
-              {selectedDay.timeline.map((item, index) => <div className="atlas-item" key={index}>
-                <span className="atlas-dot">{item.kind === 'TRAVEL' ? '🚗' : item.kind === 'STAY' ? '🏨' : item.kind === 'MEAL' ? '🍽️' : item.kind === 'FREE_TIME' ? '🕒' : '📍'}</span>
-                <div>
-                  <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
-                  <div className="item-summary-row">
-                    <strong>{item.title}</strong>
-                    {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
-                    <VerificationTag status={item.reference?.status} />
-                    <BookingReadinessBadge status={item.booking_readiness} />
+              {selectedDay.timeline.map((item, index) => {
+                const boardItem = boardDayByNumber[selectedDay.day_number]?.items?.[index];
+                const itemDateKey = `${selectedDay.day_number}-${index}`;
+                const isGatewayLeg = item.kind === 'TRAVEL' && boardItem?.is_gateway_leg;
+                return (
+                  <div className="atlas-item" key={index}>
+                    <span className="atlas-dot">{item.kind === 'TRAVEL' ? '🚗' : item.kind === 'STAY' ? '🏨' : item.kind === 'MEAL' ? '🍽️' : item.kind === 'FREE_TIME' ? '🕒' : '📍'}</span>
+                    <div>
+                      <time>{item.start_time || 'Flexible'}{item.end_time ? ` – ${item.end_time}` : ''}</time>
+                      <div className="item-summary-row">
+                        <strong>{item.title}</strong>
+                        {moneyRange(item.estimated_cost_low, item.estimated_cost_high) && <span className="item-cost">{moneyRange(item.estimated_cost_low, item.estimated_cost_high)}</span>}
+                        <VerificationTag status={item.reference?.status} />
+                        <BookingReadinessBadge status={item.booking_readiness} />
+                      </div>
+                      <p>{item.detail}</p>
+                      {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
+                      {/* TWM-206: Set-dates is leg-level, inline on the
+                          Itinerary item itself — never inside the Transport
+                          drawer (that only ever reads whatever date is
+                          already set here). Only a gateway leg is
+                          bookable, so only a gateway leg gets this
+                          affordance; date is trip-wide (TWM-201), so
+                          opening it from any gateway leg edits the same
+                          underlying value. */}
+                      {isGatewayLeg && (
+                        <div className="itinerary-set-dates">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-small"
+                            onClick={() => openDateEditForm(boardItem.date_precision === 'month' ? 'month' : 'exact', itemDateKey)}
+                          >
+                            📅 {boardItem.date_precision === 'exact' && boardItem.departure_date
+                              ? `${boardItem.departure_date} · Change dates`
+                              : boardItem.date_precision === 'month' && boardItem.departure_month
+                              ? `${boardItem.departure_month} · Change dates`
+                              : 'Set dates'}
+                          </button>
+                          {dateEditOpen && dateEditItemKey === itemDateKey && (
+                            <DateEditForm
+                              mode={dateEditMode}
+                              setMode={setDateEditMode}
+                              value={dateEditValue}
+                              setValue={setDateEditValue}
+                              returnValue={dateEditReturnValue}
+                              setReturnValue={setDateEditReturnValue}
+                              onSubmit={submitDateEdit}
+                              onCancel={() => setDateEditOpen(false)}
+                              pending={dateEditPending}
+                              error={dateEditError}
+                            />
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <p>{item.detail}</p>
-                  {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
-                </div>
-              </div>)}
+                );
+              })}
             </div>
             <div className="atlas-day-footer">
               <div className="footer-budget">
@@ -1393,7 +1490,7 @@ export default function TripDashboard() {
         {confirmType === 'transport' && (
           <ConfirmationForm dayOptions={dayNumbers} fields={confirmFields} setFields={setConfirmFields} onSubmit={submitConfirmForm} onCancel={() => setConfirmType(null)} pending={confirmPending} error={confirmError} />
         )}
-        {dateEditOpen && (
+        {dateEditOpen && dateEditItemKey === 'bookings' && (
           <DateEditForm
             mode={dateEditMode}
             setMode={setDateEditMode}
