@@ -1462,8 +1462,12 @@ export default function TripDashboard() {
               <div className="footer-tips">
                 <span className="footer-label">🎒 Good to know</span>
                 <ul className="tips-list">
-                  <li><span>🌦️</span>{selectedDay.seasonal_guidance}</li>
-                  <li><span>🎫</span>{selectedDay.permit_or_ticket_guidance}</li>
+                  {(selectedDay.notes || []).map((note, index) => (
+                    <li key={index}>
+                      <span>•</span>
+                      <span><strong>{note.title}</strong> — {note.detail} <VerificationTag status={note.reference?.status} /></span>
+                    </li>
+                  ))}
                   {selectedDay.backup_plan && <li><span>🔁</span>{selectedDay.backup_plan}</li>}
                 </ul>
               </div>

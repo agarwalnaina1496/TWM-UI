@@ -42,7 +42,7 @@ function atlasResult(overrides = {}) {
               // from a structured TRAVEL item, not a bookend fabricated purely
               // from trip_context.origin_city.
               start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Arrival from Delhi', location: 'Rishikesh',
-              detail: 'Arrive from Delhi.', movement_guidance: null, from_city: 'Delhi', to_city: 'Rishikesh', display_label: null,
+              detail: 'Arrive from Delhi.', movement_guidance: null, from_city: 'Delhi', to_city: 'Rishikesh',
               estimated_cost_low: 0, estimated_cost_high: 0,
               reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
             },
@@ -57,7 +57,11 @@ function atlasResult(overrides = {}) {
               reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
             },
           ],
-          seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'None required.', backup_plan: null,
+          notes: [
+            { category: 'Weather', title: 'Carry layers', detail: 'Carry layers.', reference: generalReference() },
+            { category: 'Access', title: 'No permits', detail: 'None required.', reference: generalReference() },
+          ],
+          backup_plan: null,
         },
         {
           day_number: 2, date: null, title: 'Ram Jhula', primary_location: 'Rishikesh',
@@ -78,12 +82,16 @@ function atlasResult(overrides = {}) {
               // from its own structured TRAVEL movement — UI no longer
               // synthesizes an origin bookend leg on its own.
               start_time: 'Evening', end_time: null, kind: 'TRAVEL', title: 'Return to Delhi', location: 'Delhi',
-              detail: 'Return to Delhi.', movement_guidance: null, from_city: 'Rishikesh', to_city: 'Delhi', display_label: null,
+              detail: 'Return to Delhi.', movement_guidance: null, from_city: 'Rishikesh', to_city: 'Delhi',
               estimated_cost_low: 0, estimated_cost_high: 0,
               reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
             },
           ],
-          seasonal_guidance: 'Best in cooler months.', permit_or_ticket_guidance: 'None required.', backup_plan: 'Indoor market visit if it rains.',
+          notes: [
+            { category: 'Weather', title: 'Cooler months', detail: 'Best in cooler months.', reference: generalReference() },
+            { category: 'Access', title: 'No permits', detail: 'None required.', reference: generalReference() },
+          ],
+          backup_plan: 'Indoor market visit if it rains.',
         },
       ],
       budget_summary: {
@@ -1269,6 +1277,20 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     sendTripCommand = vi.fn();
     await readyDashboard();
     expect(screen.getByText('No external sources cited.')).toBeInTheDocument();
+  });
+
+  it('renders day-specific Atlas notes from the canonical notes list', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState());
+    sendTripCommand = vi.fn();
+    const user = userEvent.setup();
+    await readyDashboard();
+
+    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+    expect(screen.getByText('Carry layers')).toBeInTheDocument();
+    expect(screen.getByText(/Carry layers\./)).toBeInTheDocument();
+    expect(screen.getByText('No permits')).toBeInTheDocument();
+    expect(screen.getByText(/None required\./)).toBeInTheDocument();
   });
 
   // TWM-175: verified/general-guidance (outline) and booking-readiness
