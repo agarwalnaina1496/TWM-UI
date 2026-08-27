@@ -11,9 +11,9 @@ export function timelineIcon(kind) {
 // travel-window label (e.g. "October"), and only falls back to a plain day
 // count when neither is known yet. The label itself adapts too — "Travel
 // month" when all we have is a month/window, "Trip dates" otherwise.
-export function tripDatesLabel(days, dateRangeLabel) {
-  const first = days[0]?.date;
-  const last = days[days.length - 1]?.date;
+export function tripDatesLabel(days, dateRangeLabel, boardDays = []) {
+  const first = boardDays[0]?.date;
+  const last = boardDays[boardDays.length - 1]?.date;
   if (first) return { label: 'Trip dates', value: first === last ? first : `${first} – ${last}` };
   if (dateRangeLabel) return { label: 'Travel month', value: dateRangeLabel };
   return { label: 'Trip dates', value: `${days.length} day${days.length === 1 ? '' : 's'}` };
@@ -47,15 +47,17 @@ export function dayCostRange(day) {
 // tripDatesLabel above), so a caller that needs an exact calendar date (the
 // flight-search payload) can read stops[i].dates[0] without re-deriving it,
 // while every existing dayNumbers-only consumer is unaffected.
-export function routeStops(days) {
+export function routeStops(days, boardDays = []) {
+  const dateByDay = new Map(boardDays.map(day => [day.day_number, day.date]));
   const stops = [];
   for (const day of days || []) {
     const last = stops[stops.length - 1];
     if (last && last.location === day.primary_location) {
       last.dayNumbers.push(day.day_number);
-      if (day.date) last.dates.push(day.date);
+      if (dateByDay.get(day.day_number)) last.dates.push(dateByDay.get(day.day_number));
     } else {
-      stops.push({ location: day.primary_location, dayNumbers: [day.day_number], dates: day.date ? [day.date] : [] });
+      const date = dateByDay.get(day.day_number);
+      stops.push({ location: day.primary_location, dayNumbers: [day.day_number], dates: date ? [date] : [] });
     }
   }
   return stops;

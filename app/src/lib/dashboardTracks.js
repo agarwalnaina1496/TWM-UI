@@ -6,7 +6,7 @@
 // tripLifecycle.js rather than duplicated here as a second hardcoded
 // literal-string check.
 
-import { TRIP_CONTEXT_KEYS } from '../constants/tripContext.js';
+import { TRIP_CONTEXT_KEYS, tripTravelerCount } from '../constants/tripContext.js';
 import { RECOMMENDATIONS_READY_STAGES, contextDestination, tripContextFacts } from './tripLifecycle.js';
 
 // Normalizes planner progress from either shape TripDashboard's tripState
@@ -148,6 +148,6 @@ export function contextFactRows(tripContext) {
       // The "No. of travelers" label already says what the number counts —
       // unlike the pill/facts-panel formats (no separate label), this row
       // doesn't repeat "traveler(s)" in the value too.
-      value: fact.key === TRIP_CONTEXT_KEYS.NUM_TRAVELERS ? String(tripContext[fact.key]) : fact.value,
+      value: fact.key === TRIP_CONTEXT_KEYS.NUM_TRAVELERS ? String(tripTravelerCount(tripContext)) : fact.value,
     }));
 }

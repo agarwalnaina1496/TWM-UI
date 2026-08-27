@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { TRIP_CONTEXT_KEYS, tripOriginCity, tripTravelerCount } from '../../../src/constants/tripContext.js';
+import {
+  TRIP_CONTEXT_KEYS,
+  tripOriginCity,
+  tripTravelerComposition,
+  tripTravelerCount,
+  travelerCompositionTotal,
+} from '../../../src/constants/tripContext.js';
 
 describe('tripOriginCity', () => {
   it('reads the canonical origin_city key', () => {
@@ -16,18 +22,42 @@ describe('tripOriginCity', () => {
   });
 });
 
+// tripTravelerCount reads the loose, conversational num_travelers fact
+// (same role as travel_dates) — never trusted for a real booking payload.
 describe('tripTravelerCount', () => {
-  it('normalizes a string count to a number', () => {
-    expect(tripTravelerCount({ num_travelers: '1' })).toBe(1);
+  it('normalizes a chat-entered numeric string', () => {
+    expect(tripTravelerCount({ [TRIP_CONTEXT_KEYS.NUM_TRAVELERS]: '4' })).toBe(4);
   });
 
-  it('passes through an already-numeric count', () => {
-    expect(tripTravelerCount({ [TRIP_CONTEXT_KEYS.NUM_TRAVELERS]: 4 })).toBe(4);
+  it('normalizes a plain number', () => {
+    expect(tripTravelerCount({ num_travelers: 2 })).toBe(2);
   });
 
   it('is null for missing, empty, or non-numeric values', () => {
     expect(tripTravelerCount({})).toBeNull();
     expect(tripTravelerCount({ num_travelers: '' })).toBeNull();
-    expect(tripTravelerCount({ num_travelers: 'a couple' })).toBeNull();
+    expect(tripTravelerCount({ num_travelers: 'just me' })).toBeNull();
+  });
+});
+
+// tripTravelerComposition reads the Backend-owned, structured
+// adult/child/infant composition — set only via update_traveler_composition,
+// never Scout/Meridian/Guide extraction. Same structured-precise-counterpart
+// role as tripBookingDateContext plays for dates.
+describe('tripTravelerComposition', () => {
+  it('reads the canonical structured composition', () => {
+    const tripContext = { traveler_composition: { adults: 2, children: 1, infants: 1 } };
+    expect(tripTravelerComposition(tripContext)).toEqual({ adults: 2, children: 1, infants: 1 });
+    expect(travelerCompositionTotal(tripTravelerComposition(tripContext))).toBe(4);
+  });
+
+  it('never reads the loose num_travelers key', () => {
+    expect(tripTravelerComposition({ num_travelers: { adults: 2, children: 0, infants: 0 } })).toBeNull();
+  });
+
+  it('is null for missing or malformed compositions', () => {
+    expect(tripTravelerComposition({})).toBeNull();
+    expect(tripTravelerComposition({ traveler_composition: { adults: 0, children: 2, infants: 0 } })).toBeNull();
+    expect(tripTravelerComposition({ traveler_composition: { adults: 2, children: '1', infants: 0 } })).toBeNull();
   });
 });

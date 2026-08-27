@@ -13,11 +13,7 @@ import { resolveTrustedAction, searchFlights } from './tripApi.js';
 // feasibility endpoints instead of returning mock MODE_TEMPLATE bands and a
 // Google search URL — so every one of these is now async.
 
-// TWM-195 review comment: trip_context.num_travelers can arrive as a
-// chat-entered string (e.g. '2', 'Just me' — see entryCommandFixtures.js's
-// own quick-reply chips), not a number. Normalizes to a positive integer or
-// null — never NaN, never 0/negative — so callers can safely omit the
-// field entirely rather than send a garbage value.
+// Retained for numeric fields outside canonical trip_context composition.
 export function normalizeTravelerCount(value) {
   if (value == null) return null;
   const parsed = typeof value === 'number' ? value : parseInt(String(value).trim(), 10);
@@ -201,13 +197,13 @@ function toLiveOffer(response) {
 // missing. A month-only/no-date search is not a missing_input either
 // (TWM-196): Backend returns a flexible/latest-cached result instead of
 // blocking, labeled via the response's date_precision.
-async function searchFlightOffer(tripId, leg, travelerCount) {
+async function searchFlightOffer(tripId, leg, travelerComposition) {
   const payload = {};
   if (leg.from) payload[FLIGHT_SEARCH_KEYS.ORIGIN_PLACE] = leg.from;
   if (leg.to) payload[FLIGHT_SEARCH_KEYS.DESTINATION_PLACE] = leg.to;
   if (leg.departureDate) payload[FLIGHT_SEARCH_KEYS.DEPARTURE_DATE] = leg.departureDate;
   else if (leg.departureMonth) payload[FLIGHT_SEARCH_KEYS.DEPARTURE_MONTH] = leg.departureMonth;
-  if (travelerCount) payload[FLIGHT_SEARCH_KEYS.TRAVELERS] = { adults: Math.max(1, travelerCount) };
+  if (travelerComposition) payload[FLIGHT_SEARCH_KEYS.TRAVELERS] = travelerComposition;
   try {
     const response = await searchFlights(tripId, payload);
     return toLiveOffer(response);
@@ -221,7 +217,7 @@ async function searchFlightOffer(tripId, leg, travelerCount) {
 // TWM-132) and `liveOffer` (searchFlightOffer — price/airline/stops/
 // freshness, never a url). Fetched concurrently; a failure in one never
 // blocks the other from rendering.
-async function resolveFlightOption(tripId, leg, travelerCount) {
+async function resolveFlightOption(tripId, leg, travelerComposition) {
   const name = `${modeLabel('flight')}: ${leg.from} → ${leg.to}`;
   // TWM-195 review comment: trusted-action transport CTA payloads carry
   // traveler_count (twm/schemas/trusted_action.py's
@@ -236,7 +232,9 @@ async function resolveFlightOption(tripId, leg, travelerCount) {
   // resolve a trusted-action redirect (it's an optional query param, see
   // trusted_action/resolvers.py), but a known date should still be sent so
   // the partner search page is pre-filled rather than deliberately omitted.
-  const normalizedCount = normalizeTravelerCount(travelerCount);
+  const normalizedCount = travelerComposition
+    ? travelerComposition.adults + travelerComposition.children + travelerComposition.infants
+    : null;
   const [ctaOption, liveOffer] = await Promise.all([
     resolveTrustedAction(tripId, {
       [TRUSTED_ACTION_KEYS.ACTION_TYPE]: ACTION_TYPE_FOR_MODE.flight,
@@ -248,7 +246,7 @@ async function resolveFlightOption(tripId, leg, travelerCount) {
     })
       .then(result => toTransportOption('flight', name, result))
       .catch(error => ({ mode: 'flight', name, status: 'error', errorMessage: error.message || 'Could not load this option.' })),
-    searchFlightOffer(tripId, leg, travelerCount),
+    searchFlightOffer(tripId, leg, travelerComposition),
   ]);
   return { ...ctaOption, liveOffer };
 }
@@ -258,13 +256,13 @@ async function resolveFlightOption(tripId, leg, travelerCount) {
 // unsupported_partner / disabled, plus a network-error fallback) maps to a
 // `status`, so the card can render each safely instead of assuming
 // `resolved` — a hard requirement from TWM-130's status discriminator.
-async function resolveTransportOption(tripId, leg, mode, travelerCount) {
+async function resolveTransportOption(tripId, leg, mode, travelerComposition) {
   const name = `${modeLabel(mode)}: ${leg.from} → ${leg.to}`;
   if (mode === 'flight') {
     // flight combines the trusted-action CTA with a real live-offer search
     // (TWM-146) — see resolveFlightOption's own comment for why these two
     // network calls are kept as separate concerns on one option object.
-    return resolveFlightOption(tripId, leg, travelerCount);
+    return resolveFlightOption(tripId, leg, travelerComposition);
   }
   const domain = DOMAIN_FOR_MODE[mode];
   if (!domain) {
@@ -274,7 +272,9 @@ async function resolveTransportOption(tripId, leg, mode, travelerCount) {
   // TWM-195 review comment: train/bus CTA payloads also carry traveler_count
   // when known — same rule as resolveFlightOption above, omitted entirely
   // otherwise.
-  const normalizedCount = normalizeTravelerCount(travelerCount);
+  const normalizedCount = travelerComposition
+    ? travelerComposition.adults + travelerComposition.children + travelerComposition.infants
+    : null;
   try {
     const result = await resolveTrustedAction(tripId, {
       [TRUSTED_ACTION_KEYS.ACTION_TYPE]: ACTION_TYPE_FOR_MODE[mode],
@@ -319,10 +319,10 @@ function toTransportOption(mode, name, result) {
 // exported only as a label/ordering helper — never as the source of which
 // modes get resolved here. An empty/missing `approvedModes` resolves
 // nothing and returns `[]` immediately, with no network call at all.
-export async function transportOptionsFor(tripId, leg, travelerCount, approvedModes) {
+export async function transportOptionsFor(tripId, leg, travelerComposition, approvedModes) {
   const modes = approvedModes || [];
   if (modes.length === 0) return [];
-  return Promise.all(modes.map(mode => resolveTransportOption(tripId, leg, mode, travelerCount)));
+  return Promise.all(modes.map(mode => resolveTransportOption(tripId, leg, mode, travelerComposition)));
 }
 
 // TWM-195 root-fix simplification: Backend's TripFeasibilityAssessment now
@@ -491,7 +491,7 @@ export const PARTNER_LABEL = {
   aviasales: 'Aviasales', hotellook: 'Hotellook', booking_com: 'Booking.com', agoda: 'Agoda', hostelworld: 'Hostelworld', ixigo: 'ixigo',
 };
 
-async function resolveStayOption(tripId, stay, partner) {
+async function resolveStayOption(tripId, stay, partner, travelerComposition) {
   const name = `${stay.location} — ${PARTNER_LABEL[partner] || partner}`;
   try {
     const result = await resolveTrustedAction(tripId, {
@@ -499,6 +499,12 @@ async function resolveStayOption(tripId, stay, partner) {
       [TRUSTED_ACTION_KEYS.DOMAIN]: 'stay',
       [TRUSTED_ACTION_KEYS.DESTINATION]: stay.location,
       [TRUSTED_ACTION_KEYS.PREFERRED_PARTNER]: partner,
+      ...(stay.departureDate ? { [TRUSTED_ACTION_KEYS.DEPARTURE_DATE]: stay.departureDate } : {}),
+      ...(travelerComposition ? {
+        [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: travelerComposition.adults
+          + travelerComposition.children
+          + travelerComposition.infants,
+      } : {}),
     });
     if (result.status === 'resolved') {
       const action = result.action;
@@ -518,7 +524,7 @@ async function resolveStayOption(tripId, stay, partner) {
 // genuinely have, so calling this eagerly produced noisy missing_input
 // responses. Left intact (not deleted) for the future hotel/stay affiliate
 // story to wire back in.
-export async function stayOptionsFor(tripId, stay) {
-  return Promise.all(STAY_PARTNERS.map(partner => resolveStayOption(tripId, stay, partner)));
+export async function stayOptionsFor(tripId, stay, travelerComposition) {
+  return Promise.all(STAY_PARTNERS.map(partner => resolveStayOption(tripId, stay, partner, travelerComposition)));
 }
 

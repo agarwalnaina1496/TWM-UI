@@ -234,10 +234,16 @@ function boardResponseFor(itineraryResult, tripContext, feasibility = feasibleAs
   const allLegs = transportLegs(days, bookingDateContext, originCity);
   const gatewayKeys = new Set(gatewayLegs(allLegs, originCity).map(leg => `${leg.from}→${leg.to}`));
   const legByKey = Object.fromEntries(allLegs.map(leg => [`${leg.from}→${leg.to}`, leg]));
+  const tripStart = bookingDateContext?.precision === 'exact'
+    ? new Date(`${bookingDateContext.departure_date}T00:00:00Z`)
+    : null;
   return {
     version: itineraryResult.version,
     days: days.map(day => ({
       ...day,
+      date: tripStart
+        ? new Date(tripStart.getTime() + (day.day_number - 1) * 86_400_000).toISOString().slice(0, 10)
+        : null,
       items: day.timeline.map(item => {
         if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
           return { ...item, is_gateway_leg: false, feasible_modes: null, date_precision: null };
@@ -626,13 +632,12 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
   });
 
-  // TWM-195 review comment: canonical trip_context.num_travelers (which
-  // can arrive as a chat-entered string) is the primary traveler-count
-  // source for transport CTA payloads, normalized to a number. Migrated
-  // (TWM-206) to resolve via the Transport drawer instead of the retired
-  // Bookings tab.
-  it('derives traveler_count from trip_context.num_travelers (normalizing a string like "3") for transport CTA payloads', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', num_travelers: '3' } });
+  // TWM-213: the structured, Backend-owned trip_context.traveler_composition
+  // (never the loose conversational num_travelers) is the traveler-count
+  // source for transport CTA payloads. Migrated (TWM-206) to resolve via
+  // the Transport drawer instead of the retired Bookings tab.
+  it('derives traveler_count from canonical trip_context composition for transport CTA payloads', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', traveler_composition: { adults: 2, children: 1, infants: 0 } } });
     sendTripCommand = vi.fn();
     let capturedBodies = [];
     global.fetch = vi.fn(async (url, options) => {
@@ -1214,14 +1219,13 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   });
 
   it('Overview\'s Days stat prefers real per-day dates over the travel-window label', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState());
+    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { booking_dates: { precision: 'exact', departure_date: '2026-10-12' } } });
     sendTripCommand = vi.fn();
     const base = atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: 2, date_range: 'October', overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } });
-    base.final_itinerary.days = base.final_itinerary.days.map((day, index) => ({ ...day, date: index === 0 ? '2026-10-12' : '2026-10-13' }));
     itineraryFetchResponse = { version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z', result: base };
     global.fetch = defaultFetchMock();
     await readyDashboard();
-    expect(screen.getAllByText('2026-10-12 – 2026-10-13').length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getAllByText('2026-10-12 – 2026-10-13').length).toBeGreaterThan(0));
   });
 
   it('renders unsafe text as inert content, never as markup', async () => {
@@ -1240,8 +1244,21 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // TWM-175: party size regression — trip_summary.travelers doesn't exist on
   // the real Atlas schema (the field is num_travelers); reading the wrong
   // key always silently defaulted the displayed count to 2.
-  it('displays the real num_travelers count, not a hardcoded default of 2', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState());
+  it('displays the canonical traveler_composition total, not the loose num_travelers or Atlas summary fallback', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { num_travelers: 'a family of 5', traveler_composition: { adults: 2, children: 2, infants: 1 } } });
+    itineraryFetchResponse = {
+      version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+      result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: 9, date_range: null, overview: 'x', route_rationale: 'y' } } }),
+    };
+    global.fetch = defaultFetchMock();
+    sendTripCommand = vi.fn();
+    await readyDashboard();
+    expect(screen.getAllByText('5').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('9').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
+  });
+
+  it('honestly shows traveler count as not set rather than guessing from Atlas summary', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: {} });
     itineraryFetchResponse = {
       version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
       result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: 5, date_range: null, overview: 'x', route_rationale: 'y' } } }),
@@ -1249,8 +1266,8 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     global.fetch = defaultFetchMock();
     sendTripCommand = vi.fn();
     await readyDashboard();
-    expect(screen.getAllByText('5').length).toBeGreaterThan(0);
-    expect(screen.queryAllByText('2').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
+    expect(screen.getAllByText('Not set').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('5').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
   });
 
   it('trust strip is visible without any user action — no closed-by-default disclosure', async () => {

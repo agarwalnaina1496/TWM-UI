@@ -365,7 +365,7 @@ describe('traveler_count on trusted-action transport CTA payloads (TWM-195 revie
       if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedAction()); }
       return jsonResponse({});
     });
-    await transportOptionsFor('trip-1', leg, 2, ['train', 'bus']);
+    await transportOptionsFor('trip-1', leg, { adults: 1, children: 1, infants: 0 }, ['train', 'bus']);
     expect(capturedBodies).toHaveLength(2);
     expect(capturedBodies.every(body => body.traveler_count === 2)).toBe(true);
   });
@@ -388,15 +388,15 @@ describe('traveler_count on trusted-action transport CTA payloads (TWM-195 revie
       if (url.includes('/flight-search')) { flightSearchBody = JSON.parse(options.body); return jsonResponse(flightSearchResponse()); }
       return jsonResponse({});
     });
-    await transportOptionsFor('trip-1', leg, 3, ['flight']);
-    expect(ctaBody).toMatchObject({ traveler_count: 3 });
-    expect(flightSearchBody).toMatchObject({ travelers: { adults: 3 } });
+    await transportOptionsFor('trip-1', leg, { adults: 2, children: 1, infants: 1 }, ['flight']);
+    expect(ctaBody).toMatchObject({ traveler_count: 4 });
+    expect(flightSearchBody).toMatchObject({ travelers: { adults: 2, children: 1, infants: 1 } });
   });
 
   it('drive never calls trusted-action at all, so it never carries traveler_count', async () => {
     let called = false;
     global.fetch = vi.fn(async (url) => { if (url.includes('/trusted-action')) called = true; return jsonResponse({}); });
-    await transportOptionsFor('trip-1', leg, 2, ['drive']);
+    await transportOptionsFor('trip-1', leg, { adults: 2, children: 0, infants: 0 }, ['drive']);
     expect(called).toBe(false);
   });
 });
@@ -731,6 +731,24 @@ describe('stayOptionsFor', () => {
   it('renders the affiliate_disclosure the Backend returns, never dropping it', async () => {
     const [option] = await stayOptionsFor('trip-1', { id: 'stay-Gwalior', location: 'Gwalior', nights: 2 });
     expect(option.affiliateDisclosure).toBe(true);
+  });
+
+  it('uses the same canonical date and derived traveler total as other booking surfaces', async () => {
+    const bodies = [];
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) bodies.push(JSON.parse(options.body));
+      return jsonResponse(resolvedAction());
+    });
+
+    await stayOptionsFor(
+      'trip-1',
+      { id: 'stay-Gwalior', location: 'Gwalior', nights: 2, departureDate: '2026-10-13' },
+      { adults: 2, children: 1, infants: 1 },
+    );
+
+    expect(bodies.length).toBeGreaterThan(1);
+    expect(bodies.every(body => body.departure_date === '2026-10-13')).toBe(true);
+    expect(bodies.every(body => body.traveler_count === 4)).toBe(true);
   });
 });
 

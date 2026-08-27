@@ -8,16 +8,21 @@ import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary, getTripBoard } from '../lib/tripApi.js';
 import {
   anchorsForDay, bookingReadinessLabel, dayCostRange,
-  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
+  verificationTone, trustStripCounts, bookingReadinessRollup,
 } from '../lib/atlasView.js';
 import {
   transportOptionsFor, feasibleTransportOptions,
-  stayOptionsFor, modeLabel, recommendedMode, normalizeTravelerCount,
+  stayOptionsFor, modeLabel, recommendedMode,
   PARTNER_LABEL, MODES,
 } from '../lib/bookingCatalog.js';
 import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
-import { tripOriginCity, tripBookingDateContext } from '../constants/tripContext.js';
+import {
+  tripOriginCity,
+  tripBookingDateContext,
+  tripTravelerComposition,
+  travelerCompositionTotal,
+} from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -342,6 +347,36 @@ function DateEditForm({ mode, setMode, value, setValue, returnValue, setReturnVa
       <div className="confirmation-form-actions">
         <button type="button" className="btn btn-ghost" disabled={pending} onClick={onCancel}>Cancel</button>
         <button type="submit" className="btn btn-primary" disabled={pending || !value}>Save dates</button>
+      </div>
+    </form>
+  );
+}
+
+// TWM-213: mirrors DateEditForm's shape/pattern above — a trip-wide,
+// Backend-owned fact edited through one small inline form, never guessed
+// from a conversational count.
+function TravelerEditForm({ adults, setAdults, children, setChildren, infants, setInfants, onSubmit, onCancel, pending, error }) {
+  return (
+    <form className="confirmation-form" onSubmit={onSubmit}>
+      <p className="already-booked-note">
+        Exact traveler counts improve flight fare accuracy and stay/activity search — this does not change your itinerary plan.
+      </p>
+      <label>Adults
+        <input required type="number" min={1} max={9} value={adults} disabled={pending}
+          onChange={event => setAdults(Math.max(1, Number(event.target.value) || 1))} />
+      </label>
+      <label>Children
+        <input type="number" min={0} max={8} value={children} disabled={pending}
+          onChange={event => setChildren(Math.max(0, Number(event.target.value) || 0))} />
+      </label>
+      <label>Infants
+        <input type="number" min={0} max={8} value={infants} disabled={pending}
+          onChange={event => setInfants(Math.max(0, Number(event.target.value) || 0))} />
+      </label>
+      {error && <p className="confirm-error" role="alert">{error}</p>}
+      <div className="confirmation-form-actions">
+        <button type="button" className="btn btn-ghost" disabled={pending} onClick={onCancel}>Cancel</button>
+        <button type="submit" className="btn btn-primary" disabled={pending}>Save travelers</button>
       </div>
     </form>
   );
@@ -844,6 +879,17 @@ export default function TripDashboard() {
   // spot renders the form, never every qualifying spot at once.
   const [dateEditItemKey, setDateEditItemKey] = useState(null);
 
+  // TWM-213: traveler-composition update flow — same shape/pattern as the
+  // booking-date flow above (trip-wide, Backend-owned, a save failure never
+  // clears already-resolved options). One control, not per-item, since
+  // composition has no per-leg concept.
+  const [travelerEditOpen, setTravelerEditOpen] = useState(false);
+  const [travelerEditAdults, setTravelerEditAdults] = useState(1);
+  const [travelerEditChildren, setTravelerEditChildren] = useState(0);
+  const [travelerEditInfants, setTravelerEditInfants] = useState(0);
+  const [travelerEditPending, setTravelerEditPending] = useState(false);
+  const [travelerEditError, setTravelerEditError] = useState(null);
+
   // TWM-206: the Transport drawer opened inline from a gateway leg in the
   // Itinerary tab. Resolves on demand (only when a drawer actually opens),
   // caching into transportData so a second open of the same leg never
@@ -1062,6 +1108,45 @@ export default function TripDashboard() {
     }
   }
 
+  function openTravelerEditForm() {
+    const existing = tripTravelerComposition(tripState?.trip_context);
+    setTravelerEditAdults(existing?.adults ?? 1);
+    setTravelerEditChildren(existing?.children ?? 0);
+    setTravelerEditInfants(existing?.infants ?? 0);
+    setTravelerEditError(null);
+    setTravelerEditOpen(true);
+  }
+
+  async function submitTravelerEdit(event) {
+    event.preventDefault();
+    setTravelerEditPending(true);
+    setTravelerEditError(null);
+    try {
+      await sendTripCommand('update_traveler_composition', {
+        travelerCompositionUpdate: {
+          adults: travelerEditAdults,
+          children: travelerEditChildren,
+          infants: travelerEditInfants,
+        },
+      });
+      trackEvent('traveler_composition_updated', {
+        adults: travelerEditAdults,
+        children: travelerEditChildren,
+        infants: travelerEditInfants,
+      });
+      // Same invalidation rule as submitDateEdit above: composition is
+      // trip-wide, so every cached Transport/Stay entry (built with the
+      // old count) must be dropped rather than kept stale.
+      setTransportData({});
+      setStayData({});
+      setTravelerEditOpen(false);
+    } catch (error) {
+      setTravelerEditError(error.message || 'Could not save traveler composition — your existing options are still available.');
+    } finally {
+      setTravelerEditPending(false);
+    }
+  }
+
   function resolveBookingPrompt(destination) {
     trackEvent('booking_prompt_choice', { choice: destination });
     setShowBookingPrompt(false);
@@ -1167,8 +1252,8 @@ export default function TripDashboard() {
   // Bookings-tab fetch effect uses, so the Transport drawer's on-demand
   // resolution never sends a different traveler_count than an eager
   // Bookings-tab fetch would have.
-  const partySize = normalizeTravelerCount(tripState?.trip_context?.num_travelers)
-    ?? travelerCount(finalItinerary.trip_summary);
+  const travelerComposition = tripTravelerComposition(tripState?.trip_context);
+  const partySize = travelerCompositionTotal(travelerComposition);
 
   // TWM-206: opens the Transport drawer for a gateway leg, resolving its
   // options on demand the first time (cached into transportData so a
@@ -1193,7 +1278,7 @@ export default function TripDashboard() {
     try {
       const feasibility = { modes: boardItem.feasible_modes || [] };
       const approvedModes = feasibility.modes.map(entry => entry.mode);
-      const options = await transportOptionsFor(tripId, leg, partySize, approvedModes);
+      const options = await transportOptionsFor(tripId, leg, travelerComposition, approvedModes);
       setTransportData(prev => ({ ...prev, [key]: { options, feasibility } }));
     } catch (error) {
       setTransportDrawerError(error.message || 'Could not load transport options.');
@@ -1216,7 +1301,7 @@ export default function TripDashboard() {
     if (stayData[stay.id]) return;
     setStayDrawerLoading(true);
     try {
-      const options = await stayOptionsFor(tripId, stay);
+      const options = await stayOptionsFor(tripId, stay, travelerComposition);
       setStayData(prev => ({ ...prev, [stay.id]: { options } }));
     } catch (error) {
       setStayDrawerError(error.message || 'Could not load stay options.');
@@ -1256,6 +1341,8 @@ export default function TripDashboard() {
       )}
       <TripHero
         finalItinerary={finalItinerary}
+        boardDays={boardData?.version === itineraryResult.version && boardDataTripId === tripId ? boardData.days : []}
+        travelerTotal={partySize}
         actions={<>
           <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
           {/* TWM-198: Share hidden for MVP rather than left as an
@@ -1263,6 +1350,28 @@ export default function TripDashboard() {
               PDF is unchanged here; it's tracked separately (TWM-98). */}
         </>}
       />
+      {/* TWM-213: exact traveler composition is trip-wide, same as booking
+          dates — one control here rather than per-item, since composition
+          has no per-leg concept the way dates does. */}
+      <div className="traveler-composition-edit">
+        <button type="button" className="btn btn-ghost btn-small" onClick={openTravelerEditForm}>
+          👤 {partySize ? `${partySize} travelers · Change` : 'Set exact traveler count'}
+        </button>
+        {travelerEditOpen && (
+          <TravelerEditForm
+            adults={travelerEditAdults}
+            setAdults={setTravelerEditAdults}
+            children={travelerEditChildren}
+            setChildren={setTravelerEditChildren}
+            infants={travelerEditInfants}
+            setInfants={setTravelerEditInfants}
+            onSubmit={submitTravelerEdit}
+            onCancel={() => setTravelerEditOpen(false)}
+            pending={travelerEditPending}
+            error={travelerEditError}
+          />
+        )}
+      </div>
 
       {proposedRevision && (
         <RevisionOverlay
@@ -1371,6 +1480,9 @@ export default function TripDashboard() {
                 const itemDateKey = `${selectedDay.day_number}-${index}`;
                 const isGatewayLeg = item.kind === 'TRAVEL' && boardItem?.is_gateway_leg;
                 const stayItem = stayFromTimelineItem(item, days, selectedDay.day_number);
+                if (stayItem) {
+                  stayItem.departureDate = boardDayByNumber[stayItem.dayNumbers[0]]?.date ?? null;
+                }
                 const hasItemActions = isGatewayLeg || stayItem;
                 return (
                   <div className="atlas-item" key={index}>
