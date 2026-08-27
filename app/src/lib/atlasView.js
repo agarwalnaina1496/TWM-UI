@@ -111,16 +111,32 @@ export function trustStripCounts(finalItinerary, result) {
 
 // A booking-readiness rollup ("N of M bookable items ready") — a timeline
 // item is bookable when it requires_advance_booking; it's "ready" once a
-// confirmed logistics anchor exists for that day (the real, application-owned
+// confirmed logistics anchor exists for it (the real, application-owned
 // signal a booking was actually handled — never inferred from Atlas's own
 // booking_readiness label, which only reflects whether Atlas thinks the item
 // is suggestable, not whether the traveler actually booked anything).
-export function bookingReadinessRollup(days, anchors) {
+//
+// TWM-198/TWM-209: matches an anchor to its exact item via board_item_id
+// (`${tripId}:${day_number}:${timelineIndex}` — the same derivation
+// twm/services/trip_board/service.py uses for TripBoardItem.id) when the
+// anchor carries one, so two same-day bookable items are never confused
+// with each other. Falls back to the original day-only match only for an
+// anchor with no board_item_id at all (legacy anchor data, or any future
+// confirm_logistics caller that doesn't send one) — never the reverse, so
+// an anchor that DOES carry a board_item_id can't accidentally satisfy a
+// different same-day item just because both are on that day.
+export function bookingReadinessRollup(days, anchors, tripId) {
   const bookableItems = (days || []).flatMap(day =>
-    (day.timeline || [])
-      .filter(item => item.requires_advance_booking)
-      .map(item => ({ ...item, day_number: day.day_number }))
+    (day.timeline || []).map((item, index) => ({
+      ...item,
+      day_number: day.day_number,
+      board_item_id: `${tripId}:${day.day_number}:${index}`,
+    })).filter(item => item.requires_advance_booking)
   );
-  const ready = bookableItems.filter(item => anchorsForDay(anchors, item.day_number).length > 0).length;
+  const legacyAnchors = (anchors || []).filter(anchor => !anchor.board_item_id);
+  const ready = bookableItems.filter(item =>
+    (anchors || []).some(anchor => anchor.board_item_id && anchor.board_item_id === item.board_item_id) ||
+    anchorsForDay(legacyAnchors, item.day_number).length > 0
+  ).length;
   return { ready, total: bookableItems.length };
 }
