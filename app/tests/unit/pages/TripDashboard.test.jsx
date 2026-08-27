@@ -69,6 +69,11 @@ function atlasResult(overrides = {}) {
               reference: generalReference(), requires_advance_booking: true, booking_readiness: 'unresolved',
             },
             {
+              start_time: 'Evening', end_time: null, kind: 'STAY', title: 'Second night in Rishikesh', location: 'Rishikesh',
+              detail: 'Stay in the same Rishikesh base.', movement_guidance: null, estimated_cost_low: 1600, estimated_cost_high: 3000,
+              reference: generalReference(), requires_advance_booking: true, booking_readiness: 'needs_advance_booking',
+            },
+            {
               // TWM-200 review finding: the return-to-origin leg must come
               // from its own structured TRAVEL movement — UI no longer
               // synthesizes an origin bookend leg on its own.
@@ -1022,6 +1027,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
       await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      expect(within(drawer).getByText('Rishikesh · 2 nights')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Hotellook')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Booking.com')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Agoda')).toBeInTheDocument();
@@ -1089,6 +1095,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
       const drawer = await screen.findByRole('dialog', { name: /Stay: Jaipur/ });
       await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      expect(within(drawer).getByText('Jaipur · 1 night')).toBeInTheDocument();
       expect(within(drawer).getByText('Jaipur — Hotellook')).toBeInTheDocument();
       expect(screen.queryByRole('dialog', { name: /Stay: Agra/ })).not.toBeInTheDocument();
       expect(capturedBodies).toHaveLength(3);

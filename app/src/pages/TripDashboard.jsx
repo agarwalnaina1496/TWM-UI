@@ -53,13 +53,23 @@ const moneyRange = (low, high) => (low == null || high == null ? null : `${money
 // Atlas categories arrive as raw snake_case (e.g. "arrival_departure_window") — humanize for display.
 const humanize = value => value.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
 
-function stayFromTimelineItem(item, dayNumber, index) {
+function dayHasStayInLocation(day, location) {
+  return (day?.timeline || []).some(item => item.kind === 'STAY' && item.location === location);
+}
+
+function stayFromTimelineItem(item, days, dayNumber) {
   if (item.kind !== 'STAY' || !item.location) return null;
+  const dayIndex = days.findIndex(day => day.day_number === dayNumber);
+  let startIndex = dayIndex;
+  let endIndex = dayIndex;
+  while (startIndex > 0 && dayHasStayInLocation(days[startIndex - 1], item.location)) startIndex -= 1;
+  while (endIndex < days.length - 1 && dayHasStayInLocation(days[endIndex + 1], item.location)) endIndex += 1;
+  const groupedDays = dayIndex === -1 ? [dayNumber] : days.slice(startIndex, endIndex + 1).map(day => day.day_number);
   return {
-    id: `stay-${dayNumber}-${index}-${item.location}`,
+    id: `stay-${groupedDays[0]}-${groupedDays[groupedDays.length - 1]}-${item.location}`,
     location: item.location,
-    nights: 1,
-    dayNumbers: [dayNumber],
+    nights: groupedDays.length,
+    dayNumbers: groupedDays,
   };
 }
 
@@ -1360,7 +1370,7 @@ export default function TripDashboard() {
                 const boardItem = boardDayByNumber[selectedDay.day_number]?.items?.[index];
                 const itemDateKey = `${selectedDay.day_number}-${index}`;
                 const isGatewayLeg = item.kind === 'TRAVEL' && boardItem?.is_gateway_leg;
-                const stayItem = stayFromTimelineItem(item, selectedDay.day_number, index);
+                const stayItem = stayFromTimelineItem(item, days, selectedDay.day_number);
                 const hasItemActions = isGatewayLeg || stayItem;
                 return (
                   <div className="atlas-item" key={index}>
