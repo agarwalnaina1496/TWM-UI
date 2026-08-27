@@ -1221,7 +1221,7 @@ export default function TripDashboard() {
   const costMax = Math.max(...allCosts, 1);
   const proposedRevision = itineraryState.proposed_revision;
   const trustCounts = trustStripCounts(finalItinerary, result);
-  const readiness = bookingReadinessRollup(days, anchors);
+  const readiness = bookingReadinessRollup(days, anchors, tripId);
   // TWM-198: a confirmed logistics anchor whose day_number no longer
   // exists in the current itinerary (e.g. after a regeneration that
   // changed the day count/structure) never matches anchorsForDay on any
