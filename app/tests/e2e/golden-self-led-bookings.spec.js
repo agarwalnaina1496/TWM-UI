@@ -34,6 +34,11 @@ function twoStopAtlasResult() {
               detail: 'Visit at a relaxed pace.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
               reference, requires_advance_booking: false, booking_readiness: null,
             },
+            {
+              start_time: 'Evening', end_time: null, kind: 'STAY', title: 'Overnight in Coorg', location: 'Coorg',
+              detail: 'Stay close to the coffee estates.', movement_guidance: null, estimated_cost_low: 2500, estimated_cost_high: 4500,
+              reference, requires_advance_booking: true, booking_readiness: 'needs_advance_booking',
+            },
           ],
           seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'None required.', backup_plan: null,
         },
@@ -250,10 +255,11 @@ test('Itinerary resolves a gateway transport leg and a stay via their drawers, s
 
   // Stay (TWM-197/TWM-208): resolves for real now — one redirect CTA per
   // approved partner (hotellook/booking_com/agoda), via the shared
-  // domain-agnostic /trusted-action mock in testUtils.js. Day 1 is
-  // Coorg's base.
+  // domain-agnostic /trusted-action mock in testUtils.js. The trigger is
+  // attached to the explicit STAY timeline item, not the day header.
   await page.getByRole('button', { name: /Day 1/ }).click();
-  await page.getByRole('button', { name: /Stay options/ }).click();
+  const coorgStayItem = page.locator('.atlas-item', { hasText: 'Overnight in Coorg' });
+  await coorgStayItem.getByRole('button', { name: /Stay options/ }).click();
   const stayDrawer = page.getByRole('dialog', { name: /Stay: Coorg/ });
   await expect(stayDrawer.getByRole('link', { name: 'Check stay ↗' }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Close stay options' }).click();
