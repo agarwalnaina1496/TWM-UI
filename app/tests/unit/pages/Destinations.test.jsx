@@ -809,7 +809,7 @@ describe('Destinations (real Meridian integration)', () => {
       expect(within(overlay).getByText('From Delhi')).toBeInTheDocument();
       // aria-modal="true" is a promise focus stays contained — autofocus
       // into the answer input is the minimum that has to be true for that.
-      expect(within(overlay).getByLabelText('Your answer')).toHaveFocus();
+      await waitFor(() => expect(within(overlay).getByLabelText('Your answer')).toHaveFocus());
     });
 
     it('never shows the checkpoint when Guide has no gap — proceeds straight to Trip Preview', async () => {
