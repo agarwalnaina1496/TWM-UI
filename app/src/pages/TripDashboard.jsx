@@ -22,6 +22,7 @@ import {
   tripBookingDateContext,
   tripTravelerComposition,
   travelerCompositionTotal,
+  tripTravelerCount,
 } from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
@@ -656,15 +657,40 @@ function RecommendedModeCard({ option }) {
   );
 }
 
-// TWM-206: the Transport drawer — opened inline from a gateway leg in the
+// TWM-213 UX rework: trip dates and traveler composition are both
+// trip-wide, booking-precision facts that only matter at the moment of an
+// actual search — the least-friction, most familiar pattern (every OTA
+// site's search bar sitting atop its results) is a single editable summary
+// strip at the top of wherever that search happens, prefilled with
+// whatever's already saved, not a separate affordance the traveler has to
+// find beforehand. Both labels say "Trip" explicitly (not "this leg" or
+// "this stay") since editing either one always changes the same shared
+// trip-wide value regardless of which drawer it's opened from — Stay's
+// own derived check-in date is a separate, clearly-labeled read-only line
+// the StayDrawer renders above this strip, never conflated with it.
+function BookingSummaryStrip({
+  dateLabel, onEditDate, dateEditOpen, dateEditForm,
+  travelerLabel, onEditTravelers, travelerEditOpen, travelerEditForm,
+}) {
+  return (
+    <div className="booking-summary-strip">
+      <div className="booking-summary-row">
+        <button type="button" className="btn btn-ghost btn-small" onClick={onEditDate}>
+          📅 {dateLabel ? `Trip dates: ${dateLabel} · Change` : 'Set trip dates'}
+        </button>
+        <button type="button" className="btn btn-ghost btn-small" onClick={onEditTravelers}>
+          👤 {travelerLabel ? `Trip ${travelerLabel} · Change` : 'Set trip travelers'}
+        </button>
+      </div>
+      {dateEditOpen && dateEditForm}
+      {travelerEditOpen && travelerEditForm}
+    </div>
+  );
+}
+
 // Itinerary tab. Dims the Itinerary behind it (transport-drawer-overlay);
-// never navigates away, never a full-screen modal. Date is leg-level and
-// set on the Itinerary item itself (TWM-206 step 2) — this drawer only
-// ever reads whatever date value is already there (via `leg`), it never
-// renders a date-input control of its own (TransportOptionCard is used
-// here without an `onAddDates` handler, which is what actually suppresses
-// FlightLiveOfferInfo's "Add dates" nudge button).
-function TransportDrawer({ leg, options, feasibility, loading, error, onClose }) {
+// never navigates away, never a full-screen modal.
+function TransportDrawer({ leg, options, feasibility, loading, error, summaryStrip, onClose }) {
   if (!leg) return null;
   const resolvedOptions = feasibleTransportOptions(options || [], feasibility);
   const feasibleModeNames = new Set((feasibility?.modes || []).map(entry => entry.mode));
@@ -673,7 +699,6 @@ function TransportDrawer({ leg, options, feasibility, loading, error, onClose })
   // mode, so this section can only say a mode isn't available, never why.
   const notFeasibleModes = MODES.filter(mode => !feasibleModeNames.has(mode));
   const recommended = resolvedOptions.length ? recommendedMode(resolvedOptions) : undefined;
-  const dateLabel = leg.departureDate || leg.departureMonth || null;
   return (
     <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
       <aside
@@ -687,11 +712,7 @@ function TransportDrawer({ leg, options, feasibility, loading, error, onClose })
           <h3>{leg.from} → {leg.to}</h3>
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close transport options">✕</button>
         </div>
-        {dateLabel ? (
-          <p className="transport-drawer-date">📅 {dateLabel}</p>
-        ) : (
-          <p className="transport-drawer-date-note">No date set yet — add one on the Itinerary card above for a more precise search.</p>
-        )}
+        {summaryStrip}
         {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
         {error && <p className="already-booked-note" role="alert">{error}</p>}
         {!loading && !error && (
@@ -734,7 +755,7 @@ const STAY_TIER_LABEL = { budget: 'Budget', mid_range: 'Mid-range', premium: 'Pr
 // no Trip Board adapter change needed since it isn't feasibility-derived)
 // renders as its own clearly-labeled non-binding section, never merged
 // into or presented as a partner's real price.
-function StayDrawer({ stay, options, loading, error, stayPriceEstimate, onClose }) {
+function StayDrawer({ stay, options, loading, error, stayPriceEstimate, summaryStrip, onClose }) {
   if (!stay) return null;
   return (
     <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
@@ -749,6 +770,15 @@ function StayDrawer({ stay, options, loading, error, stayPriceEstimate, onClose 
           <h3>{stay.location} · {stay.nights} night{stay.nights === 1 ? '' : 's'}</h3>
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close stay options">✕</button>
         </div>
+        {/* This stay's own check-in date, derived from day_number — never
+            the same value as the gateway travel date, and never editable
+            from here (see BookingSummaryStrip's comment above). */}
+        {stay.departureDate ? (
+          <p className="transport-drawer-date">📅 Check-in {stay.departureDate}</p>
+        ) : (
+          <p className="transport-drawer-date-note">Set exact trip dates via a Transport search for a precise check-in date.</p>
+        )}
+        {summaryStrip}
         {stayPriceEstimate && (
           <div className="stay-estimate-block">
             <span className="stay-estimate-label">Non-binding estimate, per night</span>
@@ -872,12 +902,6 @@ export default function TripDashboard() {
   const [dateEditReturnValue, setDateEditReturnValue] = useState('');
   const [dateEditPending, setDateEditPending] = useState(false);
   const [dateEditError, setDateEditError] = useState(null);
-  // TWM-206: the same trip-wide form now also opens inline from a gateway
-  // TRAVEL item in the Itinerary tab, not just from the Bookings tab's
-  // flight card — this key says which trigger point opened it (a day/item
-  // position, or 'bookings' for the original trigger) so only that one
-  // spot renders the form, never every qualifying spot at once.
-  const [dateEditItemKey, setDateEditItemKey] = useState(null);
 
   // TWM-213: traveler-composition update flow — same shape/pattern as the
   // booking-date flow above (trip-wide, Backend-owned, a save failure never
@@ -1059,7 +1083,11 @@ export default function TripDashboard() {
     }
   }
 
-  function openDateEditForm(suggestedMode, itemKey) {
+  // TWM-213: no longer keyed per-item — booking_dates is trip-wide and now
+  // only ever edited from the Transport/Stay drawer's summary strip, so a
+  // single open/closed flag is enough (only one drawer, hence one strip,
+  // is ever open at a time).
+  function openDateEditForm(suggestedMode) {
     const mode = suggestedMode === 'month' ? 'month' : 'exact';
     setDateEditMode(mode);
     // PR review: seed from whatever's already saved, when it matches the
@@ -1078,7 +1106,6 @@ export default function TripDashboard() {
       setDateEditReturnValue('');
     }
     setDateEditError(null);
-    setDateEditItemKey(itemKey);
     setDateEditOpen(true);
   }
 
@@ -1254,6 +1281,19 @@ export default function TripDashboard() {
   // Bookings-tab fetch would have.
   const travelerComposition = tripTravelerComposition(tripState?.trip_context);
   const partySize = travelerCompositionTotal(travelerComposition);
+  // TWM-213: three states, not two. Composition (exact, booking-usable) is
+  // the primary label when set. Otherwise fall back to the loose
+  // conversational num_travelers (Meridian/Guide already ask this during
+  // Discover/Plan) shown honestly as an approximation, not hidden as if
+  // nothing were known — but never sent in a real booking payload, only
+  // travelerComposition ever is. Only when neither exists does the label
+  // fall through to the drawer's "Set travelers" empty state.
+  const roughTravelerCount = tripTravelerCount(tripState?.trip_context);
+  const travelerDisplayLabel = partySize
+    ? `${partySize} travelers`
+    : roughTravelerCount
+    ? `~${roughTravelerCount} travelers (approx)`
+    : null;
 
   // TWM-206: opens the Transport drawer for a gateway leg, resolving its
   // options on demand the first time (cached into transportData so a
@@ -1350,29 +1390,6 @@ export default function TripDashboard() {
               PDF is unchanged here; it's tracked separately (TWM-98). */}
         </>}
       />
-      {/* TWM-213: exact traveler composition is trip-wide, same as booking
-          dates — one control here rather than per-item, since composition
-          has no per-leg concept the way dates does. */}
-      <div className="traveler-composition-edit">
-        <button type="button" className="btn btn-ghost btn-small" onClick={openTravelerEditForm}>
-          👤 {partySize ? `${partySize} travelers · Change` : 'Set exact traveler count'}
-        </button>
-        {travelerEditOpen && (
-          <TravelerEditForm
-            adults={travelerEditAdults}
-            setAdults={setTravelerEditAdults}
-            children={travelerEditChildren}
-            setChildren={setTravelerEditChildren}
-            infants={travelerEditInfants}
-            setInfants={setTravelerEditInfants}
-            onSubmit={submitTravelerEdit}
-            onCancel={() => setTravelerEditOpen(false)}
-            pending={travelerEditPending}
-            error={travelerEditError}
-          />
-        )}
-      </div>
-
       {proposedRevision && (
         <RevisionOverlay
           proposedRevision={proposedRevision}
@@ -1477,7 +1494,6 @@ export default function TripDashboard() {
             <div className="atlas-timeline">
               {selectedDay.timeline.map((item, index) => {
                 const boardItem = boardDayByNumber[selectedDay.day_number]?.items?.[index];
-                const itemDateKey = `${selectedDay.day_number}-${index}`;
                 const isGatewayLeg = item.kind === 'TRAVEL' && boardItem?.is_gateway_leg;
                 const stayItem = stayFromTimelineItem(item, days, selectedDay.day_number);
                 if (stayItem) {
@@ -1497,14 +1513,15 @@ export default function TripDashboard() {
                       </div>
                       <p>{item.detail}</p>
                       {item.movement_guidance && <p className="movement-guidance">{item.movement_guidance}</p>}
-                      {/* TWM-206: Set-dates is leg-level, inline on the
-                          Itinerary item itself — never inside the Transport
-                          drawer (that only ever reads whatever date is
-                          already set here). Only a gateway leg is
-                          bookable, so only a gateway leg gets this
-                          affordance; date is trip-wide (TWM-201), so
-                          opening it from any gateway leg edits the same
-                          underlying value. */}
+                      {/* TWM-213 UX rework: dates and traveler composition
+                          are no longer set inline on the Itinerary item —
+                          both are trip-wide, booking-precision facts that
+                          only matter at the moment of an actual search, so
+                          they're now an editable summary strip at the top
+                          of the Transport/Stay drawer itself (where the
+                          search happens), not a separate affordance the
+                          traveler has to find beforehand. This block is
+                          just the two drawer triggers. */}
                       {hasItemActions && (
                         <div className="itinerary-set-dates">
                           {stayItem && (
@@ -1517,46 +1534,13 @@ export default function TripDashboard() {
                             </button>
                           )}
                           {isGatewayLeg && (
-                            <>
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-small"
-                                onClick={() => openDateEditForm(boardItem.date_precision === 'month' ? 'month' : 'exact', itemDateKey)}
-                              >
-                                📅 {boardItem.date_precision === 'exact' && boardItem.departure_date
-                                  ? `${boardItem.departure_date} · Change dates`
-                                  : boardItem.date_precision === 'month' && boardItem.departure_month
-                                  ? `${boardItem.departure_month} · Change dates`
-                                  : 'Set dates'}
-                              </button>
-                              {dateEditOpen && dateEditItemKey === itemDateKey && (
-                                <DateEditForm
-                                  mode={dateEditMode}
-                                  setMode={setDateEditMode}
-                                  value={dateEditValue}
-                                  setValue={setDateEditValue}
-                                  returnValue={dateEditReturnValue}
-                                  setReturnValue={setDateEditReturnValue}
-                                  onSubmit={submitDateEdit}
-                                  onCancel={() => setDateEditOpen(false)}
-                                  pending={dateEditPending}
-                                  error={dateEditError}
-                                />
-                              )}
-                              {/* TWM-206: Transport is information-dense
-                                  (multiple modes/options, live-vs-estimated
-                                  pricing, partner links) — density decides the
-                                  interaction pattern, so it opens a side
-                                  drawer instead of expanding inline like
-                                  Set-dates does. */}
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-small"
-                                onClick={() => openTransportDrawer(boardItem)}
-                              >
-                                🚗 Transport options ▾
-                              </button>
-                            </>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-small"
+                              onClick={() => openTransportDrawer(boardItem)}
+                            >
+                              🚗 Transport options ▾
+                            </button>
                           )}
                         </div>
                       )}
@@ -1588,31 +1572,110 @@ export default function TripDashboard() {
         </div>
       </section>}
 
-      {transportDrawerLeg && (
-        <TransportDrawer
-          leg={transportDrawerLeg}
-          options={transportData[legKey(transportDrawerLeg)]?.options}
-          feasibility={transportData[legKey(transportDrawerLeg)]?.feasibility}
-          loading={transportDrawerLoading}
-          error={transportDrawerError}
-          onClose={() => setTransportDrawerLeg(null)}
-        />
-      )}
-
-      {stayDrawerStay && (
-        <StayDrawer
-          stay={stayDrawerStay}
-          options={stayData[stayDrawerStay.id]?.options}
-          loading={stayDrawerLoading}
-          error={stayDrawerError}
-          // TWM-204: stay_price_estimate lives on the raw Atlas day object,
-          // not the Trip Board adapter (it isn't feasibility-derived) —
-          // read straight from the stay's first day; Atlas is expected to
-          // keep it consistent across every day of the same base.
-          stayPriceEstimate={days.find(day => day.day_number === stayDrawerStay.dayNumbers[0])?.stay_price_estimate}
-          onClose={() => setStayDrawerStay(null)}
-        />
-      )}
+      {(() => {
+        const bookingDateContext = tripBookingDateContext(tripState?.trip_context);
+        // PR review: the strip must show the date this specific search will
+        // actually use, not always the trip's raw departure_date — an
+        // inbound/return gateway leg searches with return_date (the Board
+        // already resolves this per-item, see openTransportDrawer's `leg`),
+        // so its drawer's label has to reflect that too, or it would show
+        // the outbound date while silently searching with a different one.
+        // Stay has no outbound/inbound concept, so it always shows the
+        // trip's raw departure/month label.
+        const renderStrip = (dateLabel, dateModeHint) => (
+          <BookingSummaryStrip
+            dateLabel={dateLabel}
+            onEditDate={() => openDateEditForm(dateModeHint === 'month' ? 'month' : 'exact')}
+            dateEditOpen={dateEditOpen}
+            dateEditForm={
+              <DateEditForm
+                mode={dateEditMode}
+                setMode={setDateEditMode}
+                value={dateEditValue}
+                setValue={setDateEditValue}
+                returnValue={dateEditReturnValue}
+                setReturnValue={setDateEditReturnValue}
+                onSubmit={submitDateEdit}
+                onCancel={() => setDateEditOpen(false)}
+                pending={dateEditPending}
+                error={dateEditError}
+              />
+            }
+            travelerLabel={travelerDisplayLabel}
+            onEditTravelers={openTravelerEditForm}
+            travelerEditOpen={travelerEditOpen}
+            travelerEditForm={
+              <TravelerEditForm
+                adults={travelerEditAdults}
+                setAdults={setTravelerEditAdults}
+                children={travelerEditChildren}
+                setChildren={setTravelerEditChildren}
+                infants={travelerEditInfants}
+                setInfants={setTravelerEditInfants}
+                onSubmit={submitTravelerEdit}
+                onCancel={() => setTravelerEditOpen(false)}
+                pending={travelerEditPending}
+                error={travelerEditError}
+              />
+            }
+          />
+        );
+        const genericDateLabel = bookingDateContext?.precision === 'exact'
+          ? bookingDateContext.departure_date
+          : bookingDateContext?.precision === 'month'
+          ? bookingDateContext.departure_month
+          : null;
+        // PR review: transportDrawerLeg is a snapshot captured once when the
+        // drawer opened -- re-deriving its date from boardDayByNumber (fresh
+        // every render) instead of trusting that snapshot is what makes a
+        // date saved while the drawer is open actually show up on the strip,
+        // rather than the stale value from open-time.
+        const freshLeg = transportDrawerLeg
+          ? Object.values(boardDayByNumber)
+              .flatMap(day => day.items || [])
+              .find(item => item.is_gateway_leg && item.from_city === transportDrawerLeg.from && item.to_city === transportDrawerLeg.to)
+          : null;
+        const transportStrip = transportDrawerLeg
+          ? renderStrip(
+              freshLeg?.date_precision === 'exact' ? freshLeg.departure_date
+                : freshLeg?.date_precision === 'month' ? freshLeg.departure_month
+                : null,
+              freshLeg?.date_precision === 'month' ? 'month' : 'exact',
+            )
+          : null;
+        const stayStrip = renderStrip(genericDateLabel, bookingDateContext?.precision);
+        return (
+          <>
+            {transportDrawerLeg && (
+              <TransportDrawer
+                leg={transportDrawerLeg}
+                options={transportData[legKey(transportDrawerLeg)]?.options}
+                feasibility={transportData[legKey(transportDrawerLeg)]?.feasibility}
+                loading={transportDrawerLoading}
+                error={transportDrawerError}
+                summaryStrip={transportStrip}
+                onClose={() => setTransportDrawerLeg(null)}
+              />
+            )}
+            {stayDrawerStay && (
+              <StayDrawer
+                stay={stayDrawerStay}
+                options={stayData[stayDrawerStay.id]?.options}
+                loading={stayDrawerLoading}
+                error={stayDrawerError}
+                // TWM-204: stay_price_estimate lives on the raw Atlas day
+                // object, not the Trip Board adapter (it isn't
+                // feasibility-derived) — read straight from the stay's
+                // first day; Atlas is expected to keep it consistent
+                // across every day of the same base.
+                stayPriceEstimate={days.find(day => day.day_number === stayDrawerStay.dayNumbers[0])?.stay_price_estimate}
+                summaryStrip={stayStrip}
+                onClose={() => setStayDrawerStay(null)}
+              />
+            )}
+          </>
+        );
+      })()}
 
       {tab === 'Support' && <section>
         <div className="tab-intro"><div><h2>💬 Support</h2><p>Get help with this specific itinerary.</p></div></div>

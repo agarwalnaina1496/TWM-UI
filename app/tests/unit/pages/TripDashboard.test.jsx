@@ -823,63 +823,61 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.queryByRole('button', { name: /Transport options/ })).not.toBeInTheDocument();
   });
 
-  describe('Itinerary inline Set-dates (TWM-206)', () => {
-    it('shows a Set-dates button only on gateway TRAVEL legs, never on an internal leg or a non-TRAVEL item', async () => {
+  // TWM-213 UX rework: trip dates and traveler composition are edited from
+  // a single shared summary strip at the top of the Transport/Stay drawer
+  // (wherever the search actually happens), not inline on the Itinerary
+  // item — both are trip-wide facts, never leg- or stay-specific.
+  describe('Booking summary strip — trip dates and travelers (TWM-213)', () => {
+    it('shows "Set trip dates" and "Set trip travelers" inside the Transport drawer when neither is known yet', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Itinerary/ }));
 
-      // Day 1's "Arrival from Delhi" is the outbound gateway leg.
-      await waitFor(() => expect(screen.getByRole('button', { name: /Set dates/ })).toBeInTheDocument());
-      // Day 1's ACTIVITY item never gets the affordance.
-      expect(screen.getByText('Triveni Ghat')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
 
-      const dayNav = screen.getByRole('navigation', { name: 'Select a day' });
-      await user.click(within(dayNav).getByText('2'));
-      // Day 2's "Return to Delhi" is the inbound gateway leg — its own
-      // "Set dates" button (a second one distinct from day 1's).
-      await waitFor(() => expect(screen.getAllByRole('button', { name: /Set dates/ }).length).toBeGreaterThan(0));
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      expect(within(drawer).getByRole('button', { name: /Set trip dates/ })).toBeInTheDocument();
+      expect(within(drawer).getByRole('button', { name: /Set trip travelers/ })).toBeInTheDocument();
     });
 
-    it('expands the date-edit form inline under the clicked leg, saves via update_booking_dates, and reflects the saved date on the button', async () => {
+    it('expands the date-edit form inline in the drawer, saves via update_booking_dates, and reflects the saved date on the button', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      let savedCommandSnapshot = commandSnapshot;
       sendTripCommand = vi.fn(async (command, payload) => {
         expect(command).toBe('update_booking_dates');
         expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-05-01' });
-        savedCommandSnapshot = snapshotWith(
+        commandSnapshot = snapshotWith(
           readyItineraryState(),
           {},
           { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-05-01' } } },
         );
-        commandSnapshot = savedCommandSnapshot;
-        return { message: null, agent_meta: null, trip: savedCommandSnapshot };
+        return { message: null, agent_meta: null, trip: commandSnapshot };
       });
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
 
-      await waitFor(() => expect(screen.getByRole('button', { name: /Set dates/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /Set dates/ }));
-      expect(screen.getByLabelText('Departure date')).toBeInTheDocument();
+      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
+      expect(within(drawer).getByLabelText('Departure date')).toBeInTheDocument();
 
-      await user.type(screen.getByLabelText('Departure date'), '2026-05-01');
-      await user.click(screen.getByRole('button', { name: 'Save dates' }));
+      await user.type(within(drawer).getByLabelText('Departure date'), '2026-05-01');
+      await user.click(within(drawer).getByRole('button', { name: 'Save dates' }));
 
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
-      // Re-render picks up the saved booking_dates from the new
-      // commandSnapshot; the light board-fetch effect refetches (keyed on
-      // booking_dates) and the button now shows the saved date.
-      await waitFor(() => expect(screen.getByRole('button', { name: /2026-05-01 · Change dates/ })).toBeInTheDocument());
+      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-05-01 · Change/ })).toBeInTheDocument());
     });
 
-    // PR review, TWM-206: "Change dates" already advertises the saved
-    // value on its own face -- it must open pre-filled with that value,
-    // not blank, or a traveler adding just a return date has to retype
-    // the departure date from memory before Save unlocks.
-    it('seeds "Change dates" with the already-saved date instead of opening blank', async () => {
+    // PR review, TWM-206 (still applies post-TWM-213): "Change" already
+    // advertises the saved value on its own face -- it must open
+    // pre-filled with that value, not blank, or a traveler adding just a
+    // return date has to retype the departure date from memory before
+    // Save unlocks.
+    it('seeds "Change" with the already-saved date instead of opening blank', async () => {
       commandSnapshot = snapshotWith(
         readyItineraryState(),
         {},
@@ -889,12 +887,71 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
 
-      await waitFor(() => expect(screen.getByRole('button', { name: /2026-05-01 · Change dates/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /2026-05-01 · Change dates/ }));
-      expect(screen.getByLabelText('Departure date')).toHaveValue('2026-05-01');
-      // Save is immediately usable — not blocked on retyping the already-saved value.
-      expect(screen.getByRole('button', { name: 'Save dates' })).not.toBeDisabled();
+      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-05-01 · Change/ })).toBeInTheDocument());
+      await user.click(within(drawer).getByRole('button', { name: /Trip dates: 2026-05-01 · Change/ }));
+      expect(within(drawer).getByLabelText('Departure date')).toHaveValue('2026-05-01');
+      expect(within(drawer).getByRole('button', { name: 'Save dates' })).not.toBeDisabled();
+    });
+
+    // PR review, TWM-213: booking_dates carries both departure_date and
+    // return_date -- the Board resolves the inbound gateway leg's own date
+    // to return_date, not departure_date (twm/services/trip_board/
+    // service.py's is_outbound/is_inbound branch). The strip must reflect
+    // whichever this specific drawer's search will actually use, or it
+    // silently shows the outbound date while searching with the return one.
+    it('shows the return date, not the departure date, on the inbound gateway leg\'s drawer', async () => {
+      commandSnapshot = snapshotWith(
+        readyItineraryState(),
+        {},
+        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-05-01', return_date: '2026-05-05' } } },
+      );
+      sendTripCommand = vi.fn();
+      global.fetch = defaultFetchMock();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      const dayNav = screen.getByRole('navigation', { name: 'Select a day' });
+      await user.click(within(dayNav).getByText('2'));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Rishikesh to Delhi/ });
+
+      expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-05-05 · Change/ })).toBeInTheDocument();
+    });
+
+    it('saves traveler composition via update_traveler_composition from the drawer and reflects it on the button', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn(async (command, payload) => {
+        expect(command).toBe('update_traveler_composition');
+        // Form defaults are adults: 1, children: 0, infants: 0 (the "just
+        // me" case) — submitting without touching any field still exercises
+        // the full save/reflect wiring without fighting jsdom's quirks
+        // around controlled number-input edits.
+        expect(payload.travelerCompositionUpdate).toEqual({ adults: 1, children: 0, infants: 0 });
+        commandSnapshot = snapshotWith(
+          readyItineraryState(),
+          {},
+          { trip_context: { origin_city: 'Delhi', traveler_composition: { adults: 1, children: 0, infants: 0 } } },
+        );
+        return { message: null, agent_meta: null, trip: commandSnapshot };
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+
+      await user.click(within(drawer).getByRole('button', { name: /Set trip travelers/ }));
+      await user.click(within(drawer).getByRole('button', { name: 'Save travelers' }));
+
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_traveler_composition', expect.anything()));
+      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip 1 travelers · Change/ })).toBeInTheDocument());
     });
   });
 
@@ -916,9 +973,10 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       // Backend's feasibleAssessmentResponse fixture (used by the shared
       // /board mock) returns all four modes feasible for this leg.
       await waitFor(() => expect(within(drawer).getAllByText(/Flight|Train|Bus|Drive/).length).toBeGreaterThan(0));
-      // No date-input control inside the drawer, per the confirmed decision
-      // that Set-dates lives only on the Itinerary item itself.
+      // TWM-213: the date-input form is collapsed by default, only
+      // expanding once the "Set trip dates" trigger is clicked.
       expect(within(drawer).queryByLabelText('Departure date')).toBeNull();
+      expect(within(drawer).getByRole('button', { name: /Set trip dates/ })).toBeInTheDocument();
       // Every mode was feasible for this fixture, so there's nothing left
       // to list in the collapsed "other modes" section.
       expect(within(drawer).queryByText(/not available for this route/i)).toBeNull();
@@ -1005,18 +1063,23 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
       await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
-      await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      let drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
       await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(0));
       const callCountBeforeDateSave = trustedActionCallCount;
-      await user.click(screen.getByRole('button', { name: 'Close transport options' }));
+      await user.click(within(drawer).getByRole('button', { name: 'Close transport options' }));
 
-      await user.click(screen.getByRole('button', { name: /Set dates/ }));
-      await user.type(screen.getByLabelText('Departure date'), '2026-05-01');
-      await user.click(screen.getByRole('button', { name: 'Save dates' }));
+      // TWM-213: Set-dates now lives inside the drawer's summary strip —
+      // reopen it to set the date, same as a traveler would.
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
+      await user.type(within(drawer).getByLabelText('Departure date'), '2026-05-01');
+      await user.click(within(drawer).getByRole('button', { name: 'Save dates' }));
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
+      await user.click(within(drawer).getByRole('button', { name: 'Close transport options' }));
 
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
-      await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
       // A real refetch happened — the stale cached entry from before the
       // date save was not reused.
       await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(callCountBeforeDateSave));
