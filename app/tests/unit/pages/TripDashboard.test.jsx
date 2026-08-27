@@ -47,6 +47,11 @@ function atlasResult(overrides = {}) {
               reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
             },
             {
+              start_time: 'Evening', end_time: null, kind: 'STAY', title: 'Overnight in Rishikesh', location: 'Rishikesh',
+              detail: 'Stay near the ghats.', movement_guidance: null, estimated_cost_low: 1600, estimated_cost_high: 3000,
+              reference: generalReference(), requires_advance_booking: true, booking_readiness: 'needs_advance_booking',
+            },
+            {
               start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Triveni Ghat', location: 'Rishikesh',
               detail: 'Visit at a relaxed pace.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
               reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
@@ -1001,9 +1006,10 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
   });
 
-  // TWM-206 step 4: Stay opens a drawer from the day header (once per
-  // base/stay), same density-driven pattern as Transport.
-  describe('Itinerary Stay drawer (TWM-206)', () => {
+  // TWM-206/TWM-211: Stay opens the same density-driven drawer pattern as
+  // Transport, but the trigger now belongs to the actual STAY timeline item
+  // so its city cannot drift from the overnight stay.
+  describe('Itinerary Stay drawer (TWM-206/TWM-211)', () => {
     it('opens a drawer for the day\'s base, resolves and shows every approved partner as a link-only card', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
@@ -1019,6 +1025,74 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(within(drawer).getByText('Rishikesh — Hotellook')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Booking.com')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Agoda')).toBeInTheDocument();
+    });
+
+    it('opens from the STAY timeline item city when the overnight city differs from the day primary location', async () => {
+      const base = atlasResult();
+      itineraryFetchResponse = {
+        version: 1,
+        source_guide_revision: 3,
+        created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: {
+            trip_summary: {
+              ...base.final_itinerary.trip_summary,
+              destinations: ['Rishikesh', 'Agra', 'Jaipur'],
+              duration_days: 2,
+            },
+            days: [
+              base.final_itinerary.days[0],
+              {
+                ...base.final_itinerary.days[1],
+                title: 'Agra sights, Jaipur overnight',
+                primary_location: 'Agra',
+                summary: 'Spend the day in Agra, then continue to Jaipur for the night.',
+                timeline: [
+                  {
+                    start_time: 'Morning', end_time: null, kind: 'ACTIVITY', title: 'Taj Mahal visit', location: 'Agra',
+                    detail: 'Visit the Taj Mahal before the onward drive.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
+                    reference: generalReference(), requires_advance_booking: false, booking_readiness: null,
+                  },
+                  {
+                    start_time: 'Night', end_time: null, kind: 'STAY', title: 'Overnight in Jaipur', location: 'Jaipur',
+                    detail: 'Check into a Jaipur hotel after the Agra day.', movement_guidance: null, estimated_cost_low: 2400, estimated_cost_high: 5200,
+                    reference: generalReference(), requires_advance_booking: true, booking_readiness: 'needs_advance_booking',
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      };
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action')) {
+          capturedBodies.push(JSON.parse(options.body));
+          return jsonResponse(resolvedActionResponse());
+        }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await user.click(within(screen.getByRole('navigation', { name: 'Select a day' })).getByRole('button', { name: /Day 2/ }));
+
+      const stayTimelineItem = screen.getByText('Overnight in Jaipur').closest('.atlas-item');
+      expect(stayTimelineItem).not.toBeNull();
+      await user.click(within(stayTimelineItem).getByRole('button', { name: /Stay options/ }));
+
+      const drawer = await screen.findByRole('dialog', { name: /Stay: Jaipur/ });
+      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      expect(within(drawer).getByText('Jaipur — Hotellook')).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: /Stay: Agra/ })).not.toBeInTheDocument();
+      expect(capturedBodies).toHaveLength(3);
+      expect(capturedBodies.every(body => body.domain === 'stay' && body.destination === 'Jaipur')).toBe(true);
     });
 
     it('shows the non-binding tiered estimate when Atlas provides one on the stay\'s first day', async () => {

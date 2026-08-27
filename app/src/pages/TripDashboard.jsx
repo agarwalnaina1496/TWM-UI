@@ -8,7 +8,7 @@ import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary, getTripBoard } from '../lib/tripApi.js';
 import {
   anchorsForDay, bookingReadinessLabel, dayCostRange,
-  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount, routeStops,
+  verificationTone, trustStripCounts, bookingReadinessRollup, travelerCount,
 } from '../lib/atlasView.js';
 import {
   transportOptionsFor, feasibleTransportOptions,
@@ -52,6 +52,16 @@ const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', curre
 const moneyRange = (low, high) => (low == null || high == null ? null : `${money(low)}–${money(high)}`);
 // Atlas categories arrive as raw snake_case (e.g. "arrival_departure_window") — humanize for display.
 const humanize = value => value.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
+
+function stayFromTimelineItem(item, dayNumber, index) {
+  if (item.kind !== 'STAY' || !item.location) return null;
+  return {
+    id: `stay-${dayNumber}-${index}-${item.location}`,
+    location: item.location,
+    nights: 1,
+    dayNumbers: [dayNumber],
+  };
+}
 
 function BudgetBar({ low, high, min, max }) {
   const span = Math.max(max - min, 1);
@@ -832,9 +842,9 @@ export default function TripDashboard() {
   const [transportDrawerLoading, setTransportDrawerLoading] = useState(false);
   const [transportDrawerError, setTransportDrawerError] = useState(null);
 
-  // TWM-206: the Stay drawer, same on-demand/cached pattern as Transport's
-  // above — opened per stay (base city + night count) from the Itinerary
-  // day header, resolved only when actually opened.
+  // TWM-206/TWM-211: the Stay drawer, same on-demand/cached pattern as
+  // Transport's above — opened from the actual STAY timeline item, resolved
+  // only when actually opened.
   const [stayDrawerStay, setStayDrawerStay] = useState(null);
   const [stayDrawerLoading, setStayDrawerLoading] = useState(false);
   const [stayDrawerError, setStayDrawerError] = useState(null);
@@ -1143,20 +1153,6 @@ export default function TripDashboard() {
   const boardDayByNumber = boardData?.version === itineraryResult.version && boardDataTripId === tripId
     ? Object.fromEntries((boardData.days || []).map(day => [day.day_number, day]))
     : {};
-  // TWM-206: which base/stay (if any) the selected day belongs to — Stay's
-  // drawer trigger lives on the day header, once per base, not per
-  // timeline item the way Transport's does. routeStops (not stayLegs,
-  // whose mapped output drops dayNumbers) carries the day-run membership
-  // needed to match the selected day; the resulting shape still matches
-  // stayLegs' own {id, location, nights} convention so stayData/
-  // stayOptionsFor key identically whichever surface resolves it first.
-  const selectedDayStop = routeStops(days).find(stop => stop.dayNumbers.includes(selectedDay.day_number));
-  const selectedDayStay = selectedDayStop && {
-    id: `stay-${selectedDayStop.location}`,
-    location: selectedDayStop.location,
-    nights: selectedDayStop.dayNumbers.length,
-    dayNumbers: selectedDayStop.dayNumbers,
-  };
   // TWM-146/TWM-195/TWM-199: same canonical-then-fallback source the
   // Bookings-tab fetch effect uses, so the Transport drawer's on-demand
   // resolution never sends a different traveler_count than an eager
@@ -1196,9 +1192,12 @@ export default function TripDashboard() {
     }
   }
 
-  // TWM-206: opens the Stay drawer for a base/stay, resolving its partner
-  // options on demand the first time (cached into stayData so a second
-  // open, or the Bookings tab, never refetches the same stay).
+  // TWM-211: opens the Stay drawer for the actual STAY timeline item, not
+  // the day's primary_location-derived route stop. A day can be spent in
+  // one city and overnight in another.
+  //
+  // Resolves partner options on demand the first time (cached into stayData
+  // so a second open never refetches the same stay item).
   async function openStayDrawer(stay) {
     setStayDrawerStay(stay);
     // PR review: same reset-before-cache-hit fix as openTransportDrawer.
@@ -1354,19 +1353,6 @@ export default function TripDashboard() {
               <h2>{selectedDay.title}</h2>
               <p className="atlas-day-route">📍 {selectedDay.primary_location}</p>
               <p>{selectedDay.summary}</p>
-              {/* TWM-206: Stay is information-dense (multiple partner
-                  cards, an optional tiered estimate) — same density-driven
-                  drawer pattern as Transport, opened once per base/stay
-                  rather than per timeline item. */}
-              {selectedDayStay && (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-small"
-                  onClick={() => openStayDrawer(selectedDayStay)}
-                >
-                  🏨 Stay options ▾
-                </button>
-              )}
             </header>
             <AnchorList anchors={anchorsForDay(anchors, selectedDay.day_number)} />
             <div className="atlas-timeline">
@@ -1374,6 +1360,8 @@ export default function TripDashboard() {
                 const boardItem = boardDayByNumber[selectedDay.day_number]?.items?.[index];
                 const itemDateKey = `${selectedDay.day_number}-${index}`;
                 const isGatewayLeg = item.kind === 'TRAVEL' && boardItem?.is_gateway_leg;
+                const stayItem = stayFromTimelineItem(item, selectedDay.day_number, index);
+                const hasItemActions = isGatewayLeg || stayItem;
                 return (
                   <div className="atlas-item" key={index}>
                     <span className="atlas-dot">{item.kind === 'TRAVEL' ? '🚗' : item.kind === 'STAY' ? '🏨' : item.kind === 'MEAL' ? '🍽️' : item.kind === 'FREE_TIME' ? '🕒' : '📍'}</span>
@@ -1395,46 +1383,59 @@ export default function TripDashboard() {
                           affordance; date is trip-wide (TWM-201), so
                           opening it from any gateway leg edits the same
                           underlying value. */}
-                      {isGatewayLeg && (
+                      {hasItemActions && (
                         <div className="itinerary-set-dates">
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-small"
-                            onClick={() => openDateEditForm(boardItem.date_precision === 'month' ? 'month' : 'exact', itemDateKey)}
-                          >
-                            📅 {boardItem.date_precision === 'exact' && boardItem.departure_date
-                              ? `${boardItem.departure_date} · Change dates`
-                              : boardItem.date_precision === 'month' && boardItem.departure_month
-                              ? `${boardItem.departure_month} · Change dates`
-                              : 'Set dates'}
-                          </button>
-                          {dateEditOpen && dateEditItemKey === itemDateKey && (
-                            <DateEditForm
-                              mode={dateEditMode}
-                              setMode={setDateEditMode}
-                              value={dateEditValue}
-                              setValue={setDateEditValue}
-                              returnValue={dateEditReturnValue}
-                              setReturnValue={setDateEditReturnValue}
-                              onSubmit={submitDateEdit}
-                              onCancel={() => setDateEditOpen(false)}
-                              pending={dateEditPending}
-                              error={dateEditError}
-                            />
+                          {stayItem && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-small"
+                              onClick={() => openStayDrawer(stayItem)}
+                            >
+                              🏨 Stay options ▾
+                            </button>
                           )}
-                          {/* TWM-206: Transport is information-dense
-                              (multiple modes/options, live-vs-estimated
-                              pricing, partner links) — density decides the
-                              interaction pattern, so it opens a side
-                              drawer instead of expanding inline like
-                              Set-dates does. */}
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-small"
-                            onClick={() => openTransportDrawer(boardItem)}
-                          >
-                            🚗 Transport options ▾
-                          </button>
+                          {isGatewayLeg && (
+                            <>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-small"
+                                onClick={() => openDateEditForm(boardItem.date_precision === 'month' ? 'month' : 'exact', itemDateKey)}
+                              >
+                                📅 {boardItem.date_precision === 'exact' && boardItem.departure_date
+                                  ? `${boardItem.departure_date} · Change dates`
+                                  : boardItem.date_precision === 'month' && boardItem.departure_month
+                                  ? `${boardItem.departure_month} · Change dates`
+                                  : 'Set dates'}
+                              </button>
+                              {dateEditOpen && dateEditItemKey === itemDateKey && (
+                                <DateEditForm
+                                  mode={dateEditMode}
+                                  setMode={setDateEditMode}
+                                  value={dateEditValue}
+                                  setValue={setDateEditValue}
+                                  returnValue={dateEditReturnValue}
+                                  setReturnValue={setDateEditReturnValue}
+                                  onSubmit={submitDateEdit}
+                                  onCancel={() => setDateEditOpen(false)}
+                                  pending={dateEditPending}
+                                  error={dateEditError}
+                                />
+                              )}
+                              {/* TWM-206: Transport is information-dense
+                                  (multiple modes/options, live-vs-estimated
+                                  pricing, partner links) — density decides the
+                                  interaction pattern, so it opens a side
+                                  drawer instead of expanding inline like
+                                  Set-dates does. */}
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-small"
+                                onClick={() => openTransportDrawer(boardItem)}
+                              >
+                                🚗 Transport options ▾
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
