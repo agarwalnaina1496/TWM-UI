@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   transportOptionsFor, feasibleTransportOptions, transportLegs, gatewayLegs,
   stayOptionsFor, modeLabel, recommendedMode,
-  MODES, normalizeTravelerCount,
+  MODES,
 } from '../../../src/lib/bookingCatalog.js';
 
 function flightSearchResponse(overrides = {}) {
@@ -335,24 +335,6 @@ describe('transportOptionsFor', () => {
 
   it('MODES remains exported only as a label/ordering helper, unrelated to what gets resolved', () => {
     expect(MODES).toEqual(['flight', 'train', 'bus', 'drive']);
-  });
-});
-
-describe('normalizeTravelerCount', () => {
-  it('normalizes a numeric string like "2" to the number 2', () => {
-    expect(normalizeTravelerCount('2')).toBe(2);
-  });
-
-  it('passes a real number through unchanged', () => {
-    expect(normalizeTravelerCount(4)).toBe(4);
-  });
-
-  it('returns null for missing, non-numeric, zero, or negative values — never NaN or 0', () => {
-    expect(normalizeTravelerCount(null)).toBeNull();
-    expect(normalizeTravelerCount(undefined)).toBeNull();
-    expect(normalizeTravelerCount('Just me')).toBeNull();
-    expect(normalizeTravelerCount(0)).toBeNull();
-    expect(normalizeTravelerCount(-1)).toBeNull();
   });
 });
 

@@ -13,13 +13,6 @@ import { resolveTrustedAction, searchFlights } from './tripApi.js';
 // feasibility endpoints instead of returning mock MODE_TEMPLATE bands and a
 // Google search URL — so every one of these is now async.
 
-// Retained for numeric fields outside canonical trip_context composition.
-export function normalizeTravelerCount(value) {
-  if (value == null) return null;
-  const parsed = typeof value === 'number' ? value : parseInt(String(value).trim(), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
 export const MODES = ['flight', 'train', 'bus', 'drive'];
 const MODE_LABEL = { flight: 'Flight', train: 'Train', bus: 'Bus', drive: 'Drive' };
 export function modeLabel(mode) {

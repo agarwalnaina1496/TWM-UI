@@ -79,13 +79,6 @@ export function anchorsByType(anchors, type) {
   return (anchors || []).filter(anchor => anchor.type === type);
 }
 
-// TWM-175: AtlasTripSummary's real field is num_travelers — TripHero used
-// to read the wrong key (`travelers`), which never exists on the schema, so
-// party size always silently fell back to a hardcoded default of 2.
-export function travelerCount(summary) {
-  return summary?.num_travelers ?? null;
-}
-
 const VERIFICATION_TONE = { VERIFIED: 'positive', GENERAL_GUIDANCE: 'neutral' };
 
 export function verificationTone(status) {
