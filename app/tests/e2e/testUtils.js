@@ -239,7 +239,11 @@ function atlasResult({ title = 'Abbey Falls Getaway', destination = 'Coorg', pri
           detail: 'Visit at a relaxed pace.', movement_guidance: null, estimated_cost_low: 0, estimated_cost_high: 0,
           reference, requires_advance_booking: false, booking_readiness: null,
         }],
-        seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'None required.', backup_plan: null,
+        notes: [
+          { category: 'Weather', title: 'Carry layers', detail: 'Carry layers.', reference },
+          { category: 'Access', title: 'No permits', detail: 'None required.', reference },
+        ],
+        backup_plan: null,
       }],
       budget_summary: { currency: 'INR', lines: [{ category: 'Local movement', amount_low: 500, amount_high: 800, note: 'General range.' }], total_low: 500, total_high: 800, budget_fit: 'Within a typical budget.' },
       practical_notes: [],

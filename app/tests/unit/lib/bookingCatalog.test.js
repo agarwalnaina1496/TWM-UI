@@ -48,8 +48,8 @@ beforeEach(() => {
 
 // TWM-200: transportLegs now reads only structured, canonical
 // `from_city`/`to_city` off TRAVEL timeline items — never `location` or
-// `display_label`, which may carry road/landmark/"via" narration.
-function travelDay(dayNumber, fromCity, toCity, { departureDate = null, departureMonth = null, displayLabel = null } = {}) {
+// `detail`, which may carry road/landmark/"via" narration.
+function travelDay(dayNumber, fromCity, toCity, { departureDate = null, departureMonth = null, narrativeLocation = null } = {}) {
   return {
     day_number: dayNumber,
     primary_location: toCity,
@@ -60,8 +60,7 @@ function travelDay(dayNumber, fromCity, toCity, { departureDate = null, departur
         to_city: toCity,
         departure_date: departureDate,
         departure_month: departureMonth,
-        display_label: displayLabel,
-        location: displayLabel || `${fromCity} to ${toCity}`,
+        location: narrativeLocation || `${fromCity} to ${toCity}`,
       },
     ],
   };
@@ -87,7 +86,7 @@ describe('transportLegs', () => {
     expect(legs).toEqual([{ id: 'leg-0', from: 'Gwalior', to: 'Orchha', departureDate: null, departureMonth: null }]);
   });
 
-  it('drops a TRAVEL movement missing a structured endpoint instead of parsing display_label/location (TWM-200)', () => {
+  it('drops a TRAVEL movement missing a structured endpoint instead of parsing location/detail (TWM-200)', () => {
     const days = [
       travelDay(1, 'Bhubaneswar', 'Puri'),
       {
@@ -98,8 +97,8 @@ describe('transportLegs', () => {
             kind: 'TRAVEL',
             from_city: null,
             to_city: null,
-            display_label: 'Drive along Marine Drive from Puri to Konark',
             location: 'Marine Drive, Puri to Konark',
+            detail: 'Travel along Marine Drive from Puri to Konark',
           },
         ],
       },
@@ -147,12 +146,12 @@ describe('transportLegs', () => {
     expect(legs[0].departureMonth).toBeNull();
   });
 
-  it('regression: Odisha five-leg route resolves entirely from canonical endpoints, never the scenic display_label (TWM-200)', () => {
+  it('regression: Odisha five-leg route resolves entirely from canonical endpoints, never scenic narrative text (TWM-200)', () => {
     const days = [
       travelDay(1, 'Bangalore', 'Bhubaneswar'),
-      travelDay(2, 'Bhubaneswar', 'Puri', { displayLabel: 'Bhubaneswar to Puri Highway' }),
-      travelDay(3, 'Puri', 'Konark', { displayLabel: 'Drive along Marine Drive from Puri to Konark' }),
-      travelDay(4, 'Konark', 'Bhubaneswar', { displayLabel: 'Konark to Bhubaneswar (via Pipili)' }),
+      travelDay(2, 'Bhubaneswar', 'Puri', { narrativeLocation: 'Bhubaneswar to Puri Highway' }),
+      travelDay(3, 'Puri', 'Konark', { narrativeLocation: 'Travel along Marine Drive from Puri to Konark' }),
+      travelDay(4, 'Konark', 'Bhubaneswar', { narrativeLocation: 'Konark to Bhubaneswar via Pipili' }),
       travelDay(5, 'Bhubaneswar', 'Bangalore'),
     ];
     const legs = transportLegs(days);

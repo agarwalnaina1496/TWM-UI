@@ -376,17 +376,17 @@ export function recommendedMode(feasibleOptions) {
 
 // Transport legs (TWM-200): built only from each TRAVEL timeline item's
 // structured, canonical `from_city`/`to_city` — never from `location` or
-// `display_label`, which may carry road/landmark/"via" narration Atlas is
-// free to write for a traveler to read (e.g. "Marine Drive, Puri to
-// Konark"). Atlas/Backend owns route meaning; this function must not parse
-// that narrative text, and must not infer a route on its own — including a
+// `detail`, which may carry road/landmark/"via" narration Atlas is free to
+// write for a traveler to read (e.g. "Marine Drive, Puri to Konark").
+// Atlas/Backend owns route meaning; this function must not parse that
+// narrative text, and must not infer a route on its own — including a
 // trip_context.origin_city bookend leg. Atlas's own prompt already
 // instructs it to include transport to/from the origin as a TRAVEL item
 // when known; if it omits that movement (or any other), the honest outcome
 // is a missing leg here, not a UI-synthesized one (TWM-200 review finding).
 //
 // A TRAVEL item that is missing a structured endpoint pair is dropped
-// entirely rather than falling back to display text — fail closed for that
+// entirely rather than falling back to narrative text — fail closed for that
 // movement (TWM-200 acceptance criteria), not a best-effort parse.
 //
 // departureDate/departureMonth (TWM-200): read only from the TRAVEL item's

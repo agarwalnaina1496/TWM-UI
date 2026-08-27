@@ -25,7 +25,7 @@ function twoStopAtlasResult() {
               // from a structured TRAVEL item, not a bookend fabricated purely
               // from trip_context.origin_city.
               start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Arrival from Delhi', location: 'Coorg',
-              detail: 'Arrive from Delhi.', movement_guidance: null, from_city: 'Delhi', to_city: 'Coorg', display_label: null,
+              detail: 'Arrive from Delhi.', movement_guidance: null, from_city: 'Delhi', to_city: 'Coorg',
               estimated_cost_low: 0, estimated_cost_high: 0,
               reference, requires_advance_booking: false, booking_readiness: null,
             },
@@ -40,7 +40,11 @@ function twoStopAtlasResult() {
               reference, requires_advance_booking: true, booking_readiness: 'needs_advance_booking',
             },
           ],
-          seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'None required.', backup_plan: null,
+          notes: [
+            { category: 'Weather', title: 'Carry layers', detail: 'Carry layers.', reference },
+            { category: 'Access', title: 'No permits', detail: 'None required.', reference },
+          ],
+          backup_plan: null,
         },
         {
           day_number: 2, date: null, title: 'Wayanad wildlife', primary_location: 'Wayanad',
@@ -48,7 +52,7 @@ function twoStopAtlasResult() {
           timeline: [
             {
               start_time: 'Morning', end_time: null, kind: 'TRAVEL', title: 'Coorg to Wayanad', location: 'Wayanad',
-              detail: 'Travel to Wayanad.', movement_guidance: null, from_city: 'Coorg', to_city: 'Wayanad', display_label: null,
+              detail: 'Travel to Wayanad.', movement_guidance: null, from_city: 'Coorg', to_city: 'Wayanad',
               estimated_cost_low: 500, estimated_cost_high: 800,
               reference, requires_advance_booking: false, booking_readiness: null,
             },
@@ -63,12 +67,16 @@ function twoStopAtlasResult() {
               // Atlas's own structured TRAVEL movement — UI no longer
               // synthesizes an origin bookend leg on its own.
               start_time: 'Evening', end_time: null, kind: 'TRAVEL', title: 'Return to Delhi', location: 'Delhi',
-              detail: 'Return to Delhi.', movement_guidance: null, from_city: 'Wayanad', to_city: 'Delhi', display_label: null,
+              detail: 'Return to Delhi.', movement_guidance: null, from_city: 'Wayanad', to_city: 'Delhi',
               estimated_cost_low: 0, estimated_cost_high: 0,
               reference, requires_advance_booking: false, booking_readiness: null,
             },
           ],
-          seasonal_guidance: 'Carry layers.', permit_or_ticket_guidance: 'Forest permit required.', backup_plan: null,
+          notes: [
+            { category: 'Weather', title: 'Carry layers', detail: 'Carry layers.', reference },
+            { category: 'Access', title: 'Forest permit', detail: 'Forest permit required.', reference },
+          ],
+          backup_plan: null,
         },
       ],
       budget_summary: { currency: 'INR', lines: [{ category: 'Local movement', amount_low: 500, amount_high: 800, note: 'General range.' }], total_low: 500, total_high: 800, budget_fit: 'Within a typical budget.' },
