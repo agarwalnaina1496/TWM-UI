@@ -830,6 +830,15 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   describe('Booking summary strip — trip dates and travelers (TWM-213)', () => {
     it('shows "Set trip dates" and "Set trip travelers" inside the Transport drawer when neither is known yet', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      // Atlas's own resolved num_travelers is now a valid fallback source
+      // (see the TripHero/booking-strip approximation tests below) — this
+      // test is specifically the "genuinely nothing known anywhere" case,
+      // so it must override the default fixture's num_travelers: 2.
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } }),
+      };
+      global.fetch = defaultFetchMock();
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
@@ -870,6 +879,35 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
       await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-05-01 · Change/ })).toBeInTheDocument());
+    });
+
+    // TWM-215 live-testing finding: the exact/month radio choice used to
+    // render every time, even when a precision was already on file --
+    // confusing when a traveler who already said "I only know the month"
+    // opened "Change" to narrow down an exact date, since it re-asked the
+    // exact/month question from scratch instead of taking that as given.
+    it('narrows a known month to an exact date without re-showing the exact/month choice, but still offers "Change month"', async () => {
+      commandSnapshot = snapshotWith(
+        readyItineraryState(),
+        {},
+        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'month', departure_month: '2026-05' } } },
+      );
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+
+      await user.click(within(drawer).getByRole('button', { name: /Trip dates: 2026-05 · Change/ }));
+      expect(within(drawer).queryByRole('radiogroup', { name: 'Date precision' })).not.toBeInTheDocument();
+      expect(within(drawer).getByLabelText('Departure date')).toBeInTheDocument();
+      expect(within(drawer).getByRole('button', { name: /Not in this month\? Change month/ })).toBeInTheDocument();
+
+      // The escape hatch genuinely re-opens the mode choice.
+      await user.click(within(drawer).getByRole('button', { name: /Not in this month\? Change month/ }));
+      expect(within(drawer).getByRole('radiogroup', { name: 'Date precision' })).toBeInTheDocument();
     });
 
     // PR review, TWM-206 (still applies post-TWM-213): "Change" already
@@ -926,6 +964,14 @@ describe('Trip Dashboard (real Atlas contract)', () => {
 
     it('saves traveler composition via update_traveler_composition from the drawer and reflects it on the button', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      // Same "genuinely nothing known yet" override as the test above, so
+      // the button starts as "Set trip travelers" rather than Atlas's
+      // resolved-approximation label.
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } }),
+      };
+      global.fetch = defaultFetchMock();
       sendTripCommand = vi.fn(async (command, payload) => {
         expect(command).toBe('update_traveler_composition');
         // Form defaults are adults: 1, children: 0, infants: 0 (the "just
@@ -1083,6 +1129,47 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       // A real refetch happened — the stale cached entry from before the
       // date save was not reused.
       await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(callCountBeforeDateSave));
+    });
+
+    // TWM-215: a search-scoped traveler-count override (e.g. only 3 of 4
+    // travelers are on this specific gateway leg) must fetch independently
+    // of the trip-wide default, and must never write traveler_composition
+    // back to trip_context — it only changes what this one search asks for.
+    it('re-searches transport options for an overridden traveler count without touching traveler_composition', async () => {
+      commandSnapshot = snapshotWith(
+        readyItineraryState(),
+        {},
+        { trip_context: { origin_city: 'Delhi', traveler_composition: { adults: 4, children: 0, infants: 0 } } },
+      );
+      sendTripCommand = vi.fn();
+      let trustedActionCallCount = 0;
+      global.fetch = vi.fn(async (url) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action')) { trustedActionCallCount += 1; return jsonResponse(resolvedActionResponse()); }
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(0));
+      const callCountForDefault = trustedActionCallCount;
+
+      const countInput = within(drawer).getByRole('spinbutton');
+      expect(countInput).toHaveValue(4);
+      await user.clear(countInput);
+      await user.type(countInput, '3');
+      await user.click(within(drawer).getByRole('button', { name: 'Search' }));
+
+      await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(callCountForDefault));
+      expect(within(drawer).getByRole('button', { name: /Reset to 4 default/ })).toBeInTheDocument();
+      // This is a search-only override -- it never sends a trip command.
+      expect(sendTripCommand).not.toHaveBeenCalled();
     });
 
   });
@@ -1320,7 +1407,15 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.queryAllByText('9').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
   });
 
-  it('honestly shows traveler count as not set rather than guessing from Atlas summary', async () => {
+  // TWM-215 live-testing finding, superseding the prior "never guess from
+  // Atlas summary" rule this test used to assert: Atlas already resolves a
+  // qualitative num_travelers answer (e.g. "couple") into a real number and
+  // records the assumption transparently — hiding that resolved number
+  // behind "Not set" was the actual bug (a genuinely-known rough fact
+  // looked like nothing was known), not a safety net. Once composition is
+  // unset, Atlas's trip_summary.num_travelers is now the honest fallback,
+  // shown explicitly as an approximation rather than "Not set".
+  it('shows Atlas\'s resolved num_travelers as an approximation when traveler_composition is unset, not "Not set"', async () => {
     commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: {} });
     itineraryFetchResponse = {
       version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
@@ -1329,8 +1424,23 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     global.fetch = defaultFetchMock();
     sendTripCommand = vi.fn();
     await readyDashboard();
+    expect(screen.getAllByText('~5').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Not set').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
+  });
+
+  // Genuinely nothing known anywhere (no composition, no trip_context
+  // num_travelers, and Atlas itself has no resolved count) is the only case
+  // that should still say "Not set".
+  it('honestly shows traveler count as not set only when Atlas has no resolved num_travelers either', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: {} });
+    itineraryFetchResponse = {
+      version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+      result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'x', route_rationale: 'y' } } }),
+    };
+    global.fetch = defaultFetchMock();
+    sendTripCommand = vi.fn();
+    await readyDashboard();
     expect(screen.getAllByText('Not set').length).toBeGreaterThan(0);
-    expect(screen.queryAllByText('5').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
   });
 
   it('trust strip is visible without any user action — no closed-by-default disclosure', async () => {

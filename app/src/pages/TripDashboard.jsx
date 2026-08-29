@@ -9,6 +9,7 @@ import { getItinerary, getTripBoard } from '../lib/tripApi.js';
 import {
   anchorsForDay, bookingReadinessLabel, dayCostRange,
   verificationTone, trustStripCounts, bookingReadinessRollup,
+  travelerCount,
 } from '../lib/atlasView.js';
 import {
   transportOptionsFor, feasibleTransportOptions,
@@ -22,7 +23,6 @@ import {
   tripBookingDateContext,
   tripTravelerComposition,
   travelerCompositionTotal,
-  tripTravelerCount,
 } from '../constants/tripContext.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
@@ -314,26 +314,72 @@ function TrustStrip({ counts }) {
 // traveler who only knows their departure date can still save with the
 // return field empty, and the return leg simply gets no exact-date override
 // (falls back to a flexible/indicative search, same as today).
-function DateEditForm({ mode, setMode, value, setValue, returnValue, setReturnValue, onSubmit, onCancel, pending, error }) {
+// Precision of the month string already on file (if any), as [year, month]
+// day-of-month bounds — used to keep the narrowed exact-date picker inside
+// the month the traveler already told us, rather than opening a blank
+// calendar that lets them pick a date outside it.
+function monthDateBounds(monthValue) {
+  if (!monthValue) return {};
+  const [year, month] = monthValue.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  return { min: `${monthValue}-01`, max: `${monthValue}-${String(lastDay).padStart(2, '0')}` };
+}
+
+// `existing` is the trip's current booking_dates context (tripBookingDateContext),
+// not just this form's in-progress mode/value — the two are different on
+// purpose. Once a precision is already on file, the exact/month radio choice
+// is dropped entirely rather than shown redundantly: a traveler who already
+// said "I know the month" is narrowing to an exact date within it, not
+// re-answering "do you know the exact date or the month" from scratch, and
+// showing both options again every time was confusing (TWM-215 live-testing
+// finding). "Change month" is a deliberate, explicit escape hatch for a
+// traveler whose plans genuinely shifted -- it re-opens the mode choice
+// rather than leaving them stuck once precision is set once.
+function DateEditForm({ existing, mode, setMode, value, setValue, returnValue, setReturnValue, onSubmit, onCancel, pending, error }) {
+  const [changingPrecision, setChangingPrecision] = useState(false);
+  const hasExistingPrecision = Boolean(existing?.precision);
+  const showModeChoice = !hasExistingPrecision || changingPrecision;
+  const narrowingFromMonth = hasExistingPrecision && !changingPrecision
+    && existing.precision === 'month' && mode === 'exact';
+
+  function switchPrecision(nextMode) {
+    setChangingPrecision(true);
+    setMode(nextMode);
+    setValue('');
+    setReturnValue('');
+  }
+
   return (
     <form className="confirmation-form" onSubmit={onSubmit}>
       <p className="already-booked-note">
         Adding dates improves booking search precision only — it does not change your itinerary plan.
       </p>
-      <div className="confirmation-form-actions" role="radiogroup" aria-label="Date precision">
-        <label>
-          <input type="radio" name="booking-date-mode" checked={mode === 'exact'} disabled={pending}
-            onChange={() => { setMode('exact'); setValue(''); setReturnValue(''); }} /> I know the exact date
-        </label>
-        <label>
-          <input type="radio" name="booking-date-mode" checked={mode === 'month'} disabled={pending}
-            onChange={() => { setMode('month'); setValue(''); setReturnValue(''); }} /> I only know the month
-        </label>
-      </div>
+      {showModeChoice ? (
+        <div className="confirmation-form-actions" role="radiogroup" aria-label="Date precision">
+          <label>
+            <input type="radio" name="booking-date-mode" checked={mode === 'exact'} disabled={pending}
+              onChange={() => switchPrecision('exact')} /> I know the exact date
+          </label>
+          <label>
+            <input type="radio" name="booking-date-mode" checked={mode === 'month'} disabled={pending}
+              onChange={() => switchPrecision('month')} /> I only know the month
+          </label>
+        </div>
+      ) : (
+        <p className="already-booked-note">
+          {narrowingFromMonth ? `Narrowing down ${existing.departure_month}. ` : ''}
+          <button type="button" className="btn btn-ghost" disabled={pending}
+            onClick={() => switchPrecision(mode === 'exact' ? 'month' : 'exact')}>
+            {narrowingFromMonth ? 'Not in this month? Change month' : 'Change precision'}
+          </button>
+        </p>
+      )}
       {mode === 'exact' ? (
         <>
           <label>Departure date
-            <input required type="date" value={value} disabled={pending} onChange={event => setValue(event.target.value)} />
+            <input required type="date" value={value} disabled={pending}
+              {...(narrowingFromMonth ? monthDateBounds(existing.departure_month) : {})}
+              onChange={event => setValue(event.target.value)} />
           </label>
           <label>Return date (optional)
             <input type="date" value={returnValue} disabled={pending} min={value || undefined} onChange={event => setReturnValue(event.target.value)} />
@@ -690,7 +736,42 @@ function BookingSummaryStrip({
 
 // Itinerary tab. Dims the Itinerary behind it (transport-drawer-overlay);
 // never navigates away, never a full-screen modal.
-function TransportDrawer({ leg, options, feasibility, loading, error, summaryStrip, onClose }) {
+// TWM-215: a small, search-scoped traveler-count control — separate from
+// the trip-wide BookingSummaryStrip traveler editor above, which changes
+// traveler_composition itself. "Search for" here never touches that field;
+// it only decides what count this one leg's search asks for (e.g. a subset
+// of the group flying this leg while the rest book separately).
+function TransportTravelerOverride({ defaultTravelerCount, travelerOverride, onSearch, disabled }) {
+  const [draft, setDraft] = useState(travelerOverride ?? defaultTravelerCount ?? 1);
+  const activeCount = travelerOverride ?? defaultTravelerCount;
+  return (
+    <div className="transport-traveler-override">
+      <label>
+        Search for
+        <input type="number" min={1} max={9} value={draft} disabled={disabled}
+          onChange={event => setDraft(Math.max(1, Number(event.target.value) || 1))} />
+        traveler{draft === 1 ? '' : 's'}
+      </label>
+      <button type="button" className="btn btn-ghost" disabled={disabled || draft === activeCount}
+        onClick={() => onSearch(draft)}>
+        Search
+      </button>
+      {travelerOverride && travelerOverride !== defaultTravelerCount && (
+        <button type="button" className="btn btn-ghost" disabled={disabled}
+          onClick={() => { setDraft(defaultTravelerCount ?? 1); onSearch(null); }}>
+          Reset to {defaultTravelerCount ?? 'trip'} default
+        </button>
+      )}
+    </div>
+  );
+}
+
+// TWM-215: travelerOverride/onSearchTravelerCount let a traveler search this
+// one leg for a different party size than the trip-wide default — e.g. only
+// 3 of 4 travelers are on this specific gateway leg. This is a search-time
+// override only: it never writes trip_context/traveler_composition, and
+// resets whenever the drawer re-opens for a leg (see openTransportDrawer).
+function TransportDrawer({ leg, options, feasibility, loading, error, summaryStrip, defaultTravelerCount, travelerOverride, onSearchTravelerCount, onClose }) {
   if (!leg) return null;
   const resolvedOptions = feasibleTransportOptions(options || [], feasibility);
   const feasibleModeNames = new Set((feasibility?.modes || []).map(entry => entry.mode));
@@ -713,6 +794,14 @@ function TransportDrawer({ leg, options, feasibility, loading, error, summaryStr
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close transport options">✕</button>
         </div>
         {summaryStrip}
+        {onSearchTravelerCount && (
+          <TransportTravelerOverride
+            defaultTravelerCount={defaultTravelerCount}
+            travelerOverride={travelerOverride}
+            onSearch={onSearchTravelerCount}
+            disabled={loading}
+          />
+        )}
         {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
         {error && <p className="already-booked-note" role="alert">{error}</p>}
         {!loading && !error && (
@@ -921,6 +1010,12 @@ export default function TripDashboard() {
   const [transportDrawerLeg, setTransportDrawerLeg] = useState(null);
   const [transportDrawerLoading, setTransportDrawerLoading] = useState(false);
   const [transportDrawerError, setTransportDrawerError] = useState(null);
+  // TWM-215: a traveler count for THIS search only, independent of the
+  // trip-wide travelerComposition — e.g. 3 of the 4 travelers are flying
+  // this specific gateway leg together while the 4th books separately.
+  // Never written back to trip_context/traveler_composition; it only
+  // changes which options this one drawer's search asks for.
+  const [transportDrawerTravelerOverride, setTransportDrawerTravelerOverride] = useState(null);
 
   // TWM-206/TWM-211: the Stay drawer, same on-demand/cached pattern as
   // Transport's above — opened from the actual STAY timeline item, resolved
@@ -1288,12 +1383,54 @@ export default function TripDashboard() {
   // nothing were known — but never sent in a real booking payload, only
   // travelerComposition ever is. Only when neither exists does the label
   // fall through to the drawer's "Set travelers" empty state.
-  const roughTravelerCount = tripTravelerCount(tripState?.trip_context);
+  //
+  // PR review: Atlas's own resolved trip_summary.num_travelers, not a
+  // client-side parse of the raw trip_context string — tripTravelerCount's
+  // numeric-only parsing silently dropped a real, meaningful conversational
+  // answer like "couple" or "family of 4" (Number("couple") is NaN), making
+  // a genuinely-known rough fact look like nothing was known at all. Atlas
+  // already resolves that same qualitative answer into a real number
+  // (recording the assumption in assumptions[]), so once an itinerary
+  // exists it's the trustworthy fallback, not the raw string.
+  const roughTravelerCount = travelerCount(finalItinerary.trip_summary);
   const travelerDisplayLabel = partySize
     ? `${partySize} travelers`
     : roughTravelerCount
     ? `~${roughTravelerCount} travelers (approx)`
     : null;
+
+  // TWM-215: transportData's cache key includes the traveler count a search
+  // actually used, not just the route — so a per-leg override (see
+  // transportDrawerTravelerOverride) fetches and caches independently of the
+  // trip-wide default search for the same leg, and switching the override
+  // back and forth never serves a stale count's results as if they matched.
+  function transportCacheKey(leg, travelerCountForSearch) {
+    return `${legKey(leg)}::${travelerCountForSearch ?? 'default'}`;
+  }
+
+  // TWM-206/TWM-215: fetches (or serves from cache) a leg's transport
+  // options for a specific traveler count — the trip-wide default when
+  // travelerCountForSearch is null, or a per-search override otherwise (e.g.
+  // 3 of 4 travelers flying this leg together while the 4th books apart).
+  async function fetchTransportOptions(leg, boardItem, travelerCountForSearch) {
+    const key = transportCacheKey(leg, travelerCountForSearch);
+    setTransportDrawerError(null);
+    if (transportData[key]) return;
+    setTransportDrawerLoading(true);
+    try {
+      const feasibility = { modes: boardItem.feasible_modes || [] };
+      const approvedModes = feasibility.modes.map(entry => entry.mode);
+      const composition = travelerCountForSearch
+        ? { adults: travelerCountForSearch, children: 0, infants: 0 }
+        : travelerComposition;
+      const options = await transportOptionsFor(tripId, leg, composition, approvedModes);
+      setTransportData(prev => ({ ...prev, [key]: { options, feasibility } }));
+    } catch (error) {
+      setTransportDrawerError(error.message || 'Could not load transport options.');
+    } finally {
+      setTransportDrawerLoading(false);
+    }
+  }
 
   // TWM-206: opens the Transport drawer for a gateway leg, resolving its
   // options on demand the first time (cached into transportData so a
@@ -1305,7 +1442,6 @@ export default function TripDashboard() {
       departureDate: boardItem.date_precision === 'exact' ? boardItem.departure_date : null,
       departureMonth: boardItem.date_precision === 'month' ? boardItem.departure_month : null,
     };
-    const key = legKey(leg);
     setTransportDrawerLeg(leg);
     // PR review: reset before the cache-hit early return, not just before
     // a real fetch — onClose never clears these, so a stale error/loading
@@ -1313,18 +1449,18 @@ export default function TripDashboard() {
     // when a different, already-cached leg opens next.
     setTransportDrawerError(null);
     setTransportDrawerLoading(false);
-    if (transportData[key]) return;
-    setTransportDrawerLoading(true);
-    try {
-      const feasibility = { modes: boardItem.feasible_modes || [] };
-      const approvedModes = feasibility.modes.map(entry => entry.mode);
-      const options = await transportOptionsFor(tripId, leg, travelerComposition, approvedModes);
-      setTransportData(prev => ({ ...prev, [key]: { options, feasibility } }));
-    } catch (error) {
-      setTransportDrawerError(error.message || 'Could not load transport options.');
-    } finally {
-      setTransportDrawerLoading(false);
-    }
+    setTransportDrawerTravelerOverride(null);
+    await fetchTransportOptions(leg, boardItem, null);
+  }
+
+  // TWM-215: re-searches the currently open leg for a different traveler
+  // count than the trip-wide default, without ever writing that count back
+  // to trip_context/traveler_composition — this is a search-only override,
+  // scoped to this one drawer visit.
+  async function searchTransportForTravelerCount(boardItem, travelerCountForSearch) {
+    if (!transportDrawerLeg || !boardItem) return;
+    setTransportDrawerTravelerOverride(travelerCountForSearch);
+    await fetchTransportOptions(transportDrawerLeg, boardItem, travelerCountForSearch);
   }
 
   // TWM-211: opens the Stay drawer for the actual STAY timeline item, not
@@ -1382,7 +1518,8 @@ export default function TripDashboard() {
       <TripHero
         finalItinerary={finalItinerary}
         boardDays={boardData?.version === itineraryResult.version && boardDataTripId === tripId ? boardData.days : []}
-        travelerTotal={partySize}
+        travelerTotal={partySize || roughTravelerCount}
+        travelerIsApprox={!partySize && Boolean(roughTravelerCount)}
         actions={<>
           <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
           {/* TWM-198: Share hidden for MVP rather than left as an
@@ -1585,10 +1722,16 @@ export default function TripDashboard() {
         const renderStrip = (dateLabel, dateModeHint) => (
           <BookingSummaryStrip
             dateLabel={dateLabel}
-            onEditDate={() => openDateEditForm(dateModeHint === 'month' ? 'month' : 'exact')}
+            // TWM-215: always opens narrowing to an exact date, even when a
+            // month is already on file — DateEditForm's own hasExistingPrecision
+            // check is what decides whether that renders as "pick a day
+            // inside this month" (existing) or fresh mode-choice radios
+            // (nothing known yet); dateModeHint only drives dateLabel above.
+            onEditDate={() => openDateEditForm('exact')}
             dateEditOpen={dateEditOpen}
             dateEditForm={
               <DateEditForm
+                existing={bookingDateContext}
                 mode={dateEditMode}
                 setMode={setDateEditMode}
                 value={dateEditValue}
@@ -1649,12 +1792,15 @@ export default function TripDashboard() {
             {transportDrawerLeg && (
               <TransportDrawer
                 leg={transportDrawerLeg}
-                options={transportData[legKey(transportDrawerLeg)]?.options}
-                feasibility={transportData[legKey(transportDrawerLeg)]?.feasibility}
+                options={transportData[transportCacheKey(transportDrawerLeg, transportDrawerTravelerOverride)]?.options}
+                feasibility={transportData[transportCacheKey(transportDrawerLeg, transportDrawerTravelerOverride)]?.feasibility}
                 loading={transportDrawerLoading}
                 error={transportDrawerError}
                 summaryStrip={transportStrip}
-                onClose={() => setTransportDrawerLeg(null)}
+                defaultTravelerCount={partySize || roughTravelerCount}
+                travelerOverride={transportDrawerTravelerOverride}
+                onSearchTravelerCount={count => searchTransportForTravelerCount(freshLeg, count)}
+                onClose={() => { setTransportDrawerLeg(null); setTransportDrawerTravelerOverride(null); }}
               />
             )}
             {stayDrawerStay && (

@@ -79,6 +79,17 @@ export function anchorsByType(anchors, type) {
   return (anchors || []).filter(anchor => anchor.type === type);
 }
 
+// TWM-213: reinstated (previously removed as dead code on this PR, then
+// needed again) as the honest-display fallback source ahead of the raw
+// trip_context.num_travelers string. Atlas already resolves a qualitative
+// answer like "couple" into a real number here (recording the assumption in
+// assumptions[] rather than silently discarding it), so once an itinerary
+// exists this is always a trustworthy approximation -- unlike parsing the
+// raw conversational string client-side, which only understands digits.
+export function travelerCount(summary) {
+  return summary?.num_travelers ?? null;
+}
+
 const VERIFICATION_TONE = { VERIFIED: 'positive', GENERAL_GUIDANCE: 'neutral' };
 
 export function verificationTone(status) {
