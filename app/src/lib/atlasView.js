@@ -11,10 +11,15 @@ export function timelineIcon(kind) {
 // travel-window label (e.g. "October"), and only falls back to a plain day
 // count when neither is known yet. The label itself adapts too — "Travel
 // month" when all we have is a month/window, "Trip dates" otherwise.
-export function tripDatesLabel(days, dateRangeLabel, boardDays = []) {
-  const first = boardDays[0]?.date;
-  const last = boardDays[boardDays.length - 1]?.date;
-  if (first) return { label: 'Trip dates', value: first === last ? first : `${first} – ${last}` };
+// TWM-215: no longer takes boardDays -- those per-day dates are computed
+// from booking_dates (exact booking-precision), not from anything Atlas
+// actually planned around. Preferring them here made TripHero silently
+// switch from Atlas's own planning-window label to a booking-precision
+// value the moment a traveler set exact dates, even when those dates
+// span a different number of days than trip_duration -- see TripHero's
+// own comment for why booking-precision facts never belong on this
+// surface at all.
+export function tripDatesLabel(days, dateRangeLabel) {
   if (dateRangeLabel) return { label: 'Travel month', value: dateRangeLabel };
   return { label: 'Trip dates', value: `${days.length} day${days.length === 1 ? '' : 's'}` };
 }

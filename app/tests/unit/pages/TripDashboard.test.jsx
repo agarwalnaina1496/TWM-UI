@@ -1368,14 +1368,21 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.getAllByText('October').length).toBeGreaterThan(0);
   });
 
-  it('Overview\'s Days stat prefers real per-day dates over the travel-window label', async () => {
+  // TripHero must never reflect a booking-precision fact (exact
+  // booking_dates), even once one is set -- it is an itinerary-plan
+  // summary, not a booking surface, and trip_duration/date_range are what
+  // Atlas actually planned around. Reverses the prior "prefers real per-day
+  // dates" behavior: exact booking dates spanning a different day count
+  // than trip_duration used to make this stat contradict itself.
+  it('keeps showing the travel-window label even once exact booking dates are set, never the booking-precision dates', async () => {
     commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { booking_dates: { precision: 'exact', departure_date: '2026-10-12' } } });
     sendTripCommand = vi.fn();
     const base = atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: 2, date_range: 'October', overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } });
     itineraryFetchResponse = { version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z', result: base };
     global.fetch = defaultFetchMock();
     await readyDashboard();
-    await waitFor(() => expect(screen.getAllByText('2026-10-12 – 2026-10-13').length).toBeGreaterThan(0));
+    expect(screen.getAllByText('October').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('2026-10-12 – 2026-10-13')).toHaveLength(0);
   });
 
   it('renders unsafe text as inert content, never as markup', async () => {
@@ -1394,17 +1401,29 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // TWM-175: party size regression — trip_summary.travelers doesn't exist on
   // the real Atlas schema (the field is num_travelers); reading the wrong
   // key always silently defaulted the displayed count to 2.
-  it('displays the canonical traveler_composition total, not the loose num_travelers or Atlas summary fallback', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { num_travelers: 'a family of 5', traveler_composition: { adults: 2, children: 2, infants: 1 } } });
+  // Reversed from the prior assertion: TripHero is the itinerary-plan
+  // summary and must only ever show what Atlas actually planned around
+  // (trip_summary.num_travelers), never the exact traveler_composition --
+  // that booking-precision fact belongs on the Bookings-side
+  // BookingSummaryStrip instead, never on this surface.
+  it('shows Atlas\'s planned num_travelers on TripHero, and the exact traveler_composition only on the booking strip', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', num_travelers: 'a family of 5', traveler_composition: { adults: 2, children: 2, infants: 1 } } });
     itineraryFetchResponse = {
       version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
       result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: 9, date_range: null, overview: 'x', route_rationale: 'y' } } }),
     };
     global.fetch = defaultFetchMock();
     sendTripCommand = vi.fn();
+    const user = userEvent.setup();
     await readyDashboard();
-    expect(screen.getAllByText('5').length).toBeGreaterThan(0);
-    expect(screen.queryAllByText('9').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
+    expect(screen.getAllByText('9').filter(el => el.closest('.hero-stats')).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('5').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Transport options/ }));
+    const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+    expect(within(drawer).getByRole('button', { name: /Trip 5 travelers · Change/ })).toBeInTheDocument();
   });
 
   // TWM-215 live-testing finding, superseding the prior "never guess from
@@ -1415,7 +1434,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // looked like nothing was known), not a safety net. Once composition is
   // unset, Atlas's trip_summary.num_travelers is now the honest fallback,
   // shown explicitly as an approximation rather than "Not set".
-  it('shows Atlas\'s resolved num_travelers as an approximation when traveler_composition is unset, not "Not set"', async () => {
+  it('shows Atlas\'s resolved num_travelers on TripHero when traveler_composition is unset, not "Not set"', async () => {
     commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: {} });
     itineraryFetchResponse = {
       version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
@@ -1424,7 +1443,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     global.fetch = defaultFetchMock();
     sendTripCommand = vi.fn();
     await readyDashboard();
-    expect(screen.getAllByText('~5').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('5').filter(el => el.closest('.hero-stats')).length).toBeGreaterThan(0);
     expect(screen.queryAllByText('Not set').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
   });
 

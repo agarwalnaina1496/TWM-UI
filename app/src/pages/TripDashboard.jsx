@@ -1517,9 +1517,6 @@ export default function TripDashboard() {
       )}
       <TripHero
         finalItinerary={finalItinerary}
-        boardDays={boardData?.version === itineraryResult.version && boardDataTripId === tripId ? boardData.days : []}
-        travelerTotal={partySize || roughTravelerCount}
-        travelerIsApprox={!partySize && Boolean(roughTravelerCount)}
         actions={<>
           <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
           {/* TWM-198: Share hidden for MVP rather than left as an
