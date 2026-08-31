@@ -11,10 +11,15 @@ export function timelineIcon(kind) {
 // travel-window label (e.g. "October"), and only falls back to a plain day
 // count when neither is known yet. The label itself adapts too — "Travel
 // month" when all we have is a month/window, "Trip dates" otherwise.
+// TWM-215: no longer takes boardDays -- those per-day dates are computed
+// from booking_dates (exact booking-precision), not from anything Atlas
+// actually planned around. Preferring them here made TripHero silently
+// switch from Atlas's own planning-window label to a booking-precision
+// value the moment a traveler set exact dates, even when those dates
+// span a different number of days than trip_duration -- see TripHero's
+// own comment for why booking-precision facts never belong on this
+// surface at all.
 export function tripDatesLabel(days, dateRangeLabel) {
-  const first = days[0]?.date;
-  const last = days[days.length - 1]?.date;
-  if (first) return { label: 'Trip dates', value: first === last ? first : `${first} – ${last}` };
   if (dateRangeLabel) return { label: 'Travel month', value: dateRangeLabel };
   return { label: 'Trip dates', value: `${days.length} day${days.length === 1 ? '' : 's'}` };
 }
@@ -47,15 +52,17 @@ export function dayCostRange(day) {
 // tripDatesLabel above), so a caller that needs an exact calendar date (the
 // flight-search payload) can read stops[i].dates[0] without re-deriving it,
 // while every existing dayNumbers-only consumer is unaffected.
-export function routeStops(days) {
+export function routeStops(days, boardDays = []) {
+  const dateByDay = new Map(boardDays.map(day => [day.day_number, day.date]));
   const stops = [];
   for (const day of days || []) {
     const last = stops[stops.length - 1];
     if (last && last.location === day.primary_location) {
       last.dayNumbers.push(day.day_number);
-      if (day.date) last.dates.push(day.date);
+      if (dateByDay.get(day.day_number)) last.dates.push(dateByDay.get(day.day_number));
     } else {
-      stops.push({ location: day.primary_location, dayNumbers: [day.day_number], dates: day.date ? [day.date] : [] });
+      const date = dateByDay.get(day.day_number);
+      stops.push({ location: day.primary_location, dayNumbers: [day.day_number], dates: date ? [date] : [] });
     }
   }
   return stops;
@@ -77,9 +84,13 @@ export function anchorsByType(anchors, type) {
   return (anchors || []).filter(anchor => anchor.type === type);
 }
 
-// TWM-175: AtlasTripSummary's real field is num_travelers — TripHero used
-// to read the wrong key (`travelers`), which never exists on the schema, so
-// party size always silently fell back to a hardcoded default of 2.
+// TWM-213: reinstated (previously removed as dead code on this PR, then
+// needed again) as the honest-display fallback source ahead of the raw
+// trip_context.num_travelers string. Atlas already resolves a qualitative
+// answer like "couple" into a real number here (recording the assumption in
+// assumptions[] rather than silently discarding it), so once an itinerary
+// exists this is always a trustworthy approximation -- unlike parsing the
+// raw conversational string client-side, which only understands digits.
 export function travelerCount(summary) {
   return summary?.num_travelers ?? null;
 }

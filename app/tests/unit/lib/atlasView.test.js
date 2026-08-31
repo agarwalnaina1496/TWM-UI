@@ -1,16 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { travelerCount, verificationTone, trustStripCounts, bookingReadinessRollup } from '../../../src/lib/atlasView.js';
-
-describe('travelerCount (TWM-175 field-name bug regression)', () => {
-  it('reads the real num_travelers field, not the nonexistent travelers field', () => {
-    expect(travelerCount({ num_travelers: 4, travelers: 2 })).toBe(4);
-  });
-
-  it('returns null (not a fabricated default) when num_travelers is genuinely unknown', () => {
-    expect(travelerCount({})).toBeNull();
-    expect(travelerCount(undefined)).toBeNull();
-  });
-});
+import { verificationTone, trustStripCounts, bookingReadinessRollup } from '../../../src/lib/atlasView.js';
 
 describe('verificationTone', () => {
   it('maps VERIFIED to positive and GENERAL_GUIDANCE to neutral', () => {

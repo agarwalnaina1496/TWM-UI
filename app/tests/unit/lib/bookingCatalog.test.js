@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   transportOptionsFor, feasibleTransportOptions, transportLegs, gatewayLegs,
   stayOptionsFor, modeLabel, recommendedMode,
-  MODES, normalizeTravelerCount,
+  MODES,
 } from '../../../src/lib/bookingCatalog.js';
 
 function flightSearchResponse(overrides = {}) {
@@ -338,24 +338,6 @@ describe('transportOptionsFor', () => {
   });
 });
 
-describe('normalizeTravelerCount', () => {
-  it('normalizes a numeric string like "2" to the number 2', () => {
-    expect(normalizeTravelerCount('2')).toBe(2);
-  });
-
-  it('passes a real number through unchanged', () => {
-    expect(normalizeTravelerCount(4)).toBe(4);
-  });
-
-  it('returns null for missing, non-numeric, zero, or negative values — never NaN or 0', () => {
-    expect(normalizeTravelerCount(null)).toBeNull();
-    expect(normalizeTravelerCount(undefined)).toBeNull();
-    expect(normalizeTravelerCount('Just me')).toBeNull();
-    expect(normalizeTravelerCount(0)).toBeNull();
-    expect(normalizeTravelerCount(-1)).toBeNull();
-  });
-});
-
 describe('traveler_count on trusted-action transport CTA payloads (TWM-195 review comment)', () => {
   const leg = { from: 'Delhi', to: 'Gwalior' };
 
@@ -365,7 +347,7 @@ describe('traveler_count on trusted-action transport CTA payloads (TWM-195 revie
       if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedAction()); }
       return jsonResponse({});
     });
-    await transportOptionsFor('trip-1', leg, 2, ['train', 'bus']);
+    await transportOptionsFor('trip-1', leg, { adults: 1, children: 1, infants: 0 }, ['train', 'bus']);
     expect(capturedBodies).toHaveLength(2);
     expect(capturedBodies.every(body => body.traveler_count === 2)).toBe(true);
   });
@@ -388,15 +370,15 @@ describe('traveler_count on trusted-action transport CTA payloads (TWM-195 revie
       if (url.includes('/flight-search')) { flightSearchBody = JSON.parse(options.body); return jsonResponse(flightSearchResponse()); }
       return jsonResponse({});
     });
-    await transportOptionsFor('trip-1', leg, 3, ['flight']);
-    expect(ctaBody).toMatchObject({ traveler_count: 3 });
-    expect(flightSearchBody).toMatchObject({ travelers: { adults: 3 } });
+    await transportOptionsFor('trip-1', leg, { adults: 2, children: 1, infants: 1 }, ['flight']);
+    expect(ctaBody).toMatchObject({ traveler_count: 4 });
+    expect(flightSearchBody).toMatchObject({ travelers: { adults: 2, children: 1, infants: 1 } });
   });
 
   it('drive never calls trusted-action at all, so it never carries traveler_count', async () => {
     let called = false;
     global.fetch = vi.fn(async (url) => { if (url.includes('/trusted-action')) called = true; return jsonResponse({}); });
-    await transportOptionsFor('trip-1', leg, 2, ['drive']);
+    await transportOptionsFor('trip-1', leg, { adults: 2, children: 0, infants: 0 }, ['drive']);
     expect(called).toBe(false);
   });
 });
@@ -482,6 +464,24 @@ describe('flight live-offer resolution (TWM-146)', () => {
     const options = await transportOptionsFor('trip-1', leg, 2, ['flight']);
     const flight = options.find(o => o.mode === 'flight');
     expect(flight.liveOffer).toMatchObject({ status: 'offer', priceLabel: 'approx. INR 8,000.00', airline: 'IndiGo', stopCount: 0 });
+  });
+
+  // TWM-215: traveler_count/group_total_minor_units/group_total_is_approximate
+  // are a Backend-computed enrichment present only once the traveler's
+  // exact composition is known -- the provider itself never required a
+  // count to search at all. A null group_total_minor_units used to render
+  // as "NaN" instead of falling back to the provider's own per-traveler
+  // price.
+  it('falls back to a per-traveler price label when group_total_minor_units is unknown', async () => {
+    withFlightSearch(flightSearchResponse({
+      status: 'offer',
+      offers: [
+        { origin_iata: 'DEL', destination_iata: 'GWL', trip_type: 'one_way', departure_date: '2026-03-01', money: { currency: 'INR', per_traveler_amount_minor_units: 500000, traveler_count: null, group_total_minor_units: null, group_total_is_approximate: null }, baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'x' }, price_found_at: '2026-01-01T00:00:00.000Z', is_recommended: true, airline_code: '6E' },
+      ],
+    }));
+    const options = await transportOptionsFor('trip-1', leg, null, ['flight']);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight.liveOffer).toMatchObject({ status: 'offer', priceLabel: 'INR 5,000.00 per traveler' });
   });
 
   it('falls back to the first offer when none is flagged is_recommended (defensive, should not happen per contract)', async () => {
@@ -731,6 +731,24 @@ describe('stayOptionsFor', () => {
   it('renders the affiliate_disclosure the Backend returns, never dropping it', async () => {
     const [option] = await stayOptionsFor('trip-1', { id: 'stay-Gwalior', location: 'Gwalior', nights: 2 });
     expect(option.affiliateDisclosure).toBe(true);
+  });
+
+  it('uses the same canonical date and derived traveler total as other booking surfaces', async () => {
+    const bodies = [];
+    global.fetch = vi.fn(async (url, options) => {
+      if (url.includes('/trusted-action')) bodies.push(JSON.parse(options.body));
+      return jsonResponse(resolvedAction());
+    });
+
+    await stayOptionsFor(
+      'trip-1',
+      { id: 'stay-Gwalior', location: 'Gwalior', nights: 2, departureDate: '2026-10-13' },
+      { adults: 2, children: 1, infants: 1 },
+    );
+
+    expect(bodies.length).toBeGreaterThan(1);
+    expect(bodies.every(body => body.departure_date === '2026-10-13')).toBe(true);
+    expect(bodies.every(body => body.traveler_count === 4)).toBe(true);
   });
 });
 

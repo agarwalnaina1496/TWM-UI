@@ -52,7 +52,9 @@ export function tripContextFacts(tripContext) {
   return TRIP_CONTEXT_FIELDS
     .map(([key, format]) => {
       const value = tripContext?.[key];
-      return value === undefined || value === null || value === '' ? null : { key, value: format(value) };
+      if (value === undefined || value === null || value === '') return null;
+      const formatted = format(value);
+      return formatted == null ? null : { key, value: formatted };
     })
     .filter(Boolean);
 }
