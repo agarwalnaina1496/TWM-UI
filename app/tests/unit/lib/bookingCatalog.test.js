@@ -466,6 +466,24 @@ describe('flight live-offer resolution (TWM-146)', () => {
     expect(flight.liveOffer).toMatchObject({ status: 'offer', priceLabel: 'approx. INR 8,000.00', airline: 'IndiGo', stopCount: 0 });
   });
 
+  // TWM-215: traveler_count/group_total_minor_units/group_total_is_approximate
+  // are a Backend-computed enrichment present only once the traveler's
+  // exact composition is known -- the provider itself never required a
+  // count to search at all. A null group_total_minor_units used to render
+  // as "NaN" instead of falling back to the provider's own per-traveler
+  // price.
+  it('falls back to a per-traveler price label when group_total_minor_units is unknown', async () => {
+    withFlightSearch(flightSearchResponse({
+      status: 'offer',
+      offers: [
+        { origin_iata: 'DEL', destination_iata: 'GWL', trip_type: 'one_way', departure_date: '2026-03-01', money: { currency: 'INR', per_traveler_amount_minor_units: 500000, traveler_count: null, group_total_minor_units: null, group_total_is_approximate: null }, baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'x' }, price_found_at: '2026-01-01T00:00:00.000Z', is_recommended: true, airline_code: '6E' },
+      ],
+    }));
+    const options = await transportOptionsFor('trip-1', leg, null, ['flight']);
+    const flight = options.find(o => o.mode === 'flight');
+    expect(flight.liveOffer).toMatchObject({ status: 'offer', priceLabel: 'INR 5,000.00 per traveler' });
+  });
+
   it('falls back to the first offer when none is flagged is_recommended (defensive, should not happen per contract)', async () => {
     withFlightSearch(flightSearchResponse({
       status: 'partial',

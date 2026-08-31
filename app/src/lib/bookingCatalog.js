@@ -67,11 +67,27 @@ function flightMissingFieldsLabel(missingFields) {
 // provider generation (twm/schemas/flight_search.py) — the "approx."
 // qualifier is a hard requirement, never dropped even when the field says
 // true every time today.
+//
+// TWM-215: traveler_count/group_total_minor_units/group_total_is_approximate
+// are now a Backend-computed enrichment present only once the traveler's
+// exact composition is known — the provider itself never required a
+// traveler count to search at all. group_total_minor_units is therefore
+// null just as often as it's set; dividing a null by 100 used to silently
+// render "NaN" instead of falling back to the one price point the
+// provider always does disclose (per_traveler_amount_minor_units). No
+// "approx." prefix on the per-traveler fallback: unlike the group total,
+// it's the provider's own literal price, not a Backend-computed multiple.
 function flightPriceLabel(money) {
-  const amount = (money.group_total_minor_units / 100).toLocaleString(undefined, {
+  if (money.group_total_minor_units != null) {
+    const amount = (money.group_total_minor_units / 100).toLocaleString(undefined, {
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    });
+    return `${money.group_total_is_approximate ? 'approx. ' : ''}${money.currency} ${amount}`;
+  }
+  const perTraveler = (money.per_traveler_amount_minor_units / 100).toLocaleString(undefined, {
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   });
-  return `${money.group_total_is_approximate ? 'approx. ' : ''}${money.currency} ${amount}`;
+  return `${money.currency} ${perTraveler} per traveler`;
 }
 
 // TWM-206: maps one NormalizedFlightOffer into the shape
