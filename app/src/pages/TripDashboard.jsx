@@ -969,6 +969,35 @@ function FeasibilityDisclosure({ modes }) {
 // and a day's AnchorList already surfaces its own confirmed anchors without
 // a separate per-segment confirmed-card duplicate.
 
+// TWM-215: the single, generic mechanism any on-demand-drawer (Transport,
+// Stay, and any future one) uses to keep its cache filled for whatever is
+// currently open -- regardless of *how* it got into that state (a fresh
+// open-click, or a save elsewhere invalidating the cache while the drawer
+// stayed open). That second case is the exact bug class this generalizes
+// the fix for: it was first found and fixed only on the Transport drawer,
+// then found again, separately, on the Stay drawer -- two independent
+// hand-written "did my cache go stale while I was open" effects were
+// exactly the kind of scattered, easy-to-miss duplication this hook
+// exists to prevent from happening a third time. A future drawer composes
+// this once, passing its own open-key/cache/loading-flag/fetcher, instead
+// of hand-writing another bespoke effect.
+//
+// openKey is the drawer's own cache key (e.g. a leg's `${from}->${to}::${travelerCount}`,
+// or a stay's id) — null/falsy while nothing is open, in which case this
+// is a no-op. fetcher is called with no re-entrancy (skipped whenever
+// cache[openKey] is already populated or a fetch is already in flight)
+// and is expected to close over whatever current values it needs (board
+// data, trip context, etc.) — it is intentionally excluded from the
+// effect's own dependency array like every other callback in this file,
+// since it is freshly recreated every render anyway.
+function useDrawerFetch(openKey, cache, loading, fetcher) {
+  useEffect(() => {
+    if (!openKey || cache[openKey] || loading) return;
+    fetcher();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openKey, cache, loading]);
+}
+
 export default function TripDashboard() {
   const { commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState, viewTrip } = useTrip();
   const navigate = useNavigate();
@@ -1197,30 +1226,37 @@ export default function TripDashboard() {
     trackEvent('dashboard_entered', { entry_source: 'itinerary' });
   }, [itineraryStatus]);
 
-  // TWM-215 live-testing finding: saving a booking date while the Transport
-  // drawer stays open (the whole point of editing it inline via
-  // BookingSummaryStrip, never requiring a close/reopen) cleared
-  // transportData's cache (submitDateEdit's setTransportData({})) but
-  // nothing then refetched for the still-open leg -- the drawer was left
-  // permanently showing "No bookable transport options for this leg" /
-  // every mode "not available", since options/feasibility both read as
-  // undefined forever with no other trigger to re-fetch them. Mirrors
-  // openTransportDrawer's own fetch, just reactive instead of click-only,
-  // recomputing the board item straight from boardData (not the render-time
-  // boardDayByNumber/freshLeg below, which aren't in scope yet this early
-  // and can't be referenced before an early return without breaking the
-  // Rules of Hooks).
-  useEffect(() => {
-    if (!transportDrawerLeg) return;
-    if (boardData?.version !== itineraryResult?.version || boardDataTripId !== tripId) return;
-    const boardItem = (boardData?.days || [])
-      .flatMap(day => day.items || [])
-      .find(item => item.is_gateway_leg && item.from_city === transportDrawerLeg.from && item.to_city === transportDrawerLeg.to);
-    if (!boardItem) return;
-    const key = transportCacheKey(transportDrawerLeg, transportDrawerTravelerOverride);
-    if (transportData[key] || transportDrawerLoading) return;
-    fetchTransportOptions(transportDrawerLeg, boardItem, transportDrawerTravelerOverride);
-  }, [transportDrawerLeg, boardData, boardDataTripId, itineraryResult, tripId, transportDrawerTravelerOverride, transportData, transportDrawerLoading]);
+  // TWM-215 live-testing finding: saving a booking date/traveler count
+  // while a drawer stays open (the whole point of editing either inline
+  // via BookingSummaryStrip, never requiring a close/reopen) cleared the
+  // relevant cache (submitDateEdit's/submitTravelerEdit's setTransportData({})/
+  // setStayData({})) but nothing then refetched for the still-open item --
+  // found first on the Transport drawer, then again, separately, on the
+  // Stay drawer. Both now compose the single useDrawerFetch mechanism
+  // above instead of each hand-writing their own version of this effect.
+  useDrawerFetch(
+    transportDrawerLeg ? transportCacheKey(transportDrawerLeg, transportDrawerTravelerOverride) : null,
+    transportData,
+    transportDrawerLoading,
+    () => {
+      if (boardData?.version !== itineraryResult?.version || boardDataTripId !== tripId) return;
+      const boardItem = (boardData?.days || [])
+        .flatMap(day => day.items || [])
+        .find(item => item.is_gateway_leg && item.from_city === transportDrawerLeg.from && item.to_city === transportDrawerLeg.to);
+      if (!boardItem) return;
+      fetchTransportOptions(transportDrawerLeg, boardItem, transportDrawerTravelerOverride);
+    },
+  );
+
+  // Reads trip_context directly (tripTravelerComposition) rather than the
+  // render-time `travelerComposition` local below, which isn't in scope
+  // yet this early.
+  useDrawerFetch(
+    stayDrawerStay?.id ?? null,
+    stayData,
+    stayDrawerLoading,
+    () => fetchStayOptions(stayDrawerStay, tripTravelerComposition(tripState?.trip_context)),
+  );
 
   async function resolveRevision(command) {
     setRevisionPending(true);
@@ -1548,27 +1584,37 @@ export default function TripDashboard() {
     setTransportDrawerTravelerOverride(travelerCountForSearch);
   }
 
-  // TWM-211: opens the Stay drawer for the actual STAY timeline item, not
-  // the day's primary_location-derived route stop. A day can be spent in
-  // one city and overnight in another.
-  //
-  // Resolves partner options on demand the first time (cached into stayData
-  // so a second open never refetches the same stay item).
-  async function openStayDrawer(stay) {
-    setStayDrawerStay(stay);
-    // PR review: same reset-before-cache-hit fix as openTransportDrawer.
-    setStayDrawerError(null);
-    setStayDrawerLoading(false);
-    if (stayData[stay.id]) return;
+  // TWM-206/TWM-215: fetches (or serves from cache) a stay's options for a
+  // given traveler composition. Extracted from openStayDrawer so
+  // useDrawerFetch's reactive effect above can call it too -- the fetch
+  // itself is never triggered directly from a click handler any more (see
+  // that hook's own comment for why).
+  async function fetchStayOptions(stay, composition) {
+    if (!stay || stayData[stay.id]) return;
     setStayDrawerLoading(true);
     try {
-      const options = await stayOptionsFor(tripId, stay, travelerComposition);
+      const options = await stayOptionsFor(tripId, stay, composition);
       setStayData(prev => ({ ...prev, [stay.id]: { options } }));
     } catch (error) {
       setStayDrawerError(error.message || 'Could not load stay options.');
     } finally {
       setStayDrawerLoading(false);
     }
+  }
+
+  // TWM-211/TWM-215: opens the Stay drawer for the actual STAY timeline
+  // item, not the day's primary_location-derived route stop -- a day can
+  // be spent in one city and overnight in another. Only ever sets state;
+  // useDrawerFetch's reactive effect above is the single place that
+  // decides whether the currently-open stay needs a fetch right now.
+  function openStayDrawer(stay) {
+    setStayDrawerStay(stay);
+    // PR review: reset before the effect's own cache-hit check runs, not
+    // just before a real fetch -- onClose never clears these, so a stale
+    // error/loading state from a previously failed stay would otherwise
+    // still be showing when a different, already-cached stay opens next.
+    setStayDrawerError(null);
+    setStayDrawerLoading(false);
   }
 
   const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });

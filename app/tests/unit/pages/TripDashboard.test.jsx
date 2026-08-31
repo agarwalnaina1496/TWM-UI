@@ -1296,6 +1296,47 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(within(drawer).getByText('Rishikesh — Agoda')).toBeInTheDocument();
     });
 
+    // TWM-215: the same "stays open through a save" bug found on the
+    // Transport drawer, found again separately on the Stay drawer --
+    // submitTravelerEdit's setStayData({}) cleared the cache but nothing
+    // refetched for a Stay drawer left open through that save.
+    it('refetches stay options after a traveler-composition save even when the drawer is never closed', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      // Genuinely nothing known yet, so the button starts as "Set trip
+      // travelers" rather than Atlas's resolved-approximation label (the
+      // default fixture's num_travelers: 2) -- same override as the
+      // Transport-drawer equivalent test above.
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } }),
+      };
+      global.fetch = defaultFetchMock();
+      sendTripCommand = vi.fn(async (command, payload) => {
+        expect(command).toBe('update_traveler_composition');
+        commandSnapshot = snapshotWith(
+          readyItineraryState(),
+          {},
+          { trip_context: { origin_city: 'Delhi', traveler_composition: payload.travelerCompositionUpdate } },
+        );
+        return { message: null, agent_meta: null, trip: commandSnapshot };
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
+      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+
+      await user.click(within(drawer).getByRole('button', { name: /Set trip travelers/ }));
+      await user.click(within(drawer).getByRole('button', { name: 'Save travelers' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_traveler_composition', expect.anything()));
+
+      // Without ever closing the drawer, options must still come back.
+      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+    });
+
     it('opens from the STAY timeline item city when the overnight city differs from the day primary location', async () => {
       const base = atlasResult();
       itineraryFetchResponse = {
