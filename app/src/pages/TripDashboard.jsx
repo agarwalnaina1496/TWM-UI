@@ -21,6 +21,7 @@ import { isTripEmpty } from '../lib/tripLifecycle.js';
 import {
   tripOriginCity,
   tripBookingDateContext,
+  tripTravelDatesMonthName,
   tripTravelerComposition,
   travelerCompositionTotal,
 } from '../constants/tripContext.js';
@@ -325,6 +326,17 @@ function monthDateBounds(monthValue) {
   return { min: `${monthValue}-01`, max: `${monthValue}-${String(lastDay).padStart(2, '0')}` };
 }
 
+// TWM-215 live-testing finding: the departure-date picker had no floor at
+// all -- a traveler could pick and save a date that had already passed.
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+const MONTH_NAMES_LOWER = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+
 // `existing` is the trip's current booking_dates context (tripBookingDateContext),
 // not just this form's in-progress mode/value — the two are different on
 // purpose. Once a precision is already on file, the exact/month radio choice
@@ -335,12 +347,21 @@ function monthDateBounds(monthValue) {
 // finding). "Change month" is a deliberate, explicit escape hatch for a
 // traveler whose plans genuinely shifted -- it re-opens the mode choice
 // rather than leaving them stuck once precision is set once.
-function DateEditForm({ existing, mode, setMode, value, setValue, returnValue, setReturnValue, onSubmit, onCancel, pending, error }) {
+function DateEditForm({ existing, travelMonthHint, mode, setMode, value, setValue, returnValue, setReturnValue, onSubmit, onCancel, pending, error }) {
   const [changingPrecision, setChangingPrecision] = useState(false);
-  const hasExistingPrecision = Boolean(existing?.precision);
+  const hasStructuredMonth = existing?.precision === 'month';
+  // TWM-215 live-testing finding: a month the traveler already named in
+  // trip_context.travel_dates (e.g. "December") is just as much a known
+  // fact as a saved booking_dates month, even with no confirmed year --
+  // asking "do you know the month?" again when they already said so reads
+  // as not having listened. Both cases get the same narrowing treatment;
+  // only the loose one can't bound the date picker to a real year.
+  const hasLooseMonthOnly = !existing?.precision && Boolean(travelMonthHint);
+  const hasKnownMonth = hasStructuredMonth || hasLooseMonthOnly;
+  const knownMonthLabel = hasStructuredMonth ? existing.departure_month : travelMonthHint;
+  const hasExistingPrecision = Boolean(existing?.precision) || hasLooseMonthOnly;
   const showModeChoice = !hasExistingPrecision || changingPrecision;
-  const narrowingFromMonth = hasExistingPrecision && !changingPrecision
-    && existing.precision === 'month' && mode === 'exact';
+  const narrowingFromMonth = hasKnownMonth && !changingPrecision && mode === 'exact';
 
   function switchPrecision(nextMode) {
     setChangingPrecision(true);
@@ -367,27 +388,38 @@ function DateEditForm({ existing, mode, setMode, value, setValue, returnValue, s
         </div>
       ) : (
         <p className="already-booked-note">
-          {narrowingFromMonth ? `Narrowing down ${existing.departure_month}. ` : ''}
+          {narrowingFromMonth ? `Narrowing down ${knownMonthLabel}. ` : ''}
           <button type="button" className="btn btn-ghost" disabled={pending}
             onClick={() => switchPrecision(mode === 'exact' ? 'month' : 'exact')}>
-            {narrowingFromMonth ? 'Not in this month? Change month' : 'Change precision'}
+            {narrowingFromMonth
+              ? (hasStructuredMonth ? 'Not in this month? Change month' : `Not in ${travelMonthHint}? Pick differently`)
+              : 'Change precision'}
           </button>
         </p>
       )}
       {mode === 'exact' ? (
         <>
           <label>Departure date
-            <input required type="date" value={value} disabled={pending}
-              {...(narrowingFromMonth ? monthDateBounds(existing.departure_month) : {})}
-              onChange={event => setValue(event.target.value)} />
+            {(() => {
+              const bounds = narrowingFromMonth && hasStructuredMonth ? monthDateBounds(existing.departure_month) : {};
+              // Never let a saved month's own bounds re-open past dates --
+              // the floor is always whichever is later, today or the
+              // month's first day.
+              const min = bounds.min && bounds.min > todayIsoDate() ? bounds.min : todayIsoDate();
+              return (
+                <input required type="date" value={value} disabled={pending}
+                  min={min} max={bounds.max}
+                  onChange={event => setValue(event.target.value)} />
+              );
+            })()}
           </label>
           <label>Return date (optional)
-            <input type="date" value={returnValue} disabled={pending} min={value || undefined} onChange={event => setReturnValue(event.target.value)} />
+            <input type="date" value={returnValue} disabled={pending} min={value || todayIsoDate()} onChange={event => setReturnValue(event.target.value)} />
           </label>
         </>
       ) : (
         <label>Travel month
-          <input required type="month" value={value} disabled={pending} onChange={event => setValue(event.target.value)} />
+          <input required type="month" value={value} disabled={pending} min={todayIsoDate().slice(0, 7)} onChange={event => setValue(event.target.value)} />
         </label>
       )}
       {error && <p className="confirm-error" role="alert">{error}</p>}
@@ -1183,6 +1215,15 @@ export default function TripDashboard() {
   // single open/closed flag is enough (only one drawer, hence one strip,
   // is ever open at a time).
   function openDateEditForm(suggestedMode) {
+    const existing = tripBookingDateContext(tripState?.trip_context);
+    // TWM-215: always opens narrowing to an exact date -- DateEditForm's
+    // own hasKnownMonth check (structured booking_dates.precision==='month'
+    // OR a loose month already named in trip_context.travel_dates) decides
+    // whether that renders as "pick a day inside this month" or fresh
+    // mode-choice radios; it never needs the "I only know the month" radio
+    // pre-selected just because a month is already known -- re-asking
+    // "do you know the month?" when the traveler already said so reads as
+    // not having listened.
     const mode = suggestedMode === 'month' ? 'month' : 'exact';
     setDateEditMode(mode);
     // PR review: seed from whatever's already saved, when it matches the
@@ -1192,10 +1233,22 @@ export default function TripDashboard() {
     // memory just to add/edit a return date. Only starts blank when
     // there's genuinely nothing saved yet, or the traveler is switching
     // precision (exact <-> month has no shared field to seed from).
-    const existing = tripBookingDateContext(tripState?.trip_context);
+    const travelMonthName = tripTravelDatesMonthName(tripState?.trip_context);
     if (existing?.precision === mode) {
       setDateEditValue((mode === 'exact' ? existing.departure_date : existing.departure_month) || '');
       setDateEditReturnValue((mode === 'exact' ? existing.return_date : '') || '');
+    } else if (mode === 'exact' && !existing?.precision && travelMonthName) {
+      // TWM-215: no booking_dates yet, but travel_dates already named a
+      // month -- seed a same-year, first-of-month suggestion rather than
+      // opening blank. This is only ever a starting suggestion in a live,
+      // freely-editable date picker: the traveler can navigate to any
+      // other date/year before Save, so defaulting the year doesn't
+      // fabricate a confirmed fact the way Atlas's own structured output
+      // must avoid -- nothing is recorded until they explicitly submit it.
+      const monthIndex = MONTH_NAMES_LOWER.indexOf(travelMonthName.toLowerCase());
+      const year = new Date().getFullYear();
+      setDateEditValue(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
+      setDateEditReturnValue('');
     } else {
       setDateEditValue('');
       setDateEditReturnValue('');
@@ -1729,6 +1782,7 @@ export default function TripDashboard() {
             dateEditForm={
               <DateEditForm
                 existing={bookingDateContext}
+                travelMonthHint={tripTravelDatesMonthName(tripState?.trip_context)}
                 mode={dateEditMode}
                 setMode={setDateEditMode}
                 value={dateEditValue}

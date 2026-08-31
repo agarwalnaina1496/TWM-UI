@@ -856,11 +856,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn(async (command, payload) => {
         expect(command).toBe('update_booking_dates');
-        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-05-01' });
+        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-11-01' });
         commandSnapshot = snapshotWith(
           readyItineraryState(),
           {},
-          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-05-01' } } },
+          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01' } } },
         );
         return { message: null, agent_meta: null, trip: commandSnapshot };
       });
@@ -874,11 +874,64 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
       expect(within(drawer).getByLabelText('Departure date')).toBeInTheDocument();
 
-      await user.type(within(drawer).getByLabelText('Departure date'), '2026-05-01');
+      await user.type(within(drawer).getByLabelText('Departure date'), '2026-11-01');
       await user.click(within(drawer).getByRole('button', { name: 'Save dates' }));
 
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
-      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-05-01 · Change/ })).toBeInTheDocument());
+      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-11-01 · Change/ })).toBeInTheDocument());
+    });
+
+    // TWM-215 live-testing finding: the departure/return date pickers and
+    // the month picker had no floor at all -- a traveler could pick and
+    // save a date that had already passed.
+    it('never lets a past date be selected in any of the date-precision inputs', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+
+      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
+      const today = new Date().toISOString().slice(0, 10);
+      expect(within(drawer).getByLabelText('Departure date')).toHaveAttribute('min', today);
+      expect(within(drawer).getByLabelText('Return date (optional)')).toHaveAttribute('min', today);
+
+      await user.click(within(drawer).getByRole('radio', { name: 'I only know the month' }));
+      expect(within(drawer).getByLabelText('Travel month')).toHaveAttribute('min', today.slice(0, 7));
+    });
+
+    // TWM-215 live-testing finding: "Set trip dates" used to always show
+    // the exact/month radio choice from scratch, even when the traveler
+    // already named a month in trip_context.travel_dates (e.g. "December"
+    // -- the free-form fact Atlas itself received verbatim) and
+    // booking_dates was simply never confirmed yet -- re-asking "do you
+    // know the month?" when they'd already said so. It now narrows
+    // straight to an exact-date picker, same as an already-saved
+    // booking_dates month would, seeded with a same-year suggestion (no
+    // year was confirmed, so the traveler can freely correct it).
+    it('narrows straight to an exact date, skipping the redundant month choice, when travel_dates already names a month', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', travel_dates: 'December, exact days flexible' } });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+
+      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
+      expect(within(drawer).queryByRole('radiogroup', { name: 'Date precision' })).not.toBeInTheDocument();
+      expect(within(drawer).getByText(/Narrowing down December/)).toBeInTheDocument();
+      const currentYear = new Date().getFullYear();
+      expect(within(drawer).getByLabelText('Departure date')).toHaveValue(`${currentYear}-12-01`);
+
+      // The escape hatch still reveals the full mode choice, for a
+      // traveler whose plans genuinely aren't in December after all.
+      await user.click(within(drawer).getByRole('button', { name: /Not in December\? Pick differently/ }));
+      expect(within(drawer).getByRole('radiogroup', { name: 'Date precision' })).toBeInTheDocument();
     });
 
     // TWM-215 live-testing finding: the exact/month radio choice used to
@@ -919,7 +972,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       commandSnapshot = snapshotWith(
         readyItineraryState(),
         {},
-        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-05-01' } } },
+        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01' } } },
       );
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
@@ -929,9 +982,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
 
-      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-05-01 · Change/ })).toBeInTheDocument());
-      await user.click(within(drawer).getByRole('button', { name: /Trip dates: 2026-05-01 · Change/ }));
-      expect(within(drawer).getByLabelText('Departure date')).toHaveValue('2026-05-01');
+      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-11-01 · Change/ })).toBeInTheDocument());
+      await user.click(within(drawer).getByRole('button', { name: /Trip dates: 2026-11-01 · Change/ }));
+      expect(within(drawer).getByLabelText('Departure date')).toHaveValue('2026-11-01');
       expect(within(drawer).getByRole('button', { name: 'Save dates' })).not.toBeDisabled();
     });
 
@@ -945,7 +998,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       commandSnapshot = snapshotWith(
         readyItineraryState(),
         {},
-        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-05-01', return_date: '2026-05-05' } } },
+        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01', return_date: '2026-11-05' } } },
       );
       sendTripCommand = vi.fn();
       global.fetch = defaultFetchMock();
@@ -959,7 +1012,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Rishikesh to Delhi/ });
 
-      expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-05-05 · Change/ })).toBeInTheDocument();
+      expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-11-05 · Change/ })).toBeInTheDocument();
     });
 
     it('saves traveler composition via update_traveler_composition from the drawer and reflects it on the button', async () => {
@@ -1087,11 +1140,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       let trustedActionCallCount = 0;
       sendTripCommand = vi.fn(async (command, payload) => {
         expect(command).toBe('update_booking_dates');
-        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-05-01' });
+        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-11-01' });
         commandSnapshot = snapshotWith(
           readyItineraryState(),
           {},
-          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-05-01' } } },
+          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01' } } },
         );
         return { message: null, agent_meta: null, trip: commandSnapshot };
       });
@@ -1119,7 +1172,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
       drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
       await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
-      await user.type(within(drawer).getByLabelText('Departure date'), '2026-05-01');
+      await user.type(within(drawer).getByLabelText('Departure date'), '2026-11-01');
       await user.click(within(drawer).getByRole('button', { name: 'Save dates' }));
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
       await user.click(within(drawer).getByRole('button', { name: 'Close transport options' }));

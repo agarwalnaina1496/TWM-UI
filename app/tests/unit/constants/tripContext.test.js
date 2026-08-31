@@ -4,6 +4,7 @@ import {
   tripOriginCity,
   tripTravelerComposition,
   tripTravelerCount,
+  tripTravelDatesMonthName,
   travelerCompositionTotal,
 } from '../../../src/constants/tripContext.js';
 
@@ -19,6 +20,29 @@ describe('tripOriginCity', () => {
   it('is null for a missing/empty trip_context', () => {
     expect(tripOriginCity(undefined)).toBeNull();
     expect(tripOriginCity({})).toBeNull();
+  });
+});
+
+// tripTravelDatesMonthName reads the loose, verbatim travel_dates fact --
+// used only to default which precision a booking-date form starts on
+// (TWM-215), never to fabricate a real YYYY-MM value (no year is confirmed
+// just because a month name was mentioned).
+describe('tripTravelDatesMonthName', () => {
+  it('extracts a named month from free-form travel_dates text', () => {
+    expect(tripTravelDatesMonthName({ travel_dates: 'December, exact days flexible' })).toBe('December');
+  });
+
+  it('is case-insensitive', () => {
+    expect(tripTravelDatesMonthName({ travel_dates: 'sometime in october' })).toBe('October');
+  });
+
+  it('is null when no month name appears', () => {
+    expect(tripTravelDatesMonthName({ travel_dates: 'flexible, not sure yet' })).toBeNull();
+  });
+
+  it('is null for a missing/empty trip_context', () => {
+    expect(tripTravelDatesMonthName(undefined)).toBeNull();
+    expect(tripTravelDatesMonthName({})).toBeNull();
   });
 });
 

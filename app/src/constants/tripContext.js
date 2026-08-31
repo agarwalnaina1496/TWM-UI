@@ -50,6 +50,28 @@ export function travelerCompositionTotal(composition) {
   return composition.adults + composition.children + composition.infants;
 }
 
+const MONTH_NAMES = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+
+// TWM-215 live-testing finding: trip_context.travel_dates is the raw fact
+// the traveler actually stated (verbatim, reaches Atlas unmodified) --
+// distinct from trip_summary.date_range, which is Atlas's own narrative
+// echo of it tied to one past itinerary-generation run. A loose month name
+// here (e.g. "December", with no confirmed year -- Atlas's own dates
+// assumption already says so explicitly) is a genuinely known fact even
+// though it can't seed a real YYYY-MM value for a month <input>; callers
+// use this only to default which precision a booking-date form starts on,
+// never to fabricate a value.
+export function tripTravelDatesMonthName(tripContext) {
+  const raw = tripContext?.[TRIP_CONTEXT_KEYS.TRAVEL_DATES];
+  if (typeof raw !== 'string') return null;
+  const lower = raw.toLowerCase();
+  const match = MONTH_NAMES.find(month => lower.includes(month));
+  return match ? match[0].toUpperCase() + match.slice(1) : null;
+}
+
 // TWM-201: the post-freeze booking-date precision the traveler confirmed via
 // the Bookings date-update flow — Backend-owned (written only by the
 // update_booking_dates trip command), never UI-synthesized. Shape:
