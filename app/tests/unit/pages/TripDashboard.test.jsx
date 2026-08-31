@@ -1184,6 +1184,53 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(callCountBeforeDateSave));
     });
 
+    // Live-testing finding: saving dates via the strip without ever
+    // closing the drawer (the actual, intended inline-editing flow) left
+    // the drawer permanently showing "No bookable transport options for
+    // this leg" -- submitDateEdit's setTransportData({}) cleared the cache
+    // but nothing then refetched for the still-open leg, since only a
+    // close+reopen (the previous test's flow) used to trigger a refetch.
+    it('refetches transport options after a booking-date save even when the drawer is never closed', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      let trustedActionCallCount = 0;
+      sendTripCommand = vi.fn(async (command, payload) => {
+        expect(command).toBe('update_booking_dates');
+        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-11-01' });
+        commandSnapshot = snapshotWith(
+          readyItineraryState(),
+          {},
+          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01' } } },
+        );
+        return { message: null, agent_meta: null, trip: commandSnapshot };
+      });
+      global.fetch = vi.fn(async (url) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action')) { trustedActionCallCount += 1; return jsonResponse(resolvedActionResponse()); }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      await waitFor(() => expect(within(drawer).getAllByText(/Flight|Train|Bus|Drive/).length).toBeGreaterThan(0));
+
+      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
+      await user.type(within(drawer).getByLabelText('Departure date'), '2026-11-01');
+      await user.click(within(drawer).getByRole('button', { name: 'Save dates' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
+
+      // Without ever closing the drawer, options must still come back --
+      // not a permanent "No bookable transport options for this leg".
+      await waitFor(() => expect(within(drawer).queryByText('No bookable transport options for this leg.')).not.toBeInTheDocument());
+      expect(within(drawer).getAllByText(/Flight|Train|Bus|Drive/).length).toBeGreaterThan(0);
+    });
+
     // TWM-215: a search-scoped traveler-count override (e.g. only 3 of 4
     // travelers are on this specific gateway leg) must fetch independently
     // of the trip-wide default, and must never write traveler_composition

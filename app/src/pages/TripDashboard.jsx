@@ -1197,6 +1197,31 @@ export default function TripDashboard() {
     trackEvent('dashboard_entered', { entry_source: 'itinerary' });
   }, [itineraryStatus]);
 
+  // TWM-215 live-testing finding: saving a booking date while the Transport
+  // drawer stays open (the whole point of editing it inline via
+  // BookingSummaryStrip, never requiring a close/reopen) cleared
+  // transportData's cache (submitDateEdit's setTransportData({})) but
+  // nothing then refetched for the still-open leg -- the drawer was left
+  // permanently showing "No bookable transport options for this leg" /
+  // every mode "not available", since options/feasibility both read as
+  // undefined forever with no other trigger to re-fetch them. Mirrors
+  // openTransportDrawer's own fetch, just reactive instead of click-only,
+  // recomputing the board item straight from boardData (not the render-time
+  // boardDayByNumber/freshLeg below, which aren't in scope yet this early
+  // and can't be referenced before an early return without breaking the
+  // Rules of Hooks).
+  useEffect(() => {
+    if (!transportDrawerLeg) return;
+    if (boardData?.version !== itineraryResult?.version || boardDataTripId !== tripId) return;
+    const boardItem = (boardData?.days || [])
+      .flatMap(day => day.items || [])
+      .find(item => item.is_gateway_leg && item.from_city === transportDrawerLeg.from && item.to_city === transportDrawerLeg.to);
+    if (!boardItem) return;
+    const key = transportCacheKey(transportDrawerLeg, transportDrawerTravelerOverride);
+    if (transportData[key] || transportDrawerLoading) return;
+    fetchTransportOptions(transportDrawerLeg, boardItem, transportDrawerTravelerOverride);
+  }, [transportDrawerLeg, boardData, boardDataTripId, itineraryResult, tripId, transportDrawerTravelerOverride, transportData, transportDrawerLoading]);
+
   async function resolveRevision(command) {
     setRevisionPending(true);
     setRevisionError(null);
@@ -1485,10 +1510,19 @@ export default function TripDashboard() {
     }
   }
 
-  // TWM-206: opens the Transport drawer for a gateway leg, resolving its
-  // options on demand the first time (cached into transportData so a
-  // second open, or the Bookings tab, never refetches the same leg).
-  async function openTransportDrawer(boardItem) {
+  // TWM-206/TWM-215: opens the Transport drawer for a gateway leg. This only
+  // ever sets which leg is open -- it deliberately never calls
+  // fetchTransportOptions itself. The reactive effect above is the single
+  // place in the codebase that decides "does the currently-open leg need a
+  // fetch right now", covering every way that answer can become yes
+  // (opening a leg for the first time, a booking-date save invalidating the
+  // cache, a traveler-search-override changing) through one path instead of
+  // several imperative call sites that could each independently forget to
+  // trigger one -- which is exactly how the booking-date-save case was
+  // missed before (TWM-215 live-testing finding: saving dates without
+  // closing the drawer left it permanently showing no options, since only
+  // the click-to-open path used to fetch).
+  function openTransportDrawer(boardItem) {
     const leg = {
       from: boardItem.from_city,
       to: boardItem.to_city,
@@ -1496,24 +1530,22 @@ export default function TripDashboard() {
       departureMonth: boardItem.date_precision === 'month' ? boardItem.departure_month : null,
     };
     setTransportDrawerLeg(leg);
-    // PR review: reset before the cache-hit early return, not just before
-    // a real fetch — onClose never clears these, so a stale error/loading
-    // state from a previously failed leg would otherwise still be showing
-    // when a different, already-cached leg opens next.
+    // PR review: reset before the effect's own cache-hit check runs, not
+    // just before a real fetch — onClose never clears these, so a stale
+    // error/loading state from a previously failed leg would otherwise
+    // still be showing when a different, already-cached leg opens next.
     setTransportDrawerError(null);
     setTransportDrawerLoading(false);
     setTransportDrawerTravelerOverride(null);
-    await fetchTransportOptions(leg, boardItem, null);
   }
 
   // TWM-215: re-searches the currently open leg for a different traveler
   // count than the trip-wide default, without ever writing that count back
   // to trip_context/traveler_composition — this is a search-only override,
-  // scoped to this one drawer visit.
-  async function searchTransportForTravelerCount(boardItem, travelerCountForSearch) {
-    if (!transportDrawerLeg || !boardItem) return;
+  // scoped to this one drawer visit. Only sets state; the effect above
+  // notices the override changed and fetches for it.
+  function searchTransportForTravelerCount(travelerCountForSearch) {
     setTransportDrawerTravelerOverride(travelerCountForSearch);
-    await fetchTransportOptions(transportDrawerLeg, boardItem, travelerCountForSearch);
   }
 
   // TWM-211: opens the Stay drawer for the actual STAY timeline item, not
@@ -1850,7 +1882,7 @@ export default function TripDashboard() {
                 summaryStrip={transportStrip}
                 defaultTravelerCount={partySize || roughTravelerCount}
                 travelerOverride={transportDrawerTravelerOverride}
-                onSearchTravelerCount={count => searchTransportForTravelerCount(freshLeg, count)}
+                onSearchTravelerCount={searchTransportForTravelerCount}
                 onClose={() => { setTransportDrawerLeg(null); setTransportDrawerTravelerOverride(null); }}
               />
             )}
