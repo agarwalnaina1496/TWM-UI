@@ -1291,7 +1291,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
       await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
       expect(within(drawer).getByText('Rishikesh · 2 nights')).toBeInTheDocument();
-      expect(within(drawer).getByText('Rishikesh — Hotellook')).toBeInTheDocument();
+      expect(within(drawer).getByText('Rishikesh — ixigo')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Booking.com')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Agoda')).toBeInTheDocument();
     });
@@ -1400,7 +1400,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const drawer = await screen.findByRole('dialog', { name: /Stay: Jaipur/ });
       await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
       expect(within(drawer).getByText('Jaipur · 1 night')).toBeInTheDocument();
-      expect(within(drawer).getByText('Jaipur — Hotellook')).toBeInTheDocument();
+      expect(within(drawer).getByText('Jaipur — ixigo')).toBeInTheDocument();
       expect(screen.queryByRole('dialog', { name: /Stay: Agra/ })).not.toBeInTheDocument();
       expect(capturedBodies).toHaveLength(3);
       expect(capturedBodies.every(body => body.domain === 'stay' && body.destination === 'Jaipur')).toBe(true);

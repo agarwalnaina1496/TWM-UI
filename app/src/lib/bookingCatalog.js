@@ -489,9 +489,11 @@ export function gatewayLegs(legs, originCity) {
 }
 
 // Approved stay partners (twm/schemas/trusted_action.py's
-// _ALLOWED_PARTNERS_BY_DOMAIN["stay"]), capped to 3 so the Bookings tab
-// still shows a tiered comparison rather than every approved partner.
-const STAY_PARTNERS = ['hotellook', 'booking_com', 'agoda'];
+// _ALLOWED_PARTNERS_BY_DOMAIN["stay"]), capped to 3 so the Stay drawer
+// shows a concise comparison rather than every approved partner. TWM-216
+// swaps Hotellook for ixigo first because Backend now has a native ixigo
+// destination redirect for stays.
+const STAY_PARTNERS = ['ixigo', 'booking_com', 'agoda'];
 // TWM-196: exported so TripDashboard.jsx can build the flight affiliate
 // CTA's label from the Backend-returned partner name (option.partner)
 // instead of a hardcoded partner name — a future partner change on the
