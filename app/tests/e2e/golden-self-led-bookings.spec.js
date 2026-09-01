@@ -261,15 +261,15 @@ test('Itinerary resolves a gateway transport leg and a stay via their drawers, s
   await expect(page.getByRole('dialog', { name: /Wayanad to Delhi/ })).toBeVisible();
   await page.getByRole('button', { name: 'Close transport options' }).click();
 
-  // Stay (TWM-197/TWM-208): resolves for real now — one redirect CTA per
-  // approved partner (hotellook/booking_com/agoda), via the shared
+  // Stay (TWM-197/TWM-208/TWM-216): resolves for real now — one redirect
+  // CTA per confirmed provider capability, via the shared
   // domain-agnostic /trusted-action mock in testUtils.js. The trigger is
   // attached to the explicit STAY timeline item, not the day header.
   await page.getByRole('button', { name: /Day 1/ }).click();
   const coorgStayItem = page.locator('.atlas-item', { hasText: 'Overnight in Coorg' });
   await coorgStayItem.getByRole('button', { name: /Stay options/ }).click();
   const stayDrawer = page.getByRole('dialog', { name: /Stay: Coorg/ });
-  await expect(stayDrawer.getByRole('link', { name: 'Check stay ↗' }).first()).toBeVisible();
+  await expect(stayDrawer.getByRole('link', { name: 'Search Booking.com ↗' })).toBeVisible();
   await page.getByRole('button', { name: 'Close stay options' }).click();
 
   // Activity: the Atlas-flagged Wayanad safari still renders on its day's

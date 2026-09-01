@@ -155,11 +155,38 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
       }));
       return route.fulfill({ json: { modes } });
     }
-    // TWM-197/TWM-208: TripDashboard.jsx now also calls
-    // resolveTrustedAction(domain: 'stay') for real — this generic fulfill
-    // is domain-agnostic, so it resolves flight/train/bus CTA calls and
-    // stay-partner calls alike with the same placeholder URL.
+    // TWM-197/TWM-208/TWM-216: TripDashboard.jsx also calls
+    // resolveTrustedAction(domain: 'stay') for real. Stay responses carry
+    // provider-specific capability/CTA copy so e2e checks do not depend on
+    // the UI fallback label.
     if (method === 'POST' && pathname.endsWith('/trusted-action')) {
+      const body = request.postDataJSON();
+      if (body.domain === 'stay') {
+        const partner = body.preferred_partner || 'booking_com';
+        const labelByPartner = {
+          booking_com: 'Search Booking.com',
+          agoda: 'Search Agoda',
+          ixigo: 'Browse ixigo hotels',
+        };
+        const capabilityByPartner = {
+          booking_com: 'destination_search',
+          agoda: 'known_destination_search',
+          ixigo: 'destination_redirect',
+        };
+        return route.fulfill({
+          json: {
+            status: 'resolved',
+            action: {
+              target: { partner, target_url: `https://example.com/booking/${partner}` },
+              internal_capability: null,
+              affiliate_disclosure: false,
+              capability: capabilityByPartner[partner] || 'destination_search',
+              cta_label: labelByPartner[partner] || 'Search stays',
+              capability_note: 'Provider search opens with the confirmed capability for this mock.',
+            },
+          },
+        });
+      }
       return route.fulfill({
         json: { status: 'resolved', action: { target: { target_url: 'https://example.com/booking' }, internal_capability: null, affiliate_disclosure: false } },
       });
