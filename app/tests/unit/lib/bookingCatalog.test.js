@@ -18,16 +18,27 @@ function jsonResponse(body, { status = 200 } = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
 
-function resolvedAction({ url = 'https://www.ixigo.com/search?domain=flight', affiliate = true, internalCapability = null } = {}) {
+function resolvedAction({
+  url = 'https://www.ixigo.com/search?domain=flight',
+  affiliate = true,
+  internalCapability = null,
+  partner = 'ixigo',
+  capability = null,
+  ctaLabel = null,
+  capabilityNote = null,
+} = {}) {
   return {
     status: 'resolved',
     generated_at: '2026-01-01T00:00:00.000Z',
     action: {
       action_type: internalCapability ? 'CHECK_PRICES' : 'SEARCH_REDIRECT',
       domain: 'flight',
-      target: internalCapability ? null : { partner: 'ixigo', path: 'search', query_params: {}, target_url: url },
+      target: internalCapability ? null : { partner, path: 'search', query_params: {}, target_url: url },
       internal_capability: internalCapability,
       affiliate_disclosure: affiliate,
+      capability,
+      cta_label: ctaLabel,
+      capability_note: capabilityNote,
       generated_at: '2026-01-01T00:00:00.000Z',
     },
   };
@@ -723,7 +734,7 @@ describe('recommendedMode', () => {
 describe('stayOptionsFor', () => {
   it('resolves one trusted action per approved stay partner', async () => {
     const options = await stayOptionsFor('trip-1', { id: 'stay-Gwalior', location: 'Gwalior', nights: 2 });
-    expect(options.length).toBeGreaterThan(1);
+    expect(options).toHaveLength(3);
     expect(options.every(o => o.name.includes('Gwalior'))).toBe(true);
     expect(options.every(o => o.status === 'resolved')).toBe(true);
   });
@@ -748,7 +759,62 @@ describe('stayOptionsFor', () => {
 
     expect(bodies.length).toBeGreaterThan(1);
     expect(bodies.every(body => body.departure_date === '2026-10-13')).toBe(true);
+    expect(bodies.every(body => body.return_date === '2026-10-15')).toBe(true);
+    expect(bodies.every(body => body.trip_shape === 'round_trip')).toBe(true);
     expect(bodies.every(body => body.traveler_count === 4)).toBe(true);
+  });
+
+  it('keeps provider order and maps Backend capability CTA metadata', async () => {
+    global.fetch = vi.fn(async (url, options) => {
+      const body = JSON.parse(options.body);
+      const responseByPartner = {
+        booking_com: resolvedAction({
+          partner: 'booking_com',
+          url: 'https://www.booking.com/searchresults.html?ss=Goa',
+          affiliate: false,
+          capability: 'prefilled_search',
+          ctaLabel: 'Search Booking.com',
+          capabilityNote: 'Destination search opens on Booking.com.',
+        }),
+        agoda: resolvedAction({
+          partner: 'agoda',
+          url: 'https://www.agoda.com/search?city=11304',
+          affiliate: false,
+          capability: 'known_destination_search',
+          ctaLabel: 'Search Agoda',
+          capabilityNote: 'Known Agoda city metadata lets us prefill this stay search.',
+        }),
+        ixigo: resolvedAction({
+          partner: 'ixigo',
+          url: 'https://www.ixigo.com/hotels/hotels-in-goa',
+          affiliate: false,
+          capability: 'destination_redirect',
+          ctaLabel: 'Browse ixigo hotels',
+          capabilityNote: 'ixigo opens the destination hotel page.',
+        }),
+      };
+      return jsonResponse(responseByPartner[body.preferred_partner]);
+    });
+
+    const options = await stayOptionsFor('trip-1', { id: 'stay-Goa', location: 'Goa', nights: 1 });
+
+    expect(options.map(option => option.partner)).toEqual(['booking_com', 'agoda', 'ixigo']);
+    expect(options.map(option => option.ctaLabel)).toEqual(['Search Booking.com', 'Search Agoda', 'Browse ixigo hotels']);
+    expect(options.every(option => option.affiliateDisclosure === false)).toBe(true);
+  });
+
+  it('filters a provider with no confirmed capability instead of rendering a dead option', async () => {
+    global.fetch = vi.fn(async (url, options) => {
+      const body = JSON.parse(options.body);
+      if (body.preferred_partner === 'agoda') {
+        return jsonResponse({ status: 'disabled', generated_at: '2026-01-01T00:00:00.000Z', disabled: { reason: 'No confirmed useful provider redirect is available for this stay yet.' } });
+      }
+      return jsonResponse(resolvedAction({ partner: body.preferred_partner, url: `https://example.com/${body.preferred_partner}` }));
+    });
+
+    const options = await stayOptionsFor('trip-1', { id: 'stay-Coorg', location: 'Coorg', nights: 1 });
+
+    expect(options.map(option => option.partner)).toEqual(['booking_com', 'ixigo']);
   });
 });
 

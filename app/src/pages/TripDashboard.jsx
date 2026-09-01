@@ -714,7 +714,9 @@ function StayOptionCard({ option, best }) {
     <article className={`stay-option-card${best ? ' picked' : ''}`}>
       {best && <span className="pick-badge">Our pick</span>}
       <strong>{option.name}</strong>
-      <TrustedActionCta option={option} label="Check stay ↗" best={best} />
+      {option.capability && <span className="stay-option-tag">{option.capability.replace(/_/g, ' ')}</span>}
+      {option.capabilityNote && <p>{option.capabilityNote}</p>}
+      <TrustedActionCta option={option} label={`${option.ctaLabel || 'Search stays'} ↗`} best={best} />
     </article>
   );
 }
@@ -869,8 +871,8 @@ function TransportDrawer({ leg, options, feasibility, loading, error, summaryStr
 
 const STAY_TIER_LABEL = { budget: 'Budget', mid_range: 'Mid-range', premium: 'Premium' };
 
-// TWM-206: the Stay drawer — link-only cards per approved partner
-// (hotellook/booking_com/agoda per bookingCatalog.js's STAY_PARTNERS), no
+// TWM-206/TWM-216: the Stay drawer — link-only cards per confirmed provider
+// capability (Booking.com/Agoda/ixigo per bookingCatalog.js), no
 // fabricated price/rating on the card itself. Atlas's TWM-204 per-tier
 // estimate (stay_price_estimate, already present on the raw day object —
 // no Trip Board adapter change needed since it isn't feasibility-derived)
@@ -919,7 +921,7 @@ function StayDrawer({ stay, options, loading, error, stayPriceEstimate, summaryS
           options?.length ? (
             <div className="stay-options-grid">
               {options.map(option => (
-                // PR review: partner order (hotellook/booking_com/agoda) has
+                // PR review: provider order has
                 // no price/rating basis to prefer one — a "best" pick here
                 // would be a fabricated ranking indicator, contradicting
                 // this drawer's own no-fabricated-price/rating principle.

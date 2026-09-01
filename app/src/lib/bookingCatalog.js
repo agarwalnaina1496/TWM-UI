@@ -488,12 +488,12 @@ export function gatewayLegs(legs, originCity) {
   return gateways;
 }
 
-// Approved stay partners (twm/schemas/trusted_action.py's
-// _ALLOWED_PARTNERS_BY_DOMAIN["stay"]), capped to 3 so the Stay drawer
-// shows a concise comparison rather than every approved partner. TWM-216
-// swaps Hotellook for ixigo first because Backend now has a native ixigo
-// destination redirect for stays.
-const STAY_PARTNERS = ['ixigo', 'booking_com', 'agoda'];
+// Stay partners are ordered by the confirmed capability matrix from
+// TWM-216: Booking.com has the most broadly useful destination search,
+// Agoda is shown when Backend has verified destination metadata, and
+// ixigo is the browse fallback. The drawer filters out no-capability
+// statuses rather than rendering broken or speculative cards.
+const STAY_PARTNERS = ['booking_com', 'agoda', 'ixigo'];
 // TWM-196: exported so TripDashboard.jsx can build the flight affiliate
 // CTA's label from the Backend-returned partner name (option.partner)
 // instead of a hardcoded partner name — a future partner change on the
@@ -504,6 +504,9 @@ export const PARTNER_LABEL = {
 
 async function resolveStayOption(tripId, stay, partner, travelerComposition) {
   const name = `${stay.location} — ${PARTNER_LABEL[partner] || partner}`;
+  const checkoutDate = stay.departureDate && stay.nights
+    ? addDaysIso(stay.departureDate, stay.nights)
+    : null;
   try {
     const result = await resolveTrustedAction(tripId, {
       [TRUSTED_ACTION_KEYS.ACTION_TYPE]: 'SEARCH_REDIRECT',
@@ -511,6 +514,10 @@ async function resolveStayOption(tripId, stay, partner, travelerComposition) {
       [TRUSTED_ACTION_KEYS.DESTINATION]: stay.location,
       [TRUSTED_ACTION_KEYS.PREFERRED_PARTNER]: partner,
       ...(stay.departureDate ? { [TRUSTED_ACTION_KEYS.DEPARTURE_DATE]: stay.departureDate } : {}),
+      ...(checkoutDate ? {
+        [TRUSTED_ACTION_KEYS.RETURN_DATE]: checkoutDate,
+        [TRUSTED_ACTION_KEYS.TRIP_SHAPE]: 'round_trip',
+      } : {}),
       ...(travelerComposition ? {
         [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: travelerComposition.adults
           + travelerComposition.children
@@ -519,7 +526,16 @@ async function resolveStayOption(tripId, stay, partner, travelerComposition) {
     });
     if (result.status === 'resolved') {
       const action = result.action;
-      return { name, status: 'resolved', url: action.target?.target_url ?? null, affiliateDisclosure: !!action.affiliate_disclosure };
+      return {
+        name,
+        partner: action.target?.partner ?? partner,
+        status: 'resolved',
+        url: action.target?.target_url ?? null,
+        affiliateDisclosure: !!action.affiliate_disclosure,
+        capability: action.capability ?? null,
+        ctaLabel: action.cta_label ?? 'Search stays',
+        capabilityNote: action.capability_note ?? null,
+      };
     }
     return { name, status: result.status };
   } catch (error) {
@@ -527,15 +543,17 @@ async function resolveStayOption(tripId, stay, partner, travelerComposition) {
   }
 }
 
-// Async: resolves the approved stay partners in parallel for one stay leg.
-// TWM-195 review comment (blocker): NOT currently called from
-// TripDashboard.jsx — stay/hotel affiliate resolution is out of scope for
-// this first mode-visibility slice, and Backend's trusted-action readiness
-// currently requires route/date/traveler fields a stay leg doesn't
-// genuinely have, so calling this eagerly produced noisy missing_input
-// responses. Left intact (not deleted) for the future hotel/stay affiliate
-// story to wire back in.
+function addDaysIso(isoDate, dayCount) {
+  const parsed = new Date(`${isoDate}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  parsed.setUTCDate(parsed.getUTCDate() + dayCount);
+  return parsed.toISOString().slice(0, 10);
+}
+
+// Async: resolves confirmed stay provider capabilities in parallel. Hidden
+// providers are only those with no resolved URL/capability from Backend.
 export async function stayOptionsFor(tripId, stay, travelerComposition) {
-  return Promise.all(STAY_PARTNERS.map(partner => resolveStayOption(tripId, stay, partner, travelerComposition)));
+  const options = await Promise.all(STAY_PARTNERS.map(partner => resolveStayOption(tripId, stay, partner, travelerComposition)));
+  return options.filter(option => option.status === 'resolved' && option.url);
 }
 

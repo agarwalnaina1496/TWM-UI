@@ -176,16 +176,56 @@ let itineraryFetchResponse;
 // replacing the earlier ixigo placeholder — matches the real Backend
 // contract (twm/schemas/trusted_action.py's
 // _ALLOWED_PARTNERS_BY_DOMAIN["flight"]).
-function resolvedActionResponse({ affiliate = true } = {}) {
+function resolvedActionResponse({
+  affiliate = true,
+  partner = 'aviasales',
+  url = 'https://www.aviasales.com/search',
+  capability = 'prefilled_search',
+  ctaLabel = 'Search options',
+  capabilityNote = 'Search opens on the selected provider.',
+} = {}) {
   return {
     status: 'resolved',
     generated_at: '2026-01-01T00:00:00.000Z',
     action: {
       action_type: 'SEARCH_REDIRECT', domain: 'flight',
-      target: { partner: 'aviasales', path: 'search', query_params: {}, target_url: 'https://www.aviasales.com/search' },
-      internal_capability: null, affiliate_disclosure: affiliate, generated_at: '2026-01-01T00:00:00.000Z',
+      target: { partner, path: 'search', query_params: {}, target_url: url },
+      internal_capability: null, affiliate_disclosure: affiliate,
+      capability, cta_label: ctaLabel, capability_note: capabilityNote,
+      generated_at: '2026-01-01T00:00:00.000Z',
     },
   };
+}
+
+function stayActionResponse(partner) {
+  if (partner === 'booking_com') {
+    return resolvedActionResponse({
+      affiliate: false,
+      partner,
+      url: 'https://www.booking.com/searchresults.html?ss=Rishikesh',
+      capability: 'destination_search',
+      ctaLabel: 'Search Booking.com',
+      capabilityNote: 'Destination search opens on Booking.com; choose exact dates there if needed.',
+    });
+  }
+  if (partner === 'agoda') {
+    return resolvedActionResponse({
+      affiliate: false,
+      partner,
+      url: 'https://www.agoda.com/search?city=11304',
+      capability: 'known_destination_search',
+      ctaLabel: 'Search Agoda',
+      capabilityNote: 'Known Agoda city metadata opens the correct destination search.',
+    });
+  }
+  return resolvedActionResponse({
+    affiliate: false,
+    partner: 'ixigo',
+    url: 'https://www.ixigo.com/hotels/hotels-in-rishikesh',
+    capability: 'destination_redirect',
+    ctaLabel: 'Browse ixigo hotels',
+    capabilityNote: 'ixigo opens the destination hotel page.',
+  });
 }
 
 // TWM-146: default flight-search fixture — clarification_needed, since the
@@ -265,12 +305,16 @@ function boardResponseFor(itineraryResult, tripContext, feasibility = feasibleAs
 }
 
 function defaultFetchMock() {
-  return vi.fn(async (url) => {
+  return vi.fn(async (url, options) => {
     if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
     if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
     if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-    if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+    if (url.includes('/trusted-action')) {
+      const body = options?.body ? JSON.parse(options.body) : {};
+      if (body.domain === 'stay') return jsonResponse(stayActionResponse(body.preferred_partner));
+      return jsonResponse(resolvedActionResponse());
+    }
     if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
     return jsonResponse({});
   });
@@ -1289,11 +1333,13 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
 
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
       expect(within(drawer).getByText('Rishikesh · 2 nights')).toBeInTheDocument();
-      expect(within(drawer).getByText('Rishikesh — ixigo')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Booking.com')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Agoda')).toBeInTheDocument();
+      expect(within(drawer).getByText('Rishikesh — ixigo')).toBeInTheDocument();
+      expect(within(drawer).getByText('Search Agoda ↗')).toBeInTheDocument();
+      expect(within(drawer).getByText('Browse ixigo hotels ↗')).toBeInTheDocument();
     });
 
     // TWM-215: the same "stays open through a save" bug found on the
@@ -1327,14 +1373,14 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
 
       await user.click(within(drawer).getByRole('button', { name: /Set trip travelers/ }));
       await user.click(within(drawer).getByRole('button', { name: 'Save travelers' }));
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_traveler_composition', expect.anything()));
 
       // Without ever closing the drawer, options must still come back.
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
     });
 
     it('opens from the STAY timeline item city when the overnight city differs from the day primary location', async () => {
@@ -1382,8 +1428,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
         if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action')) {
-          capturedBodies.push(JSON.parse(options.body));
-          return jsonResponse(resolvedActionResponse());
+          const body = JSON.parse(options.body);
+          capturedBodies.push(body);
+          return jsonResponse(stayActionResponse(body.preferred_partner));
         }
         if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
         return jsonResponse({});
@@ -1398,7 +1445,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(within(stayTimelineItem).getByRole('button', { name: /Stay options/ }));
 
       const drawer = await screen.findByRole('dialog', { name: /Stay: Jaipur/ });
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
       expect(within(drawer).getByText('Jaipur · 1 night')).toBeInTheDocument();
       expect(within(drawer).getByText('Jaipur — ixigo')).toBeInTheDocument();
       expect(screen.queryByRole('dialog', { name: /Stay: Agra/ })).not.toBeInTheDocument();
@@ -1453,12 +1500,12 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
       expect(within(drawer).queryByText('Non-binding estimate, per night')).toBeNull();
     });
 
-    // PR review, TWM-206: the three stay partners are functionally
-    // equivalent link-only redirects with no price/rating behind them —
+    // PR review, TWM-206/TWM-216: stay partners have different redirect
+    // capability levels, but no price/rating behind them —
     // picking the first-resolved one as "Our pick" would be exactly the
     // fabricated ranking indicator this drawer's own comment disclaims.
     it('never shows an "Our pick" badge on a stay partner card', async () => {
@@ -1471,7 +1518,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
       expect(within(drawer).queryByText('Our pick')).not.toBeInTheDocument();
     });
   });
