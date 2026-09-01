@@ -105,28 +105,47 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
         estimated_duration_minutes: 120, estimated_distance_km: null,
         reason: 'Genuinely reachable by this mode.', verification: reference,
       }));
+      const daysWithBoardItems = days.map(day => ({
+        ...day,
+        items: day.timeline.map((item, index) => {
+          const id = item.id || `day-${day.day_number}-item-${index + 1}`;
+          if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
+            return { ...item, id, is_gateway_leg: false, feasible_modes: null, date_precision: null };
+          }
+          const key = `${item.from_city}→${item.to_city}`;
+          const isGateway = gatewayKeys.has(key);
+          const leg = legByKey[key] || {};
+          return {
+            ...item,
+            id,
+            is_gateway_leg: isGateway,
+            feasible_modes: isGateway ? feasibleModes : null,
+            date_precision: leg.departureDate ? 'exact' : leg.departureMonth ? 'month' : 'flexible',
+            departure_date: leg.departureDate || null,
+            departure_month: leg.departureMonth || null,
+          };
+        }),
+      }));
+      const stayDatePrecision = bookingDateContext?.precision || 'flexible';
+      const staySegments = daysWithBoardItems.flatMap(day => day.items
+        .filter(item => item.kind === 'STAY' && item.location)
+        .map(item => ({
+          id: `stay-${day.day_number}-${String(item.location).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+          location: item.location,
+          start_day_number: day.day_number,
+          end_day_number: day.day_number,
+          nights: 1,
+          date_precision: stayDatePrecision,
+          checkin_date: null,
+          checkout_date: null,
+          departure_month: stayDatePrecision === 'month' ? bookingDateContext.departureMonth : null,
+          board_item_ids: [item.id],
+        })));
       return route.fulfill({
         json: {
           version: currentVersion.version,
-          days: days.map(day => ({
-            ...day,
-            items: day.timeline.map(item => {
-              if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
-                return { ...item, is_gateway_leg: false, feasible_modes: null, date_precision: null };
-              }
-              const key = `${item.from_city}→${item.to_city}`;
-              const isGateway = gatewayKeys.has(key);
-              const leg = legByKey[key] || {};
-              return {
-                ...item,
-                is_gateway_leg: isGateway,
-                feasible_modes: isGateway ? feasibleModes : null,
-                date_precision: leg.departureDate ? 'exact' : leg.departureMonth ? 'month' : 'flexible',
-                departure_date: leg.departureDate || null,
-                departure_month: leg.departureMonth || null,
-              };
-            }),
-          })),
+          days: daysWithBoardItems,
+          stay_segments: staySegments,
         },
       });
     }
