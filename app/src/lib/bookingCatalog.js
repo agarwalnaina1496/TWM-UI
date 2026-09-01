@@ -504,9 +504,9 @@ export const PARTNER_LABEL = {
 
 async function resolveStayOption(tripId, stay, partner, travelerComposition) {
   const name = `${stay.location} — ${PARTNER_LABEL[partner] || partner}`;
-  const checkoutDate = stay.departureDate && stay.nights
+  const checkoutDate = stay.checkoutDate || (stay.departureDate && stay.nights
     ? addDaysIso(stay.departureDate, stay.nights)
-    : null;
+    : null);
   try {
     const result = await resolveTrustedAction(tripId, {
       [TRUSTED_ACTION_KEYS.ACTION_TYPE]: 'SEARCH_REDIRECT',

@@ -277,30 +277,70 @@ function boardResponseFor(itineraryResult, tripContext, feasibility = feasibleAs
   const tripStart = bookingDateContext?.precision === 'exact'
     ? new Date(`${bookingDateContext.departure_date}T00:00:00Z`)
     : null;
+  const boardDays = days.map(day => ({
+    ...day,
+    date: tripStart
+      ? new Date(tripStart.getTime() + (day.day_number - 1) * 86_400_000).toISOString().slice(0, 10)
+      : null,
+    items: day.timeline.map((item, index) => {
+      const id = `test-trip:${day.day_number}:${index}`;
+      if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
+        return { ...item, id, is_gateway_leg: false, feasible_modes: null, date_precision: null };
+      }
+      const key = `${item.from_city}→${item.to_city}`;
+      const isGateway = gatewayKeys.has(key);
+      const leg = legByKey[key] || {};
+      return {
+        ...item,
+        id,
+        is_gateway_leg: isGateway,
+        feasible_modes: isGateway ? (feasibility?.modes || []) : null,
+        date_precision: leg.departureDate ? 'exact' : leg.departureMonth ? 'month' : 'flexible',
+        departure_date: leg.departureDate || null,
+        departure_month: leg.departureMonth || null,
+      };
+    }),
+  }));
+  const staySegments = [];
+  let current = null;
+  for (const day of boardDays) {
+    for (const item of day.items.filter(entry => entry.kind === 'STAY')) {
+      if (current && current.location === item.location && day.day_number === current.end_day_number + 1) {
+        current.end_day_number = day.day_number;
+        current.board_item_ids.push(item.id);
+        continue;
+      }
+      if (current) staySegments.push(current);
+      current = {
+        id: `test-trip:stay:${day.day_number}:${day.day_number}:${String(item.location).toLowerCase().replace(/\s+/g, '-')}`,
+        location: item.location,
+        start_day_number: day.day_number,
+        end_day_number: day.day_number,
+        board_item_ids: [item.id],
+      };
+    }
+  }
+  if (current) staySegments.push(current);
+  const finalizedStaySegments = staySegments.map(segment => {
+    const nights = segment.end_day_number - segment.start_day_number + 1;
+    const checkin = boardDays.find(day => day.day_number === segment.start_day_number)?.date ?? null;
+    const checkout = checkin
+      ? new Date(new Date(`${checkin}T00:00:00Z`).getTime() + nights * 86_400_000).toISOString().slice(0, 10)
+      : null;
+    return {
+      ...segment,
+      id: `test-trip:stay:${segment.start_day_number}:${segment.end_day_number}:${String(segment.location).toLowerCase().replace(/\s+/g, '-')}`,
+      nights,
+      date_precision: checkin ? 'exact' : bookingDateContext?.precision === 'month' ? 'month' : 'flexible',
+      checkin_date: checkin,
+      checkout_date: checkout,
+      departure_month: bookingDateContext?.precision === 'month' ? bookingDateContext.departure_month : null,
+    };
+  });
   return {
     version: itineraryResult.version,
-    days: days.map(day => ({
-      ...day,
-      date: tripStart
-        ? new Date(tripStart.getTime() + (day.day_number - 1) * 86_400_000).toISOString().slice(0, 10)
-        : null,
-      items: day.timeline.map(item => {
-        if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
-          return { ...item, is_gateway_leg: false, feasible_modes: null, date_precision: null };
-        }
-        const key = `${item.from_city}→${item.to_city}`;
-        const isGateway = gatewayKeys.has(key);
-        const leg = legByKey[key] || {};
-        return {
-          ...item,
-          is_gateway_leg: isGateway,
-          feasible_modes: isGateway ? (feasibility?.modes || []) : null,
-          date_precision: leg.departureDate ? 'exact' : leg.departureMonth ? 'month' : 'flexible',
-          departure_date: leg.departureDate || null,
-          departure_month: leg.departureMonth || null,
-        };
-      }),
-    })),
+    days: boardDays,
+    stay_segments: finalizedStaySegments,
   };
 }
 
@@ -1356,7 +1396,20 @@ describe('Trip Dashboard (real Atlas contract)', () => {
         version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
         result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } }),
       };
-      global.fetch = defaultFetchMock();
+      const capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) {
+          const body = JSON.parse(options.body);
+          capturedBodies.push(body);
+          return jsonResponse(stayActionResponse(body.preferred_partner));
+        }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
       sendTripCommand = vi.fn(async (command, payload) => {
         expect(command).toBe('update_traveler_composition');
         commandSnapshot = snapshotWith(
@@ -1374,13 +1427,72 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
       await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
+      const initialTrustedActionCount = capturedBodies.length;
 
       await user.click(within(drawer).getByRole('button', { name: /Set trip travelers/ }));
       await user.click(within(drawer).getByRole('button', { name: 'Save travelers' }));
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_traveler_composition', expect.anything()));
 
       // Without ever closing the drawer, options must still come back.
+      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(initialTrustedActionCount));
+      expect(capturedBodies.slice(initialTrustedActionCount).some(body => body.domain === 'stay' && body.preferred_partner === 'booking_com' && body.traveler_count === 1)).toBe(true);
       await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
+    });
+
+    it('refetches stay links with updated dates while the stay drawer remains open', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      itineraryFetchResponse = {
+        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } }),
+      };
+      const capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) {
+          const body = JSON.parse(options.body);
+          capturedBodies.push(body);
+          return jsonResponse(stayActionResponse(body.preferred_partner));
+        }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      sendTripCommand = vi.fn(async (command, payload) => {
+        expect(command).toBe('update_booking_dates');
+        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-11-01' });
+        commandSnapshot = snapshotWith(
+          readyItineraryState(),
+          {},
+          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01' } } },
+        );
+        return { message: null, agent_meta: null, trip: commandSnapshot };
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
+      const initialTrustedActionCount = capturedBodies.length;
+
+      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
+      await user.type(within(drawer).getByLabelText('Departure date'), '2026-11-01');
+      await user.click(within(drawer).getByRole('button', { name: 'Save dates' }));
+
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
+      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(initialTrustedActionCount));
+      expect(capturedBodies.slice(initialTrustedActionCount).some(body => (
+        body.domain === 'stay'
+        && body.preferred_partner === 'booking_com'
+        && body.departure_date === '2026-11-01'
+        && body.return_date === '2026-11-03'
+        && body.trip_shape === 'round_trip'
+      ))).toBe(true);
+      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-11-01 · Change/ })).toBeInTheDocument());
     });
 
     it('opens from the STAY timeline item city when the overnight city differs from the day primary location', async () => {
@@ -1451,6 +1563,95 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       expect(screen.queryByRole('dialog', { name: /Stay: Agra/ })).not.toBeInTheDocument();
       expect(capturedBodies).toHaveLength(3);
       expect(capturedBodies.every(body => body.domain === 'stay' && body.destination === 'Jaipur')).toBe(true);
+    });
+
+    it('uses different Board-owned dates for different city stay segments in one trip', async () => {
+      const day = (dayNumber, location) => ({
+        day_number: dayNumber,
+        date: null,
+        title: `${location} day ${dayNumber}`,
+        primary_location: location,
+        summary: `Stay in ${location}.`,
+        timeline: [
+          {
+            start_time: 'Night', end_time: null, kind: 'STAY', title: `Overnight in ${location}`, location,
+            detail: `Stay in ${location}.`, movement_guidance: null, estimated_cost_low: 2000, estimated_cost_high: 4500,
+            reference: generalReference(), requires_advance_booking: true, booking_readiness: 'needs_advance_booking',
+          },
+        ],
+        notes: [],
+        backup_plan: null,
+      });
+      itineraryFetchResponse = {
+        version: 1,
+        source_guide_revision: 3,
+        created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: {
+            trip_summary: {
+              title: 'Jaipur and Agra',
+              destinations: ['Jaipur', 'Agra'],
+              duration_days: 4,
+              num_travelers: 2,
+              date_range: null,
+              overview: 'A four-day route.',
+              route_rationale: 'Two nights in each city.',
+            },
+            days: [day(1, 'Jaipur'), day(2, 'Jaipur'), day(3, 'Agra'), day(4, 'Agra')],
+          },
+        }),
+      };
+      commandSnapshot = snapshotWith(
+        readyItineraryState(),
+        {},
+        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01' } } },
+      );
+      const capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) {
+          const body = JSON.parse(options.body);
+          capturedBodies.push(body);
+          return jsonResponse(stayActionResponse(body.preferred_partner));
+        }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      renderDashboard();
+      await waitFor(() => expect(screen.getByText('Jaipur and Agra')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const jaipurDrawer = await screen.findByRole('dialog', { name: /Stay: Jaipur/ });
+      await waitFor(() => expect(within(jaipurDrawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
+      expect(within(jaipurDrawer).getByText('📅 Check-in 2026-11-01')).toBeInTheDocument();
+      await user.click(within(jaipurDrawer).getByRole('button', { name: 'Close stay options' }));
+
+      await user.click(within(screen.getByRole('navigation', { name: 'Select a day' })).getByRole('button', { name: /Day 3/ }));
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const agraDrawer = await screen.findByRole('dialog', { name: /Stay: Agra/ });
+      await waitFor(() => expect(within(agraDrawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
+      expect(within(agraDrawer).getByText('📅 Check-in 2026-11-03')).toBeInTheDocument();
+
+      expect(capturedBodies.some(body => (
+        body.domain === 'stay'
+        && body.destination === 'Jaipur'
+        && body.preferred_partner === 'booking_com'
+        && body.departure_date === '2026-11-01'
+        && body.return_date === '2026-11-03'
+      ))).toBe(true);
+      expect(capturedBodies.some(body => (
+        body.domain === 'stay'
+        && body.destination === 'Agra'
+        && body.preferred_partner === 'booking_com'
+        && body.departure_date === '2026-11-03'
+        && body.return_date === '2026-11-05'
+      ))).toBe(true);
     });
 
     it('shows the non-binding tiered estimate when Atlas provides one on the stay\'s first day', async () => {

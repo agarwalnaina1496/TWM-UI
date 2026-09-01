@@ -60,23 +60,19 @@ const moneyRange = (low, high) => (low == null || high == null ? null : `${money
 // Atlas categories arrive as raw snake_case (e.g. "arrival_departure_window") — humanize for display.
 const humanize = value => value.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
 
-function dayHasStayInLocation(day, location) {
-  return (day?.timeline || []).some(item => item.kind === 'STAY' && item.location === location);
-}
-
-function stayFromTimelineItem(item, days, dayNumber) {
-  if (item.kind !== 'STAY' || !item.location) return null;
-  const dayIndex = days.findIndex(day => day.day_number === dayNumber);
-  let startIndex = dayIndex;
-  let endIndex = dayIndex;
-  while (startIndex > 0 && dayHasStayInLocation(days[startIndex - 1], item.location)) startIndex -= 1;
-  while (endIndex < days.length - 1 && dayHasStayInLocation(days[endIndex + 1], item.location)) endIndex += 1;
-  const groupedDays = dayIndex === -1 ? [dayNumber] : days.slice(startIndex, endIndex + 1).map(day => day.day_number);
+function stayFromBoardSegment(segment) {
+  if (!segment) return null;
   return {
-    id: `stay-${groupedDays[0]}-${groupedDays[groupedDays.length - 1]}-${item.location}`,
-    location: item.location,
-    nights: groupedDays.length,
-    dayNumbers: groupedDays,
+    id: segment.id,
+    location: segment.location,
+    nights: segment.nights,
+    departureDate: segment.checkin_date ?? null,
+    checkoutDate: segment.checkout_date ?? null,
+    datePrecision: segment.date_precision ?? null,
+    departureMonth: segment.departure_month ?? null,
+    startDayNumber: segment.start_day_number,
+    endDayNumber: segment.end_day_number,
+    boardItemIds: segment.board_item_ids || [],
   };
 }
 
@@ -1154,6 +1150,25 @@ export default function TripDashboard() {
     // dependency also changed or the page reloaded.
   }, [itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city, tripState?.trip_context?.booking_dates]);
 
+  const currentTravelerComposition = tripTravelerComposition(tripState?.trip_context);
+  const activeStayDrawerStay = (() => {
+    if (!stayDrawerStay) return null;
+    if (boardData?.version !== itineraryResult?.version || boardDataTripId !== tripId) return stayDrawerStay;
+    const freshSegment = (boardData?.stay_segments || []).find(segment =>
+      segment.id === stayDrawerStay.id
+      || (segment.board_item_ids || []).some(itemId => stayDrawerStay.boardItemIds?.includes(itemId))
+    );
+    return freshSegment ? stayFromBoardSegment(freshSegment) : stayDrawerStay;
+  })();
+
+  function stayCacheKey(stay, composition) {
+    if (!stay) return null;
+    const travelerKey = composition
+      ? `${composition.adults ?? 0}:${composition.children ?? 0}:${composition.infants ?? 0}`
+      : 'default';
+    return `${stay.id}::${stay.datePrecision ?? 'unknown'}::${stay.departureDate ?? 'flex'}::${stay.checkoutDate ?? 'open'}::${stay.nights ?? 'nights-unknown'}::${travelerKey}`;
+  }
+
   const trackedThinState = useRef(false);
   useEffect(() => {
     if (trackedThinState.current || tripLoadStatus !== 'ready' || frozenPlan) return;
@@ -1254,10 +1269,10 @@ export default function TripDashboard() {
   // render-time `travelerComposition` local below, which isn't in scope
   // yet this early.
   useDrawerFetch(
-    stayDrawerStay?.id ?? null,
+    stayCacheKey(activeStayDrawerStay, currentTravelerComposition),
     stayData,
     stayDrawerLoading,
-    () => fetchStayOptions(stayDrawerStay, tripTravelerComposition(tripState?.trip_context)),
+    () => fetchStayOptions(activeStayDrawerStay, currentTravelerComposition),
   );
 
   async function resolveRevision(command) {
@@ -1338,6 +1353,7 @@ export default function TripDashboard() {
       // invalidated — the board-fetch effect's own booking_dates
       // dependency already re-fetches boardData for the new precision.
       setTransportData({});
+      setStayData({});
       setDateEditOpen(false);
     } catch (error) {
       setDateEditError(error.message || 'Could not save those dates — your existing flight options are still available.');
@@ -1486,6 +1502,12 @@ export default function TripDashboard() {
   const boardDayByNumber = boardData?.version === itineraryResult.version && boardDataTripId === tripId
     ? Object.fromEntries((boardData.days || []).map(day => [day.day_number, day]))
     : {};
+  const boardStaySegmentByItemId = {};
+  for (const segment of boardData?.version === itineraryResult.version && boardDataTripId === tripId ? (boardData.stay_segments || []) : []) {
+    for (const itemId of segment.board_item_ids || []) {
+      boardStaySegmentByItemId[itemId] = segment;
+    }
+  }
   // TWM-146/TWM-195/TWM-199: same canonical-then-fallback source the
   // Bookings-tab fetch effect uses, so the Transport drawer's on-demand
   // resolution never sends a different traveler_count than an eager
@@ -1592,11 +1614,12 @@ export default function TripDashboard() {
   // itself is never triggered directly from a click handler any more (see
   // that hook's own comment for why).
   async function fetchStayOptions(stay, composition) {
-    if (!stay || stayData[stay.id]) return;
+    const key = stayCacheKey(stay, composition);
+    if (!stay || !key || stayData[key]) return;
     setStayDrawerLoading(true);
     try {
       const options = await stayOptionsFor(tripId, stay, composition);
-      setStayData(prev => ({ ...prev, [stay.id]: { options } }));
+      setStayData(prev => ({ ...prev, [key]: { options } }));
     } catch (error) {
       setStayDrawerError(error.message || 'Could not load stay options.');
     } finally {
@@ -1762,10 +1785,7 @@ export default function TripDashboard() {
               {selectedDay.timeline.map((item, index) => {
                 const boardItem = boardDayByNumber[selectedDay.day_number]?.items?.[index];
                 const isGatewayLeg = item.kind === 'TRAVEL' && boardItem?.is_gateway_leg;
-                const stayItem = stayFromTimelineItem(item, days, selectedDay.day_number);
-                if (stayItem) {
-                  stayItem.departureDate = boardDayByNumber[stayItem.dayNumbers[0]]?.date ?? null;
-                }
+                const stayItem = item.kind === 'STAY' ? stayFromBoardSegment(boardStaySegmentByItemId[boardItem?.id]) : null;
                 const hasItemActions = isGatewayLeg || stayItem;
                 return (
                   <div className="atlas-item" key={index}>
@@ -1917,7 +1937,12 @@ export default function TripDashboard() {
               freshLeg?.date_precision === 'month' ? 'month' : 'exact',
             )
           : null;
-        const stayStrip = renderStrip(genericDateLabel, bookingDateContext?.precision);
+        const stayDateLabel = activeStayDrawerStay?.datePrecision === 'exact'
+          ? activeStayDrawerStay.departureDate
+          : activeStayDrawerStay?.datePrecision === 'month'
+          ? activeStayDrawerStay.departureMonth
+          : genericDateLabel;
+        const stayStrip = renderStrip(stayDateLabel, activeStayDrawerStay?.datePrecision || bookingDateContext?.precision);
         return (
           <>
             {transportDrawerLeg && (
@@ -1936,16 +1961,16 @@ export default function TripDashboard() {
             )}
             {stayDrawerStay && (
               <StayDrawer
-                stay={stayDrawerStay}
-                options={stayData[stayDrawerStay.id]?.options}
+                stay={activeStayDrawerStay}
+                options={stayData[stayCacheKey(activeStayDrawerStay, currentTravelerComposition)]?.options}
                 loading={stayDrawerLoading}
                 error={stayDrawerError}
                 // TWM-204: stay_price_estimate lives on the raw Atlas day
-                // object, not the Trip Board adapter (it isn't
-                // feasibility-derived) — read straight from the stay's
-                // first day; Atlas is expected to keep it consistent
-                // across every day of the same base.
-                stayPriceEstimate={days.find(day => day.day_number === stayDrawerStay.dayNumbers[0])?.stay_price_estimate}
+                // because Atlas owns general stay-budget guidance (not
+                // feasibility-derived) — read from the Board-owned segment's
+                // first day. This stays separate from provider cards, which
+                // never show fabricated/live prices.
+                stayPriceEstimate={days.find(day => day.day_number === activeStayDrawerStay.startDayNumber)?.stay_price_estimate}
                 summaryStrip={stayStrip}
                 onClose={() => setStayDrawerStay(null)}
               />
