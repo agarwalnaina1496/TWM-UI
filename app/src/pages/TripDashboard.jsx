@@ -897,6 +897,9 @@ function StayDrawer({ stay, options, loading, error, stayPriceEstimate, summaryS
         ) : (
           <p className="transport-drawer-date-note">Set exact trip dates via a Transport search for a precise check-in date.</p>
         )}
+        {stay.checkoutDate && (
+          <p className="transport-drawer-date">Check-out {stay.checkoutDate}</p>
+        )}
         {summaryStrip}
         {stayPriceEstimate && (
           <div className="stay-estimate-block">
