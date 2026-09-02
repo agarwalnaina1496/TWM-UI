@@ -323,7 +323,7 @@ const MONTH_NAMES_LOWER = [
 function ScheduleDateForm({
   existing, travelMonthHint, dateLabel = 'Date', helper,
   mode, setMode, value, setValue, onSubmit, onCancel, onClear,
-  clearLabel = 'Reset to itinerary date', pending, error,
+  clearLabel = 'Reset to the default date', pending, error,
 }) {
   const [changingPrecision, setChangingPrecision] = useState(false);
   const hasStructuredMonth = existing?.precision === 'month';
@@ -739,13 +739,18 @@ function DrawerDateRow({ label, source, precision, valueLabel, checkoutLabel, ed
       <p className="transport-drawer-date">
         📅 {label}: {known ? valueLabel : 'flexible'}
         {source === 'itinerary' && ' · from your itinerary'}
+        {source === 'anchor' && ' · from your trip start'}
         {source === 'override' && ' · custom'}
       </p>
       {checkoutLabel && <p className="transport-drawer-date">Check-out {checkoutLabel}</p>}
       {editable && (
         <div className="booking-summary-row">
           <button type="button" className="btn btn-ghost btn-small" onClick={onEdit}>
-            {source === 'override' ? 'Change these dates' : 'Add exact dates for this search'}
+            {source === 'override'
+              ? 'Change these dates'
+              : known
+                ? 'Use a different date for this search'
+                : 'Add exact dates for this search'}
           </button>
         </div>
       )}

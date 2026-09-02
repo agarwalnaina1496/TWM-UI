@@ -1233,6 +1233,24 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
     });
 
+    it('labels the stay date-row action "Use a different date" once a date is already anchor-derived', async () => {
+      commandSnapshot = snapshotWith(
+        readyItineraryState(),
+        { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } },
+        { trip_context: { origin_city: 'Delhi' } },
+      );
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
+      expect(within(drawer).getByText(/from your trip start/)).toBeInTheDocument();
+      expect(within(drawer).getByRole('button', { name: /Use a different date for this search/ })).toBeInTheDocument();
+      expect(within(drawer).queryByRole('button', { name: /Add exact dates for this search/ })).toBeNull();
+    });
+
     it('refetches an open stay drawer with new derived dates after a trip-start save on Overview', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       const capturedBodies = [];
@@ -1420,14 +1438,14 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const jaipurDrawer = await screen.findByRole('dialog', { name: /Stay: Jaipur/ });
       await waitFor(() => expect(within(jaipurDrawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
-      expect(within(jaipurDrawer).getByText('📅 Check-in: 2026-11-01')).toBeInTheDocument();
+      expect(within(jaipurDrawer).getByText('📅 Check-in: 2026-11-01 · from your trip start')).toBeInTheDocument();
       await user.click(within(jaipurDrawer).getByRole('button', { name: 'Close stay options' }));
 
       await user.click(within(screen.getByRole('navigation', { name: 'Select a day' })).getByRole('button', { name: /Day 3/ }));
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const agraDrawer = await screen.findByRole('dialog', { name: /Stay: Agra/ });
       await waitFor(() => expect(within(agraDrawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
-      expect(within(agraDrawer).getByText('📅 Check-in: 2026-11-03')).toBeInTheDocument();
+      expect(within(agraDrawer).getByText('📅 Check-in: 2026-11-03 · from your trip start')).toBeInTheDocument();
 
       expect(capturedBodies.some(body => (
         body.domain === 'stay'
