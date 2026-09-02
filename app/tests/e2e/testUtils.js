@@ -3,7 +3,14 @@
 // route interception so the exact scripted conversations stay deterministic and
 // don't require a live Backend/agent deployment.
 import { transportLegs, gatewayLegs } from '../../src/lib/bookingCatalog.js';
-import { tripOriginCity, tripBookingDateContext } from '../../src/constants/tripContext.js';
+import { tripOriginCity } from '../../src/constants/tripContext.js';
+import { bookingSetupStart, bookingSetupSearchPref } from '../../src/constants/bookingSetup.js';
+
+function addDaysIso(iso, days) {
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 const TRIP_ID = 'e2e-trip-1';
 
@@ -90,13 +97,16 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
     // "all four modes feasible" default as the old feasibility mock did.
     const boardMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)\/board$/);
     if (boardMatch && records.has(boardMatch[1])) {
-      const record = records.get(boardMatch[1]);
+      const trip = boardMatch[1];
+      const record = records.get(trip);
       const currentVersion = record.trip_state?.itinerary_state?.current_version;
       if (!currentVersion) return route.fulfill({ status: 404, json: { detail: 'No itinerary yet.' } });
       const days = currentVersion.result.final_itinerary.days;
       const originCity = tripOriginCity(record.trip_state?.trip_context);
-      const bookingDateContext = tripBookingDateContext(record.trip_state?.trip_context);
-      const allLegs = transportLegs(days, bookingDateContext, originCity);
+      const start = bookingSetupStart(record.trip_state);
+      const tripStartDate = start?.precision === 'exact' ? start.date : null;
+      const startMonth = start?.precision === 'month' ? start.month : null;
+      const allLegs = transportLegs(days);
       const gatewayKeys = new Set(gatewayLegs(allLegs, originCity).map(leg => `${leg.from}→${leg.to}`));
       const legByKey = Object.fromEntries(allLegs.map(leg => [`${leg.from}→${leg.to}`, leg]));
       const reference = { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
@@ -105,42 +115,63 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
         estimated_duration_minutes: 120, estimated_distance_km: null,
         reason: 'Genuinely reachable by this mode.', verification: reference,
       }));
+      const dayDate = dayNumber => (tripStartDate ? addDaysIso(tripStartDate, dayNumber - 1) : null);
       const daysWithBoardItems = days.map(day => ({
         ...day,
+        date: dayDate(day.day_number),
         items: day.timeline.map((item, index) => {
-          const id = item.id || `day-${day.day_number}-item-${index + 1}`;
+          const id = item.id || `${trip}:${day.day_number}:${index}`;
           if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
-            return { ...item, id, is_gateway_leg: false, feasible_modes: null, date_precision: null };
+            return { ...item, id, is_gateway_leg: false, feasible_modes: null, date_precision: null, date_source: null };
           }
           const key = `${item.from_city}→${item.to_city}`;
           const isGateway = gatewayKeys.has(key);
           const leg = legByKey[key] || {};
+          const override = bookingSetupSearchPref(record.trip_state, 'transport', id);
+          let departure_date = null, departure_month = null, date_precision = 'flexible', date_source = 'none';
+          if (leg.departureDate) { departure_date = leg.departureDate; date_precision = 'exact'; date_source = 'itinerary'; }
+          else if (leg.departureMonth) { departure_month = leg.departureMonth; date_precision = 'month'; date_source = 'itinerary'; }
+          else if (override?.precision === 'exact') { departure_date = override.date; date_precision = 'exact'; date_source = 'override'; }
+          else if (override?.precision === 'month') { departure_month = override.month; date_precision = 'month'; date_source = 'override'; }
+          else if (dayDate(day.day_number)) { departure_date = dayDate(day.day_number); date_precision = 'exact'; date_source = 'anchor'; }
+          else if (startMonth) { departure_month = startMonth; date_precision = 'month'; date_source = 'anchor'; }
           return {
             ...item,
             id,
             is_gateway_leg: isGateway,
             feasible_modes: isGateway ? feasibleModes : null,
-            date_precision: leg.departureDate ? 'exact' : leg.departureMonth ? 'month' : 'flexible',
-            departure_date: leg.departureDate || null,
-            departure_month: leg.departureMonth || null,
+            date_precision,
+            departure_date,
+            departure_month,
+            date_source,
           };
         }),
       }));
-      const stayDatePrecision = bookingDateContext?.precision || 'flexible';
       const staySegments = daysWithBoardItems.flatMap(day => day.items
         .filter(item => item.kind === 'STAY' && item.location)
-        .map(item => ({
-          id: `stay-${day.day_number}-${String(item.location).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-          location: item.location,
-          start_day_number: day.day_number,
-          end_day_number: day.day_number,
-          nights: 1,
-          date_precision: stayDatePrecision,
-          checkin_date: null,
-          checkout_date: null,
-          departure_month: stayDatePrecision === 'month' ? bookingDateContext.departureMonth : null,
-          board_item_ids: [item.id],
-        })));
+        .map(item => {
+          const id = `${trip}:stay:${day.day_number}:${day.day_number}:${String(item.location).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+          const override = bookingSetupSearchPref(record.trip_state, 'stay', id);
+          const nights = 1;
+          let checkin_date = null, checkout_date = null, departure_month = null, date_precision = 'flexible', date_source = 'none';
+          if (override?.precision === 'exact') {
+            checkin_date = override.date; checkout_date = addDaysIso(override.date, nights);
+            date_precision = 'exact'; date_source = 'override';
+          } else if (override?.precision === 'month') {
+            departure_month = override.month; date_precision = 'month'; date_source = 'override';
+          } else if (dayDate(day.day_number)) {
+            checkin_date = dayDate(day.day_number); checkout_date = addDaysIso(checkin_date, nights);
+            date_precision = 'exact'; date_source = 'anchor';
+          } else if (startMonth) {
+            departure_month = startMonth; date_precision = 'month'; date_source = 'anchor';
+          }
+          return {
+            id, location: item.location,
+            start_day_number: day.day_number, end_day_number: day.day_number,
+            nights, date_precision, checkin_date, checkout_date, departure_month,
+            date_source, board_item_ids: [item.id],
+          };
+        }));
       return route.fulfill({
         json: {
           version: currentVersion.version,

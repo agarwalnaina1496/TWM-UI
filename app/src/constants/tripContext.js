@@ -10,8 +10,6 @@ export const TRIP_CONTEXT_KEYS = Object.freeze({
   TRAVEL_DATES: 'travel_dates',
   BUDGET: 'budget',
   DESTINATIONS: 'destinations',
-  BOOKING_DATES: 'booking_dates',
-  TRAVELER_COMPOSITION: 'traveler_composition',
 });
 
 export function tripOriginCity(tripContext) {
@@ -22,27 +20,13 @@ export function tripOriginCity(tripContext) {
 // same loose-conversational-fact role as travel_dates — this is the one
 // place that normalizes it down to a plain number for the context-facts
 // display. Never used for a real booking payload; see
-// tripTravelerComposition below for that.
+// bookingSetupParty (constants/bookingSetup.js) for the structured,
+// booking-precision counterpart.
 export function tripTravelerCount(tripContext) {
   const raw = tripContext?.[TRIP_CONTEXT_KEYS.NUM_TRAVELERS];
   if (raw === undefined || raw === null || raw === '') return null;
   const count = Number(raw);
   return Number.isFinite(count) ? count : null;
-}
-
-// TWM-213: the Backend-owned, structured adult/child/infant composition —
-// written only by the update_traveler_composition trip command, never
-// Scout/Meridian/Guide-extracted. Same "structured, booking-precision
-// counterpart to a loose conversational fact" role as
-// tripBookingDateContext below. null until the traveler has explicitly set
-// it via the Set-travelers flow.
-export function tripTravelerComposition(tripContext) {
-  const value = tripContext?.[TRIP_CONTEXT_KEYS.TRAVELER_COMPOSITION];
-  if (!value || typeof value !== 'object') return null;
-  const { adults, children, infants } = value;
-  if (![adults, children, infants].every(Number.isInteger)) return null;
-  if (adults < 1 || children < 0 || infants < 0) return null;
-  return { adults, children, infants };
 }
 
 export function travelerCompositionTotal(composition) {
@@ -62,7 +46,7 @@ const MONTH_NAMES = [
 // here (e.g. "December", with no confirmed year -- Atlas's own dates
 // assumption already says so explicitly) is a genuinely known fact even
 // though it can't seed a real YYYY-MM value for a month <input>; callers
-// use this only to default which precision a booking-date form starts on,
+// use this only to default which precision the trip-start form starts on,
 // never to fabricate a value.
 export function tripTravelDatesMonthName(tripContext) {
   const raw = tripContext?.[TRIP_CONTEXT_KEYS.TRAVEL_DATES];
@@ -70,16 +54,4 @@ export function tripTravelDatesMonthName(tripContext) {
   const lower = raw.toLowerCase();
   const match = MONTH_NAMES.find(month => lower.includes(month));
   return match ? match[0].toUpperCase() + match.slice(1) : null;
-}
-
-// TWM-201: the post-freeze booking-date precision the traveler confirmed via
-// the Bookings date-update flow — Backend-owned (written only by the
-// update_booking_dates trip command), never UI-synthesized. Shape:
-// { precision: 'exact', departure_date: 'YYYY-MM-DD', return_date?: 'YYYY-MM-DD' } or
-// { precision: 'month', departure_month: 'YYYY-MM' }. return_date is
-// optional and only ever present alongside departure_date. null when the
-// traveler has never set one.
-export function tripBookingDateContext(tripContext) {
-  const value = tripContext?.[TRIP_CONTEXT_KEYS.BOOKING_DATES];
-  return value && typeof value === 'object' ? value : null;
 }

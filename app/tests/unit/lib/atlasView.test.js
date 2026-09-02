@@ -42,67 +42,30 @@ describe('trustStripCounts', () => {
   });
 });
 
+// TWM-216: the confirmed-logistics anchor concept is gone; the rollup is
+// driven entirely by Atlas's own per-item booking_readiness label.
 describe('bookingReadinessRollup', () => {
-  const days = [
-    { day_number: 1, timeline: [{ title: 'Flight', requires_advance_booking: true }, { title: 'Walk', requires_advance_booking: false }] },
-    { day_number: 2, timeline: [{ title: 'Train', requires_advance_booking: true }] },
-  ];
-
-  it('counts a bookable item as ready only when a confirmed anchor exists for that day — not from Atlas\'s own booking_readiness label', () => {
-    const anchors = [{ id: 'a1', type: 'transport', day_number: 1 }];
-    expect(bookingReadinessRollup(days, anchors)).toEqual({ ready: 1, total: 2 });
+  it('counts a bookable item as ready only when Atlas marked it "suggested"', () => {
+    const days = [
+      { day_number: 1, timeline: [
+        { title: 'Flight', requires_advance_booking: true, booking_readiness: 'suggested' },
+        { title: 'Walk', requires_advance_booking: false },
+      ] },
+      { day_number: 2, timeline: [{ title: 'Train', requires_advance_booking: true, booking_readiness: 'needs_advance_booking' }] },
+    ];
+    expect(bookingReadinessRollup(days)).toEqual({ ready: 1, total: 2 });
   });
 
-  it('is 0 of N when nothing is confirmed yet', () => {
-    expect(bookingReadinessRollup(days, [])).toEqual({ ready: 0, total: 2 });
+  it('is 0 of N when every bookable item still needs attention', () => {
+    const days = [
+      { day_number: 1, timeline: [{ title: 'Flight', requires_advance_booking: true, booking_readiness: 'unresolved' }] },
+      { day_number: 2, timeline: [{ title: 'Train', requires_advance_booking: true, booking_readiness: 'needs_advance_booking' }] },
+    ];
+    expect(bookingReadinessRollup(days)).toEqual({ ready: 0, total: 2 });
   });
 
   it('is 0 of 0 when nothing on the trip requires advance booking', () => {
     const noBookable = [{ day_number: 1, timeline: [{ title: 'Walk', requires_advance_booking: false }] }];
-    expect(bookingReadinessRollup(noBookable, [])).toEqual({ ready: 0, total: 0 });
-  });
-
-  // TWM-198/TWM-209: exact board_item_id matching, once an anchor carries one.
-  describe('board_item_id exact matching (TWM-209)', () => {
-    // Two bookable items on the same day — the real case day-only matching
-    // could get wrong (confirming one falsely "readies" the other too).
-    const twoBookableSameDay = [
-      { day_number: 1, timeline: [
-        { title: 'Flight', requires_advance_booking: true },
-        { title: 'Safari', requires_advance_booking: true },
-      ] },
-    ];
-
-    it('marks only the exact matching item ready when the anchor carries a board_item_id', () => {
-      // index 0 on day 1 -> "trip-1:1:0" (the Flight, not the Safari).
-      const anchors = [{ id: 'a1', type: 'transport', day_number: 1, board_item_id: 'trip-1:1:0' }];
-      expect(bookingReadinessRollup(twoBookableSameDay, anchors, 'trip-1')).toEqual({ ready: 1, total: 2 });
-    });
-
-    it('never lets a board_item_id-carrying anchor satisfy a different same-day item via day-only fallback', () => {
-      // Anchor's board_item_id points at index 1 (Safari) — Flight (index 0)
-      // must stay unready, unlike the old day-only behavior which would
-      // have marked both ready off a single same-day anchor.
-      const anchors = [{ id: 'a1', type: 'transport', day_number: 1, board_item_id: 'trip-1:1:1' }];
-      expect(bookingReadinessRollup(twoBookableSameDay, anchors, 'trip-1')).toEqual({ ready: 1, total: 2 });
-    });
-
-    it('falls back to day-only matching only for an anchor with no board_item_id at all (legacy data)', () => {
-      const anchors = [{ id: 'a1', type: 'transport', day_number: 1 }];
-      // Legacy anchor carries no board_item_id, so it satisfies day 1 by the
-      // original day-only rule — both same-day items read ready, same as
-      // pre-TWM-209 behavior for anchors without one.
-      expect(bookingReadinessRollup(twoBookableSameDay, anchors, 'trip-1')).toEqual({ ready: 2, total: 2 });
-    });
-
-    it('a mix of one exact-matching anchor and one legacy anchor does not double-count', () => {
-      const anchors = [
-        { id: 'a1', type: 'transport', day_number: 1, board_item_id: 'trip-1:1:0' },
-        { id: 'a2', type: 'activity', day_number: 1 },
-      ];
-      // Legacy anchor's day-only match already covers both items; adding
-      // the exact-matching one on top must not change the total ready count.
-      expect(bookingReadinessRollup(twoBookableSameDay, anchors, 'trip-1')).toEqual({ ready: 2, total: 2 });
-    });
+    expect(bookingReadinessRollup(noBookable)).toEqual({ ready: 0, total: 0 });
   });
 });

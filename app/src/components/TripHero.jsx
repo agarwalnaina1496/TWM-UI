@@ -7,18 +7,18 @@ const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', curre
 // exist on AtlasTripSummary (the real field is num_travelers) — it always
 // silently fell back to a hardcoded 2 regardless of the real count.
 //
-// TWM-213/TWM-215 (reverted TWM-215 wiring): TripHero is an itinerary-plan
-// summary, not a booking surface -- it must only ever reflect what Atlas
-// actually planned around (trip_summary.num_travelers, trip_summary.date_range),
-// never the exact traveler_composition/booking_dates a traveler later
-// confirms purely for booking-search precision. Those two kinds of fact
-// have different lifecycles (frozen plan vs. freely-refinable booking
-// detail) and belong on different surfaces (here vs. BookingSummaryStrip);
-// showing the booking-precision value here either looked like the
-// itinerary itself had changed when it hadn't, or went stale/contradicted
-// the plan the moment a traveler picked booking dates spanning a different
-// number of days than trip_duration. No prop threading needed here either
-// way -- both facts already live on finalItinerary.trip_summary.
+// TWM-213/TWM-215/TWM-216: TripHero is an itinerary-plan summary, not a
+// booking surface -- it must only ever reflect what Atlas actually planned
+// around (trip_summary.num_travelers, trip_summary.date_range), never the
+// structured booking_setup.party / booking_setup.start a traveler later sets
+// purely for booking-search precision. Those two kinds of fact have
+// different lifecycles (frozen plan vs. freely-refinable booking detail)
+// and belong on different surfaces (here vs. Overview's ScheduleStrip);
+// showing the booking-precision value here either looked like the itinerary
+// itself had changed when it hadn't, or went stale/contradicted the plan
+// the moment a traveler picked a start date spanning a different number of
+// days than trip_duration. No prop threading needed either way -- both
+// facts already live on finalItinerary.trip_summary.
 export default function TripHero({ finalItinerary, actions = null }) {
   const { trip_summary: summary, budget_summary: budget, days } = finalItinerary;
   const dates = tripDatesLabel(days, summary.date_range);
