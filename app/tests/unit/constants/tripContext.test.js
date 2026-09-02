@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   TRIP_CONTEXT_KEYS,
   tripOriginCity,
-  tripTravelerComposition,
   tripTravelerCount,
   tripTravelDatesMonthName,
   travelerCompositionTotal,
@@ -64,24 +63,22 @@ describe('tripTravelerCount', () => {
   });
 });
 
-// tripTravelerComposition reads the Backend-owned, structured
-// adult/child/infant composition — set only via update_traveler_composition,
-// never Scout/Meridian/Guide extraction. Same structured-precise-counterpart
-// role as tripBookingDateContext plays for dates.
-describe('tripTravelerComposition', () => {
-  it('reads the canonical structured composition', () => {
-    const tripContext = { traveler_composition: { adults: 2, children: 1, infants: 1 } };
-    expect(tripTravelerComposition(tripContext)).toEqual({ adults: 2, children: 1, infants: 1 });
-    expect(travelerCompositionTotal(tripTravelerComposition(tripContext))).toBe(4);
+describe('travelerCompositionTotal', () => {
+  it('sums a structured party', () => {
+    expect(travelerCompositionTotal({ adults: 2, children: 1, infants: 1 })).toBe(4);
   });
 
-  it('never reads the loose num_travelers key', () => {
-    expect(tripTravelerComposition({ num_travelers: { adults: 2, children: 0, infants: 0 } })).toBeNull();
+  it('is null for a missing party', () => {
+    expect(travelerCompositionTotal(null)).toBeNull();
   });
+});
 
-  it('is null for missing or malformed compositions', () => {
-    expect(tripTravelerComposition({})).toBeNull();
-    expect(tripTravelerComposition({ traveler_composition: { adults: 0, children: 2, infants: 0 } })).toBeNull();
-    expect(tripTravelerComposition({ traveler_composition: { adults: 2, children: '1', infants: 0 } })).toBeNull();
+// TWM-216: booking_dates / traveler_composition no longer live in
+// trip_context — the calendar anchor and structured party moved to the
+// booking_setup state branch (see constants/bookingSetup.js).
+describe('TRIP_CONTEXT_KEYS', () => {
+  it('no longer exposes booking_dates or traveler_composition', () => {
+    expect(TRIP_CONTEXT_KEYS.BOOKING_DATES).toBeUndefined();
+    expect(TRIP_CONTEXT_KEYS.TRAVELER_COMPOSITION).toBeUndefined();
   });
 });

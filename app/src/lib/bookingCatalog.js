@@ -405,51 +405,25 @@ export function recommendedMode(feasibleOptions) {
 // guarantees the two are mutually exclusive and validated (YYYY-MM-DD /
 // YYYY-MM); this function just passes through whichever is present, or
 // both null when Atlas didn't have confirmed precision for that leg.
-// bookingDateOverride (TWM-201): the traveler's own post-freeze booking-date
-// update (trip_context.booking_dates, via tripBookingDateContext) — applied
-// only as a fallback when a leg has no structured Atlas-provided date of its
-// own. Atlas's per-leg departure_date/departure_month still wins when
-// present, since it's a more specific, itinerary-grounded signal than the
-// trip-level precision the traveler set for booking search alone; this
-// override exists purely to give booking search a starting precision when
-// Atlas never supplied one, never to overwrite what Atlas already knows.
 //
-// originCity (PR review, TWM-201): a single exact date is not route-safe on
-// a gateway trip with an independent outbound and return leg (see
-// gatewayLegs below) — applying the same date to both would confidently
-// misdate the return search. For exact precision, departure_date is only
-// ever applied to the outbound-from-origin leg (leg.from === originCity)
-// and return_date only to the return-to-origin leg (leg.to === originCity);
-// a leg on neither boundary gets no exact-date override at all. Month
-// precision stays a single coarse window applied to any dateless leg
-// regardless of direction — that scope was never in question on review.
-export function transportLegs(days, bookingDateOverride, originCity) {
-  const overrideMonth = bookingDateOverride?.precision === 'month' ? bookingDateOverride.departure_month : null;
-  const outboundOverrideDate = bookingDateOverride?.precision === 'exact' ? bookingDateOverride.departure_date : null;
-  const inboundOverrideDate = bookingDateOverride?.precision === 'exact' ? (bookingDateOverride.return_date ?? null) : null;
+// TWM-216: the trip-level date fallback (the traveler's calendar anchor and
+// per-leg search-date preferences) is resolved server-side by the Trip
+// Board now — each transport item arrives with its effective
+// departure_date/departure_month plus a date_source. TripDashboard builds
+// the transport drawer's `leg` straight from that Board item, so this
+// helper only ever needs Atlas's own structured per-item value.
+export function transportLegs(days) {
   const movements = (days || []).flatMap(day =>
     (day.timeline || [])
       .filter(item => item.kind === 'TRAVEL' && item.from_city && item.to_city)
-      .map(item => {
-        const departureDate = item.departure_date ?? null;
-        const departureMonth = item.departure_month ?? null;
-        const hasOwnDate = departureDate != null || departureMonth != null;
-        if (hasOwnDate) {
-          return { from: item.from_city, to: item.to_city, departureDate, departureMonth };
-        }
-        const isOutboundGateway = originCity != null && item.from_city === originCity;
-        const isInboundGateway = originCity != null && item.to_city === originCity;
-        const exactOverride = isOutboundGateway ? outboundOverrideDate : (isInboundGateway ? inboundOverrideDate : null);
-        return {
-          from: item.from_city,
-          to: item.to_city,
-          departureDate: exactOverride,
-          departureMonth: exactOverride ? null : overrideMonth,
-        };
-      })
+      .map(item => ({
+        from: item.from_city,
+        to: item.to_city,
+        departureDate: item.departure_date ?? null,
+        departureMonth: item.departure_month ?? null,
+      }))
   );
-  const legs = movements.map((movement, i) => ({ id: `leg-${i}`, ...movement }));
-  return legs;
+  return movements.map((movement, i) => ({ id: `leg-${i}`, ...movement }));
 }
 
 // TWM-195 (MVP scope narrowing): Bookings Transport is gateway-only —
@@ -488,10 +462,12 @@ export function gatewayLegs(legs, originCity) {
   return gateways;
 }
 
-// Approved stay partners (twm/schemas/trusted_action.py's
-// _ALLOWED_PARTNERS_BY_DOMAIN["stay"]), capped to 3 so the Bookings tab
-// still shows a tiered comparison rather than every approved partner.
-const STAY_PARTNERS = ['hotellook', 'booking_com', 'agoda'];
+// Stay partners are ordered by the confirmed capability matrix from
+// TWM-216: Booking.com has the most broadly useful destination search,
+// Agoda is shown when Backend has verified destination metadata, and
+// ixigo is the browse fallback. The drawer filters out no-capability
+// statuses rather than rendering broken or speculative cards.
+const STAY_PARTNERS = ['booking_com', 'agoda', 'ixigo'];
 // TWM-196: exported so TripDashboard.jsx can build the flight affiliate
 // CTA's label from the Backend-returned partner name (option.partner)
 // instead of a hardcoded partner name — a future partner change on the
@@ -502,6 +478,9 @@ export const PARTNER_LABEL = {
 
 async function resolveStayOption(tripId, stay, partner, travelerComposition) {
   const name = `${stay.location} — ${PARTNER_LABEL[partner] || partner}`;
+  const checkoutDate = stay.checkoutDate || (stay.departureDate && stay.nights
+    ? addDaysIso(stay.departureDate, stay.nights)
+    : null);
   try {
     const result = await resolveTrustedAction(tripId, {
       [TRUSTED_ACTION_KEYS.ACTION_TYPE]: 'SEARCH_REDIRECT',
@@ -509,6 +488,10 @@ async function resolveStayOption(tripId, stay, partner, travelerComposition) {
       [TRUSTED_ACTION_KEYS.DESTINATION]: stay.location,
       [TRUSTED_ACTION_KEYS.PREFERRED_PARTNER]: partner,
       ...(stay.departureDate ? { [TRUSTED_ACTION_KEYS.DEPARTURE_DATE]: stay.departureDate } : {}),
+      ...(checkoutDate ? {
+        [TRUSTED_ACTION_KEYS.RETURN_DATE]: checkoutDate,
+        [TRUSTED_ACTION_KEYS.TRIP_SHAPE]: 'round_trip',
+      } : {}),
       ...(travelerComposition ? {
         [TRUSTED_ACTION_KEYS.TRAVELER_COUNT]: travelerComposition.adults
           + travelerComposition.children
@@ -517,7 +500,16 @@ async function resolveStayOption(tripId, stay, partner, travelerComposition) {
     });
     if (result.status === 'resolved') {
       const action = result.action;
-      return { name, status: 'resolved', url: action.target?.target_url ?? null, affiliateDisclosure: !!action.affiliate_disclosure };
+      return {
+        name,
+        partner: action.target?.partner ?? partner,
+        status: 'resolved',
+        url: action.target?.target_url ?? null,
+        affiliateDisclosure: !!action.affiliate_disclosure,
+        capability: action.capability ?? null,
+        ctaLabel: action.cta_label ?? 'Search stays',
+        capabilityNote: action.capability_note ?? null,
+      };
     }
     return { name, status: result.status };
   } catch (error) {
@@ -525,15 +517,17 @@ async function resolveStayOption(tripId, stay, partner, travelerComposition) {
   }
 }
 
-// Async: resolves the approved stay partners in parallel for one stay leg.
-// TWM-195 review comment (blocker): NOT currently called from
-// TripDashboard.jsx — stay/hotel affiliate resolution is out of scope for
-// this first mode-visibility slice, and Backend's trusted-action readiness
-// currently requires route/date/traveler fields a stay leg doesn't
-// genuinely have, so calling this eagerly produced noisy missing_input
-// responses. Left intact (not deleted) for the future hotel/stay affiliate
-// story to wire back in.
+function addDaysIso(isoDate, dayCount) {
+  const parsed = new Date(`${isoDate}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  parsed.setUTCDate(parsed.getUTCDate() + dayCount);
+  return parsed.toISOString().slice(0, 10);
+}
+
+// Async: resolves confirmed stay provider capabilities in parallel. Hidden
+// providers are only those with no resolved URL/capability from Backend.
 export async function stayOptionsFor(tripId, stay, travelerComposition) {
-  return Promise.all(STAY_PARTNERS.map(partner => resolveStayOption(tripId, stay, partner, travelerComposition)));
+  const options = await Promise.all(STAY_PARTNERS.map(partner => resolveStayOption(tripId, stay, partner, travelerComposition)));
+  return options.filter(option => option.status === 'resolved' && option.url);
 }
 

@@ -12,8 +12,8 @@ export function timelineIcon(kind) {
 // count when neither is known yet. The label itself adapts too — "Travel
 // month" when all we have is a month/window, "Trip dates" otherwise.
 // TWM-215: no longer takes boardDays -- those per-day dates are computed
-// from booking_dates (exact booking-precision), not from anything Atlas
-// actually planned around. Preferring them here made TripHero silently
+// from booking_setup.start (exact booking-precision), not from anything
+// Atlas actually planned around. Preferring them here made TripHero silently
 // switch from Atlas's own planning-window label to a booking-precision
 // value the moment a traveler set exact dates, even when those dates
 // span a different number of days than trip_duration -- see TripHero's
@@ -73,17 +73,6 @@ export function dayRangeLabel(dayNumbers) {
   return `Day ${dayNumbers[0]}–${dayNumbers[dayNumbers.length - 1]}`;
 }
 
-// Confirmed logistics anchors (application-owned, twm/schemas/logistics.py)
-// are shown as their own list — never fuzzy-matched onto specific Atlas
-// timeline items, which have no stable identity across regenerations.
-export function anchorsForDay(anchors, dayNumber) {
-  return (anchors || []).filter(anchor => anchor.day_number === dayNumber);
-}
-
-export function anchorsByType(anchors, type) {
-  return (anchors || []).filter(anchor => anchor.type === type);
-}
-
 // TWM-213: reinstated (previously removed as dead code on this PR, then
 // needed again) as the honest-display fallback source ahead of the raw
 // trip_context.num_travelers string. Atlas already resolves a qualitative
@@ -120,34 +109,17 @@ export function trustStripCounts(finalItinerary, result) {
   };
 }
 
-// A booking-readiness rollup ("N of M bookable items ready") — a timeline
-// item is bookable when it requires_advance_booking; it's "ready" once a
-// confirmed logistics anchor exists for it (the real, application-owned
-// signal a booking was actually handled — never inferred from Atlas's own
-// booking_readiness label, which only reflects whether Atlas thinks the item
-// is suggestable, not whether the traveler actually booked anything).
-//
-// TWM-198/TWM-209: matches an anchor to its exact item via board_item_id
-// (`${tripId}:${day_number}:${timelineIndex}` — the same derivation
-// twm/services/trip_board/service.py uses for TripBoardItem.id) when the
-// anchor carries one, so two same-day bookable items are never confused
-// with each other. Falls back to the original day-only match only for an
-// anchor with no board_item_id at all (legacy anchor data, or any future
-// confirm_logistics caller that doesn't send one) — never the reverse, so
-// an anchor that DOES carry a board_item_id can't accidentally satisfy a
-// different same-day item just because both are on that day.
-export function bookingReadinessRollup(days, anchors, tripId) {
+// A booking-readiness rollup ("N of M bookable items need attention") driven
+// entirely by Atlas's own per-item booking_readiness label (TWM-216 — the
+// confirmed-logistics anchor concept is gone; TWM never tracks whether a
+// traveler actually booked). A timeline item counts toward `total` when it
+// requires_advance_booking; it's "handled" when Atlas marked it `suggested`
+// (it has a concrete, low-friction suggestion), and still "open" when Atlas
+// marked it `needs_advance_booking` or `unresolved`.
+export function bookingReadinessRollup(days) {
   const bookableItems = (days || []).flatMap(day =>
-    (day.timeline || []).map((item, index) => ({
-      ...item,
-      day_number: day.day_number,
-      board_item_id: `${tripId}:${day.day_number}:${index}`,
-    })).filter(item => item.requires_advance_booking)
+    (day.timeline || []).filter(item => item.requires_advance_booking)
   );
-  const legacyAnchors = (anchors || []).filter(anchor => !anchor.board_item_id);
-  const ready = bookableItems.filter(item =>
-    (anchors || []).some(anchor => anchor.board_item_id && anchor.board_item_id === item.board_item_id) ||
-    anchorsForDay(legacyAnchors, item.day_number).length > 0
-  ).length;
+  const ready = bookableItems.filter(item => item.booking_readiness === 'suggested').length;
   return { ready, total: bookableItems.length };
 }

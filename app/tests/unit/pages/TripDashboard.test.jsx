@@ -4,7 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TripDashboard from '../../../src/pages/TripDashboard.jsx';
 import { transportLegs, gatewayLegs } from '../../../src/lib/bookingCatalog.js';
-import { tripOriginCity, tripBookingDateContext } from '../../../src/constants/tripContext.js';
+import { tripOriginCity } from '../../../src/constants/tripContext.js';
+import { bookingSetupStart, bookingSetupSearchPref } from '../../../src/constants/bookingSetup.js';
 
 let commandSnapshot;
 let sendTripCommand;
@@ -113,12 +114,11 @@ function atlasResult(overrides = {}) {
 // commandSnapshot — only the pointer (status/current_version.version) does.
 // The body itself comes from a lazily-fetched GET /trips/{id}/itinerary,
 // mocked below via `itineraryFetchResponse`.
-function readyItineraryState({ version = 1, history = [], proposedRevision = null } = {}) {
+function readyItineraryState({ version = 1, history = [] } = {}) {
   return {
     status: 'ready',
     current_version: { version, source_guide_revision: 3 },
     history,
-    proposed_revision: proposedRevision,
   };
 }
 
@@ -126,7 +126,7 @@ function readyItineraryState({ version = 1, history = [], proposedRevision = nul
 // every fixture below is exercising the post-approval Atlas contract, so
 // frozen_plan defaults present here (a dedicated thin-state describe block
 // below covers the pre-frozen case explicitly).
-function snapshotWith(itineraryState, { anchors = [], plannerState } = {}, { trip_context: tripContext = {} } = {}) {
+function snapshotWith(itineraryState, { plannerState, bookingSetup } = {}, { trip_context: tripContext = {} } = {}) {
   return {
     id: 'trip-1',
     version: 1,
@@ -135,17 +135,8 @@ function snapshotWith(itineraryState, { anchors = [], plannerState } = {}, { tri
       trip_context: tripContext,
       planner_state: plannerState ?? { frozen_plan: { guide_revision: 3, guide_state: {} } },
       itinerary_state: itineraryState,
-      logistics_state: { anchors },
+      ...(bookingSetup ? { booking_setup: bookingSetup } : {}),
     },
-  };
-}
-
-function anchor(overrides = {}) {
-  return {
-    id: 'anchor-1', type: 'transport', label: 'Delhi to Rishikesh arrival',
-    detail: 'Confirmed arrival at 2:00 PM.', day_number: 1, reference: 'PNR-123', notes: null,
-    confirmed_at_version: 1,
-    ...overrides,
   };
 }
 
@@ -176,16 +167,56 @@ let itineraryFetchResponse;
 // replacing the earlier ixigo placeholder — matches the real Backend
 // contract (twm/schemas/trusted_action.py's
 // _ALLOWED_PARTNERS_BY_DOMAIN["flight"]).
-function resolvedActionResponse({ affiliate = true } = {}) {
+function resolvedActionResponse({
+  affiliate = true,
+  partner = 'aviasales',
+  url = 'https://www.aviasales.com/search',
+  capability = 'prefilled_search',
+  ctaLabel = 'Search options',
+  capabilityNote = 'Search opens on the selected provider.',
+} = {}) {
   return {
     status: 'resolved',
     generated_at: '2026-01-01T00:00:00.000Z',
     action: {
       action_type: 'SEARCH_REDIRECT', domain: 'flight',
-      target: { partner: 'aviasales', path: 'search', query_params: {}, target_url: 'https://www.aviasales.com/search' },
-      internal_capability: null, affiliate_disclosure: affiliate, generated_at: '2026-01-01T00:00:00.000Z',
+      target: { partner, path: 'search', query_params: {}, target_url: url },
+      internal_capability: null, affiliate_disclosure: affiliate,
+      capability, cta_label: ctaLabel, capability_note: capabilityNote,
+      generated_at: '2026-01-01T00:00:00.000Z',
     },
   };
+}
+
+function stayActionResponse(partner) {
+  if (partner === 'booking_com') {
+    return resolvedActionResponse({
+      affiliate: false,
+      partner,
+      url: 'https://www.booking.com/searchresults.html?ss=Rishikesh',
+      capability: 'destination_search',
+      ctaLabel: 'Search Booking.com',
+      capabilityNote: 'Destination search opens on Booking.com; choose exact dates there if needed.',
+    });
+  }
+  if (partner === 'agoda') {
+    return resolvedActionResponse({
+      affiliate: false,
+      partner,
+      url: 'https://www.agoda.com/search?city=11304',
+      capability: 'known_destination_search',
+      ctaLabel: 'Search Agoda',
+      capabilityNote: 'Known Agoda city metadata opens the correct destination search.',
+    });
+  }
+  return resolvedActionResponse({
+    affiliate: false,
+    partner: 'ixigo',
+    url: 'https://www.ixigo.com/hotels/hotels-in-rishikesh',
+    capability: 'destination_redirect',
+    ctaLabel: 'Browse ixigo hotels',
+    capabilityNote: 'ixigo opens the destination hotel page.',
+  });
 }
 
 // TWM-146: default flight-search fixture — clarification_needed, since the
@@ -227,50 +258,105 @@ function feasibleAssessmentResponse() {
 // here only for test-mock fidelity, not by the component under test any
 // more) — so a test only has to say what feasibility a gateway leg should
 // carry, not hand-author a full board payload.
-function boardResponseFor(itineraryResult, tripContext, feasibility = feasibleAssessmentResponse()) {
+function boardResponseFor(itineraryResult, tripState, feasibility = feasibleAssessmentResponse()) {
   const days = itineraryResult.result.final_itinerary.days;
-  const originCity = tripOriginCity(tripContext);
-  const bookingDateContext = tripBookingDateContext(tripContext);
-  const allLegs = transportLegs(days, bookingDateContext, originCity);
+  const originCity = tripOriginCity(tripState?.trip_context);
+  const start = bookingSetupStart(tripState);
+  const startDate = start?.precision === 'exact' ? start.date : null;
+  const startMonth = start?.precision === 'month' ? start.month : null;
+  const allLegs = transportLegs(days);
   const gatewayKeys = new Set(gatewayLegs(allLegs, originCity).map(leg => `${leg.from}→${leg.to}`));
   const legByKey = Object.fromEntries(allLegs.map(leg => [`${leg.from}→${leg.to}`, leg]));
-  const tripStart = bookingDateContext?.precision === 'exact'
-    ? new Date(`${bookingDateContext.departure_date}T00:00:00Z`)
-    : null;
+  const addDays = (iso, n) => new Date(new Date(`${iso}T00:00:00Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10);
+  const dayDate = n => (startDate ? addDays(startDate, n - 1) : null);
+  const boardDays = days.map(day => ({
+    ...day,
+    date: dayDate(day.day_number),
+    items: day.timeline.map((item, index) => {
+      const id = `test-trip:${day.day_number}:${index}`;
+      if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
+        return { ...item, id, is_gateway_leg: false, feasible_modes: null, date_precision: null, date_source: null };
+      }
+      const key = `${item.from_city}→${item.to_city}`;
+      const isGateway = gatewayKeys.has(key);
+      const leg = legByKey[key] || {};
+      const override = bookingSetupSearchPref(tripState, 'transport', id);
+      let departure_date = null, departure_month = null, date_precision = 'flexible', date_source = 'none';
+      if (leg.departureDate) { departure_date = leg.departureDate; date_precision = 'exact'; date_source = 'itinerary'; }
+      else if (leg.departureMonth) { departure_month = leg.departureMonth; date_precision = 'month'; date_source = 'itinerary'; }
+      else if (override?.precision === 'exact') { departure_date = override.date; date_precision = 'exact'; date_source = 'override'; }
+      else if (override?.precision === 'month') { departure_month = override.month; date_precision = 'month'; date_source = 'override'; }
+      else if (dayDate(day.day_number)) { departure_date = dayDate(day.day_number); date_precision = 'exact'; date_source = 'anchor'; }
+      else if (startMonth) { departure_month = startMonth; date_precision = 'month'; date_source = 'anchor'; }
+      return {
+        ...item, id,
+        is_gateway_leg: isGateway,
+        feasible_modes: isGateway ? (feasibility?.modes || []) : null,
+        date_precision, departure_date, departure_month, date_source,
+      };
+    }),
+  }));
+  const staySegments = [];
+  let current = null;
+  for (const day of boardDays) {
+    for (const item of day.items.filter(entry => entry.kind === 'STAY')) {
+      if (current && current.location === item.location && day.day_number === current.end_day_number + 1) {
+        current.end_day_number = day.day_number;
+        current.board_item_ids.push(item.id);
+        continue;
+      }
+      if (current) staySegments.push(current);
+      current = {
+        location: item.location,
+        start_day_number: day.day_number,
+        end_day_number: day.day_number,
+        board_item_ids: [item.id],
+      };
+    }
+  }
+  if (current) staySegments.push(current);
+  const finalizedStaySegments = staySegments.map(segment => {
+    const nights = segment.end_day_number - segment.start_day_number + 1;
+    const id = `test-trip:stay:${segment.start_day_number}:${segment.end_day_number}:${String(segment.location).toLowerCase().replace(/\s+/g, '-')}`;
+    const override = bookingSetupSearchPref(tripState, 'stay', id);
+    const anchoredCheckin = dayDate(segment.start_day_number);
+    let checkin_date = null, checkout_date = null, departure_month = null, date_precision = 'flexible', date_source = 'none';
+    if (override?.precision === 'exact') {
+      checkin_date = override.date; checkout_date = addDays(override.date, nights);
+      date_precision = 'exact'; date_source = 'override';
+    } else if (override?.precision === 'month') {
+      departure_month = override.month; date_precision = 'month'; date_source = 'override';
+    } else if (anchoredCheckin) {
+      checkin_date = anchoredCheckin; checkout_date = addDays(anchoredCheckin, nights);
+      date_precision = 'exact'; date_source = 'anchor';
+    } else if (startMonth) {
+      departure_month = startMonth; date_precision = 'month'; date_source = 'anchor';
+    }
+    return {
+      id, location: segment.location,
+      start_day_number: segment.start_day_number, end_day_number: segment.end_day_number,
+      nights, date_precision, checkin_date, checkout_date, departure_month, date_source,
+      board_item_ids: segment.board_item_ids,
+    };
+  });
   return {
     version: itineraryResult.version,
-    days: days.map(day => ({
-      ...day,
-      date: tripStart
-        ? new Date(tripStart.getTime() + (day.day_number - 1) * 86_400_000).toISOString().slice(0, 10)
-        : null,
-      items: day.timeline.map(item => {
-        if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
-          return { ...item, is_gateway_leg: false, feasible_modes: null, date_precision: null };
-        }
-        const key = `${item.from_city}→${item.to_city}`;
-        const isGateway = gatewayKeys.has(key);
-        const leg = legByKey[key] || {};
-        return {
-          ...item,
-          is_gateway_leg: isGateway,
-          feasible_modes: isGateway ? (feasibility?.modes || []) : null,
-          date_precision: leg.departureDate ? 'exact' : leg.departureMonth ? 'month' : 'flexible',
-          departure_date: leg.departureDate || null,
-          departure_month: leg.departureMonth || null,
-        };
-      }),
-    })),
+    days: boardDays,
+    stay_segments: finalizedStaySegments,
   };
 }
 
 function defaultFetchMock() {
-  return vi.fn(async (url) => {
+  return vi.fn(async (url, options) => {
     if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
     if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-    if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+    if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-    if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
+    if (url.includes('/trusted-action')) {
+      const body = options?.body ? JSON.parse(options.body) : {};
+      if (body.domain === 'stay') return jsonResponse(stayActionResponse(body.preferred_partner));
+      return jsonResponse(resolvedActionResponse());
+    }
     if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
     return jsonResponse({});
   });
@@ -400,7 +486,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       id: 'trip-2', version: 1,
       trip_state: {
         trip_context: {}, planner_state: { frozen_plan: { guide_revision: 3, guide_state: {} } },
-        itinerary_state: readyItineraryState(), logistics_state: { anchors: [] },
+        itinerary_state: readyItineraryState(),
       },
     };
     itineraryFetchResponse = {
@@ -476,7 +562,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
         if (url.includes('/flight-search')) {
@@ -526,7 +612,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
         if (url.includes('/flight-search')) {
           return jsonResponse({
@@ -568,7 +654,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
         if (url.includes('/flight-search')) {
@@ -592,7 +678,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
         if (url.includes('/flight-search')) {
@@ -621,7 +707,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async url => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, flightOnlyAssessment));
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, flightOnlyAssessment));
         if (url.includes('/trusted-action/feasibility')) return jsonResponse(flightOnlyAssessment);
         if (url.includes('/trusted-action')) return jsonResponse({ status: 'missing_input', generated_at: '2026-01-01T00:00:00.000Z', missing_input: { missing_fields: ['origin'], message: 'Tell us the missing details.' } });
         return jsonResponse({});
@@ -632,18 +718,17 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     });
   });
 
-  // TWM-213: the structured, Backend-owned trip_context.traveler_composition
-  // (never the loose conversational num_travelers) is the traveler-count
-  // source for transport CTA payloads. Migrated (TWM-206) to resolve via
-  // the Transport drawer instead of the retired Bookings tab.
-  it('derives traveler_count from canonical trip_context composition for transport CTA payloads', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', traveler_composition: { adults: 2, children: 1, infants: 0 } } });
+  // TWM-216: the structured, Backend-owned booking_setup.party (never the
+  // loose conversational num_travelers) is the traveler-count source for
+  // transport CTA payloads.
+  it('derives traveler_count from canonical booking_setup.party for transport CTA payloads', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { party: { adults: 2, children: 1, infants: 0 } } }, { trip_context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     let capturedBodies = [];
     global.fetch = vi.fn(async (url, options) => {
       if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
       if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-      if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+      if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
       if (url.includes('/trusted-action')) { capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
       if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
       return jsonResponse({});
@@ -685,85 +770,16 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(document.querySelector('a[href^="/logistics"]')).toBeNull();
   });
 
-  it('shows a proposed-revision banner and resolves it via accept', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState({
-      proposedRevision: { version: 2, base_version: 1, affected_days: [1], changes: ['Day 1: updated for confirmed arrival'], triggered_by: { anchor_id: 'a1', type: 'transport', label: 'x' }, result: atlasResult() },
-    }));
-    sendTripCommand = vi.fn(async command => {
-      if (command === 'accept_itinerary_revision') {
-        commandSnapshot = snapshotWith(readyItineraryState({ version: 2 }));
-      }
-      return { message: null, agent_meta: null, trip: commandSnapshot };
-    });
-    const user = userEvent.setup();
-    await readyDashboard();
-    expect(screen.getByText(/This affects Day 1/)).toBeInTheDocument();
-    expect(screen.getByText('Day 1: updated for confirmed arrival')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Accept the changes' }));
-    expect(sendTripCommand).toHaveBeenCalledWith('accept_itinerary_revision');
-    await waitFor(() => expect(screen.queryByText(/This affects Day 1/)).not.toBeInTheDocument());
-  });
-
-  it('keep current discards the proposal without changing the version', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState({
-      proposedRevision: { version: 2, base_version: 1, affected_days: [1], changes: ['Day 1: updated'], triggered_by: { anchor_id: 'a1', type: 'transport', label: 'x' }, result: atlasResult() },
-    }));
-    sendTripCommand = vi.fn(async command => {
-      if (command === 'keep_current_itinerary') {
-        commandSnapshot = snapshotWith(readyItineraryState());
-      }
-      return { message: null, agent_meta: null, trip: commandSnapshot };
-    });
-    const user = userEvent.setup();
-    await readyDashboard();
-    await user.click(screen.getByRole('button', { name: 'Keep current itinerary' }));
-    expect(sendTripCommand).toHaveBeenCalledWith('keep_current_itinerary');
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Accept the changes' })).not.toBeInTheDocument());
-  });
-
-  it('shows an inline error and preserves the banner when accept fails', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState({
-      proposedRevision: { version: 2, base_version: 1, affected_days: [1], changes: ['Day 1: updated'], triggered_by: { anchor_id: 'a1', type: 'transport', label: 'x' }, result: atlasResult() },
-    }));
-    sendTripCommand = vi.fn().mockRejectedValue(new Error('Trip has a newer version.'));
-    const user = userEvent.setup();
-    await readyDashboard();
-    await user.click(screen.getByRole('button', { name: 'Accept the changes' }));
-    await waitFor(() => expect(screen.getByText('Trip has a newer version.')).toBeInTheDocument());
-    expect(screen.getByText(/This affects Day 1/)).toBeInTheDocument();
-  });
-
-  it('places an anchor under the matching day, not other days', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor({ day_number: 2, label: 'Riverside stay' })] });
-    sendTripCommand = vi.fn();
-    const user = userEvent.setup();
-    await readyDashboard();
-    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-    expect(screen.queryByText('Riverside stay')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Day 2/ }));
-    expect(screen.getByText('Riverside stay')).toBeInTheDocument();
-  });
-
-  // TWM-198: a confirmed anchor whose day_number no longer exists in the
-  // current itinerary (regeneration changed the day count) must not become
-  // silently invisible now that the Bookings tab's generic orphan-anchor
-  // catch-all is gone — Overview surfaces it under "Other confirmed items".
-  it('shows an orphaned anchor (day_number no longer in the itinerary) under "Other confirmed items" on Overview', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), {
-      anchors: [anchor({ day_number: 99, label: 'Old riverside stay', detail: 'Riverside Cottage, ₹4,200/night' })],
-    });
+  // TWM-216: the itinerary revision-review flow (confirm_logistics + its
+  // proposed-revision banner + accept/keep) is gone — confirm_logistics was
+  // its only trigger, and nothing else proposes a revision.
+  it('never renders a proposed-revision banner (the flow is removed)', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     await readyDashboard();
-    expect(screen.getByText('Other confirmed items')).toBeInTheDocument();
-    expect(screen.getByText('Old riverside stay')).toBeInTheDocument();
-    expect(screen.getByText('Riverside Cottage, ₹4,200/night')).toBeInTheDocument();
-  });
-
-  it('does not show "Other confirmed items" when every anchor still matches a current day', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor({ day_number: 2, label: 'Riverside stay' })] });
-    sendTripCommand = vi.fn();
-    await readyDashboard();
-    expect(screen.queryByText('Other confirmed items')).not.toBeInTheDocument();
+    expect(screen.queryByText(/This affects Day/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Accept the changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Keep current itinerary' })).not.toBeInTheDocument();
   });
 
   // TWM-175: the Map tab is gone — it was never a real map, just route
@@ -806,7 +822,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
       if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
       if (url.includes('/board')) {
-        const stale = boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse());
+        const stale = boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse());
         return jsonResponse({ ...stale, version: 1 });
       }
       if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
@@ -827,232 +843,95 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // a single shared summary strip at the top of the Transport/Stay drawer
   // (wherever the search actually happens), not inline on the Itinerary
   // item — both are trip-wide facts, never leg- or stay-specific.
-  describe('Booking summary strip — trip dates and travelers (TWM-213)', () => {
-    it('shows "Set trip dates" and "Set trip travelers" inside the Transport drawer when neither is known yet', async () => {
+
+  // TWM-216: the trip calendar anchor (booking_setup.start) and structured
+  // party (booking_setup.party) are edited once, from the Overview schedule
+  // strip — never from inside a per-item drawer. Each drawer gets its own
+  // per-entity date row instead (see the drawer describe blocks below).
+  describe('Overview schedule strip — trip start and party (TWM-216)', () => {
+    it('shows "Set trip start date" and "Set travellers" on Overview when neither is known yet', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      // Atlas's own resolved num_travelers is now a valid fallback source
-      // (see the TripHero/booking-strip approximation tests below) — this
-      // test is specifically the "genuinely nothing known anywhere" case,
-      // so it must override the default fixture's num_travelers: 2.
       itineraryFetchResponse = {
         version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
         result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } }),
       };
       global.fetch = defaultFetchMock();
       sendTripCommand = vi.fn();
-      const user = userEvent.setup();
       await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-
-      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /Transport options/ }));
-
-      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-      expect(within(drawer).getByRole('button', { name: /Set trip dates/ })).toBeInTheDocument();
-      expect(within(drawer).getByRole('button', { name: /Set trip travelers/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Set trip start date/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Set travellers/ })).toBeInTheDocument();
     });
 
-    it('expands the date-edit form inline in the drawer, saves via update_booking_dates, and reflects the saved date on the button', async () => {
+    it('saves the trip start via set_trip_start and reflects it on the strip', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn(async (command, payload) => {
-        expect(command).toBe('update_booking_dates');
-        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-11-01' });
-        commandSnapshot = snapshotWith(
-          readyItineraryState(),
-          {},
-          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01' } } },
-        );
+        expect(command).toBe('set_trip_start');
+        expect(payload.tripStartUpdate).toEqual({ precision: 'exact', date: '2026-11-01' });
+        commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } }, { trip_context: { origin_city: 'Delhi' } });
         return { message: null, agent_meta: null, trip: commandSnapshot };
       });
       const user = userEvent.setup();
       await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /Transport options/ }));
-      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-
-      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
-      expect(within(drawer).getByLabelText('Departure date')).toBeInTheDocument();
-
-      await user.type(within(drawer).getByLabelText('Departure date'), '2026-11-01');
-      await user.click(within(drawer).getByRole('button', { name: 'Save dates' }));
-
-      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
-      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-11-01 · Change/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Set trip start date/ }));
+      const input = await screen.findByLabelText('Trip start date');
+      await user.clear(input);
+      await user.type(input, '2026-11-01');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_trip_start', expect.anything()));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Trip starts: 2026-11-01 . Change/ })).toBeInTheDocument());
     });
 
-    // TWM-215 live-testing finding: the departure/return date pickers and
-    // the month picker had no floor at all -- a traveler could pick and
-    // save a date that had already passed.
-    it('never lets a past date be selected in any of the date-precision inputs', async () => {
+    it('reverts an anchor to flexible via set_trip_start precision=flexible', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } }, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn(async (command, payload) => {
+        expect(command).toBe('set_trip_start');
+        expect(payload.tripStartUpdate).toEqual({ precision: 'flexible' });
+        commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: {} }, { trip_context: { origin_city: 'Delhi' } });
+        return { message: null, agent_meta: null, trip: commandSnapshot };
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Trip starts: 2026-11-01 . Change/ }));
+      await user.click(screen.getByRole('button', { name: 'Make dates flexible' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_trip_start', expect.anything()));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Set trip start date/ })).toBeInTheDocument());
+    });
+
+    it('saves the party via set_party and reflects it on the strip', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /Transport options/ }));
-      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-
-      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
-      const today = new Date().toISOString().slice(0, 10);
-      expect(within(drawer).getByLabelText('Departure date')).toHaveAttribute('min', today);
-      expect(within(drawer).getByLabelText('Return date (optional)')).toHaveAttribute('min', today);
-
-      await user.click(within(drawer).getByRole('radio', { name: 'I only know the month' }));
-      expect(within(drawer).getByLabelText('Travel month')).toHaveAttribute('min', today.slice(0, 7));
-    });
-
-    // TWM-215 live-testing finding: "Set trip dates" used to always show
-    // the exact/month radio choice from scratch, even when the traveler
-    // already named a month in trip_context.travel_dates (e.g. "December"
-    // -- the free-form fact Atlas itself received verbatim) and
-    // booking_dates was simply never confirmed yet -- re-asking "do you
-    // know the month?" when they'd already said so. It now narrows
-    // straight to an exact-date picker, same as an already-saved
-    // booking_dates month would, seeded with a same-year suggestion (no
-    // year was confirmed, so the traveler can freely correct it).
-    it('narrows straight to an exact date, skipping the redundant month choice, when travel_dates already names a month', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', travel_dates: 'December, exact days flexible' } });
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /Transport options/ }));
-      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-
-      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
-      expect(within(drawer).queryByRole('radiogroup', { name: 'Date precision' })).not.toBeInTheDocument();
-      expect(within(drawer).getByText(/Narrowing down December/)).toBeInTheDocument();
-      const currentYear = new Date().getFullYear();
-      expect(within(drawer).getByLabelText('Departure date')).toHaveValue(`${currentYear}-12-01`);
-
-      // The escape hatch still reveals the full mode choice, for a
-      // traveler whose plans genuinely aren't in December after all.
-      await user.click(within(drawer).getByRole('button', { name: /Not in December\? Pick differently/ }));
-      expect(within(drawer).getByRole('radiogroup', { name: 'Date precision' })).toBeInTheDocument();
-    });
-
-    // TWM-215 live-testing finding: the exact/month radio choice used to
-    // render every time, even when a precision was already on file --
-    // confusing when a traveler who already said "I only know the month"
-    // opened "Change" to narrow down an exact date, since it re-asked the
-    // exact/month question from scratch instead of taking that as given.
-    it('narrows a known month to an exact date without re-showing the exact/month choice, but still offers "Change month"', async () => {
-      commandSnapshot = snapshotWith(
-        readyItineraryState(),
-        {},
-        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'month', departure_month: '2026-05' } } },
-      );
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /Transport options/ }));
-      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-
-      await user.click(within(drawer).getByRole('button', { name: /Trip dates: 2026-05 · Change/ }));
-      expect(within(drawer).queryByRole('radiogroup', { name: 'Date precision' })).not.toBeInTheDocument();
-      expect(within(drawer).getByLabelText('Departure date')).toBeInTheDocument();
-      expect(within(drawer).getByRole('button', { name: /Not in this month\? Change month/ })).toBeInTheDocument();
-
-      // The escape hatch genuinely re-opens the mode choice.
-      await user.click(within(drawer).getByRole('button', { name: /Not in this month\? Change month/ }));
-      expect(within(drawer).getByRole('radiogroup', { name: 'Date precision' })).toBeInTheDocument();
-    });
-
-    // PR review, TWM-206 (still applies post-TWM-213): "Change" already
-    // advertises the saved value on its own face -- it must open
-    // pre-filled with that value, not blank, or a traveler adding just a
-    // return date has to retype the departure date from memory before
-    // Save unlocks.
-    it('seeds "Change" with the already-saved date instead of opening blank', async () => {
-      commandSnapshot = snapshotWith(
-        readyItineraryState(),
-        {},
-        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01' } } },
-      );
-      sendTripCommand = vi.fn();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /Transport options/ }));
-      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-
-      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-11-01 · Change/ })).toBeInTheDocument());
-      await user.click(within(drawer).getByRole('button', { name: /Trip dates: 2026-11-01 · Change/ }));
-      expect(within(drawer).getByLabelText('Departure date')).toHaveValue('2026-11-01');
-      expect(within(drawer).getByRole('button', { name: 'Save dates' })).not.toBeDisabled();
-    });
-
-    // PR review, TWM-213: booking_dates carries both departure_date and
-    // return_date -- the Board resolves the inbound gateway leg's own date
-    // to return_date, not departure_date (twm/services/trip_board/
-    // service.py's is_outbound/is_inbound branch). The strip must reflect
-    // whichever this specific drawer's search will actually use, or it
-    // silently shows the outbound date while searching with the return one.
-    it('shows the return date, not the departure date, on the inbound gateway leg\'s drawer', async () => {
-      commandSnapshot = snapshotWith(
-        readyItineraryState(),
-        {},
-        { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01', return_date: '2026-11-05' } } },
-      );
-      sendTripCommand = vi.fn();
-      global.fetch = defaultFetchMock();
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-      const dayNav = screen.getByRole('navigation', { name: 'Select a day' });
-      await user.click(within(dayNav).getByText('2'));
-
-      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /Transport options/ }));
-      const drawer = await screen.findByRole('dialog', { name: /Rishikesh to Delhi/ });
-
-      expect(within(drawer).getByRole('button', { name: /Trip dates: 2026-11-05 · Change/ })).toBeInTheDocument();
-    });
-
-    it('saves traveler composition via update_traveler_composition from the drawer and reflects it on the button', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      // Same "genuinely nothing known yet" override as the test above, so
-      // the button starts as "Set trip travelers" rather than Atlas's
-      // resolved-approximation label.
       itineraryFetchResponse = {
         version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
         result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } }),
       };
       global.fetch = defaultFetchMock();
       sendTripCommand = vi.fn(async (command, payload) => {
-        expect(command).toBe('update_traveler_composition');
-        // Form defaults are adults: 1, children: 0, infants: 0 (the "just
-        // me" case) — submitting without touching any field still exercises
-        // the full save/reflect wiring without fighting jsdom's quirks
-        // around controlled number-input edits.
-        expect(payload.travelerCompositionUpdate).toEqual({ adults: 1, children: 0, infants: 0 });
-        commandSnapshot = snapshotWith(
-          readyItineraryState(),
-          {},
-          { trip_context: { origin_city: 'Delhi', traveler_composition: { adults: 1, children: 0, infants: 0 } } },
-        );
+        expect(command).toBe('set_party');
+        expect(payload.partyUpdate).toEqual({ adults: 1, children: 0, infants: 0 });
+        commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { party: { adults: 1, children: 0, infants: 0 } } }, { trip_context: { origin_city: 'Delhi' } });
         return { message: null, agent_meta: null, trip: commandSnapshot };
       });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Set travellers/ }));
+      await user.click(screen.getByRole('button', { name: 'Save travelers' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_party', expect.anything()));
+      await waitFor(() => expect(screen.getByRole('button', { name: /1 travelers . Change/ })).toBeInTheDocument());
+    });
+
+    it('never renders a trip-wide date or party editor inside a drawer', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
       await user.click(screen.getByRole('button', { name: /Itinerary/ }));
       await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-
-      await user.click(within(drawer).getByRole('button', { name: /Set trip travelers/ }));
-      await user.click(within(drawer).getByRole('button', { name: 'Save travelers' }));
-
-      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_traveler_composition', expect.anything()));
-      await waitFor(() => expect(within(drawer).getByRole('button', { name: /Trip 1 travelers · Change/ })).toBeInTheDocument());
+      expect(within(drawer).queryByRole('button', { name: /trip start/i })).not.toBeInTheDocument();
+      expect(within(drawer).queryByRole('button', { name: /Set travellers/ })).not.toBeInTheDocument();
     });
   });
+
 
   // TWM-206 step 3: Transport is information-dense, so it opens a side
   // drawer instead of expanding inline — dims the Itinerary behind it,
@@ -1072,10 +951,10 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       // Backend's feasibleAssessmentResponse fixture (used by the shared
       // /board mock) returns all four modes feasible for this leg.
       await waitFor(() => expect(within(drawer).getAllByText(/Flight|Train|Bus|Drive/).length).toBeGreaterThan(0));
-      // TWM-213: the date-input form is collapsed by default, only
-      // expanding once the "Set trip dates" trigger is clicked.
-      expect(within(drawer).queryByLabelText('Departure date')).toBeNull();
-      expect(within(drawer).getByRole('button', { name: /Set trip dates/ })).toBeInTheDocument();
+      // TWM-216: the per-leg date form is collapsed by default, only
+      // expanding once "Add exact dates for this search" is clicked.
+      expect(within(drawer).queryByLabelText('Leg date')).toBeNull();
+      expect(within(drawer).getByRole('button', { name: /Add exact dates for this search/ })).toBeInTheDocument();
       // Every mode was feasible for this fixture, so there's nothing left
       // to list in the collapsed "other modes" section.
       expect(within(drawer).queryByText(/not available for this route/i)).toBeNull();
@@ -1090,7 +969,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async (url) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, busOnlyAssessment));
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, busOnlyAssessment));
         if (url.includes('/trusted-action')) return jsonResponse(resolvedActionResponse());
         return jsonResponse({});
       });
@@ -1135,23 +1014,23 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     // those (flexible-precision) options forever after Set-dates saves an
     // exact date for the same leg — the whole point of wiring Set-dates
     // into the drawer's date-prefill is that a later open reflects it.
-    it('refetches transport options after a booking-date save invalidates the drawer cache', async () => {
+    it('refetches transport options after a per-leg date save invalidates the drawer cache', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       let trustedActionCallCount = 0;
       sendTripCommand = vi.fn(async (command, payload) => {
-        expect(command).toBe('update_booking_dates');
-        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-11-01' });
+        expect(command).toBe('set_search_pref');
+        expect(payload.searchPrefUpdate).toEqual({ target_type: 'transport', target_id: 'test-trip:1:0', date: '2026-11-01' });
         commandSnapshot = snapshotWith(
           readyItineraryState(),
-          {},
-          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01' } } },
+          { bookingSetup: { search_prefs: { transports: { 'test-trip:1:0': { precision: 'exact', date: '2026-11-01' } } } } },
+          { trip_context: { origin_city: 'Delhi' } },
         );
         return { message: null, agent_meta: null, trip: commandSnapshot };
       });
       global.fetch = vi.fn(async (url) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action')) { trustedActionCallCount += 1; return jsonResponse(resolvedActionResponse()); }
         if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
         return jsonResponse({});
@@ -1167,14 +1046,14 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       const callCountBeforeDateSave = trustedActionCallCount;
       await user.click(within(drawer).getByRole('button', { name: 'Close transport options' }));
 
-      // TWM-213: Set-dates now lives inside the drawer's summary strip —
-      // reopen it to set the date, same as a traveler would.
+      // TWM-216: the per-leg date affordance lives in the drawer's own date
+      // row — reopen it and set the leg's search date, as a traveler would.
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
       drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
-      await user.type(within(drawer).getByLabelText('Departure date'), '2026-11-01');
-      await user.click(within(drawer).getByRole('button', { name: 'Save dates' }));
-      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
+      await user.click(within(drawer).getByRole('button', { name: /Add exact dates for this search/ }));
+      await user.type(within(drawer).getByLabelText('Leg date'), '2026-11-01');
+      await user.click(within(drawer).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', expect.anything()));
       await user.click(within(drawer).getByRole('button', { name: 'Close transport options' }));
 
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
@@ -1190,24 +1069,25 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     // this leg" -- submitDateEdit's setTransportData({}) cleared the cache
     // but nothing then refetched for the still-open leg, since only a
     // close+reopen (the previous test's flow) used to trigger a refetch.
-    it('refetches transport options after a booking-date save even when the drawer is never closed', async () => {
+    it('refetches transport options after a per-leg date save even when the drawer is never closed', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       let trustedActionCallCount = 0;
       sendTripCommand = vi.fn(async (command, payload) => {
-        expect(command).toBe('update_booking_dates');
-        expect(payload.bookingDateUpdate).toEqual({ departure_date: '2026-11-01' });
+        expect(command).toBe('set_search_pref');
+        expect(payload.searchPrefUpdate).toEqual({ target_type: 'transport', target_id: 'test-trip:1:0', date: '2026-11-01' });
         commandSnapshot = snapshotWith(
           readyItineraryState(),
-          {},
-          { trip_context: { origin_city: 'Delhi', booking_dates: { precision: 'exact', departure_date: '2026-11-01' } } },
+          { bookingSetup: { search_prefs: { transports: { 'test-trip:1:0': { precision: 'exact', date: '2026-11-01' } } } } },
+          { trip_context: { origin_city: 'Delhi' } },
         );
         return { message: null, agent_meta: null, trip: commandSnapshot };
       });
-      global.fetch = vi.fn(async (url) => {
+      const capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action')) { trustedActionCallCount += 1; return jsonResponse(resolvedActionResponse()); }
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action')) { trustedActionCallCount += 1; capturedBodies.push(JSON.parse(options.body)); return jsonResponse(resolvedActionResponse()); }
         if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
         return jsonResponse({});
       });
@@ -1219,34 +1099,38 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
       await waitFor(() => expect(within(drawer).getAllByText(/Flight|Train|Bus|Drive/).length).toBeGreaterThan(0));
+      const countBeforeSave = capturedBodies.length;
 
-      await user.click(within(drawer).getByRole('button', { name: /Set trip dates/ }));
-      await user.type(within(drawer).getByLabelText('Departure date'), '2026-11-01');
-      await user.click(within(drawer).getByRole('button', { name: 'Save dates' }));
-      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_booking_dates', expect.anything()));
+      await user.click(within(drawer).getByRole('button', { name: /Add exact dates for this search/ }));
+      await user.type(within(drawer).getByLabelText('Leg date'), '2026-11-01');
+      await user.click(within(drawer).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', expect.anything()));
 
-      // Without ever closing the drawer, options must still come back --
-      // not a permanent "No bookable transport options for this leg".
+      // Without ever closing the drawer, options come back AND the refetch
+      // sends the just-saved leg date (not the stale open-time value).
       await waitFor(() => expect(within(drawer).queryByText('No bookable transport options for this leg.')).not.toBeInTheDocument());
       expect(within(drawer).getAllByText(/Flight|Train|Bus|Drive/).length).toBeGreaterThan(0);
+      await waitFor(() => expect(
+        capturedBodies.slice(countBeforeSave).some(body => body.departure_date === '2026-11-01')
+      ).toBe(true));
     });
 
     // TWM-215: a search-scoped traveler-count override (e.g. only 3 of 4
     // travelers are on this specific gateway leg) must fetch independently
-    // of the trip-wide default, and must never write traveler_composition
-    // back to trip_context — it only changes what this one search asks for.
-    it('re-searches transport options for an overridden traveler count without touching traveler_composition', async () => {
+    // of the trip-wide default, and must never write booking_setup.party —
+    // it only changes what this one search asks for.
+    it('re-searches transport options for an overridden traveler count without touching booking_setup.party', async () => {
       commandSnapshot = snapshotWith(
         readyItineraryState(),
-        {},
-        { trip_context: { origin_city: 'Delhi', traveler_composition: { adults: 4, children: 0, infants: 0 } } },
+        { bookingSetup: { party: { adults: 4, children: 0, infants: 0 } } },
+        { trip_context: { origin_city: 'Delhi' } },
       );
       sendTripCommand = vi.fn();
       let trustedActionCallCount = 0;
       global.fetch = vi.fn(async (url) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action')) { trustedActionCallCount += 1; return jsonResponse(resolvedActionResponse()); }
         return jsonResponse({});
       });
@@ -1289,34 +1173,42 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
 
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
       expect(within(drawer).getByText('Rishikesh · 2 nights')).toBeInTheDocument();
-      expect(within(drawer).getByText('Rishikesh — Hotellook')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Booking.com')).toBeInTheDocument();
       expect(within(drawer).getByText('Rishikesh — Agoda')).toBeInTheDocument();
+      expect(within(drawer).getByText('Rishikesh — ixigo')).toBeInTheDocument();
+      expect(within(drawer).getByText('Search Agoda ↗')).toBeInTheDocument();
+      expect(within(drawer).getByText('Browse ixigo hotels ↗')).toBeInTheDocument();
     });
 
-    // TWM-215: the same "stays open through a save" bug found on the
-    // Transport drawer, found again separately on the Stay drawer --
-    // submitTravelerEdit's setStayData({}) cleared the cache but nothing
-    // refetched for a Stay drawer left open through that save.
-    it('refetches stay options after a traveler-composition save even when the drawer is never closed', async () => {
+    // TWM-215/TWM-216: a per-segment check-in save from inside the stay
+    // drawer must refetch the still-open drawer's links (submitPrefEdit's
+    // setStayData({}) clears the cache; nothing refetched before this).
+    it('refetches stay options after a per-segment check-in save even when the drawer is never closed', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      // Genuinely nothing known yet, so the button starts as "Set trip
-      // travelers" rather than Atlas's resolved-approximation label (the
-      // default fixture's num_travelers: 2) -- same override as the
-      // Transport-drawer equivalent test above.
-      itineraryFetchResponse = {
-        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
-        result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } }),
-      };
-      global.fetch = defaultFetchMock();
+      const capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) {
+          const body = JSON.parse(options.body);
+          capturedBodies.push(body);
+          return jsonResponse(stayActionResponse(body.preferred_partner));
+        }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      const segmentId = 'test-trip:stay:1:2:rishikesh';
       sendTripCommand = vi.fn(async (command, payload) => {
-        expect(command).toBe('update_traveler_composition');
+        expect(command).toBe('set_search_pref');
+        expect(payload.searchPrefUpdate).toEqual({ target_type: 'stay', target_id: segmentId, date: '2026-11-01' });
         commandSnapshot = snapshotWith(
           readyItineraryState(),
-          {},
-          { trip_context: { origin_city: 'Delhi', traveler_composition: payload.travelerCompositionUpdate } },
+          { bookingSetup: { search_prefs: { stays: { [segmentId]: { precision: 'exact', date: '2026-11-01' } } } } },
+          { trip_context: { origin_city: 'Delhi' } },
         );
         return { message: null, agent_meta: null, trip: commandSnapshot };
       });
@@ -1327,14 +1219,89 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
+      const initialTrustedActionCount = capturedBodies.length;
 
-      await user.click(within(drawer).getByRole('button', { name: /Set trip travelers/ }));
-      await user.click(within(drawer).getByRole('button', { name: 'Save travelers' }));
-      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('update_traveler_composition', expect.anything()));
+      await user.click(within(drawer).getByRole('button', { name: /Add exact dates for this search/ }));
+      await user.type(within(drawer).getByLabelText('Check-in date'), '2026-11-01');
+      await user.click(within(drawer).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', expect.anything()));
 
       // Without ever closing the drawer, options must still come back.
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(initialTrustedActionCount));
+      expect(capturedBodies.slice(initialTrustedActionCount).some(body => body.domain === 'stay' && body.departure_date === '2026-11-01')).toBe(true);
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
+    });
+
+    it('labels the stay date-row action "Use a different date" once a date is already anchor-derived', async () => {
+      commandSnapshot = snapshotWith(
+        readyItineraryState(),
+        { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } },
+        { trip_context: { origin_city: 'Delhi' } },
+      );
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
+      expect(within(drawer).getByText(/from your trip start/)).toBeInTheDocument();
+      expect(within(drawer).getByRole('button', { name: /Use a different date for this search/ })).toBeInTheDocument();
+      expect(within(drawer).queryByRole('button', { name: /Add exact dates for this search/ })).toBeNull();
+    });
+
+    it('refetches an open stay drawer with new derived dates after a trip-start save on Overview', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      const capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) {
+          const body = JSON.parse(options.body);
+          capturedBodies.push(body);
+          return jsonResponse(stayActionResponse(body.preferred_partner));
+        }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      sendTripCommand = vi.fn(async (command, payload) => {
+        expect(command).toBe('set_trip_start');
+        expect(payload.tripStartUpdate).toEqual({ precision: 'exact', date: '2026-11-01' });
+        commandSnapshot = snapshotWith(
+          readyItineraryState(),
+          { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } },
+          { trip_context: { origin_city: 'Delhi' } },
+        );
+        return { message: null, agent_meta: null, trip: commandSnapshot };
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
+      const initialTrustedActionCount = capturedBodies.length;
+
+      // The drawer is not tab-gated, so it stays open while we set the
+      // trip-wide calendar anchor from the Overview schedule strip.
+      await user.click(screen.getByRole('button', { name: /Overview/ }));
+      await user.click(screen.getByRole('button', { name: /Set trip start date/ }));
+      await user.type(screen.getByLabelText('Trip start date'), '2026-11-01');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_trip_start', expect.anything()));
+
+      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(initialTrustedActionCount));
+      expect(capturedBodies.slice(initialTrustedActionCount).some(body => (
+        body.domain === 'stay'
+        && body.preferred_partner === 'booking_com'
+        && body.departure_date === '2026-11-01'
+        && body.return_date === '2026-11-03'
+        && body.trip_shape === 'round_trip'
+      ))).toBe(true);
     });
 
     it('opens from the STAY timeline item city when the overnight city differs from the day primary location', async () => {
@@ -1380,10 +1347,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       global.fetch = vi.fn(async (url, options) => {
         if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
         if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state?.trip_context, feasibleAssessmentResponse()));
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
         if (url.includes('/trusted-action')) {
-          capturedBodies.push(JSON.parse(options.body));
-          return jsonResponse(resolvedActionResponse());
+          const body = JSON.parse(options.body);
+          capturedBodies.push(body);
+          return jsonResponse(stayActionResponse(body.preferred_partner));
         }
         if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
         return jsonResponse({});
@@ -1398,12 +1366,101 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(within(stayTimelineItem).getByRole('button', { name: /Stay options/ }));
 
       const drawer = await screen.findByRole('dialog', { name: /Stay: Jaipur/ });
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
       expect(within(drawer).getByText('Jaipur · 1 night')).toBeInTheDocument();
-      expect(within(drawer).getByText('Jaipur — Hotellook')).toBeInTheDocument();
+      expect(within(drawer).getByText('Jaipur — ixigo')).toBeInTheDocument();
       expect(screen.queryByRole('dialog', { name: /Stay: Agra/ })).not.toBeInTheDocument();
       expect(capturedBodies).toHaveLength(3);
       expect(capturedBodies.every(body => body.domain === 'stay' && body.destination === 'Jaipur')).toBe(true);
+    });
+
+    it('uses different Board-owned dates for different city stay segments in one trip', async () => {
+      const day = (dayNumber, location) => ({
+        day_number: dayNumber,
+        date: null,
+        title: `${location} day ${dayNumber}`,
+        primary_location: location,
+        summary: `Stay in ${location}.`,
+        timeline: [
+          {
+            start_time: 'Night', end_time: null, kind: 'STAY', title: `Overnight in ${location}`, location,
+            detail: `Stay in ${location}.`, movement_guidance: null, estimated_cost_low: 2000, estimated_cost_high: 4500,
+            reference: generalReference(), requires_advance_booking: true, booking_readiness: 'needs_advance_booking',
+          },
+        ],
+        notes: [],
+        backup_plan: null,
+      });
+      itineraryFetchResponse = {
+        version: 1,
+        source_guide_revision: 3,
+        created_at: '2026-01-01T00:00:00.000Z',
+        result: atlasResult({
+          final_itinerary: {
+            trip_summary: {
+              title: 'Jaipur and Agra',
+              destinations: ['Jaipur', 'Agra'],
+              duration_days: 4,
+              num_travelers: 2,
+              date_range: null,
+              overview: 'A four-day route.',
+              route_rationale: 'Two nights in each city.',
+            },
+            days: [day(1, 'Jaipur'), day(2, 'Jaipur'), day(3, 'Agra'), day(4, 'Agra')],
+          },
+        }),
+      };
+      commandSnapshot = snapshotWith(
+        readyItineraryState(),
+        { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } },
+        { trip_context: { origin_city: 'Delhi' } },
+      );
+      const capturedBodies = [];
+      global.fetch = vi.fn(async (url, options) => {
+        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
+        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
+        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
+        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
+        if (url.includes('/trusted-action')) {
+          const body = JSON.parse(options.body);
+          capturedBodies.push(body);
+          return jsonResponse(stayActionResponse(body.preferred_partner));
+        }
+        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
+        return jsonResponse({});
+      });
+      sendTripCommand = vi.fn();
+      const user = userEvent.setup();
+      renderDashboard();
+      await waitFor(() => expect(screen.getByText('Jaipur and Agra')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const jaipurDrawer = await screen.findByRole('dialog', { name: /Stay: Jaipur/ });
+      await waitFor(() => expect(within(jaipurDrawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
+      expect(within(jaipurDrawer).getByText('📅 Check-in: 2026-11-01 · from your trip start')).toBeInTheDocument();
+      await user.click(within(jaipurDrawer).getByRole('button', { name: 'Close stay options' }));
+
+      await user.click(within(screen.getByRole('navigation', { name: 'Select a day' })).getByRole('button', { name: /Day 3/ }));
+      await user.click(screen.getByRole('button', { name: /Stay options/ }));
+      const agraDrawer = await screen.findByRole('dialog', { name: /Stay: Agra/ });
+      await waitFor(() => expect(within(agraDrawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
+      expect(within(agraDrawer).getByText('📅 Check-in: 2026-11-03 · from your trip start')).toBeInTheDocument();
+
+      expect(capturedBodies.some(body => (
+        body.domain === 'stay'
+        && body.destination === 'Jaipur'
+        && body.preferred_partner === 'booking_com'
+        && body.departure_date === '2026-11-01'
+        && body.return_date === '2026-11-03'
+      ))).toBe(true);
+      expect(capturedBodies.some(body => (
+        body.domain === 'stay'
+        && body.destination === 'Agra'
+        && body.preferred_partner === 'booking_com'
+        && body.departure_date === '2026-11-03'
+        && body.return_date === '2026-11-05'
+      ))).toBe(true);
     });
 
     it('shows the non-binding tiered estimate when Atlas provides one on the stay\'s first day', async () => {
@@ -1453,12 +1510,12 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
       expect(within(drawer).queryByText('Non-binding estimate, per night')).toBeNull();
     });
 
-    // PR review, TWM-206: the three stay partners are functionally
-    // equivalent link-only redirects with no price/rating behind them —
+    // PR review, TWM-206/TWM-216: stay partners have different redirect
+    // capability levels, but no price/rating behind them —
     // picking the first-resolved one as "Our pick" would be exactly the
     // fabricated ranking indicator this drawer's own comment disclaims.
     it('never shows an "Our pick" badge on a stay partner card', async () => {
@@ -1471,24 +1528,24 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-      await waitFor(() => expect(within(drawer).getAllByText('Check stay ↗').length).toBe(3));
+      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
       expect(within(drawer).queryByText('Our pick')).not.toBeInTheDocument();
     });
   });
 
   it('Overview\'s day-strip jumps into that day on the Itinerary tab', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor({ day_number: 2, label: 'Riverside stay' })] });
+    commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     const user = userEvent.setup();
     await readyDashboard();
     const dayStrip = screen.getByRole('navigation', { name: 'Trip days' });
     await user.click(within(dayStrip).getByText('2'));
     expect(screen.getByRole('navigation', { name: 'Select a day' })).toBeInTheDocument();
-    expect(screen.getByText('Riverside stay')).toBeInTheDocument();
+    expect(screen.getByText('Ram Jhula')).toBeInTheDocument();
   });
 
   it('Overview renders real budget_summary totals and stat tiles', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), { anchors: [anchor()] });
+    commandSnapshot = snapshotWith(readyItineraryState());
     sendTripCommand = vi.fn();
     await readyDashboard();
     expect(screen.getByText('Within a typical budget.')).toBeInTheDocument();
@@ -1509,14 +1566,12 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.getAllByText('October').length).toBeGreaterThan(0);
   });
 
-  // TripHero must never reflect a booking-precision fact (exact
-  // booking_dates), even once one is set -- it is an itinerary-plan
-  // summary, not a booking surface, and trip_duration/date_range are what
-  // Atlas actually planned around. Reverses the prior "prefers real per-day
-  // dates" behavior: exact booking dates spanning a different day count
-  // than trip_duration used to make this stat contradict itself.
-  it('keeps showing the travel-window label even once exact booking dates are set, never the booking-precision dates', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { booking_dates: { precision: 'exact', departure_date: '2026-10-12' } } });
+  // TripHero must never reflect a booking-precision fact (the
+  // booking_setup.start calendar anchor), even once one is set -- it is an
+  // itinerary-plan summary, not a booking surface, and trip_duration/
+  // date_range are what Atlas actually planned around.
+  it('keeps showing the travel-window label even once an exact trip start is set, never the booking-precision date', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { start: { precision: 'exact', date: '2026-10-12' } } }, { trip_context: {} });
     sendTripCommand = vi.fn();
     const base = atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: 2, date_range: 'October', overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } });
     itineraryFetchResponse = { version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z', result: base };
@@ -1542,29 +1597,23 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // TWM-175: party size regression — trip_summary.travelers doesn't exist on
   // the real Atlas schema (the field is num_travelers); reading the wrong
   // key always silently defaulted the displayed count to 2.
-  // Reversed from the prior assertion: TripHero is the itinerary-plan
-  // summary and must only ever show what Atlas actually planned around
-  // (trip_summary.num_travelers), never the exact traveler_composition --
-  // that booking-precision fact belongs on the Bookings-side
-  // BookingSummaryStrip instead, never on this surface.
-  it('shows Atlas\'s planned num_travelers on TripHero, and the exact traveler_composition only on the booking strip', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi', num_travelers: 'a family of 5', traveler_composition: { adults: 2, children: 2, infants: 1 } } });
+  // TWM-216: TripHero is the itinerary-plan summary and must only ever show
+  // what Atlas actually planned around (trip_summary.num_travelers), never
+  // the exact booking_setup.party — that booking-precision fact belongs on
+  // Overview's schedule strip, never on this surface.
+  it('shows Atlas\'s planned num_travelers on TripHero, and the exact party only on the schedule strip', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { party: { adults: 2, children: 2, infants: 1 } } }, { trip_context: { origin_city: 'Delhi', num_travelers: 'a family of 5' } });
     itineraryFetchResponse = {
       version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
       result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: 9, date_range: null, overview: 'x', route_rationale: 'y' } } }),
     };
     global.fetch = defaultFetchMock();
     sendTripCommand = vi.fn();
-    const user = userEvent.setup();
     await readyDashboard();
     expect(screen.getAllByText('9').filter(el => el.closest('.hero-stats')).length).toBeGreaterThan(0);
     expect(screen.queryAllByText('5').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
-
-    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-    await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /Transport options/ }));
-    const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-    expect(within(drawer).getByRole('button', { name: /Trip 5 travelers · Change/ })).toBeInTheDocument();
+    // The exact party total (2+2+1 = 5) shows only on Overview's strip.
+    expect(screen.getByRole('button', { name: /5 travelers . Change/ })).toBeInTheDocument();
   });
 
   // TWM-215 live-testing finding, superseding the prior "never guess from
@@ -1575,7 +1624,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // looked like nothing was known), not a safety net. Once composition is
   // unset, Atlas's trip_summary.num_travelers is now the honest fallback,
   // shown explicitly as an approximation rather than "Not set".
-  it('shows Atlas\'s resolved num_travelers on TripHero when traveler_composition is unset, not "Not set"', async () => {
+  it('shows Atlas\'s resolved num_travelers on TripHero when booking_setup.party is unset, not "Not set"', async () => {
     commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: {} });
     itineraryFetchResponse = {
       version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
@@ -1731,7 +1780,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('opens successfully with only trip_context populated and no itinerary — no crash, no blank page', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {} },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1748,7 +1797,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows the tab bar in the thin state, with non-Overview tabs rendering an honest placeholder', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {} },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1771,7 +1820,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows a "Back to your trips" link pointing at Home', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {} },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1782,7 +1831,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows budget as a row in "Your trip so far" when present, and omits it when absent', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both' }, planner_state: null, itinerary_state: {} },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1794,7 +1843,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('omits the Budget row entirely when trip_context has no budget', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {} },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1807,7 +1856,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('shows a bottom primary CTA pointing at destination discovery when Route is not yet done', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {} },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1823,7 +1872,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
           stage: 'planning',
           trip_context: { destinations: ['Udaipur'] },
           planner_state: { conversation_context: { awaiting: 'trip_duration' }, places: [], day_plan: [] },
-          itinerary_state: {}, logistics_state: { anchors: [] },
+          itinerary_state: {},
         },
       };
       sendTripCommand = vi.fn();
@@ -1869,7 +1918,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('a CTA click ensures full detail (openTrip) before navigating', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'planning', trip_context: { destinations: ['Udaipur'] }, planner_state: { conversation_context: { awaiting: 'trip_duration' }, places: [], day_plan: [] }, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'planning', trip_context: { destinations: ['Udaipur'] }, planner_state: { conversation_context: { awaiting: 'trip_duration' }, places: [], day_plan: [] }, itinerary_state: {} },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1884,7 +1933,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('never attempts to boot Atlas before a plan is frozen', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'planning', trip_context: {}, planner_state: { conversation_context: {}, places: [], day_plan: [] }, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'planning', trip_context: {}, planner_state: { conversation_context: {}, places: [], day_plan: [] }, itinerary_state: {} },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1895,7 +1944,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('unknown-destination Discover path (still gathering): Destination row shows "Continue chat"', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'matching', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {} },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1907,7 +1956,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     it('unknown-destination Discover path (recommendations ready): Destination row shows "Review recommendations"', async () => {
       commandSnapshot = {
         id: 'trip-1', version: 1,
-        trip_state: { stage: 'recommended', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {}, logistics_state: { anchors: [] } },
+        trip_state: { stage: 'recommended', trip_context: { origin_city: 'Delhi' }, planner_state: null, itinerary_state: {} },
       };
       sendTripCommand = vi.fn();
       renderDashboard();
@@ -1923,7 +1972,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
           stage: 'planning',
           trip_context: { origin_city: 'Delhi', destinations: ['Udaipur'] },
           planner_state: { conversation_context: { awaiting: 'trip_duration' }, places: [], day_plan: [] },
-          itinerary_state: {}, logistics_state: { anchors: [] },
+          itinerary_state: {},
         },
       };
       sendTripCommand = vi.fn();

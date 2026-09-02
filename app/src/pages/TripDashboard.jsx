@@ -7,7 +7,7 @@ import HonestTransition from '../components/ui/HonestTransition.jsx';
 import SupportContent from '../components/SupportContent.jsx';
 import { getItinerary, getTripBoard } from '../lib/tripApi.js';
 import {
-  anchorsForDay, bookingReadinessLabel, dayCostRange,
+  bookingReadinessLabel, dayCostRange,
   verificationTone, trustStripCounts, bookingReadinessRollup,
   travelerCount,
 } from '../lib/atlasView.js';
@@ -20,11 +20,15 @@ import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib
 import { isTripEmpty } from '../lib/tripLifecycle.js';
 import {
   tripOriginCity,
-  tripBookingDateContext,
   tripTravelDatesMonthName,
-  tripTravelerComposition,
   travelerCompositionTotal,
 } from '../constants/tripContext.js';
+import {
+  bookingSetupStart,
+  bookingSetupParty,
+  bookingSetupSearchPref,
+  scheduleValueLabel,
+} from '../constants/bookingSetup.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { withTripId } from '../lib/tripUrl.js';
@@ -60,23 +64,32 @@ const moneyRange = (low, high) => (low == null || high == null ? null : `${money
 // Atlas categories arrive as raw snake_case (e.g. "arrival_departure_window") — humanize for display.
 const humanize = value => value.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
 
-function dayHasStayInLocation(day, location) {
-  return (day?.timeline || []).some(item => item.kind === 'STAY' && item.location === location);
+function stayFromBoardSegment(segment) {
+  if (!segment) return null;
+  return {
+    id: segment.id,
+    location: segment.location,
+    nights: segment.nights,
+    departureDate: segment.checkin_date ?? null,
+    checkoutDate: segment.checkout_date ?? null,
+    datePrecision: segment.date_precision ?? null,
+    departureMonth: segment.departure_month ?? null,
+    dateSource: segment.date_source ?? null,
+    startDayNumber: segment.start_day_number,
+    endDayNumber: segment.end_day_number,
+    boardItemIds: segment.board_item_ids || [],
+  };
 }
 
-function stayFromTimelineItem(item, days, dayNumber) {
-  if (item.kind !== 'STAY' || !item.location) return null;
-  const dayIndex = days.findIndex(day => day.day_number === dayNumber);
-  let startIndex = dayIndex;
-  let endIndex = dayIndex;
-  while (startIndex > 0 && dayHasStayInLocation(days[startIndex - 1], item.location)) startIndex -= 1;
-  while (endIndex < days.length - 1 && dayHasStayInLocation(days[endIndex + 1], item.location)) endIndex += 1;
-  const groupedDays = dayIndex === -1 ? [dayNumber] : days.slice(startIndex, endIndex + 1).map(day => day.day_number);
+// A transport-drawer `leg` from a Trip Board TRAVEL item — the Board has
+// already resolved this leg's effective date (Atlas date / search-pref
+// override / calendar anchor), so the drawer never does date math.
+function legFromBoardItem(boardItem) {
   return {
-    id: `stay-${groupedDays[0]}-${groupedDays[groupedDays.length - 1]}-${item.location}`,
-    location: item.location,
-    nights: groupedDays.length,
-    dayNumbers: groupedDays,
+    from: boardItem.from_city,
+    to: boardItem.to_city,
+    departureDate: boardItem.date_precision === 'exact' ? boardItem.departure_date : null,
+    departureMonth: boardItem.date_precision === 'month' ? boardItem.departure_month : null,
   };
 }
 
@@ -106,25 +119,6 @@ function VerificationTag({ status }) {
   if (!status) return null;
   const label = status === 'VERIFIED' ? 'Verified' : 'General guidance';
   return <StatusPill tone={verificationTone(status)} variant="outline">{label}</StatusPill>;
-}
-
-function AnchorList({ anchors }) {
-  if (!anchors.length) return null;
-  return (
-    <div className="anchor-list" aria-label="Confirmed">
-      {anchors.map(anchor => (
-        <article className="dashboard-card anchor-card" key={anchor.id}>
-          <div>
-            <span className="badge badge-confirmed">🔒 confirmed</span>
-            <h3>{anchor.label}</h3>
-            <p>{anchor.detail}</p>
-            {anchor.reference && <div className="confirmation-chip">✓ {anchor.reference}</div>}
-            {anchor.notes && <p className="anchor-notes">{anchor.notes}</p>}
-          </div>
-        </article>
-      ))}
-    </div>
-  );
 }
 
 // TWM-184: there was previously no way back from a per-trip Dashboard to
@@ -231,26 +225,6 @@ function ThinStateDashboard({ tripState, tripId }) {
   );
 }
 
-// TWM-175: the diff-explanation + equal-weight-actions pattern, reused from
-// the Discover story's checkpoint (amber-toned here since this is a
-// confirmation gate, not an information gap).
-function RevisionOverlay({ proposedRevision, pending, error, onKeep, onAccept }) {
-  const dayLabel = proposedRevision.affected_days.length > 1
-    ? `Days ${proposedRevision.affected_days.join(' and ')}`
-    : `Day ${proposedRevision.affected_days[0]}`;
-  return (
-    <section className="revision-review" aria-label="Proposed itinerary revision">
-      <strong>⚠️ This affects {dayLabel}</strong>
-      <ul>{proposedRevision.changes.map((change, index) => <li key={index}>{change}</li>)}</ul>
-      {error && <p className="revision-error" role="alert">{error}</p>}
-      <div className="revision-actions">
-        <button type="button" className="btn btn-ghost" disabled={pending} onClick={onKeep}>Keep current itinerary</button>
-        <button type="button" className="btn btn-ghost" disabled={pending} onClick={onAccept}>Accept the changes</button>
-      </div>
-    </section>
-  );
-}
-
 // TWM-175: shown exactly once, the first time this trip's itinerary is
 // generated — not on every subsequent visit (persisted via ui_state).
 function BookingPromptOverlay({ onResolveBookings, onLookAround }) {
@@ -337,28 +311,25 @@ const MONTH_NAMES_LOWER = [
   'july', 'august', 'september', 'october', 'november', 'december',
 ];
 
-// `existing` is the trip's current booking_dates context (tripBookingDateContext),
-// not just this form's in-progress mode/value — the two are different on
-// purpose. Once a precision is already on file, the exact/month radio choice
-// is dropped entirely rather than shown redundantly: a traveler who already
-// said "I know the month" is narrowing to an exact date within it, not
-// re-answering "do you know the exact date or the month" from scratch, and
-// showing both options again every time was confusing (TWM-215 live-testing
-// finding). "Change month" is a deliberate, explicit escape hatch for a
-// traveler whose plans genuinely shifted -- it re-opens the mode choice
-// rather than leaving them stuck once precision is set once.
-function DateEditForm({ existing, travelMonthHint, mode, setMode, value, setValue, returnValue, setReturnValue, onSubmit, onCancel, pending, error }) {
+// TWM-216: one exact-date-XOR-month form, reused for the trip calendar
+// anchor (booking_setup.start) and a per-entity search-date preference
+// (booking_setup.search_prefs). `existing` is the value currently on file
+// for whichever fact this instance edits — { precision, date } or
+// { precision, month }, or null. Once a precision is on file the exact/month
+// radios are dropped (a traveler narrowing "December" to a day isn't
+// re-answering "exact or month"); "Change precision" re-opens that choice.
+// `dateLabel` names the exact input ("Trip start" / "Check-in" / "This leg").
+// `onClear` (optional) renders a clear button labelled `clearLabel`.
+function ScheduleDateForm({
+  existing, travelMonthHint, dateLabel = 'Date', helper,
+  mode, setMode, value, setValue, onSubmit, onCancel, onClear,
+  clearLabel = 'Reset to the default date', pending, error,
+}) {
   const [changingPrecision, setChangingPrecision] = useState(false);
   const hasStructuredMonth = existing?.precision === 'month';
-  // TWM-215 live-testing finding: a month the traveler already named in
-  // trip_context.travel_dates (e.g. "December") is just as much a known
-  // fact as a saved booking_dates month, even with no confirmed year --
-  // asking "do you know the month?" again when they already said so reads
-  // as not having listened. Both cases get the same narrowing treatment;
-  // only the loose one can't bound the date picker to a real year.
   const hasLooseMonthOnly = !existing?.precision && Boolean(travelMonthHint);
   const hasKnownMonth = hasStructuredMonth || hasLooseMonthOnly;
-  const knownMonthLabel = hasStructuredMonth ? existing.departure_month : travelMonthHint;
+  const knownMonthLabel = hasStructuredMonth ? existing.month : travelMonthHint;
   const hasExistingPrecision = Boolean(existing?.precision) || hasLooseMonthOnly;
   const showModeChoice = !hasExistingPrecision || changingPrecision;
   const narrowingFromMonth = hasKnownMonth && !changingPrecision && mode === 'exact';
@@ -367,22 +338,21 @@ function DateEditForm({ existing, travelMonthHint, mode, setMode, value, setValu
     setChangingPrecision(true);
     setMode(nextMode);
     setValue('');
-    setReturnValue('');
   }
 
   return (
     <form className="confirmation-form" onSubmit={onSubmit}>
       <p className="already-booked-note">
-        Adding dates improves booking search precision only — it does not change your itinerary plan.
+        {helper || 'Adding dates improves booking search precision only — it does not change your itinerary plan.'}
       </p>
       {showModeChoice ? (
         <div className="confirmation-form-actions" role="radiogroup" aria-label="Date precision">
           <label>
-            <input type="radio" name="booking-date-mode" checked={mode === 'exact'} disabled={pending}
+            <input type="radio" name="schedule-date-mode" checked={mode === 'exact'} disabled={pending}
               onChange={() => switchPrecision('exact')} /> I know the exact date
           </label>
           <label>
-            <input type="radio" name="booking-date-mode" checked={mode === 'month'} disabled={pending}
+            <input type="radio" name="schedule-date-mode" checked={mode === 'month'} disabled={pending}
               onChange={() => switchPrecision('month')} /> I only know the month
           </label>
         </div>
@@ -398,40 +368,35 @@ function DateEditForm({ existing, travelMonthHint, mode, setMode, value, setValu
         </p>
       )}
       {mode === 'exact' ? (
-        <>
-          <label>Departure date
-            {(() => {
-              const bounds = narrowingFromMonth && hasStructuredMonth ? monthDateBounds(existing.departure_month) : {};
-              // Never let a saved month's own bounds re-open past dates --
-              // the floor is always whichever is later, today or the
-              // month's first day.
-              const min = bounds.min && bounds.min > todayIsoDate() ? bounds.min : todayIsoDate();
-              return (
-                <input required type="date" value={value} disabled={pending}
-                  min={min} max={bounds.max}
-                  onChange={event => setValue(event.target.value)} />
-              );
-            })()}
-          </label>
-          <label>Return date (optional)
-            <input type="date" value={returnValue} disabled={pending} min={value || todayIsoDate()} onChange={event => setReturnValue(event.target.value)} />
-          </label>
-        </>
+        <label>{dateLabel}
+          {(() => {
+            const bounds = narrowingFromMonth && hasStructuredMonth ? monthDateBounds(existing.month) : {};
+            const min = bounds.min && bounds.min > todayIsoDate() ? bounds.min : todayIsoDate();
+            return (
+              <input required type="date" value={value} disabled={pending}
+                min={min} max={bounds.max}
+                onChange={event => setValue(event.target.value)} />
+            );
+          })()}
+        </label>
       ) : (
-        <label>Travel month
+        <label>Month
           <input required type="month" value={value} disabled={pending} min={todayIsoDate().slice(0, 7)} onChange={event => setValue(event.target.value)} />
         </label>
       )}
       {error && <p className="confirm-error" role="alert">{error}</p>}
       <div className="confirmation-form-actions">
         <button type="button" className="btn btn-ghost" disabled={pending} onClick={onCancel}>Cancel</button>
-        <button type="submit" className="btn btn-primary" disabled={pending || !value}>Save dates</button>
+        {onClear && existing && (
+          <button type="button" className="btn btn-ghost" disabled={pending} onClick={onClear}>{clearLabel}</button>
+        )}
+        <button type="submit" className="btn btn-primary" disabled={pending || !value}>Save</button>
       </div>
     </form>
   );
 }
 
-// TWM-213: mirrors DateEditForm's shape/pattern above — a trip-wide,
+// TWM-213: mirrors ScheduleDateForm's shape/pattern above — a trip-wide,
 // Backend-owned fact edited through one small inline form, never guessed
 // from a conversational count.
 function TravelerEditForm({ adults, setAdults, children, setChildren, infants, setInfants, onSubmit, onCancel, pending, error }) {
@@ -714,7 +679,9 @@ function StayOptionCard({ option, best }) {
     <article className={`stay-option-card${best ? ' picked' : ''}`}>
       {best && <span className="pick-badge">Our pick</span>}
       <strong>{option.name}</strong>
-      <TrustedActionCta option={option} label="Check stay ↗" best={best} />
+      {option.capability && <span className="stay-option-tag">{option.capability.replace(/_/g, ' ')}</span>}
+      {option.capabilityNote && <p>{option.capabilityNote}</p>}
+      <TrustedActionCta option={option} label={`${option.ctaLabel || 'Search stays'} ↗`} best={best} />
     </article>
   );
 }
@@ -735,33 +702,59 @@ function RecommendedModeCard({ option }) {
   );
 }
 
-// TWM-213 UX rework: trip dates and traveler composition are both
-// trip-wide, booking-precision facts that only matter at the moment of an
-// actual search — the least-friction, most familiar pattern (every OTA
-// site's search bar sitting atop its results) is a single editable summary
-// strip at the top of wherever that search happens, prefilled with
-// whatever's already saved, not a separate affordance the traveler has to
-// find beforehand. Both labels say "Trip" explicitly (not "this leg" or
-// "this stay") since editing either one always changes the same shared
-// trip-wide value regardless of which drawer it's opened from — Stay's
-// own derived check-in date is a separate, clearly-labeled read-only line
-// the StayDrawer renders above this strip, never conflated with it.
-function BookingSummaryStrip({
-  dateLabel, onEditDate, dateEditOpen, dateEditForm,
-  travelerLabel, onEditTravelers, travelerEditOpen, travelerEditForm,
+// TWM-216: the trip's calendar anchor (booking_setup.start) and structured
+// party (booking_setup.party) are both trip-wide, booking-precision facts —
+// edited once, here on Overview, never from inside a per-item drawer. Each
+// stay segment / transport leg then gets its own date from the Trip Board
+// (derived from this anchor, or a per-entity search-date preference the
+// traveler sets in that drawer).
+function ScheduleStrip({
+  startLabel, onEditStart, startEditOpen, startEditForm,
+  partyLabel, onEditParty, partyEditOpen, partyEditForm,
 }) {
   return (
     <div className="booking-summary-strip">
       <div className="booking-summary-row">
-        <button type="button" className="btn btn-ghost btn-small" onClick={onEditDate}>
-          📅 {dateLabel ? `Trip dates: ${dateLabel} · Change` : 'Set trip dates'}
+        <button type="button" className="btn btn-ghost btn-small" onClick={onEditStart}>
+          📅 {startLabel ? `Trip starts: ${startLabel} · Change` : 'Set trip start date'}
         </button>
-        <button type="button" className="btn btn-ghost btn-small" onClick={onEditTravelers}>
-          👤 {travelerLabel ? `Trip ${travelerLabel} · Change` : 'Set trip travelers'}
+        <button type="button" className="btn btn-ghost btn-small" onClick={onEditParty}>
+          👤 {partyLabel ? `${partyLabel} · Change` : 'Set travellers'}
         </button>
       </div>
-      {dateEditOpen && dateEditForm}
-      {travelerEditOpen && travelerEditForm}
+      {startEditOpen && startEditForm}
+      {partyEditOpen && partyEditForm}
+    </div>
+  );
+}
+
+// TWM-216: a drawer's own per-entity search date — a stay segment's check-in
+// or a transport leg's date. Distinct from the trip-level ScheduleStrip:
+// this writes booking_setup.search_prefs for one entity only. Not offered
+// when Atlas already dated the entity (source === 'itinerary').
+function DrawerDateRow({ label, source, precision, valueLabel, checkoutLabel, editable, onEdit, editOpen, editForm }) {
+  const known = precision === 'exact' || precision === 'month';
+  return (
+    <div className="booking-summary-strip">
+      <p className="transport-drawer-date">
+        📅 {label}: {known ? valueLabel : 'flexible'}
+        {source === 'itinerary' && ' · from your itinerary'}
+        {source === 'anchor' && ' · from your trip start'}
+        {source === 'override' && ' · custom'}
+      </p>
+      {checkoutLabel && <p className="transport-drawer-date">Check-out {checkoutLabel}</p>}
+      {editable && (
+        <div className="booking-summary-row">
+          <button type="button" className="btn btn-ghost btn-small" onClick={onEdit}>
+            {source === 'override'
+              ? 'Change these dates'
+              : known
+                ? 'Use a different date for this search'
+                : 'Add exact dates for this search'}
+          </button>
+        </div>
+      )}
+      {editOpen && editForm}
     </div>
   );
 }
@@ -769,8 +762,8 @@ function BookingSummaryStrip({
 // Itinerary tab. Dims the Itinerary behind it (transport-drawer-overlay);
 // never navigates away, never a full-screen modal.
 // TWM-215: a small, search-scoped traveler-count control — separate from
-// the trip-wide BookingSummaryStrip traveler editor above, which changes
-// traveler_composition itself. "Search for" here never touches that field;
+// the trip-wide ScheduleStrip party editor on Overview, which changes
+// booking_setup.party itself. "Search for" here never touches that field;
 // it only decides what count this one leg's search asks for (e.g. a subset
 // of the group flying this leg while the rest book separately).
 function TransportTravelerOverride({ defaultTravelerCount, travelerOverride, onSearch, disabled }) {
@@ -803,7 +796,7 @@ function TransportTravelerOverride({ defaultTravelerCount, travelerOverride, onS
 // 3 of 4 travelers are on this specific gateway leg. This is a search-time
 // override only: it never writes trip_context/traveler_composition, and
 // resets whenever the drawer re-opens for a leg (see openTransportDrawer).
-function TransportDrawer({ leg, options, feasibility, loading, error, summaryStrip, defaultTravelerCount, travelerOverride, onSearchTravelerCount, onClose }) {
+function TransportDrawer({ leg, options, feasibility, loading, error, dateRow, defaultTravelerCount, travelerOverride, onSearchTravelerCount, onClose }) {
   if (!leg) return null;
   const resolvedOptions = feasibleTransportOptions(options || [], feasibility);
   const feasibleModeNames = new Set((feasibility?.modes || []).map(entry => entry.mode));
@@ -825,7 +818,7 @@ function TransportDrawer({ leg, options, feasibility, loading, error, summaryStr
           <h3>{leg.from} → {leg.to}</h3>
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close transport options">✕</button>
         </div>
-        {summaryStrip}
+        {dateRow}
         {onSearchTravelerCount && (
           <TransportTravelerOverride
             defaultTravelerCount={defaultTravelerCount}
@@ -869,14 +862,14 @@ function TransportDrawer({ leg, options, feasibility, loading, error, summaryStr
 
 const STAY_TIER_LABEL = { budget: 'Budget', mid_range: 'Mid-range', premium: 'Premium' };
 
-// TWM-206: the Stay drawer — link-only cards per approved partner
-// (hotellook/booking_com/agoda per bookingCatalog.js's STAY_PARTNERS), no
+// TWM-206/TWM-216: the Stay drawer — link-only cards per confirmed provider
+// capability (Booking.com/Agoda/ixigo per bookingCatalog.js), no
 // fabricated price/rating on the card itself. Atlas's TWM-204 per-tier
 // estimate (stay_price_estimate, already present on the raw day object —
 // no Trip Board adapter change needed since it isn't feasibility-derived)
 // renders as its own clearly-labeled non-binding section, never merged
 // into or presented as a partner's real price.
-function StayDrawer({ stay, options, loading, error, stayPriceEstimate, summaryStrip, onClose }) {
+function StayDrawer({ stay, options, loading, error, stayPriceEstimate, dateRow, onClose }) {
   if (!stay) return null;
   return (
     <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
@@ -891,15 +884,11 @@ function StayDrawer({ stay, options, loading, error, stayPriceEstimate, summaryS
           <h3>{stay.location} · {stay.nights} night{stay.nights === 1 ? '' : 's'}</h3>
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close stay options">✕</button>
         </div>
-        {/* This stay's own check-in date, derived from day_number — never
-            the same value as the gateway travel date, and never editable
-            from here (see BookingSummaryStrip's comment above). */}
-        {stay.departureDate ? (
-          <p className="transport-drawer-date">📅 Check-in {stay.departureDate}</p>
-        ) : (
-          <p className="transport-drawer-date-note">Set exact trip dates via a Transport search for a precise check-in date.</p>
-        )}
-        {summaryStrip}
+        {/* TWM-216: this segment's own check-in/check-out, resolved by the
+            Trip Board from booking_setup — never the gateway travel date.
+            Editable here as a per-segment search preference (check-in only;
+            check-out always follows the segment's night count). */}
+        {dateRow}
         {stayPriceEstimate && (
           <div className="stay-estimate-block">
             <span className="stay-estimate-label">Non-binding estimate, per night</span>
@@ -919,7 +908,7 @@ function StayDrawer({ stay, options, loading, error, stayPriceEstimate, summaryS
           options?.length ? (
             <div className="stay-options-grid">
               {options.map(option => (
-                // PR review: partner order (hotellook/booking_com/agoda) has
+                // PR review: provider order has
                 // no price/rating basis to prefer one — a "best" pick here
                 // would be a fabricated ranking indicator, contradicting
                 // this drawer's own no-fabricated-price/rating principle.
@@ -965,9 +954,8 @@ function FeasibilityDisclosure({ modes }) {
 // TWM-206: BookingSegment/ActivitySegment (the Bookings-tab-only "Resolve ▾"
 // inline-expansion pattern) were retired along with the Bookings tab itself —
 // Transport/Stay resolution now happens via the Itinerary item's own
-// drawer/inline affordances (TransportDrawer/StayDrawer/DateEditForm below),
-// and a day's AnchorList already surfaces its own confirmed anchors without
-// a separate per-segment confirmed-card duplicate.
+// drawer affordances (TransportDrawer/StayDrawer below), each with its own
+// per-entity date row (DrawerDateRow).
 
 // TWM-215: the single, generic mechanism any on-demand-drawer (Transport,
 // Stay, and any future one) uses to keep its cache filled for whatever is
@@ -1015,7 +1003,6 @@ export default function TripDashboard() {
   const plannerState = tripState?.planner_state;
   const frozenPlan = plannerState?.frozen_plan;
   const itineraryState = tripState?.itinerary_state;
-  const anchors = tripState?.logistics_state?.anchors ?? [];
   const [bootStatus, setBootStatus] = useState('idle'); // idle | booting | ready | error
   const [bootError, setBootError] = useState(null);
   const [showBookingPrompt, setShowBookingPrompt] = useState(false);
@@ -1039,24 +1026,30 @@ export default function TripDashboard() {
   const [itineraryTripId, setItineraryTripId] = useState(null);
   const itineraryFetchStarted = useRef(null); // tripId currently/last fetched, or null
 
-  const [revisionPending, setRevisionPending] = useState(false);
-  const [revisionError, setRevisionError] = useState(null);
+  // TWM-216: the trip calendar anchor (booking_setup.start) — one trip-level
+  // fact, edited once from the Overview schedule strip, never from inside a
+  // per-item drawer. A save failure never clears already-resolved options;
+  // it only surfaces inline in the form.
+  const [startEditOpen, setStartEditOpen] = useState(false);
+  const [startEditMode, setStartEditMode] = useState('exact');
+  const [startEditValue, setStartEditValue] = useState('');
+  const [startEditPending, setStartEditPending] = useState(false);
+  const [startEditError, setStartEditError] = useState(null);
 
-  // TWM-201: booking-date update flow — trip-wide (it saves one trip-level
-  // precision, not a per-leg fact). A save failure never clears/hides the
-  // flight cards already rendered from the last successful resolution
-  // (acceptance criteria); it only surfaces inline in the form itself.
-  const [dateEditOpen, setDateEditOpen] = useState(false);
-  const [dateEditMode, setDateEditMode] = useState('exact');
-  const [dateEditValue, setDateEditValue] = useState('');
-  const [dateEditReturnValue, setDateEditReturnValue] = useState('');
-  const [dateEditPending, setDateEditPending] = useState(false);
-  const [dateEditError, setDateEditError] = useState(null);
+  // TWM-216: a per-entity search-date preference (booking_setup.search_prefs),
+  // edited from inside whichever drawer is open — a stay segment's check-in,
+  // or a transport leg's date (only when Atlas didn't already date it).
+  // Only one drawer is ever open, so a single flag/value pair is enough.
+  const [prefEditOpen, setPrefEditOpen] = useState(false);
+  const [prefEditMode, setPrefEditMode] = useState('exact');
+  const [prefEditValue, setPrefEditValue] = useState('');
+  const [prefEditTarget, setPrefEditTarget] = useState(null); // { type, id }
+  const [prefEditPending, setPrefEditPending] = useState(false);
+  const [prefEditError, setPrefEditError] = useState(null);
 
-  // TWM-213: traveler-composition update flow — same shape/pattern as the
-  // booking-date flow above (trip-wide, Backend-owned, a save failure never
-  // clears already-resolved options). One control, not per-item, since
-  // composition has no per-leg concept.
+  // TWM-213/TWM-216: structured-party update flow (booking_setup.party) —
+  // one trip-level control on the Overview schedule strip, Backend-owned, a
+  // save failure never clears already-resolved options.
   const [travelerEditOpen, setTravelerEditOpen] = useState(false);
   const [travelerEditAdults, setTravelerEditAdults] = useState(1);
   const [travelerEditChildren, setTravelerEditChildren] = useState(0);
@@ -1129,8 +1122,12 @@ export default function TripDashboard() {
   // the traveler actually opens.
   useEffect(() => {
     if (itineraryStatus !== 'ready' || !tripId || !itineraryResult) return;
-    const bookingDateContext = tripBookingDateContext(tripState?.trip_context);
-    const boardFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}:${bookingDateContext ? `${bookingDateContext.precision}:${bookingDateContext.departure_date || bookingDateContext.departure_month || ''}:${bookingDateContext.return_date || ''}` : ''}`;
+    // TWM-216: the whole booking_setup branch feeds the Board's resolved
+    // dates (calendar anchor + per-entity search prefs), so a JSON snapshot
+    // of it keys the fetch — any set_trip_start / set_search_pref / set_party
+    // save re-fetches the Board without a reload.
+    const bookingSetupKey = JSON.stringify(tripState?.booking_setup ?? {});
+    const boardFetchKey = `${tripId}:${itineraryResult.version}:${tripOriginCity(tripState?.trip_context) ?? ''}:${bookingSetupKey}`;
     if (boardFetchStarted.current === boardFetchKey) return;
     boardFetchStarted.current = boardFetchKey;
     let cancelled = false;
@@ -1144,13 +1141,31 @@ export default function TripDashboard() {
       // gateway leg without it.
     });
     return () => { cancelled = true; };
-    // PR review, TWM-206: trip_context.booking_dates must be a dependency,
-    // not just part of the ref-keyed guard inside — an effect only
-    // re-fires when a listed dependency actually changes, so a
-    // booking-date save (which changes booking_dates but not origin_city)
-    // was silently never triggering a refetch until an unrelated
-    // dependency also changed or the page reloaded.
-  }, [itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city, tripState?.trip_context?.booking_dates]);
+    // PR review, TWM-206: every input to the ref-keyed guard must also be a
+    // dependency — an effect only re-fires when a listed dependency actually
+    // changes, so a booking_setup save (which doesn't touch origin_city)
+    // would otherwise never trigger a refetch until an unrelated dependency
+    // also changed or the page reloaded.
+  }, [itineraryStatus, tripId, itineraryResult, tripState?.trip_context?.origin_city, tripState?.booking_setup]);
+
+  const currentTravelerComposition = bookingSetupParty(tripState);
+  const activeStayDrawerStay = (() => {
+    if (!stayDrawerStay) return null;
+    if (boardData?.version !== itineraryResult?.version || boardDataTripId !== tripId) return stayDrawerStay;
+    const freshSegment = (boardData?.stay_segments || []).find(segment =>
+      segment.id === stayDrawerStay.id
+      || (segment.board_item_ids || []).some(itemId => stayDrawerStay.boardItemIds?.includes(itemId))
+    );
+    return freshSegment ? stayFromBoardSegment(freshSegment) : stayDrawerStay;
+  })();
+
+  function stayCacheKey(stay, composition) {
+    if (!stay) return null;
+    const travelerKey = composition
+      ? `${composition.adults ?? 0}:${composition.children ?? 0}:${composition.infants ?? 0}`
+      : 'default';
+    return `${stay.id}::${stay.datePrecision ?? 'unknown'}::${stay.departureDate ?? 'flex'}::${stay.checkoutDate ?? 'open'}::${stay.nights ?? 'nights-unknown'}::${travelerKey}`;
+  }
 
   const trackedThinState = useRef(false);
   useEffect(() => {
@@ -1226,14 +1241,12 @@ export default function TripDashboard() {
     trackEvent('dashboard_entered', { entry_source: 'itinerary' });
   }, [itineraryStatus]);
 
-  // TWM-215 live-testing finding: saving a booking date/traveler count
-  // while a drawer stays open (the whole point of editing either inline
-  // via BookingSummaryStrip, never requiring a close/reopen) cleared the
-  // relevant cache (submitDateEdit's/submitTravelerEdit's setTransportData({})/
-  // setStayData({})) but nothing then refetched for the still-open item --
-  // found first on the Transport drawer, then again, separately, on the
-  // Stay drawer. Both now compose the single useDrawerFetch mechanism
-  // above instead of each hand-writing their own version of this effect.
+  // TWM-215/TWM-216 live-testing finding: saving a date/party while a drawer
+  // stays open (the whole point of editing inline, never requiring a
+  // close/reopen) clears the relevant cache (the submit handlers'
+  // setTransportData({}) / setStayData({})) but nothing then refetched for
+  // the still-open item. Both drawers now compose the single useDrawerFetch
+  // mechanism above instead of each hand-writing their own version.
   useDrawerFetch(
     transportDrawerLeg ? transportCacheKey(transportDrawerLeg, transportDrawerTravelerOverride) : null,
     transportData,
@@ -1244,108 +1257,143 @@ export default function TripDashboard() {
         .flatMap(day => day.items || [])
         .find(item => item.is_gateway_leg && item.from_city === transportDrawerLeg.from && item.to_city === transportDrawerLeg.to);
       if (!boardItem) return;
-      fetchTransportOptions(transportDrawerLeg, boardItem, transportDrawerTravelerOverride);
+      // TWM-216: transportDrawerLeg is an open-time snapshot — re-derive the
+      // leg's dates from the fresh Board item so a per-leg search-pref saved
+      // while the drawer is open reaches the Trusted Action payload.
+      fetchTransportOptions(legFromBoardItem(boardItem), boardItem, transportDrawerTravelerOverride);
     },
   );
 
-  // Reads trip_context directly (tripTravelerComposition) rather than the
+  // Reads booking_setup directly (bookingSetupParty) rather than the
   // render-time `travelerComposition` local below, which isn't in scope
   // yet this early.
   useDrawerFetch(
-    stayDrawerStay?.id ?? null,
+    stayCacheKey(activeStayDrawerStay, currentTravelerComposition),
     stayData,
     stayDrawerLoading,
-    () => fetchStayOptions(stayDrawerStay, tripTravelerComposition(tripState?.trip_context)),
+    () => fetchStayOptions(activeStayDrawerStay, currentTravelerComposition),
   );
 
-  async function resolveRevision(command) {
-    setRevisionPending(true);
-    setRevisionError(null);
-    try {
-      await sendTripCommand(command);
-      trackEvent(command === 'accept_itinerary_revision' ? 'itinerary_revision_accepted' : 'itinerary_revision_kept', {});
-    } catch (error) {
-      setRevisionError(error.message || 'Could not update the itinerary.');
-    } finally {
-      setRevisionPending(false);
-    }
-  }
-
-  // TWM-213: no longer keyed per-item — booking_dates is trip-wide and now
-  // only ever edited from the Transport/Stay drawer's summary strip, so a
-  // single open/closed flag is enough (only one drawer, hence one strip,
-  // is ever open at a time).
-  function openDateEditForm(suggestedMode) {
-    const existing = tripBookingDateContext(tripState?.trip_context);
-    // TWM-215: always opens narrowing to an exact date -- DateEditForm's
-    // own hasKnownMonth check (structured booking_dates.precision==='month'
-    // OR a loose month already named in trip_context.travel_dates) decides
-    // whether that renders as "pick a day inside this month" or fresh
-    // mode-choice radios; it never needs the "I only know the month" radio
-    // pre-selected just because a month is already known -- re-asking
-    // "do you know the month?" when the traveler already said so reads as
-    // not having listened.
+  // TWM-216: the trip calendar anchor (booking_setup.start) — a single
+  // trip-level fact, opened from the Overview schedule strip.
+  function openStartEditForm(suggestedMode) {
+    const existing = bookingSetupStart(tripState);
     const mode = suggestedMode === 'month' ? 'month' : 'exact';
-    setDateEditMode(mode);
-    // PR review: seed from whatever's already saved, when it matches the
-    // mode being opened, instead of always clearing -- the trigger button
-    // already advertises the saved value ("<date> · Change dates"), so
-    // "Change" starting blank forced retyping the departure date from
-    // memory just to add/edit a return date. Only starts blank when
-    // there's genuinely nothing saved yet, or the traveler is switching
-    // precision (exact <-> month has no shared field to seed from).
+    setStartEditMode(mode);
     const travelMonthName = tripTravelDatesMonthName(tripState?.trip_context);
     if (existing?.precision === mode) {
-      setDateEditValue((mode === 'exact' ? existing.departure_date : existing.departure_month) || '');
-      setDateEditReturnValue((mode === 'exact' ? existing.return_date : '') || '');
-    } else if (mode === 'exact' && !existing?.precision && travelMonthName) {
-      // TWM-215: no booking_dates yet, but travel_dates already named a
-      // month -- seed a same-year, first-of-month suggestion rather than
-      // opening blank. This is only ever a starting suggestion in a live,
-      // freely-editable date picker: the traveler can navigate to any
-      // other date/year before Save, so defaulting the year doesn't
-      // fabricate a confirmed fact the way Atlas's own structured output
-      // must avoid -- nothing is recorded until they explicitly submit it.
+      setStartEditValue((mode === 'exact' ? existing.date : existing.month) || '');
+    } else if (mode === 'exact' && !existing && travelMonthName) {
+      // No anchor yet, but travel_dates named a month — seed a same-year,
+      // first-of-month suggestion in a freely-editable picker (nothing is
+      // recorded until the traveler submits, so this fabricates no fact).
       const monthIndex = MONTH_NAMES_LOWER.indexOf(travelMonthName.toLowerCase());
       const year = new Date().getFullYear();
-      setDateEditValue(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
-      setDateEditReturnValue('');
+      setStartEditValue(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
     } else {
-      setDateEditValue('');
-      setDateEditReturnValue('');
+      setStartEditValue('');
     }
-    setDateEditError(null);
-    setDateEditOpen(true);
+    setStartEditError(null);
+    setStartEditOpen(true);
   }
 
-  async function submitDateEdit(event) {
+  async function submitStartEdit(event) {
     event.preventDefault();
-    setDateEditPending(true);
-    setDateEditError(null);
+    setStartEditPending(true);
+    setStartEditError(null);
     try {
-      await sendTripCommand('update_booking_dates', {
-        bookingDateUpdate: dateEditMode === 'exact'
-          ? { departure_date: dateEditValue, ...(dateEditReturnValue ? { return_date: dateEditReturnValue } : {}) }
-          : { departure_month: dateEditValue },
+      await sendTripCommand('set_trip_start', {
+        tripStartUpdate: startEditMode === 'exact'
+          ? { precision: 'exact', date: startEditValue }
+          : { precision: 'month', month: startEditValue },
       });
-      trackEvent('booking_dates_updated', { precision: dateEditMode });
-      // PR review: legKey has no date component, so an already-cached
-      // Transport drawer entry would otherwise keep serving pre-save
-      // (flexible/month-precision) options after the date changes. The
-      // date is trip-wide, not per-leg, so every cached entry is
-      // invalidated — the board-fetch effect's own booking_dates
-      // dependency already re-fetches boardData for the new precision.
+      trackEvent('trip_start_updated', { precision: startEditMode });
+      // Every cached option was resolved against the old anchor-derived
+      // dates; the board-fetch effect's own booking_setup dependency
+      // re-fetches the Board with the new dates.
       setTransportData({});
-      setDateEditOpen(false);
+      setStayData({});
+      setStartEditOpen(false);
     } catch (error) {
-      setDateEditError(error.message || 'Could not save those dates — your existing flight options are still available.');
+      setStartEditError(error.message || 'Could not save that date — your existing options are still available.');
     } finally {
-      setDateEditPending(false);
+      setStartEditPending(false);
+    }
+  }
+
+  async function clearStartEdit() {
+    setStartEditPending(true);
+    setStartEditError(null);
+    try {
+      await sendTripCommand('set_trip_start', { tripStartUpdate: { precision: 'flexible' } });
+      trackEvent('trip_start_updated', { precision: 'flexible' });
+      setTransportData({});
+      setStayData({});
+      setStartEditOpen(false);
+    } catch (error) {
+      setStartEditError(error.message || 'Could not update that — your existing options are still available.');
+    } finally {
+      setStartEditPending(false);
+    }
+  }
+
+  // TWM-216: a per-entity search-date preference (booking_setup.search_prefs)
+  // — opened from inside a drawer for one stay segment or transport leg.
+  function openPrefEditForm(targetType, targetId, suggestedMode) {
+    const existing = bookingSetupSearchPref(tripState, targetType, targetId);
+    const mode = suggestedMode === 'month' ? 'month' : 'exact';
+    setPrefEditTarget({ type: targetType, id: targetId });
+    setPrefEditMode(mode);
+    setPrefEditValue(existing?.precision === mode ? (mode === 'exact' ? existing.date : existing.month) || '' : '');
+    setPrefEditError(null);
+    setPrefEditOpen(true);
+  }
+
+  async function submitPrefEdit(event) {
+    event.preventDefault();
+    if (!prefEditTarget) return;
+    setPrefEditPending(true);
+    setPrefEditError(null);
+    try {
+      await sendTripCommand('set_search_pref', {
+        searchPrefUpdate: {
+          target_type: prefEditTarget.type,
+          target_id: prefEditTarget.id,
+          ...(prefEditMode === 'exact' ? { date: prefEditValue } : { month: prefEditValue }),
+        },
+      });
+      trackEvent('search_pref_updated', { target_type: prefEditTarget.type, precision: prefEditMode });
+      setTransportData({});
+      setStayData({});
+      setPrefEditOpen(false);
+    } catch (error) {
+      setPrefEditError(error.message || 'Could not save that date — your existing options are still available.');
+    } finally {
+      setPrefEditPending(false);
+    }
+  }
+
+  async function clearPrefEdit() {
+    if (!prefEditTarget) return;
+    setPrefEditPending(true);
+    setPrefEditError(null);
+    try {
+      await sendTripCommand('clear_search_pref', {
+        searchPrefClear: { target_type: prefEditTarget.type, target_id: prefEditTarget.id },
+      });
+      trackEvent('search_pref_cleared', { target_type: prefEditTarget.type });
+      setTransportData({});
+      setStayData({});
+      setPrefEditOpen(false);
+    } catch (error) {
+      setPrefEditError(error.message || 'Could not reset that date — your existing options are still available.');
+    } finally {
+      setPrefEditPending(false);
     }
   }
 
   function openTravelerEditForm() {
-    const existing = tripTravelerComposition(tripState?.trip_context);
+    const existing = bookingSetupParty(tripState);
     setTravelerEditAdults(existing?.adults ?? 1);
     setTravelerEditChildren(existing?.children ?? 0);
     setTravelerEditInfants(existing?.infants ?? 0);
@@ -1358,26 +1406,25 @@ export default function TripDashboard() {
     setTravelerEditPending(true);
     setTravelerEditError(null);
     try {
-      await sendTripCommand('update_traveler_composition', {
-        travelerCompositionUpdate: {
+      await sendTripCommand('set_party', {
+        partyUpdate: {
           adults: travelerEditAdults,
           children: travelerEditChildren,
           infants: travelerEditInfants,
         },
       });
-      trackEvent('traveler_composition_updated', {
+      trackEvent('party_updated', {
         adults: travelerEditAdults,
         children: travelerEditChildren,
         infants: travelerEditInfants,
       });
-      // Same invalidation rule as submitDateEdit above: composition is
-      // trip-wide, so every cached Transport/Stay entry (built with the
-      // old count) must be dropped rather than kept stale.
+      // party is trip-wide, so every cached Transport/Stay entry (built with
+      // the old count) must be dropped rather than kept stale.
       setTransportData({});
       setStayData({});
       setTravelerEditOpen(false);
     } catch (error) {
-      setTravelerEditError(error.message || 'Could not save traveler composition — your existing options are still available.');
+      setTravelerEditError(error.message || 'Could not save the party — your existing options are still available.');
     } finally {
       setTravelerEditPending(false);
     }
@@ -1484,11 +1531,17 @@ export default function TripDashboard() {
   const boardDayByNumber = boardData?.version === itineraryResult.version && boardDataTripId === tripId
     ? Object.fromEntries((boardData.days || []).map(day => [day.day_number, day]))
     : {};
+  const boardStaySegmentByItemId = {};
+  for (const segment of boardData?.version === itineraryResult.version && boardDataTripId === tripId ? (boardData.stay_segments || []) : []) {
+    for (const itemId of segment.board_item_ids || []) {
+      boardStaySegmentByItemId[itemId] = segment;
+    }
+  }
   // TWM-146/TWM-195/TWM-199: same canonical-then-fallback source the
   // Bookings-tab fetch effect uses, so the Transport drawer's on-demand
   // resolution never sends a different traveler_count than an eager
   // Bookings-tab fetch would have.
-  const travelerComposition = tripTravelerComposition(tripState?.trip_context);
+  const travelerComposition = bookingSetupParty(tripState);
   const partySize = travelerCompositionTotal(travelerComposition);
   // TWM-213: three states, not two. Composition (exact, booking-usable) is
   // the primary label when set. Otherwise fall back to the loose
@@ -1559,13 +1612,7 @@ export default function TripDashboard() {
   // closing the drawer left it permanently showing no options, since only
   // the click-to-open path used to fetch).
   function openTransportDrawer(boardItem) {
-    const leg = {
-      from: boardItem.from_city,
-      to: boardItem.to_city,
-      departureDate: boardItem.date_precision === 'exact' ? boardItem.departure_date : null,
-      departureMonth: boardItem.date_precision === 'month' ? boardItem.departure_month : null,
-    };
-    setTransportDrawerLeg(leg);
+    setTransportDrawerLeg(legFromBoardItem(boardItem));
     // PR review: reset before the effect's own cache-hit check runs, not
     // just before a real fetch — onClose never clears these, so a stale
     // error/loading state from a previously failed leg would otherwise
@@ -1590,11 +1637,12 @@ export default function TripDashboard() {
   // itself is never triggered directly from a click handler any more (see
   // that hook's own comment for why).
   async function fetchStayOptions(stay, composition) {
-    if (!stay || stayData[stay.id]) return;
+    const key = stayCacheKey(stay, composition);
+    if (!stay || !key || stayData[key]) return;
     setStayDrawerLoading(true);
     try {
       const options = await stayOptionsFor(tripId, stay, composition);
-      setStayData(prev => ({ ...prev, [stay.id]: { options } }));
+      setStayData(prev => ({ ...prev, [key]: { options } }));
     } catch (error) {
       setStayDrawerError(error.message || 'Could not load stay options.');
     } finally {
@@ -1620,22 +1668,55 @@ export default function TripDashboard() {
   const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });
   const costMin = Math.min(...allCosts, 0);
   const costMax = Math.max(...allCosts, 1);
-  const proposedRevision = itineraryState.proposed_revision;
   const trustCounts = trustStripCounts(finalItinerary, result);
-  const readiness = bookingReadinessRollup(days, anchors, tripId);
-  // TWM-198: a confirmed logistics anchor whose day_number no longer
-  // exists in the current itinerary (e.g. after a regeneration that
-  // changed the day count/structure) never matches anchorsForDay on any
-  // day any more — TWM-206 retired the Bookings tab's generic
-  // orphanTransportAnchors/orphanStayAnchors/orphanActivityAnchors
-  // catch-all along with the tab itself, so this is the only remaining
-  // surface a genuinely orphaned anchor gets, rather than becoming
-  // silently invisible. Day-number membership (not the old label-string
-  // match) is the check here: anchors have no stable id to re-match
-  // against a computed segment, but day-number existence is a simple,
-  // robust proxy for "does this confirmation still belong somewhere."
-  const currentDayNumbers = new Set(days.map(day => day.day_number));
-  const orphanAnchors = anchors.filter(anchor => !currentDayNumbers.has(anchor.day_number));
+  const readiness = bookingReadinessRollup(days);
+  const tripStart = bookingSetupStart(tripState);
+  const travelMonthHint = tripTravelDatesMonthName(tripState?.trip_context);
+
+  const startEditForm = (
+    <ScheduleDateForm
+      existing={tripStart}
+      travelMonthHint={travelMonthHint}
+      dateLabel="Trip start date"
+      helper="When does your trip start? Every stay and travel-leg search date is worked out from this — it does not change your itinerary plan."
+      mode={startEditMode}
+      setMode={setStartEditMode}
+      value={startEditValue}
+      setValue={setStartEditValue}
+      onSubmit={submitStartEdit}
+      onCancel={() => setStartEditOpen(false)}
+      onClear={clearStartEdit}
+      clearLabel="Make dates flexible"
+      pending={startEditPending}
+      error={startEditError}
+    />
+  );
+  const partyEditForm = (
+    <TravelerEditForm
+      adults={travelerEditAdults}
+      setAdults={setTravelerEditAdults}
+      children={travelerEditChildren}
+      setChildren={setTravelerEditChildren}
+      infants={travelerEditInfants}
+      setInfants={setTravelerEditInfants}
+      onSubmit={submitTravelerEdit}
+      onCancel={() => setTravelerEditOpen(false)}
+      pending={travelerEditPending}
+      error={travelerEditError}
+    />
+  );
+  const scheduleStrip = (
+    <ScheduleStrip
+      startLabel={scheduleValueLabel(tripStart)}
+      onEditStart={() => openStartEditForm('exact')}
+      startEditOpen={startEditOpen}
+      startEditForm={startEditForm}
+      partyLabel={travelerDisplayLabel}
+      onEditParty={openTravelerEditForm}
+      partyEditOpen={travelerEditOpen}
+      partyEditForm={partyEditForm}
+    />
+  );
 
   return (
     <main className="wrap dashboard">
@@ -1655,15 +1736,6 @@ export default function TripDashboard() {
               PDF is unchanged here; it's tracked separately (TWM-98). */}
         </>}
       />
-      {proposedRevision && (
-        <RevisionOverlay
-          proposedRevision={proposedRevision}
-          pending={revisionPending}
-          error={revisionError}
-          onKeep={() => resolveRevision('keep_current_itinerary')}
-          onAccept={() => resolveRevision('accept_itinerary_revision')}
-        />
-      )}
 
       <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">{TABS.map(({ name, icon }) => <button type="button" aria-current={tab === name ? 'page' : undefined} className={tab === name ? 'active' : ''} key={name} onClick={() => setTab(name)}><span className="tab-icon">{icon}</span> {name}</button>)}</nav>
 
@@ -1686,20 +1758,17 @@ export default function TripDashboard() {
           <div className="budget-summary-row total"><span>Estimated total</span><strong>{moneyRange(finalItinerary.budget_summary.total_low, finalItinerary.budget_summary.total_high)}</strong></div>
         </div>
 
-        <div className="readiness-row">
-          <span>{readiness.ready} of {readiness.total} bookable items ready</span>
-          {readiness.total > readiness.ready && (
-            <button type="button" className="btn btn-ghost" onClick={() => setTab('Itinerary')}>Resolve bookings →</button>
-          )}
-        </div>
+        <div className="tab-intro"><div><h2>🧳 Booking setup</h2><p>Set your trip start and party once — every stay and transport search is prefilled from it.</p></div></div>
+        {scheduleStrip}
 
-        {orphanAnchors.length > 0 && (
-          <div className="tab-intro"><div>
-            <h2>Other confirmed items</h2>
-            <p>Confirmed earlier, from a day this itinerary no longer has — still on file.</p>
-          </div></div>
+        {readiness.total > 0 && (
+          <div className="readiness-row">
+            <span>{readiness.total - readiness.ready} of {readiness.total} bookable items still need attention</span>
+            {readiness.total > readiness.ready && (
+              <button type="button" className="btn btn-ghost" onClick={() => setTab('Itinerary')}>Review bookings →</button>
+            )}
+          </div>
         )}
-        <AnchorList anchors={orphanAnchors} />
 
         <div className="sources-list">
           <h3>Sources</h3>
@@ -1755,15 +1824,11 @@ export default function TripDashboard() {
               <p className="atlas-day-route">📍 {selectedDay.primary_location}</p>
               <p>{selectedDay.summary}</p>
             </header>
-            <AnchorList anchors={anchorsForDay(anchors, selectedDay.day_number)} />
             <div className="atlas-timeline">
               {selectedDay.timeline.map((item, index) => {
                 const boardItem = boardDayByNumber[selectedDay.day_number]?.items?.[index];
                 const isGatewayLeg = item.kind === 'TRAVEL' && boardItem?.is_gateway_leg;
-                const stayItem = stayFromTimelineItem(item, days, selectedDay.day_number);
-                if (stayItem) {
-                  stayItem.departureDate = boardDayByNumber[stayItem.dayNumbers[0]]?.date ?? null;
-                }
+                const stayItem = item.kind === 'STAY' ? stayFromBoardSegment(boardStaySegmentByItemId[boardItem?.id]) : null;
                 const hasItemActions = isGatewayLeg || stayItem;
                 return (
                   <div className="atlas-item" key={index}>
@@ -1838,84 +1903,64 @@ export default function TripDashboard() {
       </section>}
 
       {(() => {
-        const bookingDateContext = tripBookingDateContext(tripState?.trip_context);
-        // PR review: the strip must show the date this specific search will
-        // actually use, not always the trip's raw departure_date — an
-        // inbound/return gateway leg searches with return_date (the Board
-        // already resolves this per-item, see openTransportDrawer's `leg`),
-        // so its drawer's label has to reflect that too, or it would show
-        // the outbound date while silently searching with a different one.
-        // Stay has no outbound/inbound concept, so it always shows the
-        // trip's raw departure/month label.
-        const renderStrip = (dateLabel, dateModeHint) => (
-          <BookingSummaryStrip
-            dateLabel={dateLabel}
-            // TWM-215: always opens narrowing to an exact date, even when a
-            // month is already on file — DateEditForm's own hasExistingPrecision
-            // check is what decides whether that renders as "pick a day
-            // inside this month" (existing) or fresh mode-choice radios
-            // (nothing known yet); dateModeHint only drives dateLabel above.
-            onEditDate={() => openDateEditForm('exact')}
-            dateEditOpen={dateEditOpen}
-            dateEditForm={
-              <DateEditForm
-                existing={bookingDateContext}
-                travelMonthHint={tripTravelDatesMonthName(tripState?.trip_context)}
-                mode={dateEditMode}
-                setMode={setDateEditMode}
-                value={dateEditValue}
-                setValue={setDateEditValue}
-                returnValue={dateEditReturnValue}
-                setReturnValue={setDateEditReturnValue}
-                onSubmit={submitDateEdit}
-                onCancel={() => setDateEditOpen(false)}
-                pending={dateEditPending}
-                error={dateEditError}
-              />
-            }
-            travelerLabel={travelerDisplayLabel}
-            onEditTravelers={openTravelerEditForm}
-            travelerEditOpen={travelerEditOpen}
-            travelerEditForm={
-              <TravelerEditForm
-                adults={travelerEditAdults}
-                setAdults={setTravelerEditAdults}
-                children={travelerEditChildren}
-                setChildren={setTravelerEditChildren}
-                infants={travelerEditInfants}
-                setInfants={setTravelerEditInfants}
-                onSubmit={submitTravelerEdit}
-                onCancel={() => setTravelerEditOpen(false)}
-                pending={travelerEditPending}
-                error={travelerEditError}
-              />
-            }
+        // TWM-216: a per-entity search-date preference form (booking_setup.
+        // search_prefs), reused for whichever drawer entity it's opened from.
+        const prefExisting = prefEditTarget
+          ? bookingSetupSearchPref(tripState, prefEditTarget.type, prefEditTarget.id)
+          : null;
+        const prefEditForm = (
+          <ScheduleDateForm
+            existing={prefExisting}
+            dateLabel={prefEditTarget?.type === 'stay' ? 'Check-in date' : 'Leg date'}
+            helper="Prefill this one search with a specific date. It does not change your itinerary or your trip start date."
+            mode={prefEditMode}
+            setMode={setPrefEditMode}
+            value={prefEditValue}
+            setValue={setPrefEditValue}
+            onSubmit={submitPrefEdit}
+            onCancel={() => setPrefEditOpen(false)}
+            onClear={clearPrefEdit}
+            pending={prefEditPending}
+            error={prefEditError}
           />
         );
-        const genericDateLabel = bookingDateContext?.precision === 'exact'
-          ? bookingDateContext.departure_date
-          : bookingDateContext?.precision === 'month'
-          ? bookingDateContext.departure_month
-          : null;
-        // PR review: transportDrawerLeg is a snapshot captured once when the
-        // drawer opened -- re-deriving its date from boardDayByNumber (fresh
-        // every render) instead of trusting that snapshot is what makes a
-        // date saved while the drawer is open actually show up on the strip,
-        // rather than the stale value from open-time.
+
+        // transportDrawerLeg is an open-time snapshot; re-find the fresh
+        // Board item every render so a search-pref saved while the drawer is
+        // open shows up immediately.
         const freshLeg = transportDrawerLeg
           ? Object.values(boardDayByNumber)
               .flatMap(day => day.items || [])
               .find(item => item.is_gateway_leg && item.from_city === transportDrawerLeg.from && item.to_city === transportDrawerLeg.to)
           : null;
-        const transportStrip = transportDrawerLeg
-          ? renderStrip(
-              freshLeg?.date_precision === 'exact' ? freshLeg.departure_date
-                : freshLeg?.date_precision === 'month' ? freshLeg.departure_month
-                : null,
-              freshLeg?.date_precision === 'month' ? 'month' : 'exact',
-            )
-          : null;
-        const stayStrip = renderStrip(genericDateLabel, bookingDateContext?.precision);
+        const transportDateRow = freshLeg ? (
+          <DrawerDateRow
+            label="This leg"
+            source={freshLeg.date_source}
+            precision={freshLeg.date_precision}
+            valueLabel={freshLeg.date_precision === 'month' ? freshLeg.departure_month : freshLeg.departure_date}
+            editable={freshLeg.date_source !== 'itinerary'}
+            onEdit={() => openPrefEditForm('transport', freshLeg.id, 'exact')}
+            editOpen={prefEditOpen && prefEditTarget?.type === 'transport'}
+            editForm={prefEditForm}
+          />
+        ) : null;
+
+        const stay = activeStayDrawerStay;
+        const stayDateRow = stay ? (
+          <DrawerDateRow
+            label="Check-in"
+            source={stay.dateSource}
+            precision={stay.datePrecision}
+            valueLabel={stay.datePrecision === 'month' ? stay.departureMonth : stay.departureDate}
+            checkoutLabel={stay.checkoutDate}
+            editable
+            onEdit={() => openPrefEditForm('stay', stay.id, 'exact')}
+            editOpen={prefEditOpen && prefEditTarget?.type === 'stay'}
+            editForm={prefEditForm}
+          />
+        ) : null;
+
         return (
           <>
             {transportDrawerLeg && (
@@ -1925,7 +1970,7 @@ export default function TripDashboard() {
                 feasibility={transportData[transportCacheKey(transportDrawerLeg, transportDrawerTravelerOverride)]?.feasibility}
                 loading={transportDrawerLoading}
                 error={transportDrawerError}
-                summaryStrip={transportStrip}
+                dateRow={transportDateRow}
                 defaultTravelerCount={partySize || roughTravelerCount}
                 travelerOverride={transportDrawerTravelerOverride}
                 onSearchTravelerCount={searchTransportForTravelerCount}
@@ -1934,17 +1979,17 @@ export default function TripDashboard() {
             )}
             {stayDrawerStay && (
               <StayDrawer
-                stay={stayDrawerStay}
-                options={stayData[stayDrawerStay.id]?.options}
+                stay={activeStayDrawerStay}
+                options={stayData[stayCacheKey(activeStayDrawerStay, currentTravelerComposition)]?.options}
                 loading={stayDrawerLoading}
                 error={stayDrawerError}
                 // TWM-204: stay_price_estimate lives on the raw Atlas day
-                // object, not the Trip Board adapter (it isn't
-                // feasibility-derived) — read straight from the stay's
-                // first day; Atlas is expected to keep it consistent
-                // across every day of the same base.
-                stayPriceEstimate={days.find(day => day.day_number === stayDrawerStay.dayNumbers[0])?.stay_price_estimate}
-                summaryStrip={stayStrip}
+                // because Atlas owns general stay-budget guidance (not
+                // feasibility-derived) — read from the Board-owned segment's
+                // first day. This stays separate from provider cards, which
+                // never show fabricated/live prices.
+                stayPriceEstimate={days.find(day => day.day_number === activeStayDrawerStay.startDayNumber)?.stay_price_estimate}
+                dateRow={stayDateRow}
                 onClose={() => setStayDrawerStay(null)}
               />
             )}

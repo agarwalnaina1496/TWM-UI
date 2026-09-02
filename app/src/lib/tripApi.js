@@ -73,12 +73,12 @@ export function normalizeTripRecord(record) {
 
 // A POST /commands response now carries only the trip_state branches that
 // turn actually touched (TWM-154, Backend-owned trimming) — matcher_state /
-// planner_state / itinerary_state / logistics_state are simply absent when
+// planner_state / itinerary_state / booking_setup are simply absent when
 // unchanged. The rest of trip_state (stage/active_agent/trip_context) is
 // always present. Carry forward each branch's last-known value from the
 // previous record instead of letting it go missing client-side, so a page
 // reading e.g. planner_state after an unrelated command still sees it.
-const COMMAND_RESPONSE_BRANCHES = ['matcher_state', 'planner_state', 'itinerary_state', 'logistics_state'];
+const COMMAND_RESPONSE_BRANCHES = ['matcher_state', 'planner_state', 'itinerary_state', 'booking_setup'];
 
 export function mergeCommandTripRecord(previous, incoming) {
   const normalized = normalizeTripRecord(incoming);
