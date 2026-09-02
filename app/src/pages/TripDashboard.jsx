@@ -81,6 +81,18 @@ function stayFromBoardSegment(segment) {
   };
 }
 
+// A transport-drawer `leg` from a Trip Board TRAVEL item — the Board has
+// already resolved this leg's effective date (Atlas date / search-pref
+// override / calendar anchor), so the drawer never does date math.
+function legFromBoardItem(boardItem) {
+  return {
+    from: boardItem.from_city,
+    to: boardItem.to_city,
+    departureDate: boardItem.date_precision === 'exact' ? boardItem.departure_date : null,
+    departureMonth: boardItem.date_precision === 'month' ? boardItem.departure_month : null,
+  };
+}
+
 function BudgetBar({ low, high, min, max }) {
   const span = Math.max(max - min, 1);
   const left = ((low - min) / span) * 100;
@@ -1240,7 +1252,10 @@ export default function TripDashboard() {
         .flatMap(day => day.items || [])
         .find(item => item.is_gateway_leg && item.from_city === transportDrawerLeg.from && item.to_city === transportDrawerLeg.to);
       if (!boardItem) return;
-      fetchTransportOptions(transportDrawerLeg, boardItem, transportDrawerTravelerOverride);
+      // TWM-216: transportDrawerLeg is an open-time snapshot — re-derive the
+      // leg's dates from the fresh Board item so a per-leg search-pref saved
+      // while the drawer is open reaches the Trusted Action payload.
+      fetchTransportOptions(legFromBoardItem(boardItem), boardItem, transportDrawerTravelerOverride);
     },
   );
 
@@ -1592,13 +1607,7 @@ export default function TripDashboard() {
   // closing the drawer left it permanently showing no options, since only
   // the click-to-open path used to fetch).
   function openTransportDrawer(boardItem) {
-    const leg = {
-      from: boardItem.from_city,
-      to: boardItem.to_city,
-      departureDate: boardItem.date_precision === 'exact' ? boardItem.departure_date : null,
-      departureMonth: boardItem.date_precision === 'month' ? boardItem.departure_month : null,
-    };
-    setTransportDrawerLeg(leg);
+    setTransportDrawerLeg(legFromBoardItem(boardItem));
     // PR review: reset before the effect's own cache-hit check runs, not
     // just before a real fetch — onClose never clears these, so a stale
     // error/loading state from a previously failed leg would otherwise
