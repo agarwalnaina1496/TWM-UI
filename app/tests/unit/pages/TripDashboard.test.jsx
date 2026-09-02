@@ -866,7 +866,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn(async (command, payload) => {
         expect(command).toBe('set_trip_start');
-        expect(payload.tripStartUpdate).toEqual({ date: '2026-11-01' });
+        expect(payload.tripStartUpdate).toEqual({ precision: 'exact', date: '2026-11-01' });
         commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } }, { trip_context: { origin_city: 'Delhi' } });
         return { message: null, agent_meta: null, trip: commandSnapshot };
       });
@@ -879,6 +879,22 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_trip_start', expect.anything()));
       await waitFor(() => expect(screen.getByRole('button', { name: /Trip starts: 2026-11-01 . Change/ })).toBeInTheDocument());
+    });
+
+    it('reverts an anchor to flexible via set_trip_start precision=flexible', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } }, { trip_context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn(async (command, payload) => {
+        expect(command).toBe('set_trip_start');
+        expect(payload.tripStartUpdate).toEqual({ precision: 'flexible' });
+        commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: {} }, { trip_context: { origin_city: 'Delhi' } });
+        return { message: null, agent_meta: null, trip: commandSnapshot };
+      });
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Trip starts: 2026-11-01 . Change/ }));
+      await user.click(screen.getByRole('button', { name: 'Make dates flexible' }));
+      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_trip_start', expect.anything()));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Set trip start date/ })).toBeInTheDocument());
     });
 
     it('saves the party via set_party and reflects it on the strip', async () => {
@@ -1230,7 +1246,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       });
       sendTripCommand = vi.fn(async (command, payload) => {
         expect(command).toBe('set_trip_start');
-        expect(payload.tripStartUpdate).toEqual({ date: '2026-11-01' });
+        expect(payload.tripStartUpdate).toEqual({ precision: 'exact', date: '2026-11-01' });
         commandSnapshot = snapshotWith(
           readyItineraryState(),
           { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } },

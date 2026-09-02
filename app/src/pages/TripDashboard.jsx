@@ -307,10 +307,11 @@ const MONTH_NAMES_LOWER = [
 // radios are dropped (a traveler narrowing "December" to a day isn't
 // re-answering "exact or month"); "Change precision" re-opens that choice.
 // `dateLabel` names the exact input ("Trip start" / "Check-in" / "This leg").
-// `onClear` (optional) renders a "Reset to derived date" button.
+// `onClear` (optional) renders a clear button labelled `clearLabel`.
 function ScheduleDateForm({
   existing, travelMonthHint, dateLabel = 'Date', helper,
-  mode, setMode, value, setValue, onSubmit, onCancel, onClear, pending, error,
+  mode, setMode, value, setValue, onSubmit, onCancel, onClear,
+  clearLabel = 'Reset to itinerary date', pending, error,
 }) {
   const [changingPrecision, setChangingPrecision] = useState(false);
   const hasStructuredMonth = existing?.precision === 'month';
@@ -375,7 +376,7 @@ function ScheduleDateForm({
       <div className="confirmation-form-actions">
         <button type="button" className="btn btn-ghost" disabled={pending} onClick={onCancel}>Cancel</button>
         {onClear && existing && (
-          <button type="button" className="btn btn-ghost" disabled={pending} onClick={onClear}>Reset to itinerary date</button>
+          <button type="button" className="btn btn-ghost" disabled={pending} onClick={onClear}>{clearLabel}</button>
         )}
         <button type="submit" className="btn btn-primary" disabled={pending || !value}>Save</button>
       </div>
@@ -1283,8 +1284,8 @@ export default function TripDashboard() {
     try {
       await sendTripCommand('set_trip_start', {
         tripStartUpdate: startEditMode === 'exact'
-          ? { date: startEditValue }
-          : { month: startEditValue },
+          ? { precision: 'exact', date: startEditValue }
+          : { precision: 'month', month: startEditValue },
       });
       trackEvent('trip_start_updated', { precision: startEditMode });
       // Every cached option was resolved against the old anchor-derived
@@ -1295,6 +1296,22 @@ export default function TripDashboard() {
       setStartEditOpen(false);
     } catch (error) {
       setStartEditError(error.message || 'Could not save that date — your existing options are still available.');
+    } finally {
+      setStartEditPending(false);
+    }
+  }
+
+  async function clearStartEdit() {
+    setStartEditPending(true);
+    setStartEditError(null);
+    try {
+      await sendTripCommand('set_trip_start', { tripStartUpdate: { precision: 'flexible' } });
+      trackEvent('trip_start_updated', { precision: 'flexible' });
+      setTransportData({});
+      setStayData({});
+      setStartEditOpen(false);
+    } catch (error) {
+      setStartEditError(error.message || 'Could not update that — your existing options are still available.');
     } finally {
       setStartEditPending(false);
     }
@@ -1654,6 +1671,8 @@ export default function TripDashboard() {
       setValue={setStartEditValue}
       onSubmit={submitStartEdit}
       onCancel={() => setStartEditOpen(false)}
+      onClear={clearStartEdit}
+      clearLabel="Make dates flexible"
       pending={startEditPending}
       error={startEditError}
     />
