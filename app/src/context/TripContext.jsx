@@ -394,7 +394,7 @@ export function TripProvider({ children }) {
   // The single browser mutation boundary (TWM-110): POST /api/trips/{id}/commands.
   // Every entry path (Advice/Discover/Known Destination) and every follow-up
   // traveler message goes through here — React never sends canonical TripState.
-  async function sendTripCommand(command, { message, optionId, destination, tripContext, refinement, tripStartUpdate, partyUpdate, searchPrefUpdate, searchPrefClear, idempotencyKey } = {}) {
+  async function sendTripCommand(command, { message, optionId, destination, tripContext, refinement, partyUpdate, searchPrefUpdate, searchPrefClear, idempotencyKey } = {}) {
     const record = await ensureTrip();
     return queueTripMutation(record.id, async () => {
       const current = tripRecordRef.current || record;
@@ -408,7 +408,6 @@ export function TripProvider({ children }) {
       if (destination !== undefined) payload.destination = destination;
       if (tripContext !== undefined) payload.trip_context = tripContext;
       if (refinement !== undefined) payload.refinement = refinement;
-      if (tripStartUpdate !== undefined) payload.trip_start_update = tripStartUpdate;
       if (partyUpdate !== undefined) payload.party_update = partyUpdate;
       if (searchPrefUpdate !== undefined) payload.search_pref_update = searchPrefUpdate;
       if (searchPrefClear !== undefined) payload.search_pref_clear = searchPrefClear;
@@ -417,7 +416,7 @@ export function TripProvider({ children }) {
         // A command response only carries the trip_state branches this turn
         // touched (TWM-154) — merge onto the last-known record instead of
         // replacing it wholesale, so an untouched branch (e.g. planner_state
-        // after a set_trip_start call) doesn't disappear client-side.
+        // after a set_party call) doesn't disappear client-side.
         // Merging against tripRecordRef.current (not the React `prev` from a
         // setState updater) and writing through updateTripRecord keeps the
         // ref itself current in this same tick — otherwise a follow-up

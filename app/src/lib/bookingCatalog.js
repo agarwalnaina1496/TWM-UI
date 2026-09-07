@@ -406,9 +406,8 @@ export function recommendedMode(feasibleOptions) {
 // YYYY-MM); this function just passes through whichever is present, or
 // both null when Atlas didn't have confirmed precision for that leg.
 //
-// TWM-216: the trip-level date fallback (the traveler's calendar anchor and
-// per-leg search-date preferences) is resolved server-side by the Trip
-// Board now — each transport item arrives with its effective
+// TWM-216: per-leg search-date preferences are resolved server-side by the
+// Trip Board now — each transport item arrives with its effective
 // departure_date/departure_month plus a date_source. TripDashboard builds
 // the transport drawer's `leg` straight from that Board item, so this
 // helper only ever needs Atlas's own structured per-item value.

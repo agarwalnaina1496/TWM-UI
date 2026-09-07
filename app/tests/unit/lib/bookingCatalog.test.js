@@ -175,10 +175,9 @@ describe('transportLegs', () => {
     ]);
   });
 
-  // TWM-216: the trip-level date fallback (calendar anchor + per-leg search
-  // preferences) is resolved server-side by the Trip Board now, so
-  // transportLegs only carries Atlas's own per-item value — it no longer
-  // takes a bookingDateOverride argument.
+  // TWM-216: per-leg search-date preferences are resolved server-side by the
+  // Trip Board now, so transportLegs only carries Atlas's own per-item value
+  // — it no longer takes a bookingDateOverride argument.
 });
 
 describe('gatewayLegs', () => {

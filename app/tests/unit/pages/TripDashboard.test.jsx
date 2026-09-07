@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TripDashboard from '../../../src/pages/TripDashboard.jsx';
 import { transportLegs, gatewayLegs } from '../../../src/lib/bookingCatalog.js';
 import { tripOriginCity } from '../../../src/constants/tripContext.js';
-import { bookingSetupStart, bookingSetupSearchPref } from '../../../src/constants/bookingSetup.js';
+import { bookingSetupSearchPref } from '../../../src/constants/bookingSetup.js';
 
 let commandSnapshot;
 let sendTripCommand;
@@ -261,17 +261,14 @@ function feasibleAssessmentResponse() {
 function boardResponseFor(itineraryResult, tripState, feasibility = feasibleAssessmentResponse()) {
   const days = itineraryResult.result.final_itinerary.days;
   const originCity = tripOriginCity(tripState?.trip_context);
-  const start = bookingSetupStart(tripState);
-  const startDate = start?.precision === 'exact' ? start.date : null;
-  const startMonth = start?.precision === 'month' ? start.month : null;
   const allLegs = transportLegs(days);
   const gatewayKeys = new Set(gatewayLegs(allLegs, originCity).map(leg => `${leg.from}→${leg.to}`));
   const legByKey = Object.fromEntries(allLegs.map(leg => [`${leg.from}→${leg.to}`, leg]));
   const addDays = (iso, n) => new Date(new Date(`${iso}T00:00:00Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10);
-  const dayDate = n => (startDate ? addDays(startDate, n - 1) : null);
+  // TWM-216: no trip-level calendar anchor. Each entity's date resolves
+  // search_pref -> Atlas's own per-item date (trip_dates) -> none.
   const boardDays = days.map(day => ({
     ...day,
-    date: dayDate(day.day_number),
     items: day.timeline.map((item, index) => {
       const id = `test-trip:${day.day_number}:${index}`;
       if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
@@ -282,12 +279,10 @@ function boardResponseFor(itineraryResult, tripState, feasibility = feasibleAsse
       const leg = legByKey[key] || {};
       const override = bookingSetupSearchPref(tripState, 'transport', id);
       let departure_date = null, departure_month = null, date_precision = 'flexible', date_source = 'none';
-      if (leg.departureDate) { departure_date = leg.departureDate; date_precision = 'exact'; date_source = 'itinerary'; }
-      else if (leg.departureMonth) { departure_month = leg.departureMonth; date_precision = 'month'; date_source = 'itinerary'; }
-      else if (override?.precision === 'exact') { departure_date = override.date; date_precision = 'exact'; date_source = 'override'; }
-      else if (override?.precision === 'month') { departure_month = override.month; date_precision = 'month'; date_source = 'override'; }
-      else if (dayDate(day.day_number)) { departure_date = dayDate(day.day_number); date_precision = 'exact'; date_source = 'anchor'; }
-      else if (startMonth) { departure_month = startMonth; date_precision = 'month'; date_source = 'anchor'; }
+      if (override?.precision === 'exact') { departure_date = override.date; date_precision = 'exact'; date_source = 'search_pref'; }
+      else if (override?.precision === 'month') { departure_month = override.month; date_precision = 'month'; date_source = 'search_pref'; }
+      else if (leg.departureDate) { departure_date = leg.departureDate; date_precision = 'exact'; date_source = 'trip_dates'; }
+      else if (leg.departureMonth) { departure_month = leg.departureMonth; date_precision = 'month'; date_source = 'trip_dates'; }
       return {
         ...item, id,
         is_gateway_leg: isGateway,
@@ -319,18 +314,12 @@ function boardResponseFor(itineraryResult, tripState, feasibility = feasibleAsse
     const nights = segment.end_day_number - segment.start_day_number + 1;
     const id = `test-trip:stay:${segment.start_day_number}:${segment.end_day_number}:${String(segment.location).toLowerCase().replace(/\s+/g, '-')}`;
     const override = bookingSetupSearchPref(tripState, 'stay', id);
-    const anchoredCheckin = dayDate(segment.start_day_number);
     let checkin_date = null, checkout_date = null, departure_month = null, date_precision = 'flexible', date_source = 'none';
     if (override?.precision === 'exact') {
       checkin_date = override.date; checkout_date = addDays(override.date, nights);
-      date_precision = 'exact'; date_source = 'override';
+      date_precision = 'exact'; date_source = 'search_pref';
     } else if (override?.precision === 'month') {
-      departure_month = override.month; date_precision = 'month'; date_source = 'override';
-    } else if (anchoredCheckin) {
-      checkin_date = anchoredCheckin; checkout_date = addDays(anchoredCheckin, nights);
-      date_precision = 'exact'; date_source = 'anchor';
-    } else if (startMonth) {
-      departure_month = startMonth; date_precision = 'month'; date_source = 'anchor';
+      departure_month = override.month; date_precision = 'month'; date_source = 'search_pref';
     }
     return {
       id, location: segment.location,
@@ -844,91 +833,68 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // (wherever the search actually happens), not inline on the Itinerary
   // item — both are trip-wide facts, never leg- or stay-specific.
 
-  // TWM-216: the trip calendar anchor (booking_setup.start) and structured
-  // party (booking_setup.party) are edited once, from the Overview schedule
-  // strip — never from inside a per-item drawer. Each drawer gets its own
-  // per-entity date row instead (see the drawer describe blocks below).
-  describe('Overview schedule strip — trip start and party (TWM-216)', () => {
-    it('shows "Set trip start date" and "Set travellers" on Overview when neither is known yet', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+  // TWM-216: the structured party (booking_setup.party) is edited from inside
+  // whichever booking drawer is open — party doesn't cascade the way a date
+  // control would. There is no trip-level date control anywhere.
+  describe('Party editor in the booking drawers (TWM-216)', () => {
+    function rishikeshNoTravelers() {
       itineraryFetchResponse = {
         version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
         result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } }),
       };
       global.fetch = defaultFetchMock();
+    }
+
+    async function openTransportDrawer() {
+      const user = userEvent.setup();
+      await readyDashboard();
+      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Transport options/ }));
+      await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+      return user;
+    }
+
+    it('shows "Set travellers" inside the drawer when the party is unknown', async () => {
+      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
+      rishikeshNoTravelers();
       sendTripCommand = vi.fn();
-      await readyDashboard();
-      expect(screen.getByRole('button', { name: /Set trip start date/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Set travellers/ })).toBeInTheDocument();
+      await openTransportDrawer();
+      const drawer = screen.getByRole('dialog', { name: /Delhi to Rishikesh/ });
+      expect(within(drawer).getByRole('button', { name: /Set travellers/ })).toBeInTheDocument();
     });
 
-    it('saves the trip start via set_trip_start and reflects it on the strip', async () => {
+    it('saves the party via set_party from inside the drawer, keeping it open', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      sendTripCommand = vi.fn(async (command, payload) => {
-        expect(command).toBe('set_trip_start');
-        expect(payload.tripStartUpdate).toEqual({ precision: 'exact', date: '2026-11-01' });
-        commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } }, { trip_context: { origin_city: 'Delhi' } });
-        return { message: null, agent_meta: null, trip: commandSnapshot };
-      });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Set trip start date/ }));
-      const input = await screen.findByLabelText('Trip start date');
-      await user.clear(input);
-      await user.type(input, '2026-11-01');
-      await user.click(screen.getByRole('button', { name: 'Save' }));
-      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_trip_start', expect.anything()));
-      await waitFor(() => expect(screen.getByRole('button', { name: /Trip starts: 2026-11-01 . Change/ })).toBeInTheDocument());
-    });
-
-    it('reverts an anchor to flexible via set_trip_start precision=flexible', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } }, { trip_context: { origin_city: 'Delhi' } });
-      sendTripCommand = vi.fn(async (command, payload) => {
-        expect(command).toBe('set_trip_start');
-        expect(payload.tripStartUpdate).toEqual({ precision: 'flexible' });
-        commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: {} }, { trip_context: { origin_city: 'Delhi' } });
-        return { message: null, agent_meta: null, trip: commandSnapshot };
-      });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Trip starts: 2026-11-01 . Change/ }));
-      await user.click(screen.getByRole('button', { name: 'Make dates flexible' }));
-      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_trip_start', expect.anything()));
-      await waitFor(() => expect(screen.getByRole('button', { name: /Set trip start date/ })).toBeInTheDocument());
-    });
-
-    it('saves the party via set_party and reflects it on the strip', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      itineraryFetchResponse = {
-        version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
-        result: atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: null, date_range: null, overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } }),
-      };
-      global.fetch = defaultFetchMock();
+      rishikeshNoTravelers();
       sendTripCommand = vi.fn(async (command, payload) => {
         expect(command).toBe('set_party');
         expect(payload.partyUpdate).toEqual({ adults: 1, children: 0, infants: 0 });
         commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { party: { adults: 1, children: 0, infants: 0 } } }, { trip_context: { origin_city: 'Delhi' } });
         return { message: null, agent_meta: null, trip: commandSnapshot };
       });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Set travellers/ }));
-      await user.click(screen.getByRole('button', { name: 'Save travelers' }));
+      const user = await openTransportDrawer();
+      const drawer = screen.getByRole('dialog', { name: /Delhi to Rishikesh/ });
+      await user.click(within(drawer).getByRole('button', { name: /Set travellers/ }));
+      await user.click(within(drawer).getByRole('button', { name: 'Save travelers' }));
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_party', expect.anything()));
-      await waitFor(() => expect(screen.getByRole('button', { name: /1 travelers . Change/ })).toBeInTheDocument());
+      await waitFor(() => expect(
+        within(screen.getByRole('dialog', { name: /Delhi to Rishikesh/ }))
+          .getByRole('button', { name: /Booking for 1 travelers . Change/ }),
+      ).toBeInTheDocument());
     });
 
-    it('never renders a trip-wide date or party editor inside a drawer', async () => {
+    it('never renders a trip start editor — not on Overview, not in a drawer', async () => {
       commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
       sendTripCommand = vi.fn();
       const user = userEvent.setup();
       await readyDashboard();
+      expect(screen.queryByRole('button', { name: /trip start/i })).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /Itinerary/ }));
       await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
       expect(within(drawer).queryByRole('button', { name: /trip start/i })).not.toBeInTheDocument();
-      expect(within(drawer).queryByRole('button', { name: /Set travellers/ })).not.toBeInTheDocument();
     });
   });
 
@@ -952,9 +918,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       // /board mock) returns all four modes feasible for this leg.
       await waitFor(() => expect(within(drawer).getAllByText(/Flight|Train|Bus|Drive/).length).toBeGreaterThan(0));
       // TWM-216: the per-leg date form is collapsed by default, only
-      // expanding once "Add exact dates for this search" is clicked.
+      // expanding once "Add a date for this search" is clicked.
       expect(within(drawer).queryByLabelText('Leg date')).toBeNull();
-      expect(within(drawer).getByRole('button', { name: /Add exact dates for this search/ })).toBeInTheDocument();
+      expect(within(drawer).getByRole('button', { name: /Add a date for this search/ })).toBeInTheDocument();
       // Every mode was feasible for this fixture, so there's nothing left
       // to list in the collapsed "other modes" section.
       expect(within(drawer).queryByText(/not available for this route/i)).toBeNull();
@@ -1050,7 +1016,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       // row — reopen it and set the leg's search date, as a traveler would.
       await user.click(screen.getByRole('button', { name: /Transport options/ }));
       drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-      await user.click(within(drawer).getByRole('button', { name: /Add exact dates for this search/ }));
+      await user.click(within(drawer).getByRole('button', { name: /Add a date for this search/ }));
       await user.type(within(drawer).getByLabelText('Leg date'), '2026-11-01');
       await user.click(within(drawer).getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', expect.anything()));
@@ -1101,7 +1067,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(within(drawer).getAllByText(/Flight|Train|Bus|Drive/).length).toBeGreaterThan(0));
       const countBeforeSave = capturedBodies.length;
 
-      await user.click(within(drawer).getByRole('button', { name: /Add exact dates for this search/ }));
+      await user.click(within(drawer).getByRole('button', { name: /Add a date for this search/ }));
       await user.type(within(drawer).getByLabelText('Leg date'), '2026-11-01');
       await user.click(within(drawer).getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', expect.anything()));
@@ -1113,47 +1079,6 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(
         capturedBodies.slice(countBeforeSave).some(body => body.departure_date === '2026-11-01')
       ).toBe(true));
-    });
-
-    // TWM-215: a search-scoped traveler-count override (e.g. only 3 of 4
-    // travelers are on this specific gateway leg) must fetch independently
-    // of the trip-wide default, and must never write booking_setup.party —
-    // it only changes what this one search asks for.
-    it('re-searches transport options for an overridden traveler count without touching booking_setup.party', async () => {
-      commandSnapshot = snapshotWith(
-        readyItineraryState(),
-        { bookingSetup: { party: { adults: 4, children: 0, infants: 0 } } },
-        { trip_context: { origin_city: 'Delhi' } },
-      );
-      sendTripCommand = vi.fn();
-      let trustedActionCallCount = 0;
-      global.fetch = vi.fn(async (url) => {
-        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action')) { trustedActionCallCount += 1; return jsonResponse(resolvedActionResponse()); }
-        return jsonResponse({});
-      });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-
-      await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /Transport options/ }));
-      const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-      await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(0));
-      const callCountForDefault = trustedActionCallCount;
-
-      const countInput = within(drawer).getByRole('spinbutton');
-      expect(countInput).toHaveValue(4);
-      await user.clear(countInput);
-      await user.type(countInput, '3');
-      await user.click(within(drawer).getByRole('button', { name: 'Search' }));
-
-      await waitFor(() => expect(trustedActionCallCount).toBeGreaterThan(callCountForDefault));
-      expect(within(drawer).getByRole('button', { name: /Reset to 4 default/ })).toBeInTheDocument();
-      // This is a search-only override -- it never sends a trip command.
-      expect(sendTripCommand).not.toHaveBeenCalled();
     });
 
   });
@@ -1222,7 +1147,7 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
       const initialTrustedActionCount = capturedBodies.length;
 
-      await user.click(within(drawer).getByRole('button', { name: /Add exact dates for this search/ }));
+      await user.click(within(drawer).getByRole('button', { name: /Add a date for this search/ }));
       await user.type(within(drawer).getByLabelText('Check-in date'), '2026-11-01');
       await user.click(within(drawer).getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', expect.anything()));
@@ -1233,10 +1158,11 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
     });
 
-    it('labels the stay date-row action "Use a different date" once a date is already anchor-derived', async () => {
+    it('labels the stay date-row action by whether a search date is already set', async () => {
+      const segmentId = 'test-trip:stay:1:2:rishikesh';
       commandSnapshot = snapshotWith(
         readyItineraryState(),
-        { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } },
+        { bookingSetup: { search_prefs: { stays: { [segmentId]: { precision: 'exact', date: '2026-11-01' } } } } },
         { trip_context: { origin_city: 'Delhi' } },
       );
       sendTripCommand = vi.fn();
@@ -1246,62 +1172,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-      expect(within(drawer).getByText(/from your trip start/)).toBeInTheDocument();
-      expect(within(drawer).getByRole('button', { name: /Use a different date for this search/ })).toBeInTheDocument();
-      expect(within(drawer).queryByRole('button', { name: /Add exact dates for this search/ })).toBeNull();
-    });
-
-    it('refetches an open stay drawer with new derived dates after a trip-start save on Overview', async () => {
-      commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: { origin_city: 'Delhi' } });
-      const capturedBodies = [];
-      global.fetch = vi.fn(async (url, options) => {
-        if (url.includes('/itinerary-versions')) return jsonResponse(itineraryVersionsResponse);
-        if (url.endsWith('/itinerary')) return jsonResponse(itineraryFetchResponse);
-        if (url.includes('/board')) return jsonResponse(boardResponseFor(itineraryFetchResponse, commandSnapshot?.trip_state, feasibleAssessmentResponse()));
-        if (url.includes('/trusted-action/feasibility')) return jsonResponse(feasibleAssessmentResponse());
-        if (url.includes('/trusted-action')) {
-          const body = JSON.parse(options.body);
-          capturedBodies.push(body);
-          return jsonResponse(stayActionResponse(body.preferred_partner));
-        }
-        if (url.includes('/flight-search')) return jsonResponse(clarificationNeededResponse());
-        return jsonResponse({});
-      });
-      sendTripCommand = vi.fn(async (command, payload) => {
-        expect(command).toBe('set_trip_start');
-        expect(payload.tripStartUpdate).toEqual({ precision: 'exact', date: '2026-11-01' });
-        commandSnapshot = snapshotWith(
-          readyItineraryState(),
-          { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } },
-          { trip_context: { origin_city: 'Delhi' } },
-        );
-        return { message: null, agent_meta: null, trip: commandSnapshot };
-      });
-      const user = userEvent.setup();
-      await readyDashboard();
-      await user.click(screen.getByRole('button', { name: /Itinerary/ }));
-      await waitFor(() => expect(screen.getByRole('button', { name: /Stay options/ })).toBeInTheDocument());
-      await user.click(screen.getByRole('button', { name: /Stay options/ }));
-      const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-      await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
-      const initialTrustedActionCount = capturedBodies.length;
-
-      // The drawer is not tab-gated, so it stays open while we set the
-      // trip-wide calendar anchor from the Overview schedule strip.
-      await user.click(screen.getByRole('button', { name: /Overview/ }));
-      await user.click(screen.getByRole('button', { name: /Set trip start date/ }));
-      await user.type(screen.getByLabelText('Trip start date'), '2026-11-01');
-      await user.click(screen.getByRole('button', { name: 'Save' }));
-      await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_trip_start', expect.anything()));
-
-      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(initialTrustedActionCount));
-      expect(capturedBodies.slice(initialTrustedActionCount).some(body => (
-        body.domain === 'stay'
-        && body.preferred_partner === 'booking_com'
-        && body.departure_date === '2026-11-01'
-        && body.return_date === '2026-11-03'
-        && body.trip_shape === 'round_trip'
-      ))).toBe(true);
+      expect(within(drawer).getByText(/your search date/)).toBeInTheDocument();
+      expect(within(drawer).getByRole('button', { name: /Change this search date/ })).toBeInTheDocument();
+      expect(within(drawer).queryByRole('button', { name: /Add a date for this search/ })).toBeNull();
     });
 
     it('opens from the STAY timeline item city when the overnight city differs from the day primary location', async () => {
@@ -1412,7 +1285,10 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       };
       commandSnapshot = snapshotWith(
         readyItineraryState(),
-        { bookingSetup: { start: { precision: 'exact', date: '2026-11-01' } } },
+        { bookingSetup: { search_prefs: { stays: {
+          'test-trip:stay:1:2:jaipur': { precision: 'exact', date: '2026-11-01' },
+          'test-trip:stay:3:4:agra': { precision: 'exact', date: '2026-11-03' },
+        } } } },
         { trip_context: { origin_city: 'Delhi' } },
       );
       const capturedBodies = [];
@@ -1438,14 +1314,14 @@ describe('Trip Dashboard (real Atlas contract)', () => {
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const jaipurDrawer = await screen.findByRole('dialog', { name: /Stay: Jaipur/ });
       await waitFor(() => expect(within(jaipurDrawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
-      expect(within(jaipurDrawer).getByText('📅 Check-in: 2026-11-01 · from your trip start')).toBeInTheDocument();
+      expect(within(jaipurDrawer).getByText('📅 Check-in: 2026-11-01 · your search date')).toBeInTheDocument();
       await user.click(within(jaipurDrawer).getByRole('button', { name: 'Close stay options' }));
 
       await user.click(within(screen.getByRole('navigation', { name: 'Select a day' })).getByRole('button', { name: /Day 3/ }));
       await user.click(screen.getByRole('button', { name: /Stay options/ }));
       const agraDrawer = await screen.findByRole('dialog', { name: /Stay: Agra/ });
       await waitFor(() => expect(within(agraDrawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
-      expect(within(agraDrawer).getByText('📅 Check-in: 2026-11-03 · from your trip start')).toBeInTheDocument();
+      expect(within(agraDrawer).getByText('📅 Check-in: 2026-11-03 · your search date')).toBeInTheDocument();
 
       expect(capturedBodies.some(body => (
         body.domain === 'stay'
@@ -1566,19 +1442,19 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     expect(screen.getAllByText('October').length).toBeGreaterThan(0);
   });
 
-  // TripHero must never reflect a booking-precision fact (the
-  // booking_setup.start calendar anchor), even once one is set -- it is an
-  // itinerary-plan summary, not a booking surface, and trip_duration/
-  // date_range are what Atlas actually planned around.
-  it('keeps showing the travel-window label even once an exact trip start is set, never the booking-precision date', async () => {
-    commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { start: { precision: 'exact', date: '2026-10-12' } } }, { trip_context: {} });
+  // TripHero is an itinerary-plan summary, not a booking surface: it shows
+  // the travel-window Atlas planned around (trip_summary.date_range), never a
+  // fabricated exact date range. (TWM-216: there is no trip-level date
+  // control to derive one from any more.)
+  it('shows the travel-window label on TripHero, never a fabricated date range', async () => {
+    commandSnapshot = snapshotWith(readyItineraryState(), {}, { trip_context: {} });
     sendTripCommand = vi.fn();
     const base = atlasResult({ final_itinerary: { trip_summary: { title: 'Rishikesh Getaway', destinations: ['Rishikesh'], duration_days: 2, num_travelers: 2, date_range: 'October', overview: 'A calm riverside trip.', route_rationale: 'Everything is within one town.' } } });
     itineraryFetchResponse = { version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z', result: base };
     global.fetch = defaultFetchMock();
     await readyDashboard();
     expect(screen.getAllByText('October').length).toBeGreaterThan(0);
-    expect(screen.queryAllByText('2026-10-12 – 2026-10-13')).toHaveLength(0);
+    expect(screen.queryAllByText(/\d{4}-\d{2}-\d{2} – \d{4}-\d{2}-\d{2}/)).toHaveLength(0);
   });
 
   it('renders unsafe text as inert content, never as markup', async () => {
@@ -1599,9 +1475,9 @@ describe('Trip Dashboard (real Atlas contract)', () => {
   // key always silently defaulted the displayed count to 2.
   // TWM-216: TripHero is the itinerary-plan summary and must only ever show
   // what Atlas actually planned around (trip_summary.num_travelers), never
-  // the exact booking_setup.party — that booking-precision fact belongs on
-  // Overview's schedule strip, never on this surface.
-  it('shows Atlas\'s planned num_travelers on TripHero, and the exact party only on the schedule strip', async () => {
+  // the exact booking_setup.party — that booking-precision fact belongs in
+  // the booking drawers, never on this surface.
+  it('shows Atlas\'s planned num_travelers on TripHero, and the exact party only in a booking drawer', async () => {
     commandSnapshot = snapshotWith(readyItineraryState(), { bookingSetup: { party: { adults: 2, children: 2, infants: 1 } } }, { trip_context: { origin_city: 'Delhi', num_travelers: 'a family of 5' } });
     itineraryFetchResponse = {
       version: 1, source_guide_revision: 3, created_at: '2026-01-01T00:00:00.000Z',
@@ -1609,11 +1485,16 @@ describe('Trip Dashboard (real Atlas contract)', () => {
     };
     global.fetch = defaultFetchMock();
     sendTripCommand = vi.fn();
+    const user = userEvent.setup();
     await readyDashboard();
     expect(screen.getAllByText('9').filter(el => el.closest('.hero-stats')).length).toBeGreaterThan(0);
     expect(screen.queryAllByText('5').filter(el => el.closest('.hero-stats'))).toHaveLength(0);
-    // The exact party total (2+2+1 = 5) shows only on Overview's strip.
-    expect(screen.getByRole('button', { name: /5 travelers . Change/ })).toBeInTheDocument();
+    // The exact party total (2+2+1 = 5) shows only inside a booking drawer.
+    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Transport options/ })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Transport options/ }));
+    const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
+    expect(within(drawer).getByRole('button', { name: /Booking for 5 travelers . Change/ })).toBeInTheDocument();
   });
 
   // TWM-215 live-testing finding, superseding the prior "never guess from

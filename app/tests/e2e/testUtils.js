@@ -4,7 +4,7 @@
 // don't require a live Backend/agent deployment.
 import { transportLegs, gatewayLegs } from '../../src/lib/bookingCatalog.js';
 import { tripOriginCity } from '../../src/constants/tripContext.js';
-import { bookingSetupStart, bookingSetupSearchPref } from '../../src/constants/bookingSetup.js';
+import { bookingSetupSearchPref } from '../../src/constants/bookingSetup.js';
 
 function addDaysIso(iso, days) {
   const d = new Date(`${iso}T00:00:00.000Z`);
@@ -103,9 +103,6 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
       if (!currentVersion) return route.fulfill({ status: 404, json: { detail: 'No itinerary yet.' } });
       const days = currentVersion.result.final_itinerary.days;
       const originCity = tripOriginCity(record.trip_state?.trip_context);
-      const start = bookingSetupStart(record.trip_state);
-      const tripStartDate = start?.precision === 'exact' ? start.date : null;
-      const startMonth = start?.precision === 'month' ? start.month : null;
       const allLegs = transportLegs(days);
       const gatewayKeys = new Set(gatewayLegs(allLegs, originCity).map(leg => `${leg.from}→${leg.to}`));
       const legByKey = Object.fromEntries(allLegs.map(leg => [`${leg.from}→${leg.to}`, leg]));
@@ -115,10 +112,8 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
         estimated_duration_minutes: 120, estimated_distance_km: null,
         reason: 'Genuinely reachable by this mode.', verification: reference,
       }));
-      const dayDate = dayNumber => (tripStartDate ? addDaysIso(tripStartDate, dayNumber - 1) : null);
       const daysWithBoardItems = days.map(day => ({
         ...day,
-        date: dayDate(day.day_number),
         items: day.timeline.map((item, index) => {
           const id = item.id || `${trip}:${day.day_number}:${index}`;
           if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
@@ -129,12 +124,10 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
           const leg = legByKey[key] || {};
           const override = bookingSetupSearchPref(record.trip_state, 'transport', id);
           let departure_date = null, departure_month = null, date_precision = 'flexible', date_source = 'none';
-          if (leg.departureDate) { departure_date = leg.departureDate; date_precision = 'exact'; date_source = 'itinerary'; }
-          else if (leg.departureMonth) { departure_month = leg.departureMonth; date_precision = 'month'; date_source = 'itinerary'; }
-          else if (override?.precision === 'exact') { departure_date = override.date; date_precision = 'exact'; date_source = 'override'; }
-          else if (override?.precision === 'month') { departure_month = override.month; date_precision = 'month'; date_source = 'override'; }
-          else if (dayDate(day.day_number)) { departure_date = dayDate(day.day_number); date_precision = 'exact'; date_source = 'anchor'; }
-          else if (startMonth) { departure_month = startMonth; date_precision = 'month'; date_source = 'anchor'; }
+          if (override?.precision === 'exact') { departure_date = override.date; date_precision = 'exact'; date_source = 'search_pref'; }
+          else if (override?.precision === 'month') { departure_month = override.month; date_precision = 'month'; date_source = 'search_pref'; }
+          else if (leg.departureDate) { departure_date = leg.departureDate; date_precision = 'exact'; date_source = 'trip_dates'; }
+          else if (leg.departureMonth) { departure_month = leg.departureMonth; date_precision = 'month'; date_source = 'trip_dates'; }
           return {
             ...item,
             id,
@@ -156,14 +149,9 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
           let checkin_date = null, checkout_date = null, departure_month = null, date_precision = 'flexible', date_source = 'none';
           if (override?.precision === 'exact') {
             checkin_date = override.date; checkout_date = addDaysIso(override.date, nights);
-            date_precision = 'exact'; date_source = 'override';
+            date_precision = 'exact'; date_source = 'search_pref';
           } else if (override?.precision === 'month') {
-            departure_month = override.month; date_precision = 'month'; date_source = 'override';
-          } else if (dayDate(day.day_number)) {
-            checkin_date = dayDate(day.day_number); checkout_date = addDaysIso(checkin_date, nights);
-            date_precision = 'exact'; date_source = 'anchor';
-          } else if (startMonth) {
-            departure_month = startMonth; date_precision = 'month'; date_source = 'anchor';
+            departure_month = override.month; date_precision = 'month'; date_source = 'search_pref';
           }
           return {
             id, location: item.location,

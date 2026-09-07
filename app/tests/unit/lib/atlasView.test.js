@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { verificationTone, trustStripCounts, bookingReadinessRollup } from '../../../src/lib/atlasView.js';
+import { verificationTone, trustStripCounts } from '../../../src/lib/atlasView.js';
 
 describe('verificationTone', () => {
   it('maps VERIFIED to positive and GENERAL_GUIDANCE to neutral', () => {
@@ -39,33 +39,5 @@ describe('trustStripCounts', () => {
   it('handles missing/empty data without crashing', () => {
     expect(trustStripCounts({}, {})).toEqual({ assumptionsCount: 0, unresolvedCount: 0, verifiedCount: 0, generalGuidanceCount: 0 });
     expect(trustStripCounts(undefined, undefined)).toEqual({ assumptionsCount: 0, unresolvedCount: 0, verifiedCount: 0, generalGuidanceCount: 0 });
-  });
-});
-
-// TWM-216: the confirmed-logistics anchor concept is gone; the rollup is
-// driven entirely by Atlas's own per-item booking_readiness label.
-describe('bookingReadinessRollup', () => {
-  it('counts a bookable item as ready only when Atlas marked it "suggested"', () => {
-    const days = [
-      { day_number: 1, timeline: [
-        { title: 'Flight', requires_advance_booking: true, booking_readiness: 'suggested' },
-        { title: 'Walk', requires_advance_booking: false },
-      ] },
-      { day_number: 2, timeline: [{ title: 'Train', requires_advance_booking: true, booking_readiness: 'needs_advance_booking' }] },
-    ];
-    expect(bookingReadinessRollup(days)).toEqual({ ready: 1, total: 2 });
-  });
-
-  it('is 0 of N when every bookable item still needs attention', () => {
-    const days = [
-      { day_number: 1, timeline: [{ title: 'Flight', requires_advance_booking: true, booking_readiness: 'unresolved' }] },
-      { day_number: 2, timeline: [{ title: 'Train', requires_advance_booking: true, booking_readiness: 'needs_advance_booking' }] },
-    ];
-    expect(bookingReadinessRollup(days)).toEqual({ ready: 0, total: 2 });
-  });
-
-  it('is 0 of 0 when nothing on the trip requires advance booking', () => {
-    const noBookable = [{ day_number: 1, timeline: [{ title: 'Walk', requires_advance_booking: false }] }];
-    expect(bookingReadinessRollup(noBookable)).toEqual({ ready: 0, total: 0 });
   });
 });
