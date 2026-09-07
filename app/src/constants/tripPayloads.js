@@ -10,6 +10,7 @@ export const TRUSTED_ACTION_KEYS = Object.freeze({
   DESTINATION: 'destination',
   DEPARTURE_DATE: 'departure_date',
   RETURN_DATE: 'return_date',
+  TRIP_SHAPE: 'trip_shape',
   TRAVELER_COUNT: 'traveler_count',
   PREFERRED_PARTNER: 'preferred_partner',
 });
