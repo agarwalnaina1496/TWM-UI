@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  transportOptionsFor, feasibleTransportOptions,
-  stayOptionsFor, modeLabel, recommendedMode, PARTNER_LABEL,
-} from '../../../src/lib/bookingCatalog.js';
-import { resolveBookingOptions, searchFlights } from '../../../src/lib/tripApi.js';
+import { transportOptionsFor, feasibleTransportOptions, recommendedMode } from '../../../../src/lib/booking/transportOptions.js';
+import { stayOptionsFor } from '../../../../src/lib/booking/stayOptions.js';
+import { modeLabel, PARTNER_LABEL } from '../../../../src/lib/booking/shared.js';
+import { resolveBookingOptions, searchFlights } from '../../../../src/lib/tripApi.js';
 
-vi.mock('../../../src/lib/tripApi.js', () => ({
+vi.mock('../../../../src/lib/tripApi.js', () => ({
   resolveBookingOptions: vi.fn(),
   searchFlights: vi.fn(),
 }));
