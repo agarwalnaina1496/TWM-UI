@@ -14,9 +14,9 @@ const BOOKING_PROMPT_SHOWN_KEY = uiStateKey(UI_STATE_SCREEN.DASHBOARD_OVERVIEW, 
 // the empty-trip redirect, the one-time booking prompt, and dashboard
 // analytics. Returns the derived itinerary shape the tabs render from.
 export function useItineraryData() {
-  const { commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState, openTrip } = useTrip();
+  const { commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState } = useTrip();
   const navigate = useNavigate();
-  const urlTripId = useTripFromUrl(openTrip);
+  const urlTripId = useTripFromUrl();
 
   const view = commandSnapshot;
   const tripId = view?.id;

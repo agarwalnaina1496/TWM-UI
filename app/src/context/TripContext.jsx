@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getTrip, listTrips, newIdempotencyKey, queueTripMutation,
   renameTrip as renameTripApi, saveUiState as saveUiStateApi, sendTripCommand as sendTripCommandApi,
@@ -9,202 +10,139 @@ import {
   fetchCurrentUser, login as loginApi, logout as logoutApi, signup as signupApi,
 } from '../lib/authApi.js';
 import { TRIP_ID_PARAM } from '../lib/tripUrl.js';
+import { tripKeys } from '../lib/tripKeys.js';
+import { deriveTripLoadStatus } from '../lib/tripLoadStatus.js';
 
 const TripContext = createContext(null);
 
 // Guest-first (TWM-140): every visitor starts as an anonymous guest with a
 // working session; login is an explicit upgrade, never a precondition.
 const DEFAULT_AUTH = { loggedIn: false, isGuest: true, name: 'Guest', email: '' };
+const EMPTY_UI_STATE = Object.freeze({});
 
 function authFromUser(user) {
   return user ? { loggedIn: true, isGuest: false, name: user.email, email: user.email } : DEFAULT_AUTH;
 }
 
+// TWM-221: TripContext carries identity / auth / UI state and the current
+// trip *id* only. Trip *data* — the composed TripView, the list, the round,
+// the itinerary document — is read via React Query (`useCurrentTrip`,
+// `useTripsQuery`, …). The old hand-rolled loader / cache / merge / re-GET
+// is gone; commands and UI-state saves stay on this context as a thin
+// passthrough that writes straight into the query cache.
 export function TripProvider({ children }) {
   const location = useLocation();
   const bootUrlTripIdRef = useRef(new URLSearchParams(location.search).get(TRIP_ID_PARAM));
+  const queryClient = useQueryClient();
 
   const [auth, setAuth] = useState(DEFAULT_AUTH);
-  // TWM-220: `currentTrip` is the composed `TripView` (from GET /trips/{id})
-  // once a page has opened one, or the thin `TripListItem` from the boot
-  // list load before that. Both carry `lifecycle` / `context_recap`; only
-  // the full TripView carries `plan` / `summary` / `matcher` / `booking`.
-  // Exposed as `commandSnapshot` for continuity with the pages that read it.
-  const [currentTrip, setCurrentTrip] = useState(null);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const openLoginModal = () => setLoginModalOpen(true);
-  const closeLoginModal = () => setLoginModalOpen(false);
-
-  // All of the guest's trips (thin TripListItem shape) — used by the
-  // adaptive landing resolver and My Trips.
-  const [trips, setTrips] = useState([]);
-  const [tripLoadStatus, setTripLoadStatus] = useState('idle'); // idle | loading | ready | error
-  const [tripLoadError, setTripLoadError] = useState(null);
   const [claimNotice, setClaimNotice] = useState(null);
-  const ensureTripPromise = useRef(null);
-  const bootPromiseRef = useRef(null);
-  const currentTripRef = useRef(null);
-  useEffect(() => { currentTripRef.current = currentTrip; }, [currentTrip]);
-  // Whether currentTripRef.current is a full TripView (from getTrip) vs. the
-  // boot list's thin TripListItem.
-  const currentIsFullRef = useRef(false);
-  const [tripDetailFull, setTripDetailFull] = useState(false);
-  function setCurrent(next, { full }) {
-    currentTripRef.current = next;
-    currentIsFullRef.current = full;
-    setCurrentTrip(next);
-    setTripDetailFull(full);
-  }
+  const [currentTripId, setCurrentTripId] = useState(null);
+  const currentTripIdRef = useRef(null);
+  useEffect(() => { currentTripIdRef.current = currentTripId; }, [currentTripId]);
 
-  async function loadTripsNow() {
-    setTripLoadStatus('loading');
-    setTripLoadError(null);
+  // The boot list — also the source the initial `currentTripId` is resolved
+  // from: the URL's ?tripId= if it names a real trip, else the most recent
+  // trip so a bare deep link (/trip-preview, /scout-chat) still resumes the
+  // in-progress trip rather than rendering nothing.
+  const tripsQuery = useQuery({ queryKey: tripKeys.list, queryFn: listTrips });
+  const tripsData = tripsQuery.data;
+  const bootResolved = useRef(false);
+  useEffect(() => {
+    if (bootResolved.current || !tripsData) return;
+    bootResolved.current = true;
+    if (currentTripIdRef.current) return;
+    const urlId = bootUrlTripIdRef.current;
+    const picked = (urlId && tripsData.find(t => t.id === urlId)?.id) || tripsData[0]?.id || null;
+    if (picked) setCurrentTripId(picked);
+  }, [tripsData]);
+
+  // The composed TripView for the current trip. This one useQuery replaces
+  // the hand-rolled loader + cache + merge + post-command re-GET.
+  const tripQuery = useQuery({
+    queryKey: tripKeys.trip(currentTripId),
+    queryFn: () => getTrip(currentTripId),
+    enabled: !!currentTripId,
+  });
+  const commandSnapshot = currentTripId ? tripQuery.data ?? null : null;
+  const tripLoadStatus = deriveTripLoadStatus({ currentTripId, tripsQuery, tripQuery });
+  const tripLoadError = (tripsQuery.error || (currentTripId ? tripQuery.error : null)) ?? null;
+
+  const checkSession = useCallback(async () => {
     try {
-      const records = await listTrips();
-      const urlTripId = bootUrlTripIdRef.current;
-      const record = (urlTripId && records.find(r => r.id === urlTripId)) || records[0] || null;
-      setTrips(records);
-      setCurrent(record, { full: false });
-      setTripLoadStatus('ready');
-      return record;
-    } catch (error) {
-      setTripLoadStatus('error');
-      setTripLoadError(error instanceof TripApiError ? error : new TripApiError('Trip persistence is unavailable.'));
-      setTrips([]);
-      throw error;
-    }
-  }
-
-  function ensureBootStarted() {
-    if (!bootPromiseRef.current) {
-      bootPromiseRef.current = loadTripsNow().catch(() => {});
-    }
-    return bootPromiseRef.current;
-  }
-
-  async function checkSession() {
-    try {
-      const user = await fetchCurrentUser();
-      setAuth(authFromUser(user));
+      setAuth(authFromUser(await fetchCurrentUser()));
     } catch {
       setAuth(DEFAULT_AUTH);
     }
-  }
-
-  useEffect(() => {
-    ensureBootStarted();
-    checkSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => { checkSession(); }, [checkSession]);
 
-  function retryTripLoad() {
-    const promise = loadTripsNow().catch(() => {});
-    bootPromiseRef.current = promise;
-    return promise;
-  }
+  const retryTripLoad = useCallback(() => {
+    bootResolved.current = false;
+    return queryClient.invalidateQueries({ predicate: q => {
+      const k = q.queryKey[0];
+      return k === 'trips' || k === 'trip';
+    } });
+  }, [queryClient]);
 
-  // Returns the current trip (thin or full). TWM-189: a trip is never
-  // created bare on demand — only startTrip() creates one, driven by the
-  // traveler's first message.
-  function ensureTrip() {
-    if (currentTripRef.current) return Promise.resolve(currentTripRef.current);
-    if (!ensureTripPromise.current) {
-      ensureTripPromise.current = (async () => {
-        await ensureBootStarted();
-        if (currentTripRef.current) return currentTripRef.current;
-        throw new Error('No trip exists yet — send a first message via startTrip() first.');
-      })().finally(() => {
-        ensureTripPromise.current = null;
-      });
+  // Resolves the current trip id for a mutation, waiting on the boot list if
+  // the pointer has not been set yet. TWM-189: a trip is never created bare
+  // on demand — only startTrip() creates one.
+  const ensureTripId = useCallback(async () => {
+    if (currentTripIdRef.current) return currentTripIdRef.current;
+    await queryClient.ensureQueryData({ queryKey: tripKeys.list, queryFn: listTrips });
+    const id = queryClient.getQueryData(tripKeys.list)?.[0]?.id;
+    if (!id) throw new Error('No trip exists yet — send a first message via startTrip() first.');
+    return id;
+  }, [queryClient]);
+
+  const readTripView = useCallback(async (id, { fresh = false } = {}) => {
+    if (!fresh) {
+      const cached = queryClient.getQueryData(tripKeys.trip(id));
+      if (cached) return cached;
     }
-    return ensureTripPromise.current;
-  }
+    return queryClient.fetchQuery({ queryKey: tripKeys.trip(id), queryFn: () => getTrip(id), staleTime: 0 });
+  }, [queryClient]);
+
+  const patchListItem = useCallback(view => {
+    queryClient.setQueryData(tripKeys.list, prev => (
+      prev
+        ? (prev.some(t => t.id === view.id)
+          ? prev.map(t => (t.id === view.id ? toListItem(view) : t))
+          : [toListItem(view), ...prev])
+        : prev
+    ));
+  }, [queryClient]);
+
+  const dropUnavailableTrip = useCallback(id => {
+    queryClient.setQueryData(tripKeys.list, prev => prev?.filter(t => t.id !== id) ?? prev);
+    if (id === currentTripIdRef.current) setCurrentTripId(null);
+  }, [queryClient]);
 
   // TWM-189: the only place a trip is created — runs the traveler's first
   // message, then fetches the composed TripView for the new row.
-  async function startTrip({ entryIntent, message, title } = {}) {
+  const startTrip = useCallback(async ({ entryIntent, message, title } = {}) => {
     const response = await startTripFromFirstMessage({ entryIntent, message, title });
-    const view = await getTrip(response.tripId);
-    setTrips(prev => [toListItem(view), ...prev.filter(t => t.id !== view.id)]);
-    setCurrent(view, { full: true });
+    const view = await queryClient.fetchQuery({ queryKey: tripKeys.trip(response.tripId), queryFn: () => getTrip(response.tripId) });
+    queryClient.setQueryData(tripKeys.list, prev => [toListItem(view), ...(prev || []).filter(t => t.id !== view.id)]);
+    setCurrentTripId(view.id);
     return { message: response.message, agent_meta: response.agent_meta, recommendation: response.recommendation, trip: view };
-  }
+  }, [queryClient]);
 
-  async function updateUiState(patch) {
-    const record = await ensureTrip();
-    return queueTripMutation(record.id, async () => {
-      const current = currentTripRef.current || record;
-      const nextUiState = { ...(current.ui_state || {}), ...patch };
-      try {
-        const saved = await saveUiStateApi(current.id, nextUiState, current.version);
-        setCurrent(saved, { full: true });
-        return saved;
-      } catch (error) {
-        if (error instanceof TripApiError && error.status === 409) {
-          setCurrent(await getTrip(current.id), { full: true });
-        }
-        throw error;
-      }
-    });
-  }
+  // Clears the "current trip" pointer so the next first message starts a
+  // genuinely new Backend journey.
+  const startNewTrip = useCallback(() => setCurrentTripId(null), []);
 
-  async function renameCurrentTrip(title) {
-    const record = await ensureTrip();
-    return queueTripMutation(record.id, async () => {
-      try {
-        const saved = await renameTripApi(record.id, title, record.version);
-        setCurrent(saved, { full: true });
-        setTrips(prev => prev.map(t => (t.id === saved.id ? toListItem(saved) : t)));
-        return saved;
-      } catch (error) {
-        if (error instanceof TripApiError && error.status === 409) {
-          setCurrent(await getTrip(record.id), { full: true });
-        }
-        throw error;
-      }
-    });
-  }
-
-  function dropUnavailableTrip(id) {
-    setTrips(prev => prev.filter(t => t.id !== id));
-    if (id === currentTripRef.current?.id) {
-      setCurrent(null, { full: false });
-    }
-  }
-
-  async function renameTrip(id, title) {
-    const target = trips.find(t => t.id === id);
-    if (!target) return { ok: false, reason: 'not_found' };
-    return queueTripMutation(id, async () => {
-      try {
-        const saved = await renameTripApi(id, title, target.version);
-        setTrips(prev => prev.map(t => (t.id === id ? toListItem(saved) : t)));
-        if (id === currentTripRef.current?.id) setCurrent(saved, { full: true });
-        return { ok: true, record: saved };
-      } catch (error) {
-        if (error instanceof TripApiError && error.status === 404) {
-          dropUnavailableTrip(id);
-          return { ok: false, reason: 'not_found' };
-        }
-        if (error instanceof TripApiError && error.status === 409) {
-          const latest = await getTrip(id);
-          setTrips(prev => prev.map(t => (t.id === id ? toListItem(latest) : t)));
-        }
-        throw error;
-      }
-    });
-  }
-
-  // Switches the current trip to a fully composed TripView. A plain read,
-  // never a command — never mutates stage/active_agent.
-  async function openTrip(id) {
-    if (id === currentTripRef.current?.id && currentIsFullRef.current) {
-      return { ok: true, record: currentTripRef.current };
-    }
+  // TWM-221: replaces the old getTrip / openTrip / viewTrip read trio. Warms
+  // the ['trip', id] cache and points currentTripId at it before navigating
+  // into a decision page; a gone trip (deleted / stale card) fails closed —
+  // dropped from the list, `{ ok: false }` returned, never navigated into.
+  const prefetchTrip = useCallback(async id => {
     try {
-      const view = await getTrip(id);
-      setCurrent(view, { full: true });
-      setTrips(prev => (prev.some(t => t.id === id) ? prev.map(t => (t.id === id ? toListItem(view) : t)) : [...prev, toListItem(view)]));
+      const view = await queryClient.fetchQuery({ queryKey: tripKeys.trip(id), queryFn: () => getTrip(id) });
+      patchListItem(view);
+      setCurrentTripId(id);
       return { ok: true, record: view };
     } catch (error) {
       if (error instanceof TripApiError && error.status === 404) {
@@ -213,25 +151,72 @@ export function TripProvider({ children }) {
       }
       throw error;
     }
-  }
+  }, [queryClient, patchListItem, dropUnavailableTrip]);
 
-  // TWM-220: `get_trip_core` (the composed TripView's read) is blob-free and
-  // cheap now, so there is no separate cheap "cache-first" render path — the
-  // dashboard's first paint is one `GET /trips/{id}`. Kept as a named alias
-  // so call sites (DashboardHome, TripDashboard) stay put.
-  function viewTrip(id) {
-    return openTrip(id);
-  }
+  const updateUiState = useCallback(async patch => {
+    const id = await ensureTripId();
+    return queueTripMutation(id, async () => {
+      const current = await readTripView(id);
+      const nextUiState = { ...(current.ui_state || {}), ...patch };
+      try {
+        const saved = await saveUiStateApi(id, nextUiState, current.version);
+        queryClient.setQueryData(tripKeys.trip(id), saved);
+        return saved;
+      } catch (error) {
+        if (error instanceof TripApiError && error.status === 409) await readTripView(id, { fresh: true });
+        throw error;
+      }
+    });
+  }, [ensureTripId, readTripView, queryClient]);
+
+  const renameCurrentTrip = useCallback(async title => {
+    const id = await ensureTripId();
+    return queueTripMutation(id, async () => {
+      const current = await readTripView(id);
+      try {
+        const saved = await renameTripApi(id, title, current.version);
+        queryClient.setQueryData(tripKeys.trip(id), saved);
+        patchListItem(saved);
+        return saved;
+      } catch (error) {
+        if (error instanceof TripApiError && error.status === 409) await readTripView(id, { fresh: true });
+        throw error;
+      }
+    });
+  }, [ensureTripId, readTripView, patchListItem, queryClient]);
+
+  const renameTrip = useCallback(async (id, title) => {
+    const target = (queryClient.getQueryData(tripKeys.list) || []).find(t => t.id === id);
+    if (!target) return { ok: false, reason: 'not_found' };
+    return queueTripMutation(id, async () => {
+      try {
+        const saved = await renameTripApi(id, title, target.version);
+        patchListItem(saved);
+        if (id === currentTripIdRef.current) queryClient.setQueryData(tripKeys.trip(id), saved);
+        return { ok: true, record: saved };
+      } catch (error) {
+        if (error instanceof TripApiError && error.status === 404) {
+          dropUnavailableTrip(id);
+          return { ok: false, reason: 'not_found' };
+        }
+        if (error instanceof TripApiError && error.status === 409) {
+          patchListItem(await readTripView(id, { fresh: true }));
+        }
+        throw error;
+      }
+    });
+  }, [queryClient, patchListItem, dropUnavailableTrip, readTripView]);
 
   // The single browser mutation boundary: POST /api/trips/{id}/commands.
-  // TWM-220: the command response carries only the touched trip_state
-  // branches; we re-fetch the composed TripView rather than merge that shape
-  // client-side. The response's own `message` / `agent_meta` /
-  // `recommendation` are returned alongside the fresh view.
-  async function sendTripCommand(command, { message, optionId, destination, tripContext, refinement, partyUpdate, searchPrefUpdate, searchPrefClear, idempotencyKey } = {}) {
-    const record = await ensureTrip();
-    return queueTripMutation(record.id, async () => {
-      const current = currentTripRef.current || record;
+  // TWM-220/TWM-221: the command response is branch-shaped; we force-refetch
+  // the composed TripView into cache (the idiomatic post-mutation
+  // invalidation), fold the produced round into ['recommendations', id], and
+  // let ['itinerary', id] revalidate. The response's own message /
+  // agent_meta / recommendation are returned alongside the fresh view.
+  const sendTripCommand = useCallback(async (command, { message, optionId, destination, tripContext, refinement, partyUpdate, searchPrefUpdate, searchPrefClear, idempotencyKey } = {}) => {
+    const id = await ensureTripId();
+    return queueTripMutation(id, async () => {
+      const current = await readTripView(id);
       const payload = {
         command,
         expected_version: current.version,
@@ -246,90 +231,81 @@ export function TripProvider({ children }) {
       if (searchPrefUpdate !== undefined) payload.search_pref_update = searchPrefUpdate;
       if (searchPrefClear !== undefined) payload.search_pref_clear = searchPrefClear;
       try {
-        const response = await sendTripCommandApi(current.id, payload);
-        const view = await getTrip(current.id);
-        setCurrent(view, { full: true });
-        setTrips(prev => prev.map(t => (t.id === view.id ? toListItem(view) : t)));
-        return {
-          message: response.message,
-          agent_meta: response.agent_meta,
-          recommendation: response.recommendation,
-          trip: view,
-        };
+        const response = await sendTripCommandApi(id, payload);
+        const view = await readTripView(id, { fresh: true });
+        patchListItem(view);
+        if (response.recommendation) queryClient.setQueryData(tripKeys.recommendations(id), response.recommendation);
+        queryClient.invalidateQueries({ queryKey: tripKeys.itinerary(id) });
+        return { message: response.message, agent_meta: response.agent_meta, recommendation: response.recommendation, trip: view };
       } catch (error) {
-        if (error instanceof TripApiError && error.status === 409) {
-          setCurrent(await getTrip(current.id), { full: true });
-        }
+        if (error instanceof TripApiError && error.status === 409) await readTripView(id, { fresh: true });
         throw error;
       }
     });
-  }
+  }, [ensureTripId, readTripView, patchListItem, queryClient]);
 
-  // Clears the "current trip" pointer so the next first message starts a
-  // genuinely new Backend journey. TWM-219: no local mock content to reset.
-  function startNewTrip() {
-    setCurrent(null, { full: false });
-  }
+  const openLoginModal = useCallback(() => setLoginModalOpen(true), []);
+  const closeLoginModal = useCallback(() => setLoginModalOpen(false), []);
+  const dismissClaimNotice = useCallback(() => setClaimNotice(null), []);
+  const setAuthDirect = useCallback(next => setAuth(next), []);
+  const setContact = useCallback(({ name, email }) => setAuth(prev => ({ ...prev, name, email })), []);
+  const continueWithoutLogin = useCallback(() => setAuth(DEFAULT_AUTH), []);
 
-  async function signup(email, password) {
+  const resetTripDataForAuthChange = useCallback(() => {
+    bootResolved.current = false;
+    setCurrentTripId(null);
+    return queryClient.invalidateQueries();
+  }, [queryClient]);
+
+  const signup = useCallback(async (email, password) => {
     const signupResult = await signupApi(email, password);
     if (signupResult.claimed_trip_count > 0) setClaimNotice({ count: signupResult.claimed_trip_count });
     return signupResult;
-  }
+  }, []);
 
-  async function login(email, password) {
+  const login = useCallback(async (email, password) => {
     const result = await loginApi(email, password);
     setAuth(authFromUser(result));
     if (result.claimed_trip_count > 0) setClaimNotice({ count: result.claimed_trip_count });
-    await loadTripsNow().catch(() => {});
+    await resetTripDataForAuthChange();
     return result;
-  }
+  }, [resetTripDataForAuthChange]);
 
-  function continueWithoutLogin() {
-    setAuth(DEFAULT_AUTH);
-  }
-
-  async function logout() {
+  const logout = useCallback(async () => {
     try {
       await logoutApi();
     } finally {
       setAuth(DEFAULT_AUTH);
-      await loadTripsNow().catch(() => {});
+      await resetTripDataForAuthChange();
     }
-  }
-
-  function dismissClaimNotice() {
-    setClaimNotice(null);
-  }
-
-  function setAuthDirect(nextAuth) {
-    setAuth(nextAuth);
-  }
-
-  function setContact({ name, email }) {
-    setAuth(prev => ({ ...prev, name, email }));
-  }
+  }, [resetTripDataForAuthChange]);
 
   const hasAccess = auth.loggedIn || auth.isGuest;
 
-  return (
-    <TripContext.Provider value={{
-      startNewTrip, auth, hasAccess, signup, login, continueWithoutLogin, logout, setContact,
-      setAuthDirect,
-      loginModalOpen, openLoginModal, closeLoginModal,
-      claimNotice, dismissClaimNotice,
-      commandSnapshot: currentTrip, sendTripCommand, startTrip,
-      currentTripId: currentTrip?.id ?? null, tripLoadStatus, tripLoadError, retryTripLoad, renameCurrentTrip,
-      trips, openTrip, viewTrip, tripDetailFull, renameTrip,
-      uiState: currentTrip?.ui_state ?? {}, updateUiState,
-    }}>
-      {children}
-    </TripContext.Provider>
-  );
+  const uiState = commandSnapshot?.ui_state ?? EMPTY_UI_STATE;
+
+  const value = useMemo(() => ({
+    auth, hasAccess, setAuthDirect, setContact,
+    signup, login, continueWithoutLogin, logout,
+    loginModalOpen, openLoginModal, closeLoginModal,
+    claimNotice, dismissClaimNotice,
+    currentTripId, setCurrentTripId, startTrip, startNewTrip, prefetchTrip,
+    commandSnapshot, tripLoadStatus, tripLoadError, uiState,
+    sendTripCommand, updateUiState, renameCurrentTrip, renameTrip, retryTripLoad,
+  }), [
+    auth, hasAccess, setAuthDirect, setContact, signup, login, continueWithoutLogin, logout,
+    loginModalOpen, openLoginModal, closeLoginModal, claimNotice, dismissClaimNotice,
+    currentTripId, startTrip, startNewTrip, prefetchTrip,
+    commandSnapshot, tripLoadStatus, tripLoadError, uiState,
+    sendTripCommand, updateUiState, renameCurrentTrip, renameTrip, retryTripLoad,
+  ]);
+
+  return <TripContext.Provider value={value}>{children}</TripContext.Provider>;
 }
 
 // A composed TripView carries everything a TripListItem does plus more —
-// project it down so `trips` stays list-shaped after a full fetch/rename.
+// project it down so the ['trips'] cache stays list-shaped after a full
+// fetch / rename / command.
 function toListItem(view) {
   return {
     id: view.id,

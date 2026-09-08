@@ -3,15 +3,14 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../../src/App.jsx';
-import { TripProvider } from '../../src/context/TripContext.jsx';
-import { SeedAuth, mockFetchWithGuestSession } from './testUtils.js';
+import { AppProviders, SeedAuth, mockFetchWithGuestSession } from './testUtils.js';
 
 function renderApp(initialEntries, auth) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <TripProvider>
+      <AppProviders>
         {auth ? <SeedAuth auth={auth}><App /></SeedAuth> : <App />}
-      </TripProvider>
+      </AppProviders>
     </MemoryRouter>
   );
 }

@@ -24,7 +24,7 @@ function tripDetailLines(view) {
 }
 
 export default function RequestQuote() {
-  const { commandSnapshot, auth, setContact } = useTrip();
+  const { commandSnapshot: view, auth, setContact } = useTrip();
   const [name, setName] = useState(auth.name);
   const [email, setEmail] = useState(auth.email);
   const [sent, setSent] = useState(false);
@@ -54,7 +54,7 @@ export default function RequestQuote() {
 
             <div className="field-block">
               <div className="field-title">Trip details</div>
-              {tripDetailLines(commandSnapshot).map(line => (
+              {tripDetailLines(view).map(line => (
                 <div className="field-hint" key={line}>{line}</div>
               ))}
             </div>

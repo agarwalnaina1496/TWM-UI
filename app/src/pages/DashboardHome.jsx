@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout.jsx';
 import { useTrip } from '../context/TripContext.jsx';
+import { useTripsQuery } from '../hooks/tripQueries.js';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
 import StatusPill from '../components/ui/StatusPill.jsx';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
@@ -30,6 +31,91 @@ function matchesSearch(t, query) {
   return (t.title || 'Untitled trip').toLowerCase().includes(q) || destination.toLowerCase().includes(q);
 }
 
+// TWM-221: hoisted to module scope so a DashboardHome re-render (e.g. a
+// background trip prefetch landing) re-renders these in place rather than
+// remounting the subtree and dropping an open rename input's focus/value.
+function RenameName({ t, rename, showRename = true, label }) {
+  if (rename.id === t.id) {
+    return (
+      <input
+        className="name"
+        autoFocus
+        value={rename.value}
+        onChange={e => rename.setValue(e.target.value)}
+        onBlur={() => rename.commit(t.id)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+          if (e.key === 'Escape') rename.cancel();
+        }}
+      />
+    );
+  }
+  return (
+    <div className="name">
+      {label || 'Untitled trip'}{' '}
+      {showRename && (
+        <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => rename.start(t)}>
+          Rename
+        </button>
+      )}
+    </div>
+  );
+}
+
+// TWM-171: exactly one primary affordance per committed trip card, fixed
+// label regardless of stage — stage is communicated via the adjacent status
+// tag, not this button's text.
+function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
+  const badge = stageBadge(t);
+  const destination = contextDestination(t);
+  const recapPills = contextRecapPills(t);
+  const timestamp = formatTripTimestamp(t);
+  const statusLine = tripStatusLine(t);
+  return (
+    <div className="trip-card">
+      <div>
+        <RenameName t={t} rename={rename} showRename={showRename} label={decodeHtmlEntities(t.title)} />
+        {destination && <div className="trip-card-destination">{destination}</div>}
+        <div className="meta">
+          <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
+          {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
+        </div>
+        {statusLine && <p className="trip-card-status-line">{statusLine}</p>}
+        {recapPills.length > 0 && (
+          <div className="trip-card-recap">
+            {recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
+          </div>
+        )}
+      </div>
+      <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
+        Open trip →
+      </button>
+    </div>
+  );
+}
+
+function ExploreRailCard({ t, rename, busyId, onOpen }) {
+  const cta = stageCta(t);
+  const badge = stageBadge(t);
+  const recapPills = contextRecapPills(t);
+  const statusLine = tripStatusLine(t);
+  return (
+    <div className="explore-card">
+      <RenameName t={t} rename={rename} label={t.title} />
+      <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
+      {statusLine && <p className="explore-card-status-line">{statusLine}</p>}
+      {recapPills.length > 0 && (
+        <div className="trip-card-recap">
+          {recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
+        </div>
+      )}
+      <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
+        {cta.label}
+      </button>
+    </div>
+  );
+}
+
 // Dashboard-as-home (TWM-163): the product's home surface once a traveler
 // has any trips, mounted directly at both `/` and `/my-trips`. Distinct from
 // TripDashboard.jsx, the per-trip itinerary/booking view a card here links
@@ -45,7 +131,9 @@ function matchesSearch(t, query) {
 // separate filter no longer adds anything the new structure doesn't already
 // split out.
 export default function DashboardHome() {
-  const { trips, tripLoadStatus, auth, startNewTrip, openTrip, viewTrip, renameTrip } = useTrip();
+  const { auth, startNewTrip, prefetchTrip, renameTrip } = useTrip();
+  const tripsQuery = useTripsQuery();
+  const trips = tripsQuery.data ?? [];
   const navigate = useNavigate();
   const [syncInviteOpen, setSyncInviteOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -110,17 +198,16 @@ export default function DashboardHome() {
   // it from `trips`, so the card disappears and we just surface why instead
   // of navigating into a dead trip.
   //
-  // TWM-182: the plain "Open trip →" card always lands on /dashboard, which
-  // can safely render off the cheap list-cached record (viewTrip) — no
-  // network cost for the common case. handleExploreRailOpen below overrides
-  // this to the full openTrip, since its `to` can be a decision-making page
-  // (ScoutChat/Destinations/TripPreview) that needs real planner_state.
-  async function handleOpen(t, { to = '/dashboard', fetchTrip = viewTrip } = {}) {
+  // TWM-221: warms the ['trip', id] cache and points currentTripId at it
+  // before navigating; a gone trip (deleted, or a stale card from another
+  // session) fails closed — prefetchTrip drops it from the list and we
+  // surface why instead of navigating into a dead trip.
+  async function handleOpen(t, { to = '/dashboard' } = {}) {
     if (busyId) return;
     setBusyId(t.id);
     setNotice(null);
     try {
-      const result = await fetchTrip(t.id);
+      const result = await prefetchTrip(t.id);
       if (!result.ok) {
         setNotice('This trip is no longer available.');
         return;
@@ -133,7 +220,7 @@ export default function DashboardHome() {
 
   function handleExploreRailOpen(t) {
     trackEvent('explore_rail_engaged', { stage: t.lifecycle?.stage ?? 'new' });
-    handleOpen(t, { to: stageCta(t).to, fetchTrip: openTrip });
+    handleOpen(t, { to: stageCta(t).to });
   }
 
   function startRename(t) {
@@ -154,105 +241,14 @@ export default function DashboardHome() {
     }
   }
 
-  // TWM-171: exactly one primary affordance per committed trip card, fixed
-  // label regardless of stage — stage is communicated via the adjacent
-  // status tag, not this button's text.
-  function TripCard({ t, showRename = true }) {
-    const badge = stageBadge(t);
-    const destination = contextDestination(t);
-    const recapPills = contextRecapPills(t);
-    const timestamp = formatTripTimestamp(t);
-    const statusLine = tripStatusLine(t);
-    return (
-      <div className="trip-card" key={t.id}>
-        <div>
-          {renamingId === t.id ? (
-            <input
-              className="name"
-              autoFocus
-              value={renameValue}
-              onChange={e => setRenameValue(e.target.value)}
-              onBlur={() => commitRename(t.id)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
-                if (e.key === 'Escape') setRenamingId(null);
-              }}
-            />
-          ) : (
-            <div className="name">
-              {decodeHtmlEntities(t.title) || 'Untitled trip'}{' '}
-              {showRename && (
-                <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => startRename(t)}>
-                  Rename
-                </button>
-              )}
-            </div>
-          )}
-          {destination && <div className="trip-card-destination">{destination}</div>}
-          <div className="meta">
-            <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
-            {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
-          </div>
-          {statusLine && <p className="trip-card-status-line">{statusLine}</p>}
-          {recapPills.length > 0 && (
-            <div className="trip-card-recap">
-              {recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
-            </div>
-          )}
-        </div>
-        <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => handleOpen(t)}>
-          Open trip →
-        </button>
-      </div>
-    );
-  }
+  const rename = { id: renamingId, value: renameValue, setValue: setRenameValue, commit: commitRename, start: startRename, cancel: () => setRenamingId(null) };
 
-  function ExploreRailCard({ t }) {
-    const cta = stageCta(t);
-    const badge = stageBadge(t);
-    const recapPills = contextRecapPills(t);
-    const statusLine = tripStatusLine(t);
-    return (
-      <div className="explore-card" key={t.id}>
-        {renamingId === t.id ? (
-          <input
-            className="name"
-            autoFocus
-            value={renameValue}
-            onChange={e => setRenameValue(e.target.value)}
-            onBlur={() => commitRename(t.id)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
-              if (e.key === 'Escape') setRenamingId(null);
-            }}
-          />
-        ) : (
-          <div className="name">
-            {t.title || 'Untitled trip'}{' '}
-            <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => startRename(t)}>
-              Rename
-            </button>
-          </div>
-        )}
-        <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
-        {statusLine && <p className="explore-card-status-line">{statusLine}</p>}
-        {recapPills.length > 0 && (
-          <div className="trip-card-recap">
-            {recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
-          </div>
-        )}
-        <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => handleExploreRailOpen(t)}>
-          {cta.label}
-        </button>
-      </div>
-    );
-  }
-
-  // Gated on tripLoadStatus, not just visibleTrips.length === 0 — trips
-  // starts as an empty array before the boot fetch resolves, so an
-  // unconditional length check briefly renders a real account as empty.
-  const stillLoading = tripLoadStatus !== 'ready';
-  const trueEmpty = !stillLoading && visibleTrips.length === 0;
+  // Gated on the list query having actually resolved once — `trips` starts
+  // as an empty array before the boot fetch settles, so an unconditional
+  // length check would briefly render a real account (and, mid-load, a
+  // genuinely empty one) with the settled empty state instead of "Loading".
+  const stillLoading = !tripsQuery.isFetched;
+  const trueEmpty = tripsQuery.isFetched && visibleTrips.length === 0;
 
   return (
     <Layout>
@@ -324,13 +320,13 @@ export default function DashboardHome() {
             searchResults.length === 0 ? (
               <div className="empty-trips"><p>No trips match "{search.trim()}".</p></div>
             ) : (
-              searchResults.map(t => <TripCard key={t.id} t={t} />)
+              searchResults.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} />)
             )
           ) : (
             <>
               {hero && (
                 <section className="hero-trip" aria-label="Your most urgent trip">
-                  <TripCard t={hero} />
+                  <TripCard t={hero} rename={rename} busyId={busyId} onOpen={handleOpen} />
                 </section>
               )}
 
@@ -338,12 +334,12 @@ export default function DashboardHome() {
                 <section className="explore-rail" aria-label="Continue exploring">
                   <h2 className="section-title">Continue exploring</h2>
                   <div className="explore-rail-row">
-                    {discoverOnlyTrips.map(t => <ExploreRailCard key={t.id} t={t} />)}
+                    {discoverOnlyTrips.map(t => <ExploreRailCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleExploreRailOpen} />)}
                   </div>
                 </section>
               )}
 
-              {listTrips.map(t => <TripCard key={t.id} t={t} />)}
+              {listTrips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} />)}
 
               {listTrips.length === 0 && !hero && discoverOnlyTrips.length === 0 && completedTrips.length === 0 && (
                 <div className="empty-trips"><p>No trips here yet.</p></div>
@@ -352,7 +348,7 @@ export default function DashboardHome() {
               {completedTrips.length > 0 && (
                 <section className="past-trips" aria-label="Past trips">
                   <h2 className="section-title">Past trips</h2>
-                  {completedTrips.map(t => <TripCard key={t.id} t={t} showRename={false} />)}
+                  {completedTrips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} showRename={false} />)}
                 </section>
               )}
             </>

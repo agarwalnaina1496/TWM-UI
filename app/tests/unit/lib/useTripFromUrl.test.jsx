@@ -1,50 +1,48 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { useTripFromUrl } from '../../../src/lib/useTripFromUrl.js';
+import { useTrip } from '../../../src/context/TripContext.jsx';
+import { AppProviders, mockFetchWithGuestSession } from '../testUtils.js';
 
 function wrapper(initialPath) {
   return function Wrapper({ children }) {
-    return <MemoryRouter initialEntries={[initialPath]}>{children}</MemoryRouter>;
+    return (
+      <MemoryRouter initialEntries={[initialPath]}>
+        <AppProviders>{children}</AppProviders>
+      </MemoryRouter>
+    );
   };
 }
 
-describe('useTripFromUrl (TWM-185)', () => {
-  it('does not call the resolver when the URL has no ?tripId=', () => {
-    const resolveTrip = vi.fn();
-    renderHook(() => useTripFromUrl(resolveTrip), { wrapper: wrapper('/dashboard') });
-    expect(resolveTrip).not.toHaveBeenCalled();
+// TWM-221: useTripFromUrl no longer takes a resolver — the URL's ?tripId=
+// becomes TripContext's currentTripId, and the ['trip', id] query does the
+// fetching. It still returns the raw URL param so pages can tell an explicit
+// trip link apart from the boot default.
+describe('useTripFromUrl', () => {
+  beforeEach(() => { mockFetchWithGuestSession(); });
+
+  it('returns null when the URL has no ?tripId=', () => {
+    const { result } = renderHook(() => useTripFromUrl(), { wrapper: wrapper('/dashboard') });
+    expect(result.current).toBeNull();
   });
 
-  it('calls the resolver once with the URL\'s trip id on mount', () => {
-    const resolveTrip = vi.fn();
-    renderHook(() => useTripFromUrl(resolveTrip), { wrapper: wrapper('/dashboard?tripId=trip-1') });
-    expect(resolveTrip).toHaveBeenCalledTimes(1);
-    expect(resolveTrip).toHaveBeenCalledWith('trip-1');
-  });
-
-  it('returns the resolved tripId', () => {
-    const { result } = renderHook(() => useTripFromUrl(vi.fn()), { wrapper: wrapper('/dashboard?tripId=trip-1') });
+  it('returns the URL\'s trip id', () => {
+    const { result } = renderHook(() => useTripFromUrl(), { wrapper: wrapper('/dashboard?tripId=trip-1') });
     expect(result.current).toBe('trip-1');
   });
 
-  it('preserves other query params — only reads tripId, ignores the rest', () => {
-    const resolveTrip = vi.fn();
-    renderHook(() => useTripFromUrl(resolveTrip), { wrapper: wrapper('/dashboard?tab=Bookings&tripId=trip-1') });
-    expect(resolveTrip).toHaveBeenCalledWith('trip-1');
+  it('reads only tripId, ignoring other query params', () => {
+    const { result } = renderHook(() => useTripFromUrl(), { wrapper: wrapper('/dashboard?tab=Bookings&tripId=trip-7') });
+    expect(result.current).toBe('trip-7');
   });
 
-  it('does not re-call the resolver on a re-render with the same tripId', () => {
-    const resolveTrip = vi.fn();
-    const { rerender } = renderHook(() => useTripFromUrl(resolveTrip), { wrapper: wrapper('/dashboard?tripId=trip-1') });
-    rerender();
-    rerender();
-    expect(resolveTrip).toHaveBeenCalledTimes(1);
-  });
-
-  // Guards against a caller passing a not-yet-ready resolver (e.g. a mocked
-  // useTrip() in a test that doesn't define every function) — never throws.
-  it('does not throw when the resolver is not a function', () => {
-    expect(() => renderHook(() => useTripFromUrl(undefined), { wrapper: wrapper('/dashboard?tripId=trip-1') })).not.toThrow();
+  it('points currentTripId at the URL\'s trip', async () => {
+    const { result } = renderHook(
+      () => ({ url: useTripFromUrl(), ctx: useTrip() }),
+      { wrapper: wrapper('/dashboard?tripId=trip-9') },
+    );
+    await Promise.resolve();
+    expect(result.current.ctx.currentTripId).toBe('trip-9');
   });
 });

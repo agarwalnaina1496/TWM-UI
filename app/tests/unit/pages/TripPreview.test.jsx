@@ -9,9 +9,10 @@ let commandSnapshot;
 let sendTripCommand;
 let tripLoadStatus;
 let openTrip;
+let setCurrentTripId;
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, openTrip }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, currentTripId: commandSnapshot?.id ?? null, setCurrentTripId, prefetchTrip: openTrip }),
 }));
 vi.mock('react-router-dom', async () => ({ ...(await vi.importActual('react-router-dom')), useNavigate: () => navigate }));
 
@@ -47,13 +48,14 @@ describe('TripPreview real Guide Plan Builder', () => {
     vi.clearAllMocks();
     tripLoadStatus = 'ready';
     openTrip = vi.fn();
+    setCurrentTripId = vi.fn();
   });
 
-  it('resolves the trip named by ?tripId= via openTrip when landing fresh', async () => {
+  it('points currentTripId at the trip named by ?tripId= when landing fresh', async () => {
     commandSnapshot = null;
     sendTripCommand = vi.fn();
     render(<MemoryRouter initialEntries={['/trip-preview?tripId=trip-1']}><TripPreview /></MemoryRouter>);
-    await waitFor(() => expect(openTrip).toHaveBeenCalledWith('trip-1'));
+    await waitFor(() => expect(setCurrentTripId).toHaveBeenCalledWith('trip-1'));
   });
 
   it('bootstraps a fresh discover-path session with start_planning', async () => {

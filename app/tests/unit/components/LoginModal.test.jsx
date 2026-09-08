@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import LoginModal from '../../../src/components/LoginModal.jsx';
 import ClaimConfirmation from '../../../src/components/ClaimConfirmation.jsx';
-import { TripProvider, useTrip } from '../../../src/context/TripContext.jsx';
-import { mockFetchWithGuestSession } from '../testUtils.js';
+import { useTrip } from '../../../src/context/TripContext.jsx';
+import { AppProviders, mockFetchWithGuestSession } from '../testUtils.js';
 
 function jsonResponse(status, body) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -26,11 +26,11 @@ function Sentinel() {
 function renderLoginModal() {
   const view = render(
     <MemoryRouter>
-      <TripProvider>
+      <AppProviders>
         <Sentinel />
         <LoginModal />
         <ClaimConfirmation />
-      </TripProvider>
+      </AppProviders>
     </MemoryRouter>
   );
   return view;

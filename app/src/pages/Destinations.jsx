@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { getRecommendations, TripApiError } from '../lib/tripApi.js';
+import { useRecommendationsQuery } from '../hooks/tripQueries.js';
 import { safeMatcherOutcomeViewModel } from '../lib/recommendationViewModel.js';
 import { contextRecapPills } from '../lib/tripLifecycle.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
@@ -27,10 +27,10 @@ const MATCHING_STEPS = ['Reviewing what you told us', 'Matching against real des
 
 export default function Destinations() {
   const navigate = useNavigate();
-  const { commandSnapshot, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState, openTrip } = useTrip();
-  // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this page
-  // triggers matching/reads matcher_state to decide what to do next.
-  useTripFromUrl(openTrip);
+  const { commandSnapshot: view, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState } = useTrip();
+  // TWM-185/TWM-221: reload/bookmark/deep-link safe — points currentTripId at
+  // the URL's trip so the ['trip', id] query resolves the right one.
+  useTripFromUrl();
 
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState(null);
@@ -59,61 +59,34 @@ export default function Destinations() {
   const trackedFailureStatus = useRef(null);
   const trackedTransitionShown = useRef(false);
 
-  const view = commandSnapshot;
-  const tripId = commandSnapshot?.id;
+  const tripId = view?.id;
   const awaiting = view?.matcher?.awaiting;
   const lastMeridianMessage = view?.matcher?.last_message;
 
-  // The matcher round is fetched lazily on mount only (TWM-153); after a
-  // command it arrives inline on the command response (TWM-217/TWM-220).
-  const [latest, setLatest] = useState(null);
-  const [recoStatus, setRecoStatus] = useState('idle'); // idle | loading | ready | error
-  const [recoError, setRecoError] = useState(null);
+  // TWM-221: the matcher round is a React Query read (['recommendations',
+  // id]) — lazy on mount, request-deduped. After a command it is written
+  // straight into that cache by TripContext's sendTripCommand; a turn that
+  // produced no round leaves the current one in place and the fresh
+  // `view.matcher` drives the clarification UI.
+  const recommendationsQuery = useRecommendationsQuery(tripId);
+  const latest = recommendationsQuery.data ?? null;
+  const recoStatus = !tripId
+    ? 'ready'
+    : recommendationsQuery.isError
+      ? 'error'
+      : recommendationsQuery.data !== undefined
+        ? 'ready'
+        : 'loading';
+  const recoError = recommendationsQuery.error?.message || 'Could not load recommendations.';
+  const refreshLatest = recommendationsQuery.refetch;
 
-  const refreshLatest = useCallback(async (idOverride) => {
-    const id = idOverride ?? tripId;
-    if (!id) {
-      setLatest(null);
-      setRecoStatus('ready');
-      return null;
-    }
-    setRecoStatus('loading');
-    setRecoError(null);
-    try {
-      const round = await getRecommendations(id);
-      setLatest(round);
-      setRecoStatus('ready');
-      return round;
-    } catch (error) {
-      if (error instanceof TripApiError && error.status === 404) {
-        setLatest(null);
-        setRecoStatus('ready');
-        return null;
-      }
-      setRecoStatus('error');
-      setRecoError(error instanceof TripApiError ? error.message : 'Could not load recommendations.');
-      return null;
-    }
-  }, [tripId]);
-
-  // Consumes the round a command turn produced (TWM-220) — no follow-up GET.
-  // A turn that produced no round (e.g. Meridian asked another clarifying
-  // question) leaves the current round in place; the fresh `view.matcher`
-  // drives the clarification UI.
+  // A command turn's round is already in the ['recommendations', id] cache
+  // by the time this runs; fire the generated-count analytics only.
   const applyCommandRound = useCallback(round => {
-    if (!round) return;
-    if (round.options?.length) {
+    if (round?.options?.length) {
       trackEvent('recommendations_generated', { recommendation_count: round.options.length });
     }
-    setLatest(round);
-    setRecoStatus('ready');
   }, []);
-
-  useEffect(() => {
-    if (tripLoadStatus !== 'ready') return;
-    refreshLatest();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripLoadStatus, tripId]);
 
   function triggerContinue() {
     triggered.current = true;
@@ -212,7 +185,7 @@ export default function Destinations() {
       // no day_plan yet still belongs on ScoutChat's chat window, not the
       // (now day_plan-only) Plan Builder.
       const destination = planReady(view?.plan) ? '/trip-preview' : '/scout-chat';
-      navigate(withTripId(destination, commandSnapshot?.id));
+      navigate(withTripId(destination, view?.id));
       return;
     }
     doPlanThis(option);
@@ -259,7 +232,7 @@ export default function Destinations() {
     }
     if (checkpointWasShown.current) trackEvent('checkpoint_resolved', {});
     setCheckpointAwaiting(null);
-    const tripId = response.trip?.id ?? commandSnapshot?.id;
+    const tripId = response.trip?.id ?? view?.id;
     if (planReady(nextPlan)) {
       navigate(withTripId('/trip-preview', tripId), { state: { guideMessage: response.message } });
       return;

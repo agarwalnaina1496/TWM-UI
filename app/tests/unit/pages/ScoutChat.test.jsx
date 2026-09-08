@@ -9,10 +9,11 @@ let commandSnapshot;
 let sendTripCommand;
 let tripLoadStatus;
 let openTrip;
+let setCurrentTripId;
 let searchParams = new URLSearchParams();
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, openTrip }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, currentTripId: commandSnapshot?.id ?? null, setCurrentTripId, prefetchTrip: openTrip }),
 }));
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
@@ -40,13 +41,14 @@ describe('ScoutChat advice-entry chat', () => {
     commandSnapshot = null;
     tripLoadStatus = 'ready';
     openTrip = vi.fn();
+    setCurrentTripId = vi.fn();
     searchParams = new URLSearchParams();
   });
 
-  it('resolves the trip named by ?tripId= via openTrip when landing fresh', () => {
+  it('points currentTripId at the trip named by ?tripId= when landing fresh', () => {
     searchParams = new URLSearchParams('tripId=trip-1');
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-    expect(openTrip).toHaveBeenCalledWith('trip-1');
+    expect(setCurrentTripId).toHaveBeenCalledWith('trip-1');
   });
 
   it('redirects home when the URL trip resolves to an empty trip', () => {

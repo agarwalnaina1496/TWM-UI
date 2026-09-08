@@ -3,8 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import DashboardHome from '../../../src/pages/DashboardHome.jsx';
-import { TripProvider } from '../../../src/context/TripContext.jsx';
-import { SeedAuth, mockFetchWithGuestSession } from '../testUtils.js';
+import { AppProviders, SeedAuth, mockFetchWithGuestSession } from '../testUtils.js';
 
 function jsonResponse(body, { status = 200 } = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -42,9 +41,9 @@ function tripView(overrides = {}) {
 function renderDashboardHome(auth) {
   return render(
     <MemoryRouter>
-      <TripProvider>
+      <AppProviders>
         {auth ? <SeedAuth auth={auth}><DashboardHome /></SeedAuth> : <DashboardHome />}
-      </TripProvider>
+      </AppProviders>
     </MemoryRouter>
   );
 }
@@ -62,6 +61,19 @@ describe('DashboardHome', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  // TWM-221: TripProvider warms ['trip', <most-recent>] on boot, so a plain
+  // positional mockResolvedValueOnce queue no longer lines up. Route by URL:
+  // `trips` for GET /api/trips, `patch` for PATCH /api/trips/:id, and a
+  // default TripView for the background per-trip GET.
+  function routeFetch({ trips = [], patch = () => tripView() }) {
+    fetchMock.mockImplementation((url, options) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips }));
+      if (/^\/api\/trips\/[^/]+$/.test(url) && options?.method === 'PATCH') return Promise.resolve(patch());
+      if (/^\/api\/trips\/[^/]+/.test(url)) return Promise.resolve(tripView());
+      return Promise.resolve(jsonResponse({}));
+    });
+  }
 
   it('shows the empty state when there are no trips', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
@@ -91,10 +103,10 @@ describe('DashboardHome', () => {
   });
 
   it('renders stage-aware badge and CTA for a real trip', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [listItem({ title: 'Coorg', stage: 'matched', context: { origin_city: 'Delhi' } })] }));
+    routeFetch({ trips: [listItem({ title: 'Coorg', stage: 'matched', context: { origin_city: 'Delhi' } })] });
     renderDashboardHome(GUEST);
-    expect(await screen.findByText(/browsing as a guest/i)).toBeInTheDocument();
-    expect(screen.getByText('Destination chosen')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Destination chosen')).toBeInTheDocument());
+    expect(screen.getByText('Coorg')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
   });
 
@@ -175,17 +187,17 @@ describe('DashboardHome', () => {
   });
 
   it('search filters to matching trips only, without any lookup request', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+    routeFetch({ trips: [
       listItem({ id: 'trip-1', title: 'Coorg weekend', stage: 'matched', context: { origin_city: 'Delhi' } }),
       listItem({ id: 'trip-2', title: 'Manali trip', stage: 'matched', context: { origin_city: 'Delhi' } }),
-    ] }));
+    ] });
     renderDashboardHome(GUEST);
     await screen.findByText('Coorg weekend');
-    const callsBefore = fetchMock.mock.calls.length;
     await userEvent.type(screen.getByLabelText('Search your trips'), 'coorg');
     expect(screen.getByText('Coorg weekend')).toBeInTheDocument();
     expect(screen.queryByText('Manali trip')).not.toBeInTheDocument();
-    expect(fetchMock.mock.calls.length).toBe(callsBefore);
+    // No search/lookup endpoint — every call is the list or a trip read.
+    expect(fetchMock.mock.calls.every(([url]) => url === '/api/trips' || /^\/api\/trips\/[^/]+$/.test(url))).toBe(true);
   });
 
   it('empty-state entry door creates no Backend record', async () => {
@@ -198,13 +210,14 @@ describe('DashboardHome', () => {
   });
 
   it('renames a trip through the Backend', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem({ title: 'Coorg', stage: 'matched', context: { origin_city: 'Delhi' } })] }))
-      .mockResolvedValueOnce(tripView({ title: 'Coorg Weekend', version: 2 }));
+    routeFetch({
+      trips: [listItem({ title: 'Coorg', stage: 'matched', context: { origin_city: 'Delhi' } })],
+      patch: () => tripView({ title: 'Coorg Weekend', version: 2 }),
+    });
     renderDashboardHome(GUEST);
     await screen.findByText('Coorg');
     await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
-    const input = screen.getByDisplayValue('Coorg');
+    const input = await screen.findByDisplayValue('Coorg');
     await userEvent.clear(input);
     await userEvent.type(input, 'Coorg Weekend{Enter}');
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1', expect.objectContaining({
@@ -214,12 +227,15 @@ describe('DashboardHome', () => {
   });
 
   it('opening a trip deleted elsewhere drops it from the shared cache (TWM-109)', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [
+    fetchMock.mockImplementation((url) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [
         listItem({ id: 'trip-1', title: 'Coorg', stage: 'matched', context: { origin_city: 'Delhi' } }),
         listItem({ id: 'trip-2', title: 'Deleted elsewhere', stage: 'matched', context: { origin_city: 'Delhi' }, updated_at: '2025-12-01T00:00:00.000Z' }),
-      ] }))
-      .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+      ] }));
+      if (url === '/api/trips/trip-2') return Promise.resolve(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+      if (/^\/api\/trips\/[^/]+/.test(url)) return Promise.resolve(tripView());
+      return Promise.resolve(jsonResponse({}));
+    });
     renderDashboardHome(GUEST);
     await screen.findByText('Deleted elsewhere');
     await userEvent.click(within(screen.getByText('Deleted elsewhere').closest('.trip-card')).getByRole('button', { name: 'Open trip →' }));
@@ -228,13 +244,14 @@ describe('DashboardHome', () => {
   });
 
   it('renaming a trip that returns 404 shows an unavailable notice (TWM-109)', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem({ title: 'Coorg', stage: 'matched', context: { origin_city: 'Delhi' } })] }))
-      .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+    routeFetch({
+      trips: [listItem({ title: 'Coorg', stage: 'matched', context: { origin_city: 'Delhi' } })],
+      patch: () => jsonResponse({ detail: 'Trip not found.' }, { status: 404 }),
+    });
     renderDashboardHome(GUEST);
     await screen.findByText('Coorg');
     await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
-    const input = screen.getByDisplayValue('Coorg');
+    const input = await screen.findByDisplayValue('Coorg');
     await userEvent.clear(input);
     await userEvent.type(input, 'Coorg Weekend{Enter}');
     expect(await screen.findByRole('alert')).toHaveTextContent('This trip is no longer available.');

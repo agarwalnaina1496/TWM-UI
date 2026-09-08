@@ -3,7 +3,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import RequestQuote from '../../../src/pages/RequestQuote.jsx';
-import { TripProvider, useTrip } from '../../../src/context/TripContext.jsx';
+import { useTrip } from '../../../src/context/TripContext.jsx';
+import { AppProviders } from '../testUtils.js';
 
 function AuthSentinel() {
   const { auth } = useTrip();
@@ -16,10 +17,10 @@ function AuthSentinel() {
 function renderRequestQuote() {
   return render(
     <MemoryRouter>
-      <TripProvider>
+      <AppProviders>
         <RequestQuote />
         <AuthSentinel />
-      </TripProvider>
+      </AppProviders>
     </MemoryRouter>
   );
 }
