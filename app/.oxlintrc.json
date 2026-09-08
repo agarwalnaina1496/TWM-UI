@@ -3,6 +3,53 @@
   "plugins": ["react", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    "eslint/max-lines": ["error", { "max": 600, "skipComments": true, "skipBlankLines": true }],
+    "eslint/max-params": ["error", { "max": 6 }],
+    "eslint/max-lines-per-function": ["warn", { "max": 150, "skipComments": true, "skipBlankLines": true }],
+    "eslint/complexity": ["error", 25]
+  },
+  "overrides": [
+    {
+      "files": ["tests/**", "src/**/*.test.{js,jsx}", "src/**/*.spec.{js,jsx}"],
+      "rules": {
+        "eslint/max-lines": "off",
+        "eslint/max-lines-per-function": "off",
+        "eslint/complexity": "off",
+        "eslint/max-params": "off"
+      }
+    },
+    {
+      "files": ["src/pages/Destinations.jsx", "src/pages/ScoutChat.jsx", "src/pages/TripPreview.jsx"],
+      "rules": {
+        "eslint/complexity": "off"
+      }
+    },
+    {
+      "files": ["src/lib/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              { "name": "react", "message": "lib/ modules are pure view-models — no React. Move view state to a hook (src/hooks/)." },
+              { "name": "react-router-dom", "message": "lib/ modules are pure — no router. Move to a hook or page." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/lib/tripApi.js",
+        "src/lib/authApi.js",
+        "src/lib/analytics.js",
+        "src/lib/queryClient.js",
+        "src/lib/booking/**"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": "off"
+      }
+    }
+  ]
 }

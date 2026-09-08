@@ -30,9 +30,26 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 - When agent-version metadata is available, preserve it with the relevant saved advice or recommendation output and expose it in approved debugging surfaces.
 - Do not infer prompt provenance from response content; use deterministic metadata returned by the backend.
 
-## Client data layer and the trip_state boundary (TWM-221)
+## Client data layer (TWM-221)
 
-Trip data is read through React Query: `useQuery(['trip', id])` (the server-composed `TripView`, surfaced as `commandSnapshot` / `tripLoadStatus` on `TripContext` and via `useCurrentTrip`), `['trips']`, `['recommendations', id]`, `['itinerary', id]`. `TripContext` owns identity, auth, UI state, and the current trip *id* only — never a hand-rolled trip cache, loader, or branch-merge. A mutating command posts to `/commands` and then force-refetches the `TripView` into cache (writing any produced round into `['recommendations', id]` and invalidating `['itinerary', id]`); the client never reconstructs canonical `trip_state` from a command response. Because Backend owns `trip_state`, a module under `src/lib/` or `src/components/` must render from a composed read model — a `TripView`, the round, or the enriched `/itinerary` document — and must not reach into raw `trip_state` branch paths (`trip_state`, `.planner_state`, `.matcher_state`, `.trip_context`, `final_itinerary.<field>`, `result.unresolved`). This is enforced by the `tests/unit/architecture/trip-state-boundary.test.js` fitness function (allow-list: `lib/booking/legsFromItinerary.js`, `lib/recommendationViewModel.js`), which runs in the normal test/coverage step; a deliberate violation fails CI.
+Trip data is read through React Query: `['trip', id]` (the server-composed `TripView`, surfaced as `commandSnapshot` / `tripLoadStatus` / `uiState` on `TripContext`), `['trips']`, `['recommendations', id]` (`useRecommendationsQuery`), `['itinerary', id]`. `TripContext` owns identity, auth, UI state, and the current trip *id* only — never a hand-rolled trip cache, loader, or branch-merge. A mutating command posts to `/commands` and then force-refetches the `TripView` into cache (writing any produced round into `['recommendations', id]` and invalidating `['itinerary', id]`); the client never reconstructs canonical `trip_state` from a command response.
+
+## Architecture rules (enforced) (TWM-224)
+
+Every rule here ships with the check that enforces it. Adding a rule without its check is not allowed. `oxlint` (not ESLint) has no `eslint-plugin-boundaries` / `no-restricted-syntax`, so graph and read-model rules are vitest fitness functions in `tests/unit/architecture/` (they run in the normal `npm test` step, which CI runs).
+
+| Rule | Check |
+|---|---|
+| **Layer graph** — `pages → hooks, components, context, lib, constants, data`; `hooks → context, lib, constants`; `components → context, lib, constants` (no hooks, no pages); `context → lib, constants`; `lib → lib, constants` (pure); `constants` / `data` import nothing internal. Top imports down, never up. | `tests/unit/architecture/layer-graph.test.js` |
+| **Read-model boundary** — a `src/lib/` or `src/components/` module renders from a composed read model (`TripView`, the round, the enriched `/itinerary` document), never raw `trip_state` branch paths (`trip_state`, `.planner_state`, `.matcher_state`, `.trip_context`, `final_itinerary`/`finalItinerary.<field>`, `trip_summary`, `boardData.<field>`, `result.unresolved`). Allow-list: `lib/booking/legsFromItinerary.js`, `lib/recommendationViewModel.js`. | `tests/unit/architecture/trip-state-boundary.test.js` |
+| **`lib/` purity** — a `lib/` module imports neither `react` nor `react-router-dom` (view-models are formatting only; view state belongs in a hook). Exempt: `lib/tripApi.js`, `lib/authApi.js`, `lib/analytics.js`, `lib/queryClient.js`, `lib/booking/**` (they do I/O). | `oxlint` `eslint/no-restricted-imports` (per-glob override in `.oxlintrc.json`) |
+| **File size** — no source file over 600 lines. | `oxlint` `eslint/max-lines` (error) |
+| **Function arity** — no function with 7+ parameters (pass an object). | `oxlint` `eslint/max-params` (error, max 6) |
+| **Function complexity** — cyclomatic complexity ≤ 25. | `oxlint` `eslint/complexity` (error). Exempt: `pages/Destinations.jsx`, `pages/ScoutChat.jsx`, `pages/TripPreview.jsx` — legacy interlocking flow control; ratchet under the cap in a dedicated refactor, do not add new files to the exempt list. |
+| **Function length** — advisory warning over 150 lines. | `oxlint` `eslint/max-lines-per-function` (warn). Current over-cap render functions: `TripProvider`, `TripPreview`, `Destinations`, `ScoutChat`, `DashboardHome`, `useBookingDrawers` — ratchet these down over time, never up. |
+| **Dispatch is a lookup, not an if-chain** *(review-only)* — a command / action dispatcher is a `{name: handler}` map, not `if x === … else if`. | review; reference: none in this repo yet |
+
+Each fitness function includes a deliberate-violation self-test so the rule cannot be silently weakened.
 
 ## Documentation
 

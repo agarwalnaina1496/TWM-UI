@@ -16,7 +16,7 @@ import OptionDetailCard from '../components/destinations/OptionDetailCard.jsx';
 import RefinementDrawer from '../components/destinations/RefinementDrawer.jsx';
 import CheckpointOverlay from '../components/destinations/CheckpointOverlay.jsx';
 import { withTripId } from '../lib/tripUrl.js';
-import { useTripFromUrl } from '../lib/useTripFromUrl.js';
+import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
 import '../styles/destinations.css';
 
 const FOCUSED_KEY = uiStateKey(UI_STATE_SCREEN.DESTINATIONS, 'focusedKey');

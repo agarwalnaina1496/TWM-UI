@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { useTripFromUrl } from '../../../src/lib/useTripFromUrl.js';
+import { useTripFromUrl } from '../../../src/hooks/useTripFromUrl.js';
 import { useTrip } from '../../../src/context/TripContext.jsx';
 import { AppProviders, mockFetchWithGuestSession } from '../testUtils.js';
 

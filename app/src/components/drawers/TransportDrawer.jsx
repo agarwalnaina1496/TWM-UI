@@ -4,10 +4,6 @@ import { ModeTag, VerificationTag } from '../StatusPills.jsx';
 import StatusPill from '../ui/StatusPill.jsx';
 import TrustedActionCta from './TrustedActionCta.jsx';
 
-export function legKey(leg) {
-  return `${leg.from}→${leg.to}`;
-}
-
 function durationDistanceLabel(option) {
   const parts = [];
   if (option.durationMinutes != null) parts.push(`${Math.round((option.durationMinutes / 60) * 10) / 10}h`);

@@ -3,8 +3,7 @@ import { useTrip } from '../context/TripContext.jsx';
 import { getTripFeasibility } from '../lib/tripApi.js';
 import { transportOptionsFor } from '../lib/booking/transportOptions.js';
 import { stayOptionsFor } from '../lib/booking/stayOptions.js';
-import { legFromItem, stayFromSegment, travelerPartyLabel } from '../lib/booking/legsFromItinerary.js';
-import { legKey } from '../components/drawers/TransportDrawer.jsx';
+import { legFromItem, legKey, stayFromSegment, travelerPartyLabel } from '../lib/booking/legsFromItinerary.js';
 import { searchPrefFor } from '../constants/bookingSetup.js';
 import { trackEvent } from '../lib/analytics.js';
 

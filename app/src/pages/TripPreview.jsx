@@ -10,7 +10,7 @@ import BackToTrip from '../components/BackToTrip.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
 import PaceMeter from '../components/ui/PaceMeter.jsx';
 import { withTripId } from '../lib/tripUrl.js';
-import { useTripFromUrl } from '../lib/useTripFromUrl.js';
+import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
 import '../styles/preview.css';
 
 const PACE_OPTIONS = ['relaxed', 'balanced', 'packed'];
