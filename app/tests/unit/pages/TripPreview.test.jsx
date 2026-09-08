@@ -4,16 +4,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TripPreview from '../../../src/pages/TripPreview.jsx';
 
-const updateTrip = vi.fn();
 const navigate = vi.fn();
-let trip;
 let commandSnapshot;
 let sendTripCommand;
 let tripLoadStatus;
 let openTrip;
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ trip, updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus, openTrip }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, openTrip }),
 }));
 vi.mock('react-router-dom', async () => ({ ...(await vi.importActual('react-router-dom')), useNavigate: () => navigate }));
 
@@ -47,7 +45,6 @@ function view(plan, context = { destinations: 'Rishikesh', trip_duration: '2' },
 describe('TripPreview real Guide Plan Builder', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    trip = {};
     tripLoadStatus = 'ready';
     openTrip = vi.fn();
   });

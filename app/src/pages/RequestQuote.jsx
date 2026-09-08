@@ -4,21 +4,27 @@ import { useTrip } from '../context/TripContext.jsx';
 import { trackEvent } from '../lib/analytics.js';
 import '../styles/auth.css';
 
-const BUDGET_LABELS = {
-  budget: 'Under ₹30,000', mid: '₹30,000–70,000', premium: '₹70,000+', flexible: 'Flexible budget',
-};
-
-function formatDateRange(start, end) {
-  if (!start) return '';
-  const opts = { day: 'numeric', month: 'short', year: 'numeric' };
-  const s = new Date(start).toLocaleDateString('en-IN', opts);
-  if (!end || end === start) return s;
-  const e = new Date(end).toLocaleDateString('en-IN', opts);
-  return `${s} – ${e}`;
+// TWM-219: the TWM-Led quote-request flow is a pre-MVP stub. Trip details
+// come from the composed read model (context_recap + summary) when a trip
+// is open, or a single honest line otherwise — there is no structured
+// trip-date display anywhere to show.
+function tripDetailLines(view) {
+  if (!view) return ['Your coordinator will confirm trip details with you.'];
+  const recap = new Map((view.context_recap || []).map(item => [item.key, item.value]));
+  const lines = [];
+  const headline = [
+    recap.get('destinations') || 'Destination TBD',
+    recap.get('trip_duration') && `${recap.get('trip_duration')} days`,
+    view.summary?.travelers?.value || recap.get('num_travelers'),
+  ].filter(Boolean).join(' · ');
+  if (headline) lines.push(headline);
+  if (recap.get('origin_city')) lines.push(`From ${recap.get('origin_city')}`);
+  if (recap.get('budget')) lines.push(`Budget: ${recap.get('budget')}`);
+  return lines.length ? lines : ['Your coordinator will confirm trip details with you.'];
 }
 
 export default function RequestQuote() {
-  const { trip, auth, setContact } = useTrip();
+  const { commandSnapshot, auth, setContact } = useTrip();
   const [name, setName] = useState(auth.name);
   const [email, setEmail] = useState(auth.email);
   const [sent, setSent] = useState(false);
@@ -48,17 +54,9 @@ export default function RequestQuote() {
 
             <div className="field-block">
               <div className="field-title">Trip details</div>
-              <div className="field-hint">
-                {trip.destination?.name || 'Destination TBD'} · {trip.days.length || trip.tripLength} days · {trip.travelers} {trip.travelers === 1 ? 'traveler' : 'travelers'}
-              </div>
-              {trip.origin && <div className="field-hint">From {trip.origin}</div>}
-              <div className="field-hint">Budget: {BUDGET_LABELS[trip.budget] || 'Flexible budget'}</div>
-              {(trip.departDate || (trip.month && trip.month !== 'flexible')) && (
-                <div className="field-hint">
-                  {trip.departDate ? formatDateRange(trip.departDate, trip.returnDate) : trip.month}
-                </div>
-              )}
-              {trip.style && <div className="field-hint">Goal: "{trip.style}"</div>}
+              {tripDetailLines(commandSnapshot).map(line => (
+                <div className="field-hint" key={line}>{line}</div>
+              ))}
             </div>
 
             <span className="btn btn-primary btn-full" onClick={submit}>Request a quote →</span>

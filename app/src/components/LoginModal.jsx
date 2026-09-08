@@ -21,7 +21,7 @@ export function LoginRouteRedirect() {
 // from anywhere via useTrip().openLoginModal() and closes back onto exactly
 // the screen the traveler was already on.
 export default function LoginModal() {
-  const { trip, signup, login, continueWithoutLogin, loginModalOpen, closeLoginModal } = useTrip();
+  const { signup, login, continueWithoutLogin, loginModalOpen, closeLoginModal } = useTrip();
   const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'forgot'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -101,9 +101,6 @@ export default function LoginModal() {
       >
         <button type="button" className="modal-close" aria-label="Close" onClick={closeLoginModal}>×</button>
         <h1 id="login-modal-title">{heading} <em>{mode === 'forgot' ? 'password' : 'continue'}</em></h1>
-        {mode !== 'forgot' && trip.plan === 'twm-led' && (
-          <p className="lede">We'll need a way to reach you, since a real person coordinates TWM-Led trips.</p>
-        )}
 
         {mode === 'forgot' ? (
           resetSent ? (
@@ -147,12 +144,8 @@ export default function LoginModal() {
                 ? <>Already have an account? <span onClick={() => switchMode('login')}>Log in</span></>
                 : <>New user? <span onClick={() => switchMode('signup')}>Sign up</span></>}
             </p>
-            {trip.plan !== 'twm-led' && (
-              <>
-                <div className="auth-divider">or</div>
-                <span className="btn btn-ghost btn-full" onClick={handleContinueWithoutLogin}>Continue without login</span>
-              </>
-            )}
+            <div className="auth-divider">or</div>
+            <span className="btn btn-ghost btn-full" onClick={handleContinueWithoutLogin}>Continue without login</span>
           </>
         )}
       </div>
