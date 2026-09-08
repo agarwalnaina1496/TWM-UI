@@ -38,11 +38,10 @@ const KNOWN_DESTINATION_PROMPT = 'Where are you headed?';
 export default function ScoutChat() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { commandSnapshot, sendTripCommand, startTrip, currentTripId, tripLoadStatus, openTrip } = useTrip();
-  // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this page
-  // reads matcher_state/planner_state to decide what to do next and can't
-  // safely act on a possibly-thin cached record.
-  const urlTripId = useTripFromUrl(openTrip);
+  const { commandSnapshot, sendTripCommand, startTrip, currentTripId, tripLoadStatus } = useTrip();
+  // TWM-185/TWM-221: reload/bookmark/deep-link safe — points currentTripId at
+  // the URL's trip so the ['trip', id] query resolves the right one.
+  const urlTripId = useTripFromUrl();
   const intent = params.get('intent');
   // No trip anywhere yet (not on the URL, not already tracked this
   // session) — a genuine live entry, not a resume. Only ever paired with an

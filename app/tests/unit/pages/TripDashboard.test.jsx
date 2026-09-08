@@ -10,9 +10,10 @@ let tripLoadStatus;
 let uiState;
 let updateUiState;
 let openTrip;
+let setCurrentTripId;
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState, openTrip, viewTrip: openTrip }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, uiState, updateUiState, currentTripId: commandSnapshot?.id ?? null, setCurrentTripId, prefetchTrip: openTrip }),
 }));
 
 const navigate = vi.fn();
@@ -201,6 +202,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     uiState = {};
     updateUiState = vi.fn(async () => {});
     openTrip = vi.fn(async () => ({ ok: true }));
+    setCurrentTripId = vi.fn();
     itineraryResponse = enrichedDoc();
     global.fetch = makeFetch();
   });
@@ -656,11 +658,11 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(screen.getAllByRole('button', { name: 'Continue chat →' })).toHaveLength(2);
   });
 
-  it('resolves the trip named by ?tripId= via openTrip when landing fresh', async () => {
+  it('points currentTripId at the trip named by ?tripId= when landing fresh', async () => {
     commandSnapshot = null;
     sendTripCommand = vi.fn();
     renderDashboard(['/dashboard?tripId=trip-1']);
-    await waitFor(() => expect(openTrip).toHaveBeenCalledWith('trip-1'));
+    await waitFor(() => expect(setCurrentTripId).toHaveBeenCalledWith('trip-1'));
   });
 
   it('shows a "trip unavailable" message when commandSnapshot is null', async () => {
@@ -671,13 +673,13 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(screen.getByRole('button', { name: 'Back to your trips' })).toBeInTheDocument();
   });
 
-  it('a CTA click ensures full detail (openTrip) before navigating', async () => {
+  it('a CTA click points currentTripId at the trip before navigating', async () => {
     commandSnapshot = thinView({ stage: 'planning', context: { destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const button = await screen.findByRole('button', { name: 'Continue chat →' });
     await userEvent.setup().click(button);
-    expect(openTrip).toHaveBeenCalledWith('trip-1');
+    expect(setCurrentTripId).toHaveBeenCalledWith('trip-1');
   });
 
   it('never attempts to boot Atlas before a plan is frozen', async () => {

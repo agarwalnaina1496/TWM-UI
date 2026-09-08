@@ -4,8 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useSearchParams } from 'react-router-dom';
 import Header from '../../../src/components/Header.jsx';
 import LoginModal from '../../../src/components/LoginModal.jsx';
-import { TripProvider } from '../../../src/context/TripContext.jsx';
-import { SeedAuth, mockFetchWithGuestSession } from '../testUtils.js';
+import { AppProviders, SeedAuth, mockFetchWithGuestSession } from '../testUtils.js';
 
 function renderHeader(auth) {
   // TripProvider's own boot check (GET /auth/me) is authoritative and runs
@@ -15,9 +14,9 @@ function renderHeader(auth) {
   mockFetchWithGuestSession({ authenticatedAs: auth?.loggedIn ? { id: 'u1', email: auth.email } : null });
   return render(
     <MemoryRouter>
-      <TripProvider>
+      <AppProviders>
         {auth ? <SeedAuth auth={auth}><Header /></SeedAuth> : <Header />}
-      </TripProvider>
+      </AppProviders>
     </MemoryRouter>
   );
 }
@@ -26,10 +25,10 @@ function renderHeaderWithLoginModal(initialEntries) {
   mockFetchWithGuestSession();
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <TripProvider>
+      <AppProviders>
         <Header />
         <LoginModal />
-      </TripProvider>
+      </AppProviders>
     </MemoryRouter>
   );
 }
@@ -38,13 +37,13 @@ function renderHeaderWithJourneyRoute() {
   mockFetchWithGuestSession();
   return render(
     <MemoryRouter initialEntries={['/']}>
-      <TripProvider>
+      <AppProviders>
         <Header />
         <Routes>
           <Route path="/" element={<div>Dashboard-home screen</div>} />
           <Route path="/journey-entry" element={<JourneyEntryProbe />} />
         </Routes>
-      </TripProvider>
+      </AppProviders>
     </MemoryRouter>
   );
 }

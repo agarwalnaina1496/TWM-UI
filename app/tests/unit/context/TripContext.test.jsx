@@ -1,11 +1,21 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { TripProvider, useTrip } from '../../../src/context/TripContext.jsx';
-import { mockFetchWithGuestSession } from '../testUtils.js';
+import { useTrip } from '../../../src/context/TripContext.jsx';
+import { useTripsQuery } from '../../../src/hooks/tripQueries.js';
+import { AppProviders, mockFetchWithGuestSession } from '../testUtils.js';
 
 function wrapper({ children }) {
-  return <MemoryRouter><TripProvider>{children}</TripProvider></MemoryRouter>;
+  return <MemoryRouter><AppProviders>{children}</AppProviders></MemoryRouter>;
+}
+
+// TWM-221: the trip list is its own React Query now, not a context field —
+// render it alongside useTrip() so assertions that used to read
+// `result.current.trips` can read `result.current.tripsList`.
+function useTripAndList() {
+  const ctx = useTrip();
+  const tripsQuery = useTripsQuery();
+  return { ...ctx, tripsList: tripsQuery.data ?? [] };
 }
 
 function jsonResponse(body, { status = 200 } = {}) {
@@ -142,61 +152,73 @@ describe('TripContext trip record (TWM-220 TripView shape)', () => {
     vi.restoreAllMocks();
   });
 
-  it('reuses an existing trip on boot instead of creating a new one', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-1')] }));
-    const { result } = renderHook(() => useTrip(), { wrapper });
+  it('resolves the current trip id from the boot list (most recent), never creating one', async () => {
+    fetchMock.mockImplementation((url) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-1')] }));
+      return Promise.resolve(jsonResponse(tripView('trip-1')));
+    });
+    const { result } = renderHook(() => useTripAndList(), { wrapper });
+    await waitFor(() => expect(result.current.currentTripId).toBe('trip-1'));
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
-    expect(result.current.currentTripId).toBe('trip-1');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.tripsList.map(t => t.id)).toEqual(['trip-1']);
+    expect(fetchMock.mock.calls.every(([, o]) => !o || o.method === undefined || o.method === 'GET')).toBe(true);
   });
 
   it('does not create a trip on boot when none exist yet', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
+    fetchMock.mockResolvedValue(jsonResponse({ trips: [] }));
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
     expect(result.current.currentTripId).toBe(null);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('creates a trip via startTrip on the first message, then loads its TripView', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [] }))                    // boot list
-      .mockResolvedValueOnce(commandResp({ id: 'trip-new' }))               // POST /first-message
-      .mockResolvedValueOnce(jsonResponse(tripView('trip-new', {           // GET /trips/trip-new
+    fetchMock.mockImplementation((url, options) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [] }));
+      if (url === '/api/trips/first-message') return Promise.resolve(commandResp({ id: 'trip-new' }));
+      if (url === '/api/trips/trip-new') return Promise.resolve(jsonResponse(tripView('trip-new', {
         lifecycle: { stage: 'matching', status: 'free', active_agent: 'meridian', selected_option: null },
       })));
+      return Promise.resolve(jsonResponse({}));
+    });
 
-    const { result } = renderHook(() => useTrip(), { wrapper });
+    const { result } = renderHook(() => useTripAndList(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
 
     await act(async () => { await result.current.startTrip({ entryIntent: 'discover', message: 'Plan my Coorg trip' }); });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/trips/first-message', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/first-message', expect.objectContaining({ method: 'POST' }));
     expect(result.current.currentTripId).toBe('trip-new');
-    expect(result.current.commandSnapshot.lifecycle.stage).toBe('matching');
-    expect(result.current.trips.map(t => t.id)).toEqual(['trip-new']);
+    await waitFor(() => expect(result.current.commandSnapshot?.lifecycle.stage).toBe('matching'));
+    await waitFor(() => expect(result.current.tripsList.map(t => t.id)).toEqual(['trip-new']));
   });
 
   it('sendTripCommand rejects when no trip exists yet', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
+    fetchMock.mockResolvedValue(jsonResponse({ trips: [] }));
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
     await expect(
       act(async () => { await result.current.sendTripCommand('traveler_message', { message: 'hi' }); })
     ).rejects.toThrow('No trip exists yet');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('sendTripCommand re-fetches the TripView and returns the message + round', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-1')] }))              // boot list
-      .mockResolvedValueOnce(commandResp({ message: 'Here are options.', recommendation: { version: 1, status: 'SUCCESS', options: [] } })) // POST /commands
-      .mockResolvedValueOnce(jsonResponse(tripView('trip-1', { version: 3,              // GET /trips/trip-1
-        lifecycle: { stage: 'recommended', status: 'free', active_agent: null, selected_option: null },
-        matcher: { last_message: 'Here are options.', awaiting: null, has_recommendation: true },
+  it('sendTripCommand re-fetches the TripView into cache and returns the message + round', async () => {
+    let tripVersion = 2;
+    fetchMock.mockImplementation((url, options) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-1')] }));
+      if (url === '/api/trips/trip-1/commands') {
+        tripVersion = 3;
+        return Promise.resolve(commandResp({ message: 'Here are options.', recommendation: { version: 1, status: 'SUCCESS', options: [] } }));
+      }
+      if (url === '/api/trips/trip-1') return Promise.resolve(jsonResponse(tripView('trip-1', {
+        version: tripVersion,
+        lifecycle: { stage: tripVersion === 3 ? 'recommended' : 'new', status: 'free', active_agent: null, selected_option: null },
+        matcher: { last_message: 'Here are options.', awaiting: null, has_recommendation: tripVersion === 3 },
       })));
+      return Promise.resolve(jsonResponse({}));
+    });
 
     const { result } = renderHook(() => useTrip(), { wrapper });
+    await act(async () => { await result.current.setCurrentTripId('trip-1'); });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
 
     let response;
@@ -205,7 +227,7 @@ describe('TripContext trip record (TWM-220 TripView shape)', () => {
     expect(response.message).toBe('Here are options.');
     expect(response.recommendation.status).toBe('SUCCESS');
     expect(response.trip.lifecycle.stage).toBe('recommended');
-    expect(result.current.commandSnapshot.version).toBe(3);
+    await waitFor(() => expect(result.current.commandSnapshot.version).toBe(3));
     expect(result.current.commandSnapshot.matcher.has_recommendation).toBe(true);
   });
 
@@ -218,30 +240,36 @@ describe('TripContext trip record (TWM-220 TripView shape)', () => {
   });
 
   it('renameCurrentTrip PATCHes and keeps currentTripId stable', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-1')] }))
-      .mockResolvedValueOnce(jsonResponse(tripView('trip-1', { title: 'Goa Getaway', version: 2 })));
+    fetchMock.mockImplementation((url, options) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-1')] }));
+      if (url === '/api/trips/trip-1' && options?.method === 'PATCH') return Promise.resolve(jsonResponse(tripView('trip-1', { title: 'Goa Getaway', version: 2 })));
+      if (url === '/api/trips/trip-1') return Promise.resolve(jsonResponse(tripView('trip-1')));
+      return Promise.resolve(jsonResponse({}));
+    });
 
     const { result } = renderHook(() => useTrip(), { wrapper });
+    await act(async () => { await result.current.setCurrentTripId('trip-1'); });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
 
     await act(async () => { await result.current.renameCurrentTrip('Goa Getaway'); });
 
     expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1', expect.objectContaining({
       method: 'PATCH',
-      body: JSON.stringify({ expected_version: 1, title: 'Goa Getaway' }),
+      body: JSON.stringify({ expected_version: 2, title: 'Goa Getaway' }),
     }));
     expect(result.current.currentTripId).toBe('trip-1');
-    expect(result.current.commandSnapshot.title).toBe('Goa Getaway');
+    await waitFor(() => expect(result.current.commandSnapshot.title).toBe('Goa Getaway'));
   });
 
-  // TWM-219: the legacy in-memory mock trip-state is gone.
-  it('exposes no `trip` / `updateTrip` and touches no localStorage on boot', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-1')] }));
+  // TWM-219/TWM-221: no legacy in-memory mock trip-state, no localStorage.
+  it('exposes no `trip` / `updateTrip` / `openTrip` and touches no localStorage on boot', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ trips: [listItem('trip-1')] }));
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
     expect(result.current.trip).toBeUndefined();
     expect(result.current.updateTrip).toBeUndefined();
+    expect(result.current.openTrip).toBeUndefined();
+    expect(result.current.viewTrip).toBeUndefined();
     expect(localStorage.length).toBe(0);
   });
 });
@@ -258,99 +286,103 @@ describe('TripContext multi-trip handling', () => {
     vi.restoreAllMocks();
   });
 
-  it('boots to the URL-provided trip id instead of records[0]', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }));
+  it('boots to the URL-provided trip id', async () => {
+    fetchMock.mockImplementation((url) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }));
+      if (/^\/api\/trips\/[^/]+/.test(url)) return Promise.resolve(jsonResponse(tripView('trip-b')));
+      return Promise.resolve(jsonResponse({}));
+    });
     function w({ children }) {
-      return <MemoryRouter initialEntries={['/dashboard?tripId=trip-b']}><TripProvider>{children}</TripProvider></MemoryRouter>;
+      return <MemoryRouter initialEntries={['/dashboard?tripId=trip-b']}><AppProviders>{children}</AppProviders></MemoryRouter>;
     }
-    const { result } = renderHook(() => useTrip(), { wrapper: w });
+    const { result } = renderHook(() => useTripAndList(), { wrapper: w });
+    await waitFor(() => expect(result.current.currentTripId).toBe('trip-b'));
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
-    expect(result.current.currentTripId).toBe('trip-b');
-    expect(result.current.trips.map(t => t.id)).toEqual(['trip-a', 'trip-b']);
+    expect(result.current.tripsList.map(t => t.id)).toEqual(['trip-a', 'trip-b']);
   });
 
-  it('falls back to records[0] when the URL trip id matches nothing', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-a')] }));
+  it('falls back to the most recent trip when the URL trip id matches nothing', async () => {
+    fetchMock.mockImplementation((url) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-a')] }));
+      return Promise.resolve(jsonResponse(tripView('trip-a')));
+    });
     function w({ children }) {
-      return <MemoryRouter initialEntries={['/dashboard?tripId=nope']}><TripProvider>{children}</TripProvider></MemoryRouter>;
+      return <MemoryRouter initialEntries={['/dashboard?tripId=nope']}><AppProviders>{children}</AppProviders></MemoryRouter>;
     }
     const { result } = renderHook(() => useTrip(), { wrapper: w });
-    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
-    expect(result.current.currentTripId).toBe('trip-a');
+    await waitFor(() => expect(result.current.currentTripId).toBe('trip-a'));
   });
 
-  it('keeps every listed trip in `trips`', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({
-      trips: [listItem('trip-a', { updated_at: '2026-01-02T00:00:00.000Z' }), listItem('trip-b', { updated_at: '2026-01-01T00:00:00.000Z' })],
-    }));
-    const { result } = renderHook(() => useTrip(), { wrapper });
-    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
-    expect(result.current.trips.map(t => t.id)).toEqual(['trip-a', 'trip-b']);
+  it('keeps every listed trip in the list query, most-recent first', async () => {
+    fetchMock.mockImplementation((url) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({
+        trips: [listItem('trip-b', { updated_at: '2026-01-01T00:00:00.000Z' }), listItem('trip-a', { updated_at: '2026-01-02T00:00:00.000Z' })],
+      }));
+      return Promise.resolve(jsonResponse(tripView('trip-a')));
+    });
+    const { result } = renderHook(() => useTripAndList(), { wrapper });
+    await waitFor(() => expect(result.current.tripsList.map(t => t.id)).toEqual(['trip-a', 'trip-b']));
     expect(result.current.currentTripId).toBe('trip-a');
   });
 
   it('startNewTrip clears the current trip locally without a Backend call', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-1')] }));
+    fetchMock.mockImplementation((url) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-1')] }));
+      return Promise.resolve(jsonResponse(tripView('trip-1')));
+    });
     const { result } = renderHook(() => useTrip(), { wrapper });
+    await waitFor(() => expect(result.current.currentTripId).toBe('trip-1'));
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
     const before = fetchMock.mock.calls.length;
     act(() => { result.current.startNewTrip(); });
     expect(fetchMock.mock.calls.length).toBe(before);
     expect(result.current.currentTripId).toBe(null);
-    expect(result.current.trips.map(t => t.id)).toEqual(['trip-1']);
   });
 
-  it('openTrip switches the current trip via a plain GET, never a command', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-a', { lifecycle: { stage: 'matched', status: 'free', active_agent: null, selected_option: null } }), listItem('trip-b')] }))
-      .mockResolvedValueOnce(jsonResponse(tripView('trip-b', { lifecycle: { stage: 'planning', status: 'free', active_agent: 'guide', selected_option: null } })));
+  it('prefetchTrip switches the current trip via a plain GET, never a command', async () => {
+    fetchMock.mockImplementation((url, options) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }));
+      if (url === '/api/trips/trip-b') return Promise.resolve(jsonResponse(tripView('trip-b', { lifecycle: { stage: 'planning', status: 'free', active_agent: 'guide', selected_option: null } })));
+      return Promise.resolve(jsonResponse({}));
+    });
 
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
 
-    await act(async () => { await result.current.openTrip('trip-b'); });
+    let outcome;
+    await act(async () => { outcome = await result.current.prefetchTrip('trip-b'); });
 
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-b', expect.not.objectContaining({ method: expect.anything() }));
+    expect(outcome.ok).toBe(true);
+    const bGet = fetchMock.mock.calls.find(([u]) => u === '/api/trips/trip-b');
+    expect(bGet[1]?.method).toBeUndefined();
     expect(result.current.currentTripId).toBe('trip-b');
-    expect(result.current.commandSnapshot.lifecycle.stage).toBe('planning');
+    await waitFor(() => expect(result.current.commandSnapshot.lifecycle.stage).toBe('planning'));
   });
 
-  it('openTrip does not re-fetch when the current trip already came from a full fetch', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-b')] }))
-      .mockResolvedValueOnce(jsonResponse(tripView('trip-b', { lifecycle: { stage: 'planning', status: 'free', active_agent: 'guide', selected_option: null } })));
+  it('prefetchTrip does not re-fetch a trip already warm in cache', async () => {
+    fetchMock.mockImplementation((url) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-b')] }));
+      return Promise.resolve(jsonResponse(tripView('trip-b')));
+    });
 
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
 
-    await act(async () => { await result.current.openTrip('trip-b'); });
+    await act(async () => { await result.current.prefetchTrip('trip-b'); });
     const after = fetchMock.mock.calls.length;
-    await act(async () => { await result.current.openTrip('trip-b'); });
+    await act(async () => { await result.current.prefetchTrip('trip-b'); });
     expect(fetchMock.mock.calls.length).toBe(after);
   });
 
-  it('viewTrip delegates to a full fetch', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-a')] }))
-      .mockResolvedValueOnce(jsonResponse(tripView('trip-a', {
-        plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' },
-      })));
-
-    const { result } = renderHook(() => useTrip(), { wrapper });
-    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
-
-    await act(async () => { await result.current.viewTrip('trip-a'); });
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-a', expect.not.objectContaining({ method: expect.anything() }));
-    expect(result.current.commandSnapshot.plan.awaiting).toBe('trip_duration');
-  });
-
   it('renameTrip renames a non-current trip without switching currentTripId', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }))
-      .mockResolvedValueOnce(jsonResponse(tripView('trip-b', { title: 'Goa', version: 2 })));
+    fetchMock.mockImplementation((url, options) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }));
+      if (url === '/api/trips/trip-b' && options?.method === 'PATCH') return Promise.resolve(jsonResponse(tripView('trip-b', { title: 'Goa', version: 2 })));
+      return Promise.resolve(jsonResponse(tripView('trip-a')));
+    });
 
-    const { result } = renderHook(() => useTrip(), { wrapper });
-    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    const { result } = renderHook(() => useTripAndList(), { wrapper });
+    await waitFor(() => expect(result.current.currentTripId).toBe('trip-a'));
 
     await act(async () => { await result.current.renameTrip('trip-b', 'Goa'); });
 
@@ -359,49 +391,56 @@ describe('TripContext multi-trip handling', () => {
       body: JSON.stringify({ expected_version: 1, title: 'Goa' }),
     }));
     expect(result.current.currentTripId).toBe('trip-a');
-    expect(result.current.trips.find(t => t.id === 'trip-b').title).toBe('Goa');
+    await waitFor(() => expect(result.current.tripsList.find(t => t.id === 'trip-b').title).toBe('Goa'));
   });
 
-  it('openTrip fails closed on a 404 (TWM-109)', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }))
-      .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+  it('prefetchTrip fails closed on a 404 (TWM-109)', async () => {
+    fetchMock.mockImplementation((url) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }));
+      if (url === '/api/trips/trip-b') return Promise.resolve(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+      return Promise.resolve(jsonResponse({}));
+    });
 
-    const { result } = renderHook(() => useTrip(), { wrapper });
-    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    const { result } = renderHook(() => useTripAndList(), { wrapper });
+    await waitFor(() => expect(result.current.tripsList.length).toBe(2));
 
     let outcome;
-    await act(async () => { outcome = await result.current.openTrip('trip-b'); });
+    await act(async () => { outcome = await result.current.prefetchTrip('trip-b'); });
     expect(outcome).toEqual({ ok: false, reason: 'not_found' });
-    expect(result.current.trips.map(t => t.id)).toEqual(['trip-a']);
-    expect(result.current.currentTripId).toBe('trip-a');
+    await waitFor(() => expect(result.current.tripsList.map(t => t.id)).toEqual(['trip-a']));
   });
 
   it('renameTrip fails closed on a 404 (TWM-109)', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }))
-      .mockResolvedValueOnce(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+    fetchMock.mockImplementation((url, options) => {
+      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }));
+      if (url === '/api/trips/trip-b' && options?.method === 'PATCH') return Promise.resolve(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+      return Promise.resolve(jsonResponse(tripView('trip-b')));
+    });
 
-    const { result } = renderHook(() => useTrip(), { wrapper });
-    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    const { result } = renderHook(() => useTripAndList(), { wrapper });
+    await waitFor(() => expect(result.current.tripsList.length).toBe(2));
 
     let outcome;
     await act(async () => { outcome = await result.current.renameTrip('trip-b', 'Goa'); });
     expect(outcome).toEqual({ ok: false, reason: 'not_found' });
-    expect(result.current.trips.map(t => t.id)).toEqual(['trip-a']);
+    await waitFor(() => expect(result.current.tripsList.map(t => t.id)).toEqual(['trip-a']));
   });
 
-  it('clears `trips` instead of leaving it stale when a refresh fails', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-a')] }))
-      .mockRejectedValueOnce(new TypeError('Network request failed'));
+  it('retryTripLoad refetches the list after a failure', async () => {
+    let attempt = 0;
+    fetchMock.mockImplementation((url) => {
+      if (url !== '/api/trips') return Promise.resolve(jsonResponse({}));
+      attempt += 1;
+      return attempt === 1
+        ? Promise.reject(new TypeError('Network request failed'))
+        : Promise.resolve(jsonResponse({ trips: [listItem('trip-a')] }));
+    });
 
-    const { result } = renderHook(() => useTrip(), { wrapper });
-    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
-    expect(result.current.trips).toHaveLength(1);
+    const { result } = renderHook(() => useTripAndList(), { wrapper });
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('error'));
 
     await act(async () => { await result.current.retryTripLoad(); });
-    await waitFor(() => expect(result.current.tripLoadStatus).toBe('error'));
-    expect(result.current.trips).toEqual([]);
+    await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
+    expect(result.current.tripsList.map(t => t.id)).toEqual(['trip-a']);
   });
 });

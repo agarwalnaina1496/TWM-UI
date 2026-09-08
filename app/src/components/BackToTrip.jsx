@@ -11,8 +11,8 @@ import '../styles/design-system.css';
 // TWM-185: carries the current trip's id so landing on Dashboard from here
 // is reload/bookmark safe too, not just a same-session in-memory jump.
 export default function BackToTrip() {
-  const { commandSnapshot } = useTrip();
+  const { currentTripId } = useTrip();
   return (
-    <Link className="back-to-trip" to={withTripId('/dashboard', commandSnapshot?.id)}>← Back to trip</Link>
+    <Link className="back-to-trip" to={withTripId('/dashboard', currentTripId)}>← Back to trip</Link>
   );
 }

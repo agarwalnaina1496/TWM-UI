@@ -56,11 +56,10 @@ function FreeTextComposer({ value, onChange, onSubmit, placeholder, pending }) {
 export default function TripPreview() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { commandSnapshot, sendTripCommand, tripLoadStatus, openTrip } = useTrip();
-  // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this
-  // page's boot effect below decides whether to fire start_planning off
-  // real planner_state and must never act on a possibly-thin cached record.
-  const urlTripId = useTripFromUrl(openTrip);
+  const { commandSnapshot, sendTripCommand, tripLoadStatus } = useTrip();
+  // TWM-185/TWM-221: reload/bookmark/deep-link safe — points currentTripId at
+  // the URL's trip so the ['trip', id] query resolves the right one.
+  const urlTripId = useTripFromUrl();
 
   const view = commandSnapshot;
   const plan = view?.plan;

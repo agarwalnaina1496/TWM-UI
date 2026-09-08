@@ -4,12 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import ContextualAuthModal from '../../../src/components/ContextualAuthModal.jsx';
 import LoginModal from '../../../src/components/LoginModal.jsx';
-import { TripProvider } from '../../../src/context/TripContext.jsx';
+import { AppProviders } from '../testUtils.js';
 
 function Harness({ initialOpen = true, onContinueWithoutLogin }) {
   return (
     <MemoryRouter>
-      <TripProvider>
+      <AppProviders>
         <ContextualAuthModal
           open={initialOpen}
           onClose={() => {}}
@@ -18,7 +18,7 @@ function Harness({ initialOpen = true, onContinueWithoutLogin }) {
           onContinueWithoutLogin={onContinueWithoutLogin}
         />
         <LoginModal />
-      </TripProvider>
+      </AppProviders>
     </MemoryRouter>
   );
 }

@@ -16,7 +16,7 @@ export default defineConfig(({ command }) => ({
         // App.jsx's React.lazy imports). rolldown (Vite 8) wants the
         // function form of manualChunks.
         manualChunks(id) {
-          if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) {
+          if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler|@tanstack\/react-query|@tanstack\/query-core)\//.test(id)) {
             return 'vendor';
           }
         },

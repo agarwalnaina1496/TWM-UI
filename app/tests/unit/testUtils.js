@@ -1,6 +1,37 @@
-import { useEffect } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { vi } from 'vitest';
-import { useTrip } from '../../src/context/TripContext.jsx';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TripProvider, useTrip } from '../../src/context/TripContext.jsx';
+
+// TWM-221: a fresh QueryClient per test — retries off (a rejected queryFn
+// surfaces immediately), no background refetch, no GC between assertions.
+export function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity, refetchOnWindowFocus: false, staleTime: Infinity },
+      mutations: { retry: false },
+    },
+  });
+}
+
+// Wraps a subtree in a throwaway QueryClient. Pair with a real <TripProvider>
+// for tests that exercise the live data layer. (No JSX — this file is .js.)
+export function TestQueryProvider({ client, children }) {
+  const [fallback] = useState(createTestQueryClient);
+  return createElement(QueryClientProvider, { client: client ?? fallback }, children);
+}
+
+// TWM-221: <TripProvider> now depends on a QueryClient in context. This
+// bundles the two so a test can swap `<TripProvider>` → `<AppProviders>`
+// with no other change. Pass `client` to seed / inspect the cache.
+export function AppProviders({ client, children }) {
+  const [fallback] = useState(createTestQueryClient);
+  return createElement(
+    QueryClientProvider,
+    { client: client ?? fallback },
+    createElement(TripProvider, null, children),
+  );
+}
 
 // Seeds TripContext's in-memory auth state directly via setAuthDirect,
 // bypassing the real signup/login network calls entirely. Mount this once,

@@ -7,21 +7,14 @@ import { DASHBOARD_TABS, DashboardBackLink } from './chrome.jsx';
 
 function DashboardCtaButton({ cta, tripId, className }) {
   const navigate = useNavigate();
-  const { openTrip } = useTrip();
-  const [pending, setPending] = useState(false);
+  const { setCurrentTripId } = useTrip();
 
-  async function go() {
-    if (pending) return;
-    setPending(true);
-    try {
-      await openTrip(tripId);
-      navigate(withTripId(cta.to, tripId));
-    } finally {
-      setPending(false);
-    }
+  function go() {
+    setCurrentTripId(tripId);
+    navigate(withTripId(cta.to, tripId));
   }
 
-  return <button type="button" className={className} disabled={pending} onClick={go}>{cta.label} →</button>;
+  return <button type="button" className={className} onClick={go}>{cta.label} →</button>;
 }
 
 function ThinStateTabPlaceholder({ tab }) {

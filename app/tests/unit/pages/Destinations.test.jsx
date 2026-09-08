@@ -2,8 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Destinations from '../../../src/pages/Destinations.jsx';
-import { TripProvider } from '../../../src/context/TripContext.jsx';
-import { wrapFetchMockWithGuestSession } from '../testUtils.js';
+import { AppProviders, wrapFetchMockWithGuestSession } from '../testUtils.js';
 
 function jsonResponse(body, { status = 200 } = {}) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -114,7 +113,7 @@ function withTripId(entries) {
 function renderDestinations(initialEntries = ['/destinations?next=preview']) {
   return render(
     <MemoryRouter initialEntries={withTripId(initialEntries)}>
-      <TripProvider><Destinations /></TripProvider>
+      <AppProviders><Destinations /></AppProviders>
     </MemoryRouter>
   );
 }
@@ -122,13 +121,13 @@ function renderDestinations(initialEntries = ['/destinations?next=preview']) {
 function renderDestinationsWithRouting(initialEntries = ['/destinations?next=preview']) {
   return render(
     <MemoryRouter initialEntries={withTripId(initialEntries)}>
-      <TripProvider>
+      <AppProviders>
         <Routes>
           <Route path="/destinations" element={<Destinations />} />
           <Route path="/trip-preview" element={<div>Trip Preview screen</div>} />
           <Route path="/scout-chat" element={<div>Scout Chat screen</div>} />
         </Routes>
-      </TripProvider>
+      </AppProviders>
     </MemoryRouter>
   );
 }

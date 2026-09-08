@@ -30,6 +30,10 @@ This repository owns frontend behavior, UI state, local persistence, stage-drive
 - When agent-version metadata is available, preserve it with the relevant saved advice or recommendation output and expose it in approved debugging surfaces.
 - Do not infer prompt provenance from response content; use deterministic metadata returned by the backend.
 
+## Client data layer and the trip_state boundary (TWM-221)
+
+Trip data is read through React Query: `useQuery(['trip', id])` (the server-composed `TripView`, surfaced as `commandSnapshot` / `tripLoadStatus` on `TripContext` and via `useCurrentTrip`), `['trips']`, `['recommendations', id]`, `['itinerary', id]`. `TripContext` owns identity, auth, UI state, and the current trip *id* only — never a hand-rolled trip cache, loader, or branch-merge. A mutating command posts to `/commands` and then force-refetches the `TripView` into cache (writing any produced round into `['recommendations', id]` and invalidating `['itinerary', id]`); the client never reconstructs canonical `trip_state` from a command response. Because Backend owns `trip_state`, a module under `src/lib/` or `src/components/` must render from a composed read model — a `TripView`, the round, or the enriched `/itinerary` document — and must not reach into raw `trip_state` branch paths (`trip_state`, `.planner_state`, `.matcher_state`, `.trip_context`, `final_itinerary.<field>`, `result.unresolved`). This is enforced by the `tests/unit/architecture/trip-state-boundary.test.js` fitness function (allow-list: `lib/booking/legsFromItinerary.js`, `lib/recommendationViewModel.js`), which runs in the normal test/coverage step; a deliberate violation fails CI.
+
 ## Documentation
 
 - Keep product behavior and shared-contract docs in `TWM_Docs/`, including product architecture, TripState/stages, CTA mappings, resume behavior, and shared API/user flows.
