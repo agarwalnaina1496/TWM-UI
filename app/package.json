@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "audit:architecture": "node scripts/architecture-audit.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
