@@ -51,6 +51,19 @@ Every rule here ships with the check that enforces it. Adding a rule without its
 
 Each fitness function includes a deliberate-violation self-test so the rule cannot be silently weakened.
 
+## Architecture audit (quarterly) (TWM-225)
+
+`ci.yml` enforces the rules above per PR. This audit catches *drift* — the tree creeping toward a break, or a fitness function's assumptions going stale. It runs on a schedule (`.github/workflows/architecture-audit.yml`, 1st of Jan/Apr/Jul/Oct; also `workflow_dispatch`), never blocks anything, and produces a findings report kept as a build artifact + step summary. The PR template's DoD checklist is the per-PR half of the same intent.
+
+**What it checks** (`app/scripts/architecture-audit.mjs` + the workflow):
+
+- **Files approaching the size cap** — any `src/` file within ~120 lines of the 600 cap. Split before it forces an exemption.
+- **Exempt-list growth** — the `complexity: off` list (expected: the 3 legacy pages) and the `lib/` purity I/O allow-list. Each entry is a rule bent; if a list grows, fix the code.
+- **`max-lines-per-function` ratchet** — the advisory over-cap render-function list (`AGENTS.md` above). It must only shrink; the workflow prints the live list from `npm run lint`.
+- **The enforced checks re-run** — `npm run lint` and `tests/unit/architecture/` run again on the schedule, so a rule that started passing only by luck is caught.
+
+**Triage.** A finding is not a failure. For each one: fix it now if small, or open a cleanup story (own Linear issue, `Feature`-child if it's a capability). Update this section and the *Architecture rules (enforced)* table whenever a rule, budget, or exemption changes.
+
 ## Documentation
 
 - Keep product behavior and shared-contract docs in `TWM_Docs/`, including product architecture, TripState/stages, CTA mappings, resume behavior, and shared API/user flows.

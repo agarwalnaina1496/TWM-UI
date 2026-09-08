@@ -1,0 +1,68 @@
+name: Architecture Audit
+
+# TWM-225: the quarterly deep re-check for TWM-UI. The per-PR `ci.yml`
+# enforces the rules (`npm run lint` + the `tests/unit/architecture/`
+# fitness functions); this catches *drift* — the tree creeping toward a
+# break, or a fitness function's assumptions going stale. It never blocks
+# anything; it produces a findings report a human triages (see
+# AGENTS.md -> "Architecture audit (quarterly)").
+
+on:
+  schedule:
+    - cron: "0 9 1 1,4,7,10 *"   # 09:00 UTC on the 1st of Jan / Apr / Jul / Oct
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  audit:
+    name: Architecture Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Re-run the enforced fitness functions
+        run: |
+          npm run lint | tee lint-output.txt
+          npx vitest run tests/unit/architecture
+
+      - name: Drift audit
+        run: node scripts/architecture-audit.mjs | tee architecture-audit-report.md
+
+      - name: Append the max-lines-per-function ratchet list
+        if: always()
+        run: |
+          {
+            echo ""
+            echo "## max-lines-per-function (advisory ratchet — must only shrink)"
+            echo '```'
+            grep "max-lines-per-function" lint-output.txt || echo "(none — the list is empty)"
+            echo '```'
+          } >> architecture-audit-report.md
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-audit-report
+          path: app/architecture-audit-report.md
+          retention-days: 400
+
+      - name: Summary
+        if: always()
+        run: cat architecture-audit-report.md >> "$GITHUB_STEP_SUMMARY"
