@@ -4,6 +4,11 @@
 // (tests/unit/architecture/read-model-boundary.test.js): the enriched
 // itinerary is a self-describing document, not raw trip_state.
 
+// A stable cache/identity key for a resolved leg.
+export function legKey(leg) {
+  return `${leg.from}→${leg.to}`;
+}
+
 // A stay-drawer subject from an enriched `stay_segments[]` entry — the
 // Backend resolved this segment's check-in/check-out and their source, so
 // the drawer never does date math.

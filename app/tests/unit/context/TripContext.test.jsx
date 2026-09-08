@@ -172,7 +172,7 @@ describe('TripContext trip record (TWM-220 TripView shape)', () => {
   });
 
   it('creates a trip via startTrip on the first message, then loads its TripView', async () => {
-    fetchMock.mockImplementation((url, options) => {
+    fetchMock.mockImplementation((url, _options) => {
       if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [] }));
       if (url === '/api/trips/first-message') return Promise.resolve(commandResp({ id: 'trip-new' }));
       if (url === '/api/trips/trip-new') return Promise.resolve(jsonResponse(tripView('trip-new', {
@@ -203,7 +203,7 @@ describe('TripContext trip record (TWM-220 TripView shape)', () => {
 
   it('sendTripCommand re-fetches the TripView into cache and returns the message + round', async () => {
     let tripVersion = 2;
-    fetchMock.mockImplementation((url, options) => {
+    fetchMock.mockImplementation((url, _options) => {
       if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-1')] }));
       if (url === '/api/trips/trip-1/commands') {
         tripVersion = 3;
@@ -240,9 +240,9 @@ describe('TripContext trip record (TWM-220 TripView shape)', () => {
   });
 
   it('renameCurrentTrip PATCHes and keeps currentTripId stable', async () => {
-    fetchMock.mockImplementation((url, options) => {
+    fetchMock.mockImplementation((url, _options) => {
       if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-1')] }));
-      if (url === '/api/trips/trip-1' && options?.method === 'PATCH') return Promise.resolve(jsonResponse(tripView('trip-1', { title: 'Goa Getaway', version: 2 })));
+      if (url === '/api/trips/trip-1' && _options?.method === 'PATCH') return Promise.resolve(jsonResponse(tripView('trip-1', { title: 'Goa Getaway', version: 2 })));
       if (url === '/api/trips/trip-1') return Promise.resolve(jsonResponse(tripView('trip-1')));
       return Promise.resolve(jsonResponse({}));
     });
@@ -340,7 +340,7 @@ describe('TripContext multi-trip handling', () => {
   });
 
   it('prefetchTrip switches the current trip via a plain GET, never a command', async () => {
-    fetchMock.mockImplementation((url, options) => {
+    fetchMock.mockImplementation((url, _options) => {
       if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }));
       if (url === '/api/trips/trip-b') return Promise.resolve(jsonResponse(tripView('trip-b', { lifecycle: { stage: 'planning', status: 'free', active_agent: 'guide', selected_option: null } })));
       return Promise.resolve(jsonResponse({}));
@@ -375,9 +375,9 @@ describe('TripContext multi-trip handling', () => {
   });
 
   it('renameTrip renames a non-current trip without switching currentTripId', async () => {
-    fetchMock.mockImplementation((url, options) => {
+    fetchMock.mockImplementation((url, _options) => {
       if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }));
-      if (url === '/api/trips/trip-b' && options?.method === 'PATCH') return Promise.resolve(jsonResponse(tripView('trip-b', { title: 'Goa', version: 2 })));
+      if (url === '/api/trips/trip-b' && _options?.method === 'PATCH') return Promise.resolve(jsonResponse(tripView('trip-b', { title: 'Goa', version: 2 })));
       return Promise.resolve(jsonResponse(tripView('trip-a')));
     });
 
@@ -411,9 +411,9 @@ describe('TripContext multi-trip handling', () => {
   });
 
   it('renameTrip fails closed on a 404 (TWM-109)', async () => {
-    fetchMock.mockImplementation((url, options) => {
+    fetchMock.mockImplementation((url, _options) => {
       if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [listItem('trip-a'), listItem('trip-b')] }));
-      if (url === '/api/trips/trip-b' && options?.method === 'PATCH') return Promise.resolve(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
+      if (url === '/api/trips/trip-b' && _options?.method === 'PATCH') return Promise.resolve(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
       return Promise.resolve(jsonResponse(tripView('trip-b')));
     });
 

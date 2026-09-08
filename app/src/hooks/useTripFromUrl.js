@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { TRIP_ID_PARAM } from './tripUrl.js';
+import { TRIP_ID_PARAM } from '../lib/tripUrl.js';
 
 // TWM-185/TWM-221: points TripContext's `currentTripId` at whichever trip the
 // URL's ?tripId= names, on mount and whenever it changes — so a hard reload,

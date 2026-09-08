@@ -5,7 +5,7 @@ import { getItinerary } from '../lib/tripApi.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
-import { useTripFromUrl } from '../lib/useTripFromUrl.js';
+import { useTripFromUrl } from './useTripFromUrl.js';
 
 const BOOKING_PROMPT_SHOWN_KEY = uiStateKey(UI_STATE_SCREEN.DASHBOARD_OVERVIEW, 'bookingPromptShown');
 

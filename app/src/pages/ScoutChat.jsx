@@ -12,7 +12,7 @@ import { isTripEmpty } from '../lib/tripLifecycle.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import FactsPanel from '../components/FactsPanel.jsx';
 import { withTripId } from '../lib/tripUrl.js';
-import { useTripFromUrl } from '../lib/useTripFromUrl.js';
+import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
 import '../styles/chat.css';
 
 let nextId = 1;
