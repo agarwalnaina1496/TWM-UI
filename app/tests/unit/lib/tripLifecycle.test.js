@@ -1,44 +1,47 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, tripStatusLine, relativeUpdatedAt,
-  contextRecapPills,
+  contextRecapPills, contextDestination,
 } from '../../../src/lib/tripLifecycle.js';
 
-function state(overrides = {}) {
-  return { stage: 'new', trip_context: {}, ...overrides };
+// TWM-220: every helper reads a `TripView` (full) or a `TripListItem` (thin).
+// Both carry `lifecycle` + `context_recap`; thin list items add
+// has_places / has_day_plan / has_itinerary / awaiting / has_recommendation.
+function recap(entries) {
+  return Object.entries(entries).map(([key, value]) => ({ key, label: key, value }));
+}
+function trip(overrides = {}) {
+  const { stage = 'new', context = {}, ...rest } = overrides;
+  return { lifecycle: { stage }, context_recap: recap(context), ...rest };
 }
 
-describe('tripLifecycle stage helpers (TWM-108)', () => {
+describe('tripLifecycle stage helpers', () => {
   it.each([
     ['new', {}, true],
-    ['new with context', { trip_context: { origin: 'Delhi' } }, false],
+    ['new with context', { context: { origin_city: 'Delhi' } }, false],
     ['matching', { stage: 'matching' }, false],
     ['planned', { stage: 'planned' }, false],
   ])('isTripEmpty: %s', (_label, overrides, expected) => {
-    expect(isTripEmpty(state(overrides))).toBe(expected);
+    expect(isTripEmpty(trip(overrides))).toBe(expected);
   });
 
   it.each([
-    ['ready', { itinerary_state: { status: 'ready' } }, true],
-    ['pending', { itinerary_state: { status: 'pending' } }, false],
-    ['missing', {}, false],
+    ['has_itinerary flag (list item)', { has_itinerary: true }, true],
+    ['summary present (full view)', { summary: { title: 'x' } }, true],
+    ['neither', {}, false],
   ])('isItineraryReady: %s', (_label, overrides, expected) => {
-    expect(isItineraryReady(state(overrides))).toBe(expected);
+    expect(isItineraryReady(trip(overrides))).toBe(expected);
   });
 
   it('isCompletedTrip is true only for stage done', () => {
-    expect(isCompletedTrip(state({ stage: 'done' }))).toBe(true);
-    expect(isCompletedTrip(state({ stage: 'planned' }))).toBe(false);
+    expect(isCompletedTrip(trip({ stage: 'done' }))).toBe(true);
+    expect(isCompletedTrip(trip({ stage: 'planned' }))).toBe(false);
   });
 
   it.each([
     ['new, no context', {}, 'New'],
-    ['new, has context', { trip_context: { origin: 'Delhi' } }, 'In conversation'],
+    ['new, has context', { context: { origin_city: 'Delhi' } }, 'In conversation'],
     ['matching', { stage: 'matching' }, 'In conversation'],
-    // TWM-188 item 2: recommendation_ready was removed from the canonical
-    // stage enum — an unrecognized/removed stage value now falls back to
-    // the same badge as any other unknown stage, not a dedicated entry.
-    ['recommendation_ready (removed, TWM-188)', { stage: 'recommendation_ready' }, 'New'],
     ['recommended', { stage: 'recommended' }, 'Recommendations ready'],
     ['matched', { stage: 'matched' }, 'Destination chosen'],
     ['planning', { stage: 'planning' }, 'Planning in progress'],
@@ -46,90 +49,72 @@ describe('tripLifecycle stage helpers (TWM-108)', () => {
     ['planned', { stage: 'planned' }, 'Plan ready'],
     ['booked', { stage: 'booked' }, 'Booked'],
     ['done', { stage: 'done' }, 'Completed'],
-    ['itinerary ready overrides stage', { stage: 'planning', itinerary_state: { status: 'ready' } }, 'Itinerary ready'],
+    ['itinerary ready overrides stage', { stage: 'planning', has_itinerary: true }, 'Itinerary ready'],
   ])('stageBadge: %s -> %s', (_label, overrides, expectedText) => {
-    expect(stageBadge(state(overrides)).text).toBe(expectedText);
+    expect(stageBadge(trip(overrides)).text).toBe(expectedText);
   });
 
   it.each([
     ['new, no context', {}, '/'],
-    ['new, has context', { trip_context: { origin: 'Delhi' } }, '/scout-chat'],
+    ['new, has context', { context: { origin_city: 'Delhi' } }, '/scout-chat'],
     ['matching, no recommendation yet', { stage: 'matching' }, '/scout-chat'],
-    ['recommendation_ready (removed, TWM-188)', { stage: 'recommendation_ready' }, '/'],
     ['recommended', { stage: 'recommended' }, '/destinations'],
     ['matched', { stage: 'matched' }, '/destinations'],
     ['planning, no day_plan yet', { stage: 'planning' }, '/scout-chat'],
     ['plan_ready', { stage: 'plan_ready', has_day_plan: true }, '/trip-preview'],
     ['planned', { stage: 'planned' }, '/dashboard'],
-    ['itinerary ready overrides stage', { stage: 'matched', itinerary_state: { status: 'ready' } }, '/dashboard'],
+    ['itinerary ready overrides stage', { stage: 'matched', has_itinerary: true }, '/dashboard'],
   ])('stageCta: %s -> %s', (_label, overrides, expectedTo) => {
-    expect(stageCta(state(overrides)).to).toBe(expectedTo);
+    expect(stageCta(trip(overrides)).to).toBe(expectedTo);
   });
 
-  // TWM-190: planning/matching route by whether the stage's defining
-  // artifact actually exists (day_plan / a recommendation round), not by
-  // stage string alone.
   it.each([
-    ['planning with a day_plan already (in substance plan_ready)', { stage: 'planning', has_day_plan: true }, '/trip-preview'],
-    ['plan_ready without has_day_plan set (inconsistent summary, falls back)', { stage: 'plan_ready' }, '/trip-preview'],
-    ['matching with an existing recommendation (refinement awaiting clarification)', { stage: 'matching', has_recommendation: true }, '/destinations'],
+    ['planning with a day_plan already', { stage: 'planning', has_day_plan: true }, '/trip-preview'],
+    ['plan_ready without has_day_plan', { stage: 'plan_ready' }, '/trip-preview'],
+    ['matching with an existing recommendation', { stage: 'matching', has_recommendation: true }, '/destinations'],
     ['matching with no recommendation', { stage: 'matching', has_recommendation: false }, '/scout-chat'],
   ])('stageCta artifact-based routing: %s -> %s', (_label, overrides, expectedTo) => {
-    expect(stageCta(state(overrides)).to).toBe(expectedTo);
+    expect(stageCta(trip(overrides)).to).toBe(expectedTo);
   });
 });
 
-// TWM-184: My Trips card status line — deliberately prose, not a fixed-slot
-// indicator. Covers both list-summary shape (awaiting/has_day_plan/
-// has_places flat on trip_state) and destination resolution via
-// trip_context.destinations.
-describe('tripStatusLine (TWM-184)', () => {
+describe('tripStatusLine', () => {
   it('itinerary ready always wins, regardless of stage', () => {
-    expect(tripStatusLine(state({ stage: 'planning', itinerary_state: { status: 'ready' } }))).toBe('Your full trip plan is ready to book and go.');
+    expect(tripStatusLine(trip({ stage: 'planning', has_itinerary: true }))).toBe('Your full trip plan is ready to book and go.');
   });
 
-  it('stage done (no itinerary_state) reads as completed', () => {
-    expect(tripStatusLine(state({ stage: 'done' }))).toBe('This trip has wrapped up.');
+  it('stage done reads as completed', () => {
+    expect(tripStatusLine(trip({ stage: 'done' }))).toBe('This trip has wrapped up.');
   });
 
-  it('no destination, no context at all: "Just getting started."', () => {
-    expect(tripStatusLine(state({}))).toBe('Just getting started.');
+  it('no destination, no context at all', () => {
+    expect(tripStatusLine(trip({}))).toBe('Just getting started.');
   });
 
-  it('no destination, but some context exists: "still figuring out"', () => {
-    expect(tripStatusLine(state({ trip_context: { origin_city: 'Delhi' } }))).toBe("Still figuring out where you're headed.");
+  it('no destination, but some context exists', () => {
+    expect(tripStatusLine(trip({ context: { origin_city: 'Delhi' } }))).toBe("Still figuring out where you're headed.");
   });
 
-  // TWM-190: trip_context.destinations is the one canonical "destination
-  // known" signal for both entry paths now (Backend writes it directly at
-  // select_destination for Discover, same as Guide's own extraction for
-  // known-destination) — selected_option is no longer read for this at
-  // all, and lives outside trip_context entirely (twm/services/
-  // trip_commands/state.py).
-  it('destination known via destinations array (both entry paths)', () => {
-    const line = tripStatusLine(state({ trip_context: { destinations: ['Udaipur'] } }));
-    expect(line).toBe('Destination settled — planning not started yet.');
+  it('destination known via the composed recap', () => {
+    expect(tripStatusLine(trip({ context: { destinations: 'Udaipur' } }))).toBe('Destination settled — planning not started yet.');
   });
 
-  it('destination known + awaiting: Guide is actively gathering details', () => {
-    const line = tripStatusLine(state({ trip_context: { destinations: ['Udaipur'] }, awaiting: 'trip_duration' }));
-    expect(line).toBe("Guide's working out the details with you.");
+  it('destination known + awaiting', () => {
+    expect(tripStatusLine(trip({ context: { destinations: 'Udaipur' }, awaiting: 'trip_duration' }))).toBe("Guide's working out the details with you.");
   });
 
-  it('destination known + has_places (no day plan yet)', () => {
-    const line = tripStatusLine(state({ trip_context: { destinations: ['Udaipur'] }, has_places: true }));
-    expect(line).toBe('Places picked — building the day-by-day plan.');
+  it('destination known + has_places', () => {
+    expect(tripStatusLine(trip({ context: { destinations: 'Udaipur' }, has_places: true }))).toBe('Places picked — building the day-by-day plan.');
   });
 
-  it('destination known + has_day_plan takes priority over has_places/awaiting', () => {
-    const line = tripStatusLine(state({
-      trip_context: { destinations: ['Udaipur'] }, awaiting: 'x', has_places: true, has_day_plan: true,
-    }));
-    expect(line).toBe('A full day-by-day plan is set — sorting out bookings next.');
+  it('destination known + has_day_plan takes priority', () => {
+    expect(tripStatusLine(trip({
+      context: { destinations: 'Udaipur' }, awaiting: 'x', has_places: true, has_day_plan: true,
+    }))).toBe('A full day-by-day plan is set — sorting out bookings next.');
   });
 });
 
-describe('relativeUpdatedAt (TWM-184)', () => {
+describe('relativeUpdatedAt', () => {
   afterEach(() => vi.useRealTimers());
 
   it('returns null for a missing or invalid date', () => {
@@ -159,12 +144,14 @@ describe('relativeUpdatedAt (TWM-184)', () => {
   });
 });
 
-describe('contextRecapPills (TWM-183, TWM-190 canonical fields)', () => {
-  // origin_city is the one canonical key every agent actually writes
-  // (twm/schemas/trip_context.py's FIXED_KEYS) — no more `origin` fallback,
-  // since nothing ever wrote that key in the first place.
-  it('recognizes origin_city', () => {
-    expect(contextRecapPills({ origin_city: 'Bengaluru' })).toContain('From Bengaluru');
+describe('context recap formatters', () => {
+  it('contextRecapPills prefixes origin and drops the destination', () => {
+    const t = trip({ context: { origin_city: 'Bengaluru', budget: 'INR 50000', destinations: 'Goa' } });
+    expect(contextRecapPills(t)).toEqual(['From Bengaluru', 'INR 50000']);
+  });
+
+  it('contextDestination reads the destinations recap item', () => {
+    expect(contextDestination(trip({ context: { destinations: 'Goa' } }))).toBe('Goa');
+    expect(contextDestination(trip({}))).toBeNull();
   });
 });
-

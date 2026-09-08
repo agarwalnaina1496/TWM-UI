@@ -1,10 +1,13 @@
-// TWM-110: JourneyEntry/ScoutChat now call the real POST /api/trips/{id}/commands
-// boundary instead of a client-side fixture. Mocks that boundary with Playwright
-// route interception so the exact scripted conversations stay deterministic and
-// don't require a live Backend/agent deployment.
-import { transportLegs, gatewayLegs } from '../../src/lib/bookingCatalog.js';
-import { tripOriginCity } from '../../src/constants/tripContext.js';
-import { bookingSetupSearchPref } from '../../src/constants/bookingSetup.js';
+// TWM-110: mocks the real trip-persistence boundary with Playwright route
+// interception so scripted conversations stay deterministic without a live
+// Backend/agent deployment.
+//
+// TWM-220: specs still author `trip_state`-shaped fixture records; this
+// harness composes the server-side read models the UI now consumes —
+// `TripView` for GET/PATCH /trips/{id}, a thin list item for GET /trips,
+// and the enriched document for GET /trips/{id}/itinerary. Command /
+// first-message responses carry only message + agent_meta + recommendation;
+// the app re-fetches the TripView.
 
 function addDaysIso(iso, days) {
   const d = new Date(`${iso}T00:00:00.000Z`);
@@ -25,165 +28,240 @@ function commandResponse(message, trip) {
   return { message, agent_meta: null, trip };
 }
 
-// `steps` is an ordered array of { command, response } — response is a
-// {message, trip} pair built with commandResponse/tripRecord. Each command
-// sent by the app is matched to the next step in order; command name is
-// asserted so a mis-sequenced test fails loudly instead of silently mismatching.
-//
-// `initialTrip`, when given, makes GET /api/trips (list) and GET /api/trips/{id}
-// (single) serve a persisted trip record instead of the default "no trips yet"
-// behavior — needed for refresh/resume specs, since TripContext always re-fetches
-// from the Backend on mount rather than trusting cached localStorage state.
-//
-// `initialTrips` (TWM-108), when given instead, seeds the list with several
-// distinct trip records — for adaptive-landing/My Trips specs. GET-list, GET
-// single-by-id, and rename PATCH all resolve against the full seeded set; the
-// scripted `steps` (commands) still apply to whichever trip id they're sent to.
-//
-// `initialRecommendation` / a step's `recommendation` field (TWM-153): the
-// latest matcher round is served from GET /api/trips/{id}/recommendations,
-// not from trip_state — set it once via the option, or update it from a
-// scripted step whose command produced a new round (continue/traveler_message
-// /more_like_this), 404 otherwise.
-//
-// `initialItineraryVersions` / a step's `itineraryVersions` field (TWM-155):
-// archived itinerary revisions are served from
-// GET /api/trips/{id}/itinerary-versions, not from trip_state — defaults to
-// an empty list so any spec reaching the Dashboard doesn't need to opt in.
-export async function mockTripCommandFlow(page, steps, { initialTrip, initialTrips, initialRecommendation = null, initialItineraryVersions = [] } = {}) {
+const RECAP_LABELS = {
+  origin_city: 'Coming from', num_travelers: 'Travellers', trip_duration: 'Trip length',
+  travel_dates: 'When', budget: 'Budget', destinations: 'Destination',
+};
+const RECAP_KEYS = ['origin_city', 'num_travelers', 'trip_duration', 'travel_dates', 'budget', 'destinations'];
+
+function composeRecap(tripContext = {}) {
+  const items = [];
+  for (const key of RECAP_KEYS) {
+    const raw = tripContext[key];
+    if (raw === undefined || raw === null || raw === '' || (Array.isArray(raw) && raw.length === 0)) continue;
+    const value = Array.isArray(raw) ? raw.join(', ') : String(raw);
+    items.push({ key, label: RECAP_LABELS[key], value });
+  }
+  return items;
+}
+
+function composePlan(plannerState) {
+  if (!plannerState) return null;
+  return {
+    places: plannerState.places ?? [],
+    day_plan: (plannerState.day_plan ?? []).map(d => ({
+      day_number: d.day_number, places: d.places ?? [], pace: d.pace ?? null, buffer_note: d.buffer_note ?? null,
+    })),
+    frozen: plannerState.frozen_plan != null,
+    awaiting: plannerState.conversation_context?.awaiting ?? null,
+  };
+}
+
+function itineraryResult(record) {
+  const it = record.trip_state?.itinerary_state;
+  if (it?.status !== 'ready') return null;
+  return it.current_version?.result ?? null;
+}
+
+function composeSummary(result) {
+  if (!result) return null;
+  const ts = result.final_itinerary.trip_summary || {};
+  const bs = result.final_itinerary.budget_summary || {};
+  const count = ts.num_travelers ?? ts.travelers ?? null;
+  return {
+    title: ts.title || '', destinations: ts.destinations || [], duration_days: ts.duration_days ?? ts.trip_duration ?? 0,
+    overview: ts.overview || '', route_rationale: ts.route_rationale || '',
+    travelers: typeof count === 'number'
+      ? { value: `~${count}`, exact: null, source: 'itinerary_estimate' }
+      : { value: null, exact: null, source: 'unknown' },
+    dates: { precision: 'none', departure: null, return: null, month: null, label: null, source: 'none' },
+    budget: { low: bs.total_low ?? 0, high: bs.total_high ?? 0, currency: bs.currency || 'INR' },
+  };
+}
+
+function composeBudgetBreakdown(result) {
+  if (!result) return null;
+  const bs = result.final_itinerary.budget_summary || {};
+  return {
+    fit_note: bs.budget_fit || `Estimated ${bs.currency || 'INR'} ${bs.total_low}–${bs.currency || 'INR'} ${bs.total_high}.`,
+    lines: (bs.lines || []).map(l => ({ category: l.category, low: l.amount_low, high: l.amount_high, note: l.note })),
+    estimated_for_travelers: result.final_itinerary.trip_summary?.num_travelers ?? null,
+    party_changed_since: false,
+  };
+}
+
+function composeBeforeYouGo(result) {
+  if (!result) return null;
+  const notes = (result.final_itinerary.practical_notes || []).map(n => ({ title: n.title, detail: n.detail, verify: !!n.needs_verification }));
+  const assumptions = (result.final_itinerary.assumptions || []).map(a => ({ title: a.category === 'stay_area' ? "Where you'll stay" : (a.detail || '').split(/[.!?]/)[0].slice(0, 80), detail: a.detail, verify: true }));
+  return [...notes, ...assumptions];
+}
+
+function toTripView(record, hasRecommendation) {
+  const ts = record.trip_state || {};
+  const result = itineraryResult(record);
+  return {
+    id: record.id, title: record.title, product_mode: record.product_mode, version: record.version,
+    ui_state: record.ui_state || {}, created_at: record.created_at, updated_at: record.updated_at,
+    lifecycle: {
+      stage: ts.stage ?? 'new', status: ts.status ?? 'free',
+      active_agent: ts.active_agent ?? null, selected_option: ts.selected_option ?? null,
+    },
+    context_recap: composeRecap(ts.trip_context),
+    plan: composePlan(ts.planner_state),
+    matcher: {
+      last_message: ts.matcher_state?.conversation_context?.last_meridian_message ?? null,
+      awaiting: ts.matcher_state?.conversation_context?.awaiting ?? null,
+      has_recommendation: !!hasRecommendation,
+    },
+    summary: composeSummary(result),
+    booking: result ? { party: ts.booking_setup?.party ?? null } : null,
+    budget_breakdown: composeBudgetBreakdown(result),
+    open_gaps: result ? (ts.booking_setup?.party ? [] : [{ what: "who's travelling", resolution: 'set_party', detail: 'Set the exact party.' }]) : null,
+    before_you_go: composeBeforeYouGo(result),
+  };
+}
+
+// The real GET /trips list item is thinner than this, but the app is always
+// reached after an openTrip in production; this harness serves a full
+// TripView superset here so a spec that navigates straight to a trip page
+// (no ?tripId=) still renders off the boot pick.
+function toListItem(record, hasRecommendation) {
+  const ts = record.trip_state || {};
+  return {
+    ...toTripView(record, hasRecommendation),
+    travel_window: null,
+    has_places: (ts.planner_state?.places?.length || 0) > 0,
+    has_day_plan: (ts.planner_state?.day_plan?.length || 0) > 0,
+    has_itinerary: ts.itinerary_state?.status === 'ready',
+    awaiting: ts.planner_state?.conversation_context?.awaiting ?? null,
+    has_recommendation: !!hasRecommendation,
+  };
+}
+
+// The enriched GET /trips/{id}/itinerary document.
+function toEnrichedItinerary(record) {
+  const result = itineraryResult(record);
+  if (!result) return null;
+  const cv = record.trip_state.itinerary_state.current_version;
+  const days = result.final_itinerary.days;
+  const originCity = record.trip_state?.trip_context?.origin_city;
+  const searchPrefs = record.trip_state?.booking_setup?.search_prefs || {};
+  const travelLegs = days.flatMap(d => d.timeline.filter(i => i.kind === 'TRAVEL' && i.from_city && i.to_city));
+  const outbound = travelLegs.find(l => originCity && l.from_city === originCity);
+  const inbound = [...travelLegs].reverse().find(l => originCity && l.to_city === originCity);
+
+  const enrichedDays = days.map(day => ({
+    ...day,
+    timeline: day.timeline.map((item, index) => {
+      const id = item.id || `${record.id}:${day.day_number}:${index}`;
+      const isGateway = (item.kind === 'TRAVEL' && item.from_city && item.to_city) && (item === outbound || item === inbound);
+      let resolved_date = null, date_precision = 'none', date_source = 'none';
+      if (item.kind === 'TRAVEL' || item.kind === 'STAY') {
+        const bucket = item.kind === 'TRAVEL' ? 'transports' : 'stays';
+        const pref = searchPrefs[bucket]?.[id];
+        if (pref?.precision === 'exact' && pref.date) { resolved_date = pref.date; date_precision = 'exact'; date_source = 'search_pref'; }
+        else if (pref?.precision === 'month' && pref.month) { resolved_date = pref.month; date_precision = 'month'; date_source = 'search_pref'; }
+      }
+      return {
+        ...item, id, is_gateway_leg: !!isGateway,
+        resolved_date, date_precision, date_source,
+      };
+    }),
+  }));
+
+  // Consecutive same-location STAY grouping.
+  const segments = [];
+  let current = null;
+  for (const day of enrichedDays) {
+    for (const item of day.timeline.filter(i => i.kind === 'STAY' && (i.location || '').trim())) {
+      const loc = item.location.trim();
+      if (current && current.location.toLowerCase() === loc.toLowerCase() && day.day_number === current.end + 1) {
+        current.end = day.day_number; current.ids.push(item.id); continue;
+      }
+      if (current) segments.push(current);
+      current = { location: loc, start: day.day_number, end: day.day_number, ids: [item.id] };
+    }
+  }
+  if (current) segments.push(current);
+  const stay_segments = segments.map(s => {
+    const nights = s.end - s.start + 1;
+    const slug = s.location.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const id = `${record.id}:stay:${s.start}:${s.end}:${slug}`;
+    const pref = searchPrefs.stays?.[id];
+    let checkin_date = null, checkout_date = null, month = null, date_precision = 'none', date_source = 'none';
+    if (pref?.precision === 'exact' && pref.date) {
+      checkin_date = pref.date; checkout_date = addDaysIso(pref.date, nights);
+      date_precision = 'exact'; date_source = 'search_pref';
+    } else if (pref?.precision === 'month' && pref.month) {
+      month = pref.month; date_precision = 'month'; date_source = 'search_pref';
+    }
+    return { id, location: s.location, start_day_number: s.start, end_day_number: s.end, nights, date_precision, checkin_date, checkout_date, month, date_source, board_item_ids: s.ids };
+  });
+
+  return {
+    version: cv.version, source_guide_revision: cv.source_guide_revision,
+    result: { ...result, final_itinerary: { ...result.final_itinerary, days: enrichedDays }, stay_segments },
+    created_at: record.created_at,
+  };
+}
+
+function bookingOptionsResponse(body) {
+  const stayLabels = { booking_com: 'Search Booking.com', agoda: 'Search Agoda', ixigo: 'Browse ixigo hotels' };
+  return {
+    results: (body.targets || []).map(target => {
+      const isMode = target.kind === 'mode';
+      return {
+        target,
+        status: 'resolved',
+        generated_at: 't',
+        action: {
+          action_type: 'SEARCH_REDIRECT',
+          domain: isMode ? target.value : 'stay',
+          target: { partner: isMode ? (target.value === 'flight' ? 'aviasales' : target.value) : target.value, path: 'search', query_params: {}, target_url: `https://example.com/booking/${target.value}` },
+          internal_capability: null,
+          affiliate_disclosure: false,
+          capability: isMode ? 'prefilled_search' : 'destination_search',
+          cta_label: isMode ? `Check ${target.value}` : (stayLabels[target.value] || 'Search stays'),
+          capability_note: null,
+        },
+      };
+    }),
+  };
+}
+
+export async function mockTripCommandFlow(page, steps, { initialTrip, initialTrips, initialRecommendation = null } = {}) {
   let pending = [...steps];
   const seeded = initialTrips ?? (initialTrip ? [initialTrip] : []);
   const records = new Map(seeded.map(record => [record.id, record]));
   let current = seeded[0] ?? null;
   let latestRecommendation = initialRecommendation;
-  let itineraryVersions = initialItineraryVersions;
+
   await page.route('**/api/trips**', async route => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     const method = request.method();
 
     if (method === 'GET' && /\/api\/trips\/?$/.test(pathname)) {
-      const list = [...records.values()].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+      const list = [...records.values()]
+        .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+        .map(r => toListItem(r, r.id === current?.id && latestRecommendation != null));
       return route.fulfill({ json: { trips: list } });
     }
+
     const recoMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)\/recommendations$/);
     if (recoMatch) {
       if (!latestRecommendation) return route.fulfill({ status: 404, json: { detail: 'No recommendations yet.' } });
       return route.fulfill({ json: latestRecommendation });
     }
-    const itineraryVersionsMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)\/itinerary-versions$/);
-    if (itineraryVersionsMatch) {
-      return route.fulfill({ json: { versions: itineraryVersions } });
-    }
-    // TripDashboard lazily fetches the itinerary body from this endpoint
-    // (separate from the trip record's itinerary_state summary) once
-    // itinerary_state.status is 'ready' — unmocked, it falls through to a
-    // real network call that 404s to the Vite SPA fallback (200 + HTML),
-    // which request() then silently treats as an empty success payload.
+
     const itineraryMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)\/itinerary$/);
     if (itineraryMatch && records.has(itineraryMatch[1])) {
-      const currentVersion = records.get(itineraryMatch[1]).trip_state?.itinerary_state?.current_version;
-      if (!currentVersion) return route.fulfill({ status: 404, json: { detail: 'No itinerary yet.' } });
-      return route.fulfill({ json: currentVersion });
+      const enriched = toEnrichedItinerary(records.get(itineraryMatch[1]));
+      if (!enriched) return route.fulfill({ status: 404, json: { detail: 'No itinerary yet.' } });
+      return route.fulfill({ json: enriched });
     }
-    // TWM-202/TWM-206: TripDashboard.jsx now fetches the composed Trip
-    // Board (gateway-leg identification + feasibility) from this endpoint
-    // instead of deriving it client-side and calling
-    // /trusted-action/feasibility per leg. Synthesized here the same way
-    // as /itinerary above — from the current record's own itinerary
-    // result — reusing the exact gateway-leg logic the pre-adapter client
-    // code used to, so a spec's fixture data alone still determines which
-    // rows are gateway legs; every gateway leg gets the same generic
-    // "all four modes feasible" default as the old feasibility mock did.
-    const boardMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)\/board$/);
-    if (boardMatch && records.has(boardMatch[1])) {
-      const trip = boardMatch[1];
-      const record = records.get(trip);
-      const currentVersion = record.trip_state?.itinerary_state?.current_version;
-      if (!currentVersion) return route.fulfill({ status: 404, json: { detail: 'No itinerary yet.' } });
-      const days = currentVersion.result.final_itinerary.days;
-      const originCity = tripOriginCity(record.trip_state?.trip_context);
-      const allLegs = transportLegs(days);
-      const gatewayKeys = new Set(gatewayLegs(allLegs, originCity).map(leg => `${leg.from}→${leg.to}`));
-      const legByKey = Object.fromEntries(allLegs.map(leg => [`${leg.from}→${leg.to}`, leg]));
-      const reference = { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
-      const feasibleModes = ['flight', 'train', 'bus', 'drive'].map(mode => ({
-        mode, status: 'feasible', duration_source: 'computed',
-        estimated_duration_minutes: 120, estimated_distance_km: null,
-        reason: 'Genuinely reachable by this mode.', verification: reference,
-      }));
-      const daysWithBoardItems = days.map(day => ({
-        ...day,
-        items: day.timeline.map((item, index) => {
-          const id = item.id || `${trip}:${day.day_number}:${index}`;
-          if (item.kind !== 'TRAVEL' || !item.from_city || !item.to_city) {
-            return { ...item, id, is_gateway_leg: false, feasible_modes: null, date_precision: null, date_source: null };
-          }
-          const key = `${item.from_city}→${item.to_city}`;
-          const isGateway = gatewayKeys.has(key);
-          const leg = legByKey[key] || {};
-          const override = bookingSetupSearchPref(record.trip_state, 'transport', id);
-          let departure_date = null, departure_month = null, date_precision = 'flexible', date_source = 'none';
-          if (override?.precision === 'exact') { departure_date = override.date; date_precision = 'exact'; date_source = 'search_pref'; }
-          else if (override?.precision === 'month') { departure_month = override.month; date_precision = 'month'; date_source = 'search_pref'; }
-          else if (leg.departureDate) { departure_date = leg.departureDate; date_precision = 'exact'; date_source = 'trip_dates'; }
-          else if (leg.departureMonth) { departure_month = leg.departureMonth; date_precision = 'month'; date_source = 'trip_dates'; }
-          return {
-            ...item,
-            id,
-            is_gateway_leg: isGateway,
-            feasible_modes: isGateway ? feasibleModes : null,
-            date_precision,
-            departure_date,
-            departure_month,
-            date_source,
-          };
-        }),
-      }));
-      const staySegments = daysWithBoardItems.flatMap(day => day.items
-        .filter(item => item.kind === 'STAY' && item.location)
-        .map(item => {
-          const id = `${trip}:stay:${day.day_number}:${day.day_number}:${String(item.location).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-          const override = bookingSetupSearchPref(record.trip_state, 'stay', id);
-          const nights = 1;
-          let checkin_date = null, checkout_date = null, departure_month = null, date_precision = 'flexible', date_source = 'none';
-          if (override?.precision === 'exact') {
-            checkin_date = override.date; checkout_date = addDaysIso(override.date, nights);
-            date_precision = 'exact'; date_source = 'search_pref';
-          } else if (override?.precision === 'month') {
-            departure_month = override.month; date_precision = 'month'; date_source = 'search_pref';
-          }
-          return {
-            id, location: item.location,
-            start_day_number: day.day_number, end_day_number: day.day_number,
-            nights, date_precision, checkin_date, checkout_date, departure_month,
-            date_source, board_item_ids: [item.id],
-          };
-        }));
-      return route.fulfill({
-        json: {
-          version: currentVersion.version,
-          days: daysWithBoardItems,
-          stay_segments: staySegments,
-        },
-      });
-    }
-    // Bookings tab (TWM-130/131/146) resolves each transport mode's CTA,
-    // per-route feasibility, and a live flight-offer search — all real
-    // network calls, unmocked by default. Fulfilled generically here
-    // (a resolved CTA to a placeholder URL, all four modes genuinely
-    // feasible, no live offer) so any spec that reaches the Bookings tab
-    // gets deterministic, renderable options instead of the Vite
-    // SPA-fallback empty-object trick.
-    // TWM-195 root-fix contract: `modes` is the only field on
-    // TripFeasibilityAssessment (no more excluded_modes) and only ever
-    // contains genuinely route-valid entries. A `null`/missing assessment,
-    // or `modes: []`, must resolve zero transport modes on the UI side —
-    // never "every mode feasible" as a fallback. This shared mock returns
-    // all four modes feasible by default so any generic spec that reaches
-    // the Bookings tab gets deterministic, renderable options; a spec that
-    // specifically needs to prove the empty/absurd-mode behavior overrides
-    // this route itself (see golden-self-led-bookings.spec.js).
+
     if (method === 'POST' && pathname.endsWith('/trusted-action/feasibility')) {
       const reference = { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
       const modes = ['flight', 'train', 'bus', 'drive'].map(mode => ({
@@ -193,108 +271,72 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
       }));
       return route.fulfill({ json: { modes } });
     }
-    // TWM-197/TWM-208/TWM-216: TripDashboard.jsx also calls
-    // resolveTrustedAction(domain: 'stay') for real. Stay responses carry
-    // provider-specific capability/CTA copy so e2e checks do not depend on
-    // the UI fallback label.
+
+    if (method === 'POST' && pathname.endsWith('/booking-options')) {
+      return route.fulfill({ json: bookingOptionsResponse(request.postDataJSON()) });
+    }
+
     if (method === 'POST' && pathname.endsWith('/trusted-action')) {
-      const body = request.postDataJSON();
-      if (body.domain === 'stay') {
-        const partner = body.preferred_partner || 'booking_com';
-        const labelByPartner = {
-          booking_com: 'Search Booking.com',
-          agoda: 'Search Agoda',
-          ixigo: 'Browse ixigo hotels',
-        };
-        const capabilityByPartner = {
-          booking_com: 'destination_search',
-          agoda: 'known_destination_search',
-          ixigo: 'destination_redirect',
-        };
-        return route.fulfill({
-          json: {
-            status: 'resolved',
-            action: {
-              target: { partner, target_url: `https://example.com/booking/${partner}` },
-              internal_capability: null,
-              affiliate_disclosure: false,
-              capability: capabilityByPartner[partner] || 'destination_search',
-              cta_label: labelByPartner[partner] || 'Search stays',
-              capability_note: 'Provider search opens with the confirmed capability for this mock.',
-            },
-          },
-        });
-      }
-      return route.fulfill({
-        json: { status: 'resolved', action: { target: { target_url: 'https://example.com/booking' }, internal_capability: null, affiliate_disclosure: false } },
-      });
+      return route.fulfill({ json: { status: 'resolved', action: { target: { target_url: 'https://example.com/booking' }, internal_capability: null, affiliate_disclosure: false } } });
     }
+
     if (method === 'POST' && pathname.endsWith('/flight-search')) {
-      return route.fulfill({ json: { status: 'unavailable' } });
+      return route.fulfill({ json: { status: 'unavailable', unavailable: { code: 'x', message: 'Live flight search is not available yet.' } } });
     }
+
     const singleMatch = method === 'GET' && pathname.match(/\/api\/trips\/([^/]+)$/);
     if (singleMatch && records.has(singleMatch[1])) {
-      return route.fulfill({ json: records.get(singleMatch[1]) });
+      const r = records.get(singleMatch[1]);
+      return route.fulfill({ json: toTripView(r, r.id === current?.id && latestRecommendation != null) });
     }
+
     if (method === 'POST' && /\/api\/trips\/?$/.test(pathname)) {
       current = tripRecord({ id: seeded.length ? `${TRIP_ID}-${records.size + 1}` : undefined });
       records.set(current.id, current);
-      return route.fulfill({ status: 201, json: current });
+      return route.fulfill({ status: 201, json: toTripView(current, false) });
     }
+
     const renameMatch = method === 'PATCH' && pathname.match(/\/api\/trips\/([^/]+)$/);
     if (renameMatch && records.has(renameMatch[1])) {
       const body = request.postDataJSON();
-      const updated = { ...records.get(renameMatch[1]), title: body.title, version: body.expected_version + 1 };
+      const updated = { ...records.get(renameMatch[1]), title: body.title ?? records.get(renameMatch[1]).title, ui_state: body.ui_state ?? records.get(renameMatch[1]).ui_state, version: body.expected_version + 1 };
       records.set(renameMatch[1], updated);
-      return route.fulfill({ json: updated });
+      return route.fulfill({ json: toTripView(updated, updated.id === current?.id && latestRecommendation != null) });
     }
+
     if (method === 'POST' && pathname.endsWith('/commands')) {
       const body = request.postDataJSON();
       const step = pending.shift();
       if (!step) throw new Error(`Unexpected trip command: ${JSON.stringify(body)} (no more scripted steps).`);
-      if (step.command !== body.command) {
-        throw new Error(`Expected command "${step.command}" but got "${body.command}".`);
-      }
+      if (step.command !== body.command) throw new Error(`Expected command "${step.command}" but got "${body.command}".`);
       current = step.response.trip;
       records.set(current.id, current);
       if (step.recommendation !== undefined) latestRecommendation = step.recommendation;
-      if (step.itineraryVersions !== undefined) itineraryVersions = step.itineraryVersions;
-      return route.fulfill({ json: step.response });
+      return route.fulfill({ json: { message: step.response.message ?? null, agent_meta: null, recommendation: step.recommendation ?? null, trip: { id: current.id, version: current.version } } });
     }
-    // TWM-189: the traveler's first message (entry_intent: discover/
-    // known_destination, from a trip-less fresh entry) now creates the trip
-    // and sends the message in one request — POST /api/trips/first-message —
-    // instead of a bare create followed by a /commands call. Same
-    // scripted-step consumption as /commands above (keyed by entryIntent
-    // instead of command, since a first-message step carries no command
-    // name — TWM-192's entry-command collapse), but always the step that
-    // actually creates `current`.
+
     if (method === 'POST' && pathname.endsWith('/first-message')) {
       const body = request.postDataJSON();
       const step = pending.shift();
       if (!step) throw new Error(`Unexpected first-message command: ${JSON.stringify(body)} (no more scripted steps).`);
-      if (step.entryIntent !== body.entry_intent) {
-        throw new Error(`Expected entry_intent "${step.entryIntent}" but got "${body.entry_intent}".`);
-      }
+      if (step.entryIntent !== body.entry_intent) throw new Error(`Expected entry_intent "${step.entryIntent}" but got "${body.entry_intent}".`);
       current = step.response.trip;
       records.set(current.id, current);
       if (step.recommendation !== undefined) latestRecommendation = step.recommendation;
-      if (step.itineraryVersions !== undefined) itineraryVersions = step.itineraryVersions;
-      return route.fulfill({ status: 201, json: step.response });
+      return route.fulfill({ status: 201, json: { message: step.response.message ?? null, agent_meta: null, recommendation: step.recommendation ?? null, trip: { id: current.id, version: current.version } } });
     }
+
     return route.continue();
   });
 }
 
-// A minimal, schema-valid AtlasResponse (twm/schemas/atlas.py) for e2e specs
-// that just need to reach the Dashboard and see real content render.
 function atlasResult({ title = 'Abbey Falls Getaway', destination = 'Coorg', primaryLocation = 'Coorg' } = {}) {
   const reference = { status: 'GENERAL_GUIDANCE', source_title: null, source_url: null };
   return {
     final_itinerary: {
       trip_summary: {
-        title, destinations: [destination], duration_days: 1, travelers: 2,
-        date_range: null, overview: 'A relaxed one-day visit.', route_rationale: 'Everything is within one base.',
+        title, destinations: [destination], duration_days: 1, num_travelers: 2,
+        overview: 'A relaxed one-day visit.', route_rationale: 'Everything is within one base.',
       },
       days: [{
         day_number: 1, date: null, title: 'Arrival and exploring', primary_location: primaryLocation,
@@ -305,8 +347,8 @@ function atlasResult({ title = 'Abbey Falls Getaway', destination = 'Coorg', pri
           reference, requires_advance_booking: false, booking_readiness: null,
         }],
         notes: [
-          { category: 'Weather', title: 'Carry layers', detail: 'Carry layers.', reference },
-          { category: 'Access', title: 'No permits', detail: 'None required.', reference },
+          { category: 'Weather', title: 'Carry layers', detail: 'Carry layers.', needs_verification: false },
+          { category: 'Access', title: 'No permits', detail: 'None required.', needs_verification: false },
         ],
         backup_plan: null,
       }],
@@ -315,20 +357,14 @@ function atlasResult({ title = 'Abbey Falls Getaway', destination = 'Coorg', pri
       sources: [],
       assumptions: [],
     },
-    unresolved: [],
     agent_meta: { agent: 'atlas', prompt_version: '1.2.0' },
   };
 }
 
-// TWM-138: itinerary_state.result nests under current_version alongside
-// proposed_revision, not the flat TWM-96 shape. Accepted-revision history
-// (TWM-155) lives in its own table now, served via `itineraryVersions`/
-// `initialItineraryVersions` on mockTripCommandFlow, not on this object.
 function readyItineraryState(options) {
   return {
     status: 'ready',
     current_version: { version: 1, source_guide_revision: 3, result: atlasResult(options) },
-    proposed_revision: null,
   };
 }
 

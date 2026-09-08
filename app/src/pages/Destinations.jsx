@@ -346,18 +346,18 @@ export default function Destinations() {
   const trackedFailureStatus = useRef(null);
   const trackedTransitionShown = useRef(false);
 
-  const tripState = commandSnapshot?.trip_state;
+  const view = commandSnapshot;
   const tripId = commandSnapshot?.id;
-  const awaiting = tripState?.matcher_state?.conversation_context?.awaiting;
-  const lastMeridianMessage = tripState?.matcher_state?.conversation_context?.last_meridian_message;
+  const awaiting = view?.matcher?.awaiting;
+  const lastMeridianMessage = view?.matcher?.last_message;
 
-  // The latest matcher round is fetched lazily (TWM-153) — it no longer
-  // rides along on trip_state, since only this page ever needs it.
+  // The matcher round is fetched lazily on mount only (TWM-153); after a
+  // command it arrives inline on the command response (TWM-217/TWM-220).
   const [latest, setLatest] = useState(null);
   const [recoStatus, setRecoStatus] = useState('idle'); // idle | loading | ready | error
   const [recoError, setRecoError] = useState(null);
 
-  const refreshLatest = useCallback(async (idOverride, { fromCommand = false } = {}) => {
+  const refreshLatest = useCallback(async (idOverride) => {
     const id = idOverride ?? tripId;
     if (!id) {
       setLatest(null);
@@ -368,9 +368,6 @@ export default function Destinations() {
     setRecoError(null);
     try {
       const round = await getRecommendations(id);
-      if (fromCommand && round?.options?.length) {
-        trackEvent('recommendations_generated', { recommendation_count: round.options.length });
-      }
       setLatest(round);
       setRecoStatus('ready');
       return round;
@@ -386,6 +383,19 @@ export default function Destinations() {
     }
   }, [tripId]);
 
+  // Consumes the round a command turn produced (TWM-220) — no follow-up GET.
+  // A turn that produced no round (e.g. Meridian asked another clarifying
+  // question) leaves the current round in place; the fresh `view.matcher`
+  // drives the clarification UI.
+  const applyCommandRound = useCallback(round => {
+    if (!round) return;
+    if (round.options?.length) {
+      trackEvent('recommendations_generated', { recommendation_count: round.options.length });
+    }
+    setLatest(round);
+    setRecoStatus('ready');
+  }, []);
+
   useEffect(() => {
     if (tripLoadStatus !== 'ready') return;
     refreshLatest();
@@ -397,7 +407,7 @@ export default function Destinations() {
     setTriggering(true);
     setTriggerError(null);
     return sendTripCommand('continue')
-      .then(response => refreshLatest(response.trip?.id, { fromCommand: true }))
+      .then(response => applyCommandRound(response.recommendation))
       .catch(commandError => { trackFailure('discovery', commandError); setTriggerError(commandError.message || 'Something went wrong.'); })
       .finally(() => setTriggering(false));
   }
@@ -456,8 +466,8 @@ export default function Destinations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outcome]);
 
-  const pills = contextRecapPills(tripState?.trip_context);
-  const selectedOption = tripState?.selected_option ?? null;
+  const pills = contextRecapPills(view);
+  const selectedOption = view?.lifecycle?.selected_option ?? null;
 
   function focusOption(key) {
     if (key === focusedKey) return;
@@ -488,7 +498,7 @@ export default function Destinations() {
       // TWM-190: route by artifact existence — a prior planning session with
       // no day_plan yet still belongs on ScoutChat's chat window, not the
       // (now day_plan-only) Plan Builder.
-      const destination = planReady(tripState?.planner_state) ? '/trip-preview' : '/scout-chat';
+      const destination = planReady(view?.plan) ? '/trip-preview' : '/scout-chat';
       navigate(withTripId(destination, commandSnapshot?.id));
       return;
     }
@@ -522,12 +532,12 @@ export default function Destinations() {
   // answer — Guide gates one fixed field at a time, so a single answer may
   // reveal another gap before all five are satisfied.
   function proceedFromGuideResponse(response) {
-    const plannerState = response.trip?.trip_state?.planner_state;
-    const nextAwaiting = plannerState?.conversation_context?.awaiting;
+    const nextPlan = response.trip?.plan;
+    const nextAwaiting = nextPlan?.awaiting;
     // Guide can clear the fixed-field checkpoint gate on the same turn it
     // finishes the plan — planReady must win over isFixedFieldGap, or a
     // completed plan gets stuck showing a stale checkpoint prompt.
-    if (!planReady(plannerState) && isFixedFieldGap(nextAwaiting)) {
+    if (!planReady(nextPlan) && isFixedFieldGap(nextAwaiting)) {
       setCheckpointAwaiting(nextAwaiting);
       setCheckpointMessage(response.message || '');
       checkpointWasShown.current = true;
@@ -540,7 +550,7 @@ export default function Destinations() {
     if (checkpointWasShown.current) trackEvent('checkpoint_resolved', {});
     setCheckpointAwaiting(null);
     const tripId = response.trip?.id ?? commandSnapshot?.id;
-    if (planReady(plannerState)) {
+    if (planReady(nextPlan)) {
       navigate(withTripId('/trip-preview', tripId), { state: { guideMessage: response.message } });
       return;
     }
@@ -580,7 +590,7 @@ export default function Destinations() {
         },
       });
       trackEvent('more_like_this_used', { with_qualifier: Boolean(instructions) });
-      await refreshLatest(response.trip?.id, { fromCommand: true });
+      applyCommandRound(response.recommendation);
       setMoreLikeThisQualifier('');
       setFocusedKey(null);
       setEvidenceOpen(false);
@@ -600,7 +610,7 @@ export default function Destinations() {
     setTriggering(true);
     try {
       const response = await sendTripCommand('traveler_message', { message: value });
-      await refreshLatest(response.trip?.id, { fromCommand: true });
+      applyCommandRound(response.recommendation);
     } catch (commandError) {
       setTriggerError(commandError.message || 'Something went wrong.');
     } finally {
@@ -617,7 +627,7 @@ export default function Destinations() {
     try {
       trackEvent('refinement_drawer_used', {});
       const response = await sendTripCommand('traveler_message', { message: value });
-      await refreshLatest(response.trip?.id, { fromCommand: true });
+      applyCommandRound(response.recommendation);
       setRefinementOpen(false);
     } catch (commandError) {
       setPlanError(commandError.message || 'Something went wrong.');
@@ -763,7 +773,7 @@ export default function Destinations() {
               moreLikeThisBusy={moreLikeThisId === focusedOption.key}
               beenBefore={beenBefore[focusedOption.key] ?? null}
               onToggleBeenBefore={id => setBeenBefore(previous => ({ ...previous, [focusedOption.key]: previous[focusedOption.key] === id ? null : id }))}
-              travelers={tripState?.trip_context?.travelers}
+              travelers={view?.context_recap?.find(r => r.key === 'num_travelers')?.value}
             />
           )}
         </div>

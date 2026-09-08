@@ -1,58 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import {
-  TRIP_CONTEXT_KEYS,
-  tripOriginCity,
-  tripTravelerCount,
-  travelerCompositionTotal,
-} from '../../../src/constants/tripContext.js';
+import { TRIP_CONTEXT_KEYS } from '../../../src/constants/tripContext.js';
 
-describe('tripOriginCity', () => {
-  it('reads the canonical origin_city key', () => {
-    expect(tripOriginCity({ origin_city: 'Bangalore' })).toBe('Bangalore');
-  });
-
-  it('never falls back to a noncanonical origin key', () => {
-    expect(tripOriginCity({ origin: 'Bangalore' })).toBeNull();
-  });
-
-  it('is null for a missing/empty trip_context', () => {
-    expect(tripOriginCity(undefined)).toBeNull();
-    expect(tripOriginCity({})).toBeNull();
-  });
-});
-
-// tripTravelerCount reads the loose, conversational num_travelers fact
-// (same role as travel_dates) — never trusted for a real booking payload.
-describe('tripTravelerCount', () => {
-  it('normalizes a chat-entered numeric string', () => {
-    expect(tripTravelerCount({ [TRIP_CONTEXT_KEYS.NUM_TRAVELERS]: '4' })).toBe(4);
-  });
-
-  it('normalizes a plain number', () => {
-    expect(tripTravelerCount({ num_travelers: 2 })).toBe(2);
-  });
-
-  it('is null for missing, empty, or non-numeric values', () => {
-    expect(tripTravelerCount({})).toBeNull();
-    expect(tripTravelerCount({ num_travelers: '' })).toBeNull();
-    expect(tripTravelerCount({ num_travelers: 'just me' })).toBeNull();
-  });
-});
-
-describe('travelerCompositionTotal', () => {
-  it('sums a structured party', () => {
-    expect(travelerCompositionTotal({ adults: 2, children: 1, infants: 1 })).toBe(4);
-  });
-
-  it('is null for a missing party', () => {
-    expect(travelerCompositionTotal(null)).toBeNull();
-  });
-});
-
-// TWM-216: booking_dates / traveler_composition no longer live in
-// trip_context — the calendar anchor and structured party moved to the
-// booking_setup state branch (see constants/bookingSetup.js).
+// TWM-220: only the canonical key names survive — the raw-value readers
+// moved server-side into the TripView composer.
 describe('TRIP_CONTEXT_KEYS', () => {
+  it('exposes the canonical field names', () => {
+    expect(TRIP_CONTEXT_KEYS).toEqual({
+      ORIGIN_CITY: 'origin_city',
+      NUM_TRAVELERS: 'num_travelers',
+      TRIP_DURATION: 'trip_duration',
+      TRAVEL_DATES: 'travel_dates',
+      BUDGET: 'budget',
+      DESTINATIONS: 'destinations',
+    });
+  });
+
   it('no longer exposes booking_dates or traveler_composition', () => {
     expect(TRIP_CONTEXT_KEYS.BOOKING_DATES).toBeUndefined();
     expect(TRIP_CONTEXT_KEYS.TRAVELER_COMPOSITION).toBeUndefined();

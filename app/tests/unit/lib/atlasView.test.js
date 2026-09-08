@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { verificationTone, trustStripCounts } from '../../../src/lib/atlasView.js';
+import { verificationTone, timelineIcon, bookingReadinessLabel, dayCostRange } from '../../../src/lib/atlasView.js';
 
 describe('verificationTone', () => {
   it('maps VERIFIED to positive and GENERAL_GUIDANCE to neutral', () => {
@@ -12,32 +12,29 @@ describe('verificationTone', () => {
   });
 });
 
-function reference(status) {
-  return { status, source_title: status === 'VERIFIED' ? 'Source' : null, source_url: status === 'VERIFIED' ? 'https://example.com' : null };
-}
-
-describe('trustStripCounts', () => {
-  it('aggregates assumptions, unresolved items, and verified/general-guidance across all timeline items and practical notes', () => {
-    const finalItinerary = {
-      assumptions: [{ category: 'dates', detail: 'x' }],
-      practical_notes: [{ category: 'weather', title: 'x', detail: 'y', reference: reference('VERIFIED') }],
-      days: [
-        { day_number: 1, timeline: [{ title: 'a', reference: reference('VERIFIED') }, { title: 'b', reference: reference('GENERAL_GUIDANCE') }] },
-        { day_number: 2, timeline: [{ title: 'c', reference: reference('GENERAL_GUIDANCE') }] },
-      ],
-    };
-    const result = { unresolved: [{ item: 'x', generic_guidance: 'y' }, { item: 'z', generic_guidance: 'w' }] };
-
-    expect(trustStripCounts(finalItinerary, result)).toEqual({
-      assumptionsCount: 1,
-      unresolvedCount: 2,
-      verifiedCount: 2,
-      generalGuidanceCount: 2,
-    });
+describe('timelineIcon', () => {
+  it('maps known kinds and falls back to the activity pin', () => {
+    expect(timelineIcon('STAY')).toBe('🏨');
+    expect(timelineIcon('TRAVEL')).toBe('🚗');
+    expect(timelineIcon('WHATEVER')).toBe('📍');
   });
+});
 
-  it('handles missing/empty data without crashing', () => {
-    expect(trustStripCounts({}, {})).toEqual({ assumptionsCount: 0, unresolvedCount: 0, verifiedCount: 0, generalGuidanceCount: 0 });
-    expect(trustStripCounts(undefined, undefined)).toEqual({ assumptionsCount: 0, unresolvedCount: 0, verifiedCount: 0, generalGuidanceCount: 0 });
+describe('bookingReadinessLabel', () => {
+  it('labels the two surviving statuses (TWM-217 dropped "unresolved")', () => {
+    expect(bookingReadinessLabel('suggested')).toBe('Suggested');
+    expect(bookingReadinessLabel('needs_advance_booking')).toBe('Needs advance booking');
+    expect(bookingReadinessLabel('anything_else')).toBe('anything_else');
+  });
+});
+
+describe('dayCostRange', () => {
+  it('sums per-item estimated cost bounds across a day', () => {
+    const day = { timeline: [
+      { estimated_cost_low: 100, estimated_cost_high: 200 },
+      { estimated_cost_low: 50, estimated_cost_high: 75 },
+      { title: 'no cost' },
+    ] };
+    expect(dayCostRange(day)).toEqual({ low: 150, high: 275 });
   });
 });

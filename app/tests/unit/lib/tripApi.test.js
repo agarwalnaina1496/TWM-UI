@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  getTrip, listTrips, normalizeTripRecord, queueTripMutation, renameTrip, saveUiState, TripApiError,
-  resolveTrustedAction, getTripFeasibility, searchFlights, startTripFromFirstMessage,
+  getTrip, listTrips, queueTripMutation, renameTrip, saveUiState, TripApiError,
+  resolveTrustedAction, resolveBookingOptions, getTripFeasibility, searchFlights, startTripFromFirstMessage,
 } from '../../../src/lib/tripApi.js';
 
 function jsonResponse(body, { status = 200 } = {}) {
@@ -20,18 +20,20 @@ describe('tripApi', () => {
     vi.restoreAllMocks();
   });
 
-  it('normalizeTripRecord fills a default trip_state when the record has none', () => {
-    const normalized = normalizeTripRecord({ id: 'trip-1', title: 'Untitled Trip', trip_state: {}, ui_state: null });
-    expect(normalized.trip_state.trip_id).toBe('trip-1');
-    expect(normalized.trip_state.stage).toBe('new');
-    expect(normalized.ui_state).toEqual({});
+  // TWM-220: getTrip returns the composed TripView verbatim — no client-side
+  // trip_state synthesis.
+  it('getTrip returns the TripView payload as-is', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'trip-1', version: 3, lifecycle: { stage: 'matching' } }));
+    const view = await getTrip('trip-1');
+    expect(view).toEqual({ id: 'trip-1', version: 3, lifecycle: { stage: 'matching' } });
   });
 
-  it('startTripFromFirstMessage posts to /api/trips/first-message with credentials included', async () => {
+  it('startTripFromFirstMessage posts to first-message and returns the new trip id + version', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
       message: 'Got it.',
       agent_meta: null,
-      trip: { id: 'trip-1', title: 'Untitled Trip', product_mode: 'self_led', version: 1, trip_state: {}, ui_state: {} },
+      recommendation: null,
+      trip: { id: 'trip-1', version: 1, trip_state: {} },
     }));
     const response = await startTripFromFirstMessage({ entryIntent: 'discover', message: 'Suggest mountains' });
     expect(fetchMock).toHaveBeenCalledWith('/api/trips/first-message', expect.objectContaining({
@@ -39,15 +41,14 @@ describe('tripApi', () => {
       method: 'POST',
       body: JSON.stringify({ entry_intent: 'discover', message: 'Suggest mountains' }),
     }));
-    expect(response.trip.id).toBe('trip-1');
-    expect(response.message).toBe('Got it.');
+    expect(response).toMatchObject({ tripId: 'trip-1', version: 1, message: 'Got it.' });
   });
 
-  it('listTrips fetches the list in a single request (trip_state travels with the summary), sorted by updated_at descending', async () => {
+  it('listTrips fetches the list in a single request, sorted by updated_at descending', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
       trips: [
-        { id: 'a', trip_state: {}, updated_at: '2026-01-01T00:00:00.000Z' },
-        { id: 'b', trip_state: {}, updated_at: '2026-06-01T00:00:00.000Z' },
+        { id: 'a', updated_at: '2026-01-01T00:00:00.000Z' },
+        { id: 'b', updated_at: '2026-06-01T00:00:00.000Z' },
       ],
     }));
     const records = await listTrips();
@@ -56,30 +57,24 @@ describe('tripApi', () => {
     expect(records.map(r => r.id)).toEqual(['b', 'a']);
   });
 
-  it('getTrip normalizes the fetched record', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'trip-1', trip_state: {}, ui_state: {} }));
-    const record = await getTrip('trip-1');
-    expect(record.trip_state.stage).toBe('new');
-  });
-
-  it('renameTrip sends expected_version and title via PATCH', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Goa Trip', version: 2, trip_state: {}, ui_state: {} }));
-    const record = await renameTrip('trip-1', 'Goa Trip', 1);
+  it('renameTrip sends expected_version and title via PATCH and returns the fresh view', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'trip-1', title: 'Goa Trip', version: 2 }));
+    const view = await renameTrip('trip-1', 'Goa Trip', 1);
     expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1', expect.objectContaining({
       method: 'PATCH',
       body: JSON.stringify({ expected_version: 1, title: 'Goa Trip' }),
     }));
-    expect(record.title).toBe('Goa Trip');
+    expect(view.title).toBe('Goa Trip');
   });
 
   it('saveUiState PATCHes the ui-state endpoint with expected_version', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'trip-1', version: 2, trip_state: {}, ui_state: { collapsed: true } }));
-    const record = await saveUiState('trip-1', { collapsed: true }, 1);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'trip-1', version: 2, ui_state: { collapsed: true } }));
+    const view = await saveUiState('trip-1', { collapsed: true }, 1);
     expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/ui-state', expect.objectContaining({
       method: 'PATCH',
       body: JSON.stringify({ expected_version: 1, ui_state: { collapsed: true } }),
     }));
-    expect(record.ui_state).toEqual({ collapsed: true });
+    expect(view.ui_state).toEqual({ collapsed: true });
   });
 
   it('throws a TripApiError with status and message on a non-ok response', async () => {
@@ -100,9 +95,7 @@ describe('tripApi', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
       order.push('first');
     });
-    const second = queueTripMutation('trip-1', async () => {
-      order.push('second');
-    });
+    const second = queueTripMutation('trip-1', async () => { order.push('second'); });
     await Promise.all([first, second]);
     expect(order).toEqual(['first', 'second']);
   });
@@ -114,56 +107,42 @@ describe('tripApi', () => {
     await expect(second).resolves.toBe('ok');
   });
 
-  // TWM-132: the two new TWM-130/131 trusted-action endpoints.
-  it('resolveTrustedAction POSTs the request payload to /trips/{id}/trusted-action', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'resolved', generated_at: '2026-01-01T00:00:00.000Z', action: { action_type: 'SEARCH_REDIRECT', domain: 'flight', target: { partner: 'ixigo', path: 'search', query_params: {}, target_url: 'https://www.ixigo.com/search' }, internal_capability: null, affiliate_disclosure: true, generated_at: '2026-01-01T00:00:00.000Z' } }));
+  it('resolveTrustedAction POSTs the request payload', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'resolved', generated_at: 't', action: { action_type: 'SEARCH_REDIRECT', domain: 'flight', target: { partner: 'ixigo', target_url: 'https://www.ixigo.com/search' }, affiliate_disclosure: true } }));
     const payload = { action_type: 'SEARCH_REDIRECT', domain: 'flight', origin: 'Delhi', destination: 'Goa' };
     const result = await resolveTrustedAction('trip-1', payload);
-    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/trusted-action', expect.objectContaining({
-      method: 'POST', body: JSON.stringify(payload),
-    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/trusted-action', expect.objectContaining({ method: 'POST', body: JSON.stringify(payload) }));
     expect(result.status).toBe('resolved');
-    expect(result.action.target.target_url).toBe('https://www.ixigo.com/search');
   });
 
-  it('resolveTrustedAction surfaces a missing_input result without throwing', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'missing_input', generated_at: '2026-01-01T00:00:00.000Z', missing_input: { missing_fields: ['origin'], message: 'Tell us the missing details.' } }));
-    const result = await resolveTrustedAction('trip-1', { action_type: 'SEARCH_REDIRECT', domain: 'train' });
-    expect(result).toMatchObject({ status: 'missing_input' });
+  // TWM-220: the batch drawer endpoint.
+  it('resolveBookingOptions POSTs the batch payload to /booking-options', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ results: [
+      { target: { kind: 'mode', value: 'flight' }, status: 'resolved', generated_at: 't', action: { action_type: 'SEARCH_REDIRECT', domain: 'flight', target: { partner: 'aviasales', target_url: 'https://x' }, affiliate_disclosure: true } },
+      { target: { kind: 'mode', value: 'train' }, status: 'missing_input', generated_at: 't', missing_input: { missing_fields: ['origin'], message: 'x' } },
+    ] }));
+    const payload = { domain: 'transport', from_city: 'Delhi', to_city: 'Goa', party: { adults: 2, children: 0, infants: 0 }, targets: [{ kind: 'mode', value: 'flight' }, { kind: 'mode', value: 'train' }] };
+    const result = await resolveBookingOptions('trip-1', payload);
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/booking-options', expect.objectContaining({ method: 'POST', body: JSON.stringify(payload) }));
+    expect(result.results.map(r => r.status)).toEqual(['resolved', 'missing_input']);
   });
 
-  it('getTripFeasibility POSTs origin/destination to the feasibility endpoint', async () => {
+  it('getTripFeasibility POSTs origin/destination', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ modes: [{ mode: 'flight', status: 'feasible', duration_source: 'computed', reason: 'x' }] }));
     const result = await getTripFeasibility('trip-1', { origin: 'Delhi', destination: 'Goa' });
-    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/trusted-action/feasibility', expect.objectContaining({
-      method: 'POST', body: JSON.stringify({ origin: 'Delhi', destination: 'Goa' }),
-    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/trusted-action/feasibility', expect.objectContaining({ method: 'POST', body: JSON.stringify({ origin: 'Delhi', destination: 'Goa' }) }));
     expect(result.modes[0].mode).toBe('flight');
   });
 
-  it('getTripFeasibility can resolve null when the Backend has no assessment yet', async () => {
+  it('getTripFeasibility can resolve null', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(null));
-    const result = await getTripFeasibility('trip-1', { origin: 'Delhi', destination: 'Goa' });
-    expect(result).toBeNull();
+    expect(await getTripFeasibility('trip-1', { origin: 'Delhi', destination: 'Goa' })).toBeNull();
   });
 
-  // TWM-146: POST /trips/{id}/flight-search — mirrors resolveTrustedAction/
-  // getTripFeasibility's existing style.
-  it('searchFlights POSTs the payload to /trips/{id}/flight-search', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'clarification_needed', queried_at: '2026-01-01T00:00:00.000Z', clarification: { missing_fields: ['departure_date'], message: 'Tell us your dates.' } }));
-    const payload = { departure_date: '2026-03-01', travelers: { adults: 2 } };
-    const result = await searchFlights('trip-1', payload);
-    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/flight-search', expect.objectContaining({
-      method: 'POST', body: JSON.stringify(payload),
-    }));
+  it('searchFlights POSTs the payload to /flight-search', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'clarification_needed', clarification: { missing_fields: ['departure_date'], message: 'x' } }));
+    const result = await searchFlights('trip-1', { departure_date: '2026-03-01' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/flight-search', expect.objectContaining({ method: 'POST', body: JSON.stringify({ departure_date: '2026-03-01' }) }));
     expect(result.status).toBe('clarification_needed');
-  });
-
-  it('searchFlights surfaces an offer response with offers untouched', async () => {
-    const offer = { origin_iata: 'DEL', destination_iata: 'GOI', trip_type: 'one_way', departure_date: '2026-03-01', money: { currency: 'INR', per_traveler_amount_minor_units: 500000, traveler_count: 1, group_total_minor_units: 500000, group_total_is_approximate: true }, baggage: {}, fare_conditions: {}, provenance: { provider_name: 'aviasales', provider_reference: 'x' }, price_found_at: '2026-01-01T00:00:00.000Z', is_recommended: true };
-    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'offer', queried_at: '2026-01-01T00:00:00.000Z', offers: [offer] }));
-    const result = await searchFlights('trip-1', {});
-    expect(result.offers).toHaveLength(1);
-    expect(result.offers[0].is_recommended).toBe(true);
   });
 });
