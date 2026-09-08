@@ -235,13 +235,13 @@ describe('TripContext trip record (TWM-220 TripView shape)', () => {
     expect(result.current.commandSnapshot.title).toBe('Goa Getaway');
   });
 
-  it('does not persist mock trip content to the Backend or localStorage', async () => {
+  // TWM-219: the legacy in-memory mock trip-state is gone.
+  it('exposes no `trip` / `updateTrip` and touches no localStorage on boot', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [listItem('trip-1')] }));
     const { result } = renderHook(() => useTrip(), { wrapper });
     await waitFor(() => expect(result.current.tripLoadStatus).toBe('ready'));
-    act(() => result.current.updateTrip({ destination: { type: 'single', name: 'Coorg', places: null } }));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(result.current.trip.destination).toEqual({ type: 'single', name: 'Coorg', places: null });
+    expect(result.current.trip).toBeUndefined();
+    expect(result.current.updateTrip).toBeUndefined();
     expect(localStorage.length).toBe(0);
   });
 });

@@ -12,33 +12,6 @@ import { TRIP_ID_PARAM } from '../lib/tripUrl.js';
 
 const TripContext = createContext(null);
 
-// Mock trip content only (destination, places, days, plan...) — this is not
-// canonical TripState. It has no Backend home yet, so it lives only in
-// memory for this session — canonical trip state is Backend-owned and
-// composed into the `TripView` that `currentTrip` below holds.
-const DEFAULT_TRIP = {
-  destination: null,
-  origin: '',
-  budget: 'flexible',
-  style: '',
-  travelers: 2,
-  month: 'flexible',
-  tripLength: 3,
-  places: [],
-  days: [],
-  guidePlan: null,
-  guideSnapshot: null,
-  atlasState: null,
-  tripType: 'round',
-  departDate: '',
-  returnDate: '',
-  travelMode: null,
-  hotel: null,
-  bookingUploaded: false,
-  plan: 'self-led',
-  paid: false,
-};
-
 // Guest-first (TWM-140): every visitor starts as an anonymous guest with a
 // working session; login is an explicit upgrade, never a precondition.
 const DEFAULT_AUTH = { loggedIn: false, isGuest: true, name: 'Guest', email: '' };
@@ -51,7 +24,6 @@ export function TripProvider({ children }) {
   const location = useLocation();
   const bootUrlTripIdRef = useRef(new URLSearchParams(location.search).get(TRIP_ID_PARAM));
 
-  const [trip, setTrip] = useState(DEFAULT_TRIP);
   const [auth, setAuth] = useState(DEFAULT_AUTH);
   // TWM-220: `currentTrip` is the composed `TripView` (from GET /trips/{id})
   // once a page has opened one, or the thin `TripListItem` from the boot
@@ -293,13 +265,10 @@ export function TripProvider({ children }) {
     });
   }
 
-  function updateTrip(patch) {
-    setTrip(prev => ({ ...prev, ...patch }));
-  }
-
+  // Clears the "current trip" pointer so the next first message starts a
+  // genuinely new Backend journey. TWM-219: no local mock content to reset.
   function startNewTrip() {
     setCurrent(null, { full: false });
-    setTrip(DEFAULT_TRIP);
   }
 
   async function signup(email, password) {
@@ -345,7 +314,7 @@ export function TripProvider({ children }) {
 
   return (
     <TripContext.Provider value={{
-      trip, updateTrip, startNewTrip, auth, hasAccess, signup, login, continueWithoutLogin, logout, setContact,
+      startNewTrip, auth, hasAccess, signup, login, continueWithoutLogin, logout, setContact,
       setAuthDirect,
       loginModalOpen, openLoginModal, closeLoginModal,
       claimNotice, dismissClaimNotice,

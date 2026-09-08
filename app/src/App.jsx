@@ -1,16 +1,27 @@
-import { useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import LoginModal, { LoginRouteRedirect } from './components/LoginModal.jsx';
 import ClaimConfirmation from './components/ClaimConfirmation.jsx';
-import ScoutChat from './pages/ScoutChat.jsx';
-import Destinations from './pages/Destinations.jsx';
-import TripPreview from './pages/TripPreview.jsx';
-import RequestQuote from './pages/RequestQuote.jsx';
-import Support from './pages/Support.jsx';
 import DashboardHome from './pages/DashboardHome.jsx';
-import TripDashboard from './pages/TripDashboard.jsx';
 import { trackEvent } from './lib/analytics.js';
+
+// TWM-219: DashboardHome (the `/` + `/my-trips` landing) stays eager — every
+// visitor lands there first. Every other route is its own lazy chunk.
+const ScoutChat = lazy(() => import('./pages/ScoutChat.jsx'));
+const Destinations = lazy(() => import('./pages/Destinations.jsx'));
+const TripPreview = lazy(() => import('./pages/TripPreview.jsx'));
+const RequestQuote = lazy(() => import('./pages/RequestQuote.jsx'));
+const Support = lazy(() => import('./pages/Support.jsx'));
+const TripDashboard = lazy(() => import('./pages/TripDashboard.jsx'));
+
+function RouteFallback() {
+  return (
+    <div className="think" role="status" aria-label="Loading">
+      <span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span>
+    </div>
+  );
+}
 
 export default function App() {
   const location = useLocation();
@@ -31,26 +42,25 @@ export default function App() {
       <Header />
       <LoginModal />
       <ClaimConfirmation />
-      <Routes>
-        <Route path="/login" element={<LoginRouteRedirect />} />
-        <Route path="/" element={<DashboardHome />} />
-        <Route path="/scout-chat" element={<ScoutChat />} />
-        {/* TWM-190 (regression fix): /journey-entry is ScoutChat.jsx itself
-            now, not a second chat implementation — it's the single
-            conversational surface for both a live entry and a resume.
-            Keyed by search: switching intent (Plan a Trip <-> Discover
-            Destination) while already on this route must fully remount —
-            ScoutChat's message history and entry-guard refs are only reset
-            on mount, so without a key change React Router keeps the same
-            instance and the screen silently shows stale intent state. */}
-        <Route path="/journey-entry" element={<ScoutChat key={location.search} />} />
-        <Route path="/destinations" element={<Destinations />} />
-        <Route path="/trip-preview" element={<TripPreview />} />
-        <Route path="/request-quote" element={<RequestQuote />} />
-        <Route path="/support" element={<Support />} />
-        <Route path="/dashboard" element={<TripDashboard />} />
-        <Route path="/my-trips" element={<DashboardHome />} />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/login" element={<LoginRouteRedirect />} />
+          <Route path="/" element={<DashboardHome />} />
+          <Route path="/scout-chat" element={<ScoutChat />} />
+          {/* TWM-190: /journey-entry is ScoutChat.jsx itself — the single
+              conversational surface for both a live entry and a resume.
+              Keyed by search so switching intent (Plan a Trip <-> Discover
+              Destination) fully remounts (ScoutChat's message history and
+              entry-guard refs only reset on mount). */}
+          <Route path="/journey-entry" element={<ScoutChat key={location.search} />} />
+          <Route path="/destinations" element={<Destinations />} />
+          <Route path="/trip-preview" element={<TripPreview />} />
+          <Route path="/request-quote" element={<RequestQuote />} />
+          <Route path="/support" element={<Support />} />
+          <Route path="/dashboard" element={<TripDashboard />} />
+          <Route path="/my-trips" element={<DashboardHome />} />
+        </Routes>
+      </Suspense>
     </div>
   );
 }

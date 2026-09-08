@@ -8,6 +8,21 @@ export default defineConfig(({ command }) => ({
   // Only the production build is served from /app/dist via the Vercel rewrite;
   // the dev server serves from its own root, so base must stay default there.
   base: command === 'build' ? '/app/dist/' : '/',
+  build: {
+    rollupOptions: {
+      output: {
+        // TWM-219: a stable vendor chunk so the framework code is cached
+        // across app deploys. Route code lands in its own lazy chunk (see
+        // App.jsx's React.lazy imports). rolldown (Vite 8) wants the
+        // function form of manualChunks.
+        manualChunks(id) {
+          if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) {
+            return 'vendor';
+          }
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: './tests/setup.js',

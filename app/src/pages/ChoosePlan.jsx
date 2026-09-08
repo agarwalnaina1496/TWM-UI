@@ -1,13 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout.jsx';
-import { useTrip } from '../context/TripContext.jsx';
 import '../styles/choose-plan.css';
 
+// TWM-Led is not available yet, so Self-Led is the only real choice. TWM-219:
+// no local plan/atlas mock to write — the pick just proceeds to the Dashboard.
 export default function ChoosePlan() {
   const navigate = useNavigate();
-  const { trip, updateTrip } = useTrip();
   function chooseSelfLed() {
-    updateTrip({ plan: 'self-led', atlasState: { ...trip.atlasState, mode: 'self-led' } });
     navigate('/dashboard');
   }
   return (

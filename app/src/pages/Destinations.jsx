@@ -314,7 +314,7 @@ function CheckpointOverlay({ knownFacts, message, value, onChange, onSubmit, bus
 
 export default function Destinations() {
   const navigate = useNavigate();
-  const { updateTrip, commandSnapshot, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState, openTrip } = useTrip();
+  const { commandSnapshot, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState, openTrip } = useTrip();
   // TWM-185: reload/bookmark/deep-link safe — a full fetch, since this page
   // triggers matching/reads matcher_state to decide what to do next.
   useTripFromUrl(openTrip);
@@ -516,9 +516,6 @@ export default function Destinations() {
     try {
       await sendTripCommand('select_destination', { optionId: option.key });
       trackEvent('destination_selected', { selection_source: 'plan_this_trip' });
-      // Display-only field read by Itinerary/Logistics/RequestQuote; TWM-106
-      // moved the Plan Builder itself onto Backend-persisted trip_context.
-      updateTrip({ destination: { type: option.type, name: option.name } });
       const response = await sendTripCommand('start_planning');
       proceedFromGuideResponse(response);
     } catch (commandError) {
