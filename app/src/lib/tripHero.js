@@ -1,74 +1,50 @@
-// TWM-172: Home's hero-selection + discover-only classification.
-//
-// There is no structured start/end date anywhere in the data DashboardHome
-// has access to — the trip-list summary (`TravelWithMe/twm/schemas/trips.py`
-// TripSummary) only exposes `itinerary_state.status` (a bare string) and a
-// handful of free-text `trip_context` fields (`month`, `travel_window`,
-// `dates`) that Scout extracts verbatim and are explicitly not a guaranteed
-// schema (see TWM_Docs/TRIP_STATE.md). Per product decision, this is a
-// deliberate best-effort heuristic against `trip_context.month` (the most
-// structured of the three) — not a fabricated exact date. A trip whose month
-// can't be parsed simply doesn't compete for the hero position; it still
-// appears in the regular list.
+// DashboardHome's hero-selection + discover-only classification (TWM-172).
+// TWM-220: the month heuristic that used to parse `trip_context` free text
+// client-side is gone — a list item now carries a server-composed
+// `travel_window` ({ precision, departure?, month? } or null), the
+// structured half of `TripView.summary.dates`.
 
-const MONTH_NAMES = [
-  'january', 'february', 'march', 'april', 'may', 'june',
-  'july', 'august', 'september', 'october', 'november', 'december',
-];
+const DISCOVER_ONLY_STAGES = new Set(['matching', 'recommended']);
 
-// Best-effort: finds the first recognizable month name inside trip_context's
-// free-text fields, in order of how likely each is to actually name a month.
-// Returns the first day of the nearest future (or current) occurrence of
-// that month — if the named month has already passed this year, it's
-// assumed to mean next year, since travelers don't plan trips into the past.
-export function parseTripMonthDate(tripContext, now = new Date()) {
-  const candidates = [tripContext?.month, tripContext?.travel_window, tripContext?.dates];
-  const text = candidates.find(value => typeof value === 'string' && value.trim());
-  if (!text) return null;
-  const lower = text.toLowerCase();
-  const monthIndex = MONTH_NAMES.findIndex(name => lower.includes(name));
-  if (monthIndex === -1) return null;
+// A trip "counts" for hero ranking (and the regular committed list) only
+// once a destination has been chosen — stage 'matched' and beyond. Earlier
+// stages are browsing-only and belong in the explore rail.
+export function isDiscoverOnly(trip) {
+  const stage = trip?.lifecycle?.stage ?? 'new';
+  const hasContext = (trip?.context_recap?.length || 0) > 0;
+  if (stage === 'new') return hasContext;
+  return DISCOVER_ONLY_STAGES.has(stage);
+}
 
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
-  const year = monthIndex < currentMonth ? currentYear + 1 : currentYear;
-  return new Date(year, monthIndex, 1);
+// First day of the trip's travel window, from the composed `travel_window`.
+// `null` when nothing confidently interpretable was said — such a trip
+// never competes for the hero slot but still appears in the regular list.
+function travelWindowDate(trip) {
+  const window = trip?.travel_window;
+  if (!window) return null;
+  if (window.precision === 'exact' && window.departure) return new Date(`${window.departure}T00:00:00`);
+  if (window.precision === 'month' && window.month) {
+    const [year, month] = window.month.split('-').map(Number);
+    if (year && month) return new Date(year, month - 1, 1);
+  }
+  return null;
 }
 
 function isSameMonth(date, now) {
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
 }
 
-const DISCOVER_ONLY_STAGES = new Set(['matching', 'recommended']);
-
-// A trip "counts" for hero ranking (and the regular committed list) only
-// once a destination has actually been chosen — stage 'matched' and beyond
-// (the stage name itself means a destination was picked, same semantics
-// stageBadge/stageCta already use for "Destination chosen"). Earlier stages
-// (a fresh chat with some context, still matching, or still browsing
-// recommendations) are browsing-only and belong in the explore rail.
-// Deliberately stage-based, not trip_state.selected_option presence — that
-// field isn't reliably populated across every path that reaches these
-// stages, where stage-based classification is.
-export function isDiscoverOnly(tripState) {
-  const stage = tripState?.stage ?? 'new';
-  const hasContext = !!(tripState?.trip_context && Object.keys(tripState.trip_context).length > 0);
-  if (stage === 'new') return hasContext;
-  return DISCOVER_ONLY_STAGES.has(stage);
-}
-
-// Ranks committed, non-completed trips: a trip whose parsed month is the
-// current month wins outright (treated as "ongoing"); otherwise the nearest
-// future month wins; a trip with no parseable month never wins the hero
-// position. Returns null when nothing qualifies — the hero section must be
-// absent entirely in that case, never a placeholder.
+// Ranks committed, non-completed trips: one whose window is the current
+// month wins outright ("ongoing"); otherwise the nearest future month wins;
+// a trip with no parseable window never wins. Returns null when nothing
+// qualifies — the hero section is then absent entirely, never a placeholder.
 export function selectHeroTrip(trips, now = new Date()) {
   let ongoing = null;
   let nearestUpcoming = null;
   let nearestUpcomingDate = null;
 
   for (const t of trips) {
-    const parsed = parseTripMonthDate(t.trip_state?.trip_context, now);
+    const parsed = travelWindowDate(t);
     if (!parsed) continue;
     if (isSameMonth(parsed, now)) {
       if (!ongoing) ongoing = t;

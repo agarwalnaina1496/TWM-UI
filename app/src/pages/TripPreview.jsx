@@ -62,13 +62,12 @@ export default function TripPreview() {
   // real planner_state and must never act on a possibly-thin cached record.
   const urlTripId = useTripFromUrl(openTrip);
 
-  const tripState = commandSnapshot?.trip_state;
-  const tripContext = tripState?.trip_context;
-  const plannerState = tripState?.planner_state;
-  const frozenPlan = plannerState?.frozen_plan;
-  const awaiting = plannerState?.conversation_context?.awaiting;
-  const places = plannerState?.places || [];
-  const dayPlan = plannerState?.day_plan || [];
+  const view = commandSnapshot;
+  const plan = view?.plan;
+  const frozenPlan = plan?.frozen;
+  const awaiting = plan?.awaiting;
+  const places = plan?.places || [];
+  const dayPlan = plan?.day_plan || [];
   // day_plan is only ever produced alongside places in the same single-step
   // turn, so its presence alone signals a generated plan — a subsequent
   // edit can legitimately empty out places within a day without un-generating
@@ -97,7 +96,7 @@ export default function TripPreview() {
   const trackedPlanBuilderView = useRef(false);
   // Best-effort distinction for planning_entry — a selected recommendation
   // means Discover led here; otherwise it's a known-destination entry.
-  const planningEntry = tripState?.selected_option ? 'discovered_destination' : 'known_destination';
+  const planningEntry = view?.lifecycle?.selected_option ? 'discovered_destination' : 'known_destination';
 
   // Already frozen (e.g. the traveler navigated back after approving) — Guide
   // never reruns, so skip straight to the dashboard. TripDashboard.jsx owns
@@ -114,10 +113,10 @@ export default function TripPreview() {
   // Gated on a URL tripId so a genuinely fresh, not-yet-created trip
   // reached without one is unaffected.
   useEffect(() => {
-    if (!urlTripId || tripLoadStatus !== 'ready' || !isTripEmpty(tripState)) return;
+    if (!urlTripId || tripLoadStatus !== 'ready' || !isTripEmpty(view)) return;
     navigate('/', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlTripId, tripLoadStatus, tripState, navigate]);
+  }, [urlTripId, tripLoadStatus, view, navigate]);
 
   // Bootstraps the real Guide session for the discover path (the
   // known-destination path already starts Guide from JourneyEntry's chat
@@ -129,12 +128,12 @@ export default function TripPreview() {
     if (tripLoadStatus !== 'ready') return;
     // TWM-188: when the guard above is about to redirect this exact trip
     // home, don't also boot Guide against it in the same commit.
-    if (frozenPlan || bootStarted.current || (urlTripId && isTripEmpty(tripState))) return;
-    if (plannerState && dayPlan.length > 0) {
+    if (frozenPlan || bootStarted.current || (urlTripId && isTripEmpty(view))) return;
+    if (plan && dayPlan.length > 0) {
       setBootStatus('ready');
       return;
     }
-    if (plannerState && (places.length || awaiting)) {
+    if (plan && (places.length || awaiting)) {
       // TWM-190: Guide already owns this trip but hasn't produced a
       // day_plan yet — that gating conversation lives on ScoutChat now,
       // not this page's retired inline chat branch.
@@ -146,8 +145,8 @@ export default function TripPreview() {
     (async () => {
       try {
         const response = await sendTripCommand('start_planning');
-        const nextPlannerState = response.trip?.trip_state?.planner_state;
-        if (!nextPlannerState?.day_plan?.length) {
+        const nextPlan = response.trip?.plan;
+        if (!nextPlan?.day_plan?.length) {
           // Guide asked a gating question instead of generating the plan on
           // this turn — hand off to ScoutChat rather than rendering a
           // second, retired chat implementation here.
@@ -212,8 +211,8 @@ export default function TripPreview() {
     trackEvent('reopen_destination_discovery_triggered', { source: 'plan_builder_reversal' });
     try {
       const response = await sendTripCommand('traveler_message', { message: REOPEN_DESTINATION_MESSAGE });
-      const nextState = response.trip?.trip_state;
-      const awaiting = nextState?.planner_state?.conversation_context?.awaiting;
+      const nextView = response.trip;
+      const awaiting = nextView?.plan?.awaiting;
       // TWM-188 item 3: a trip with an existing recommendation list gets a
       // choice prompt instead of an immediate reversal — stage/active_agent
       // don't change yet, so route on `awaiting`, not on stage.
@@ -225,7 +224,7 @@ export default function TripPreview() {
       // No prior recommendations existed — the reversal already happened in
       // this same command. Navigate off the stage actually returned rather
       // than assuming /destinations for every reversal (matching -> /scout-chat).
-      if (nextState?.stage === 'matching') {
+      if (nextView?.lifecycle?.stage === 'matching') {
         navigate(withTripId('/scout-chat', response.trip?.id ?? commandSnapshot?.id));
         return;
       }
@@ -248,8 +247,8 @@ export default function TripPreview() {
     else setPending(true);
     try {
       const response = await sendTripCommand(command);
-      const nextState = response.trip?.trip_state;
-      const destination = nextState?.stage === 'recommended' ? '/destinations' : '/scout-chat';
+      const nextView = response.trip;
+      const destination = nextView?.lifecycle?.stage === 'recommended' ? '/destinations' : '/scout-chat';
       navigate(withTripId(destination, response.trip?.id ?? commandSnapshot?.id));
     } catch (error) {
       setReversalError(error.message || 'Could not reconsider the destination.');
@@ -279,7 +278,7 @@ export default function TripPreview() {
     );
   }
 
-  if (bootStatus !== 'ready' || !plannerState) {
+  if (bootStatus !== 'ready' || !plan) {
     return (
       <main className="wrap plan-builder">
         <BackToTrip />
@@ -292,17 +291,17 @@ export default function TripPreview() {
   // day_plan (see the boot effect above and its upstream callers in
   // Destinations.jsx/ScoutChat.jsx/JourneyEntry.jsx) — the still-gating
   // case now redirects to ScoutChat instead of rendering here.
-  const summary = planBuilderSummary(tripContext, plannerState);
+  const summary = planBuilderSummary(view);
 
   return (
     <main className="wrap plan-builder">
       <BackToTrip />
       <span className="eyebrow">Guide Plan Builder</span>
-      <h1>{summary.destinations.join(', ') || 'Your trip'} <em>| {summary.durationDays} days</em></h1>
+      <h1>{summary.destinationLabel || 'Your trip'} <em>| {summary.durationDays} days</em></h1>
       <p className="lede">Shape the places and day pace together. Dates can stay open until you book.</p>
 
       <section className="plan-summary" aria-label="Plan summary">
-        <div><strong>{summary.destinations.length}</strong><span>destinations</span></div>
+        <div><strong>{summary.destinationCount}</strong><span>destinations</span></div>
         <div><strong>{summary.placeCount}</strong><span>planned places</span></div>
         <div><strong>{summary.durationDays}</strong><span>days</span></div>
       </section>

@@ -20,14 +20,19 @@ vi.mock('react-router-dom', async () => ({
   useSearchParams: () => [searchParams],
 }));
 
-function readyPlannerState() {
+// TWM-220: commandSnapshot is a `TripView`.
+function recap(entries) {
+  return Object.entries(entries).map(([key, value]) => ({ key, label: key, value }));
+}
+function view({ stage = 'new', activeAgent = null, context = {}, plan = null, matcher = {} } = {}) {
   return {
-    conversation_context: { awaiting: null },
-    places: ['Abbey Falls'],
-    day_plan: [{ day_number: 1, date: null, places: ['Abbey Falls'], pace: 'relaxed', buffer_note: null }],
-    revision: 3,
+    id: 'trip-1',
+    lifecycle: { stage, status: 'free', active_agent: activeAgent, selected_option: null },
+    context_recap: recap(context), plan,
+    matcher: { last_message: null, awaiting: null, has_recommendation: false, ...matcher },
   };
 }
+const readyPlan = () => ({ places: ['Abbey Falls'], day_plan: [{ day_number: 1, places: ['Abbey Falls'], pace: 'relaxed', buffer_note: null }], frozen: false, awaiting: null });
 
 describe('ScoutChat advice-entry chat', () => {
   beforeEach(() => {
@@ -38,85 +43,61 @@ describe('ScoutChat advice-entry chat', () => {
     searchParams = new URLSearchParams();
   });
 
-  // TWM-185: a hard reload/bookmark on /scout-chat?tripId=... must resolve
-  // that trip via a full fetch — commandSnapshot starts null, just like a
-  // real reload with no prior openTrip call this session.
-  it('resolves the trip named by ?tripId= via openTrip when landing fresh', async () => {
+  it('resolves the trip named by ?tripId= via openTrip when landing fresh', () => {
     searchParams = new URLSearchParams('tripId=trip-1');
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(openTrip).toHaveBeenCalledWith('trip-1');
   });
 
-  // TWM-188: a deep-link/stale-tab to a trip with no trip_context yet is an
-  // orphan, not a real trip — must bounce home instead of showing the
-  // cold-open greeting for it.
-  it('redirects home when the URL trip resolves to an empty (no trip_context) trip', async () => {
+  it('redirects home when the URL trip resolves to an empty trip', () => {
     searchParams = new URLSearchParams('tripId=trip-1');
-    commandSnapshot = { trip_state: { stage: 'new', trip_context: {} } };
+    commandSnapshot = view({});
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(navigate).toHaveBeenCalledWith('/', { replace: true });
   });
 
-  it('does not redirect a fresh trip reached with no URL tripId, even if empty (the normal cold-open path)', () => {
-    commandSnapshot = { trip_state: { stage: 'new', trip_context: {} } };
+  it('does not redirect a fresh trip reached with no URL tripId', () => {
+    commandSnapshot = view({});
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(navigate).not.toHaveBeenCalledWith('/', { replace: true });
   });
 
-  it('routes to the unified Plan Builder once a Guide-owned turn generates a complete plan, without throwing', async () => {
-    commandSnapshot = { trip_state: { active_agent: 'guide', planner_state: { conversation_context: { awaiting: 'anything_else' }, places: [], day_plan: [] } } };
-    sendTripCommand = vi.fn(async () => ({
-      message: 'Here is your plan.',
-      trip: { trip_state: { active_agent: 'guide', planner_state: readyPlannerState() } },
-    }));
+  it('routes to the unified Plan Builder once a Guide turn generates a complete plan', async () => {
+    commandSnapshot = view({ activeAgent: 'guide', plan: { places: [], day_plan: [], frozen: false, awaiting: 'anything_else' } });
+    sendTripCommand = vi.fn(async () => ({ message: 'Here is your plan.', trip: view({ activeAgent: 'guide', plan: readyPlan() }) }));
     const user = userEvent.setup();
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-    const input = screen.getByPlaceholderText('Ask Scout a travel question…');
-    await user.type(input, "That's everything{Enter}");
-    expect(navigate).toHaveBeenCalledWith('/trip-preview', { state: { guideMessage: 'Here is your plan.' } });
+    await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), "That's everything{Enter}");
+    expect(navigate).toHaveBeenCalledWith(expect.stringContaining('/trip-preview'), { state: { guideMessage: 'Here is your plan.' } });
   });
 
-  // The scout_entry command (a typed "first turn, let Scout decide the
-  // agent" signal) has been removed entirely — it had no live caller, since
-  // every fresh entry already arrives here with ownership pre-decided by
-  // this page's own entry_intent (discover/known_destination), sent only on
-  // a trip's genuine first send. Every send once a trip exists is a plain
-  // traveler_message, regardless of active_agent.
   it.each(['meridian', 'guide', 'scout'])(
     'always sends traveler_message, regardless of active_agent (%s)',
     async agent => {
-      commandSnapshot = { trip_state: { active_agent: agent, trip_context: { origin: 'Delhi' } } };
-      sendTripCommand = vi.fn(async () => ({
-        message: 'Got it.',
-        trip: { trip_state: { active_agent: agent, planner_state: null } },
-      }));
+      commandSnapshot = view({ activeAgent: agent, context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn(async () => ({ message: 'Got it.', trip: view({ activeAgent: agent }) }));
       const user = userEvent.setup();
       render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-      const input = screen.getByPlaceholderText('Ask Scout a travel question…');
-      await user.type(input, 'Actually, change of plans{Enter}');
-      expect(sendTripCommand).toHaveBeenCalledWith(
-        'traveler_message',
-        expect.objectContaining({ message: 'Actually, change of plans' })
-      );
+      await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), 'Change of plans{Enter}');
+      expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', expect.objectContaining({ message: 'Change of plans' }));
     }
   );
 
-  it('shows the assistant reply in chat when Guide has not yet completed the plan', async () => {
-    commandSnapshot = { trip_state: { active_agent: 'guide', planner_state: { conversation_context: { awaiting: 'budget' }, places: [], day_plan: [] } } };
+  it('shows the assistant reply in chat when Guide has not completed the plan', async () => {
+    commandSnapshot = view({ activeAgent: 'guide', plan: { places: [], day_plan: [], frozen: false, awaiting: 'budget' } });
     sendTripCommand = vi.fn(async () => ({
       message: 'And roughly what budget?',
-      trip: { trip_state: { active_agent: 'guide', planner_state: { conversation_context: { awaiting: 'budget' }, places: [], day_plan: [] } } },
+      trip: view({ activeAgent: 'guide', plan: { places: [], day_plan: [], frozen: false, awaiting: 'budget' } }),
     }));
     const user = userEvent.setup();
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-    const input = screen.getByPlaceholderText('Ask Scout a travel question…');
-    await user.type(input, 'Plan a Coorg trip{Enter}');
+    await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), 'Plan a Coorg trip{Enter}');
     expect(await screen.findByText('And roughly what budget?')).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalled();
   });
 });
 
-describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
+describe('ScoutChat refresh recap and hand-off note', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     commandSnapshot = null;
@@ -126,13 +107,13 @@ describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
   });
 
   it('shows the cold-open greeting for a trip with no saved context yet', () => {
-    commandSnapshot = { trip_state: {} };
+    commandSnapshot = view({});
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.getByText(/Hey there! I'm Scout/)).toBeInTheDocument();
   });
 
-  it('shows a recap turn instead of the cold-open greeting once real trip_context is already saved', () => {
-    commandSnapshot = { trip_state: { trip_context: { origin_city: 'Delhi', num_travelers: 2 } } };
+  it('shows a recap turn instead of the cold-open once real context is saved', () => {
+    commandSnapshot = view({ context: { origin_city: 'Delhi', num_travelers: '2 people' } });
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.queryByText(/Hey there! I'm Scout/)).not.toBeInTheDocument();
     expect(screen.getByText(/Picking up where you left off/)).toBeInTheDocument();
@@ -141,30 +122,26 @@ describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
 
   it('waits for the trip to finish loading before deciding which greeting to show', () => {
     tripLoadStatus = 'loading';
-    commandSnapshot = { trip_state: { trip_context: { origin_city: 'Delhi' } } };
+    commandSnapshot = view({ context: { origin_city: 'Delhi' } });
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.queryByText(/Hey there! I'm Scout/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Picking up where you left off/)).not.toBeInTheDocument();
   });
 
-  it('shows the live facts panel for known trip_context fields', () => {
-    commandSnapshot = { trip_state: { trip_context: { origin_city: 'Delhi', num_travelers: 2 } } };
+  it('shows the live facts panel for known context fields', () => {
+    commandSnapshot = view({ context: { origin_city: 'Delhi', num_travelers: '2 people' } });
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.getByLabelText('What we know so far')).toBeInTheDocument();
     expect(screen.getByText('Delhi')).toBeInTheDocument();
   });
 
-  it('shows the hand-off note exactly once, on the real scout -> meridian transition', async () => {
-    commandSnapshot = { trip_state: { active_agent: 'scout', trip_context: { origin_city: 'Delhi' } } };
-    sendTripCommand = vi.fn(async () => ({
-      message: 'Here are some matches.',
-      trip: { trip_state: { active_agent: 'meridian', planner_state: null } },
-    }));
+  it('shows the hand-off note once, on the real scout -> meridian transition', async () => {
+    commandSnapshot = view({ activeAgent: 'scout', context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn();
     const { rerender } = render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.queryByText(/Bringing in Meridian/)).not.toBeInTheDocument();
 
-    // Simulate the trip snapshot updating to meridian ownership after a turn.
-    commandSnapshot = { trip_state: { active_agent: 'meridian', trip_context: { origin_city: 'Delhi' } } };
+    commandSnapshot = view({ activeAgent: 'meridian', context: { origin_city: 'Delhi' } });
     rerender(<MemoryRouter><ScoutChat /></MemoryRouter>);
 
     expect(await screen.findByText(/Bringing in Meridian, who handles destination matching/)).toBeInTheDocument();
@@ -172,38 +149,30 @@ describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
   });
 
   it('shows no hand-off note when a trip loads already owned by meridian', () => {
-    commandSnapshot = { trip_state: { active_agent: 'meridian', trip_context: { origin: 'Delhi' } } };
+    commandSnapshot = view({ activeAgent: 'meridian', context: { origin_city: 'Delhi' } });
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.queryByText(/Bringing in Meridian/)).not.toBeInTheDocument();
   });
 
-  // TWM-190: ScoutChat.jsx is now the single conversational surface for
-  // Guide too — its recap and hand-off note must be agent-aware, not
-  // hardcoded to Meridian's phrasing/data shape.
-  it('shows a Guide-phrased recap turn (not Meridian\'s) when resuming a Guide-owned trip', () => {
-    commandSnapshot = {
-      trip_state: {
-        active_agent: 'guide',
-        trip_context: { destinations: ['Coorg'], origin: 'Delhi' },
-        planner_state: { conversation_context: { awaiting: 'budget' } },
-      },
-    };
+  it('shows a Guide-phrased recap turn when resuming a Guide-owned trip', () => {
+    commandSnapshot = view({
+      activeAgent: 'guide',
+      context: { destinations: 'Coorg', origin_city: 'Delhi' },
+      plan: { places: [], day_plan: [], frozen: false, awaiting: 'budget' },
+    });
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.queryByText(/Hey there! I'm Scout/)).not.toBeInTheDocument();
     expect(screen.getByText(/Picking up where you left off — planning Coorg/)).toBeInTheDocument();
     expect(screen.getByText(/I still need to know about budget/)).toBeInTheDocument();
   });
 
-  it('shows the hand-off note exactly once, on the real scout -> guide transition', async () => {
-    commandSnapshot = { trip_state: { active_agent: 'scout', trip_context: { origin: 'Delhi' } } };
-    sendTripCommand = vi.fn(async () => ({
-      message: 'Let\'s get your plan started.',
-      trip: { trip_state: { active_agent: 'guide', planner_state: { conversation_context: { awaiting: null }, places: [], day_plan: [] } } },
-    }));
+  it('shows the hand-off note once, on the real scout -> guide transition', async () => {
+    commandSnapshot = view({ activeAgent: 'scout', context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn();
     const { rerender } = render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.queryByText(/Bringing in Guide/)).not.toBeInTheDocument();
 
-    commandSnapshot = { trip_state: { active_agent: 'guide', trip_context: { origin: 'Delhi' } } };
+    commandSnapshot = view({ activeAgent: 'guide', context: { origin_city: 'Delhi' } });
     rerender(<MemoryRouter><ScoutChat /></MemoryRouter>);
 
     expect(await screen.findByText(/Bringing in Guide, who builds your day-by-day plan/)).toBeInTheDocument();
@@ -211,7 +180,7 @@ describe('ScoutChat refresh recap and hand-off note (TWM-173)', () => {
   });
 
   it('shows no hand-off note when a trip loads already owned by guide', () => {
-    commandSnapshot = { trip_state: { active_agent: 'guide', trip_context: { origin: 'Delhi' } } };
+    commandSnapshot = view({ activeAgent: 'guide', context: { origin_city: 'Delhi' } });
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.queryByText(/Bringing in Guide/)).not.toBeInTheDocument();
   });

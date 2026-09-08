@@ -105,8 +105,7 @@ export default function ScoutChat() {
         response = await sendTripCommand('traveler_message', { message: text, idempotencyKey });
       }
       entered.current = true;
-      const plannerState = response.trip.trip_state.planner_state;
-      if (planReady(plannerState)) {
+      if (planReady(response.trip.plan)) {
         // Guide generated the complete plan in this turn — go straight to
         // the unified Plan Builder instead of showing the message here,
         // this component unmounts on navigate. Same handoff as JourneyEntry.
@@ -121,10 +120,10 @@ export default function ScoutChat() {
     }
   }
 
-  const activeAgent = commandSnapshot?.trip_state?.active_agent;
-  const stage = commandSnapshot?.trip_state?.stage;
-  const matcherAwaiting = commandSnapshot?.trip_state?.matcher_state?.conversation_context?.awaiting;
-  const guideAwaiting = commandSnapshot?.trip_state?.planner_state?.conversation_context?.awaiting;
+  const activeAgent = commandSnapshot?.lifecycle?.active_agent;
+  const stage = commandSnapshot?.lifecycle?.stage;
+  const matcherAwaiting = commandSnapshot?.matcher?.awaiting;
+  const guideAwaiting = commandSnapshot?.plan?.awaiting;
   const awaiting = activeAgent === 'guide' ? guideAwaiting : matcherAwaiting;
 
   // TWM-173: a refresh must not show the cold-open greeting again once real
@@ -155,8 +154,8 @@ export default function ScoutChat() {
     // last-message field the way Meridian's does, so this is a synthesized
     // recap rather than Guide's own last question echoed back.
     const recap = activeAgent === 'guide'
-      ? buildPlanRecapTurn(commandSnapshot?.trip_state?.trip_context, { awaiting })
-      : buildRecapTurn(commandSnapshot?.trip_state, { awaiting });
+      ? buildPlanRecapTurn(commandSnapshot, { awaiting })
+      : buildRecapTurn(commandSnapshot, { awaiting });
     say('assistant', recap || COLD_OPEN);
     const message = params.get('msg')?.trim();
     if (message) runAdvice(message);
@@ -178,10 +177,10 @@ export default function ScoutChat() {
   // Gated on a URL tripId so a genuinely fresh, not-yet-created trip
   // reached without one (the normal cold-open path) is unaffected.
   useEffect(() => {
-    if (!urlTripId || tripLoadStatus !== 'ready' || !isTripEmpty(commandSnapshot?.trip_state)) return;
+    if (!urlTripId || tripLoadStatus !== 'ready' || !isTripEmpty(commandSnapshot)) return;
     navigate('/', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlTripId, tripLoadStatus, commandSnapshot?.trip_state, navigate]);
+  }, [urlTripId, tripLoadStatus, commandSnapshot, navigate]);
 
   // Hand-off note fires exactly once, only on a real scout->specialist
   // transition — never on initial load of an already-owned trip.
@@ -236,7 +235,7 @@ export default function ScoutChat() {
             ? "Tell Scout what matters to you, and it'll narrow down destinations that fit."
             : 'Scout keeps the nuance in what you say, asks only for material gaps, and hands the trip to the right specialist.'}
       </p>
-      <FactsPanel tripContext={commandSnapshot?.trip_state?.trip_context} />
+      <FactsPanel contextRecap={commandSnapshot?.context_recap} />
 
       <div className="chat-log" aria-live="polite">
         {messages.map(message => (

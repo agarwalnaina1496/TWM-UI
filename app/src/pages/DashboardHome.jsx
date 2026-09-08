@@ -26,7 +26,7 @@ function formatTripTimestamp(t) {
 function matchesSearch(t, query) {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  const destination = contextDestination(t.trip_state?.trip_context) || '';
+  const destination = contextDestination(t) || '';
   return (t.title || 'Untitled trip').toLowerCase().includes(q) || destination.toLowerCase().includes(q);
 }
 
@@ -71,10 +71,10 @@ export default function DashboardHome() {
   // Fresh, no-progress trips (e.g. the record TripContext auto-creates)
   // aren't real trips from the traveler's point of view — TWM-108/163 keep
   // them out of Dashboard-home entirely.
-  const visibleTrips = trips.filter(t => !isTripEmpty(t.trip_state));
-  const completedTrips = visibleTrips.filter(t => isCompletedTrip(t.trip_state));
-  const discoverOnlyTrips = visibleTrips.filter(t => !isCompletedTrip(t.trip_state) && isDiscoverOnly(t.trip_state));
-  const committedTrips = visibleTrips.filter(t => !isCompletedTrip(t.trip_state) && !isDiscoverOnly(t.trip_state));
+  const visibleTrips = trips.filter(t => !isTripEmpty(t));
+  const completedTrips = visibleTrips.filter(t => isCompletedTrip(t));
+  const discoverOnlyTrips = visibleTrips.filter(t => !isCompletedTrip(t) && isDiscoverOnly(t));
+  const committedTrips = visibleTrips.filter(t => !isCompletedTrip(t) && !isDiscoverOnly(t));
 
   const hero = useMemo(() => selectHeroTrip(committedTrips), [committedTrips]);
   const listTrips = committedTrips.filter(t => t.id !== hero?.id);
@@ -85,7 +85,7 @@ export default function DashboardHome() {
   useEffect(() => {
     if (!hero || trackedHero.current === hero.id) return;
     trackedHero.current = hero.id;
-    trackEvent('hero_trip_shown', { stage: hero.trip_state?.stage ?? 'new' });
+    trackEvent('hero_trip_shown', { stage: hero.lifecycle?.stage ?? 'new' });
   }, [hero]);
 
   // Mirrors the header nav's "Plan a Trip" / "Discover Destination" actions
@@ -132,8 +132,8 @@ export default function DashboardHome() {
   }
 
   function handleExploreRailOpen(t) {
-    trackEvent('explore_rail_engaged', { stage: t.trip_state?.stage ?? 'new' });
-    handleOpen(t, { to: stageCta(t.trip_state).to, fetchTrip: openTrip });
+    trackEvent('explore_rail_engaged', { stage: t.lifecycle?.stage ?? 'new' });
+    handleOpen(t, { to: stageCta(t).to, fetchTrip: openTrip });
   }
 
   function startRename(t) {
@@ -158,11 +158,11 @@ export default function DashboardHome() {
   // label regardless of stage — stage is communicated via the adjacent
   // status tag, not this button's text.
   function TripCard({ t, showRename = true }) {
-    const badge = stageBadge(t.trip_state);
-    const destination = contextDestination(t.trip_state?.trip_context);
-    const recapPills = contextRecapPills(t.trip_state?.trip_context);
+    const badge = stageBadge(t);
+    const destination = contextDestination(t);
+    const recapPills = contextRecapPills(t);
     const timestamp = formatTripTimestamp(t);
-    const statusLine = tripStatusLine(t.trip_state);
+    const statusLine = tripStatusLine(t);
     return (
       <div className="trip-card" key={t.id}>
         <div>
@@ -208,10 +208,10 @@ export default function DashboardHome() {
   }
 
   function ExploreRailCard({ t }) {
-    const cta = stageCta(t.trip_state);
-    const badge = stageBadge(t.trip_state);
-    const recapPills = contextRecapPills(t.trip_state?.trip_context);
-    const statusLine = tripStatusLine(t.trip_state);
+    const cta = stageCta(t);
+    const badge = stageBadge(t);
+    const recapPills = contextRecapPills(t);
+    const statusLine = tripStatusLine(t);
     return (
       <div className="explore-card" key={t.id}>
         {renamingId === t.id ? (

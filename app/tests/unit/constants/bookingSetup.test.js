@@ -1,45 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import {
-  bookingSetupParty,
-  bookingSetupSearchPref,
-} from '../../../src/constants/bookingSetup.js';
+import { searchPrefFor } from '../../../src/constants/bookingSetup.js';
 
-describe('bookingSetupParty', () => {
-  it('reads a structured party', () => {
-    expect(bookingSetupParty({ booking_setup: { party: { adults: 2, children: 1, infants: 0 } } }))
-      .toEqual({ adults: 2, children: 1, infants: 0 });
-  });
-
-  it('is null for a malformed party', () => {
-    expect(bookingSetupParty({ booking_setup: { party: { adults: 0, children: 1, infants: 0 } } })).toBeNull();
-    expect(bookingSetupParty({ booking_setup: { party: { adults: 2, children: '1', infants: 0 } } })).toBeNull();
-    expect(bookingSetupParty({})).toBeNull();
-  });
-});
-
-describe('bookingSetupSearchPref', () => {
-  const tripState = {
-    booking_setup: {
-      search_prefs: {
-        stays: { 't:stay:1:2:agra': { precision: 'exact', date: '2026-06-10' } },
-        transports: { 't:2:0': { precision: 'month', month: '2026-06' } },
-      },
-    },
-  };
-
-  it('reads a stay segment override by id', () => {
-    expect(bookingSetupSearchPref(tripState, 'stay', 't:stay:1:2:agra'))
+// TWM-220: a per-entity search date is read straight off the enriched
+// itinerary entity (its `date_source` / `precision` / `date` | `month`),
+// not a `booking_setup` branch.
+describe('searchPrefFor', () => {
+  it('returns the exact date when the source is a search pref', () => {
+    expect(searchPrefFor({ date_source: 'search_pref', precision: 'exact', date: '2026-06-10' }))
       .toEqual({ precision: 'exact', date: '2026-06-10' });
   });
 
-  it('reads a transport leg override by id', () => {
-    expect(bookingSetupSearchPref(tripState, 'transport', 't:2:0'))
+  it('returns the month when the source is a month-precision search pref', () => {
+    expect(searchPrefFor({ date_source: 'search_pref', precision: 'month', month: '2026-06' }))
       .toEqual({ precision: 'month', month: '2026-06' });
   });
 
-  it('is null for an unknown target or missing prefs', () => {
-    expect(bookingSetupSearchPref(tripState, 'stay', 'nope')).toBeNull();
-    expect(bookingSetupSearchPref({}, 'stay', 't:stay:1:2:agra')).toBeNull();
-    expect(bookingSetupSearchPref(tripState, 'stay', null)).toBeNull();
+  it('is null when the date came from the trip dates or nothing', () => {
+    expect(searchPrefFor({ date_source: 'trip_dates', precision: 'exact', date: '2026-06-10' })).toBeNull();
+    expect(searchPrefFor({ date_source: 'none', precision: 'none' })).toBeNull();
+    expect(searchPrefFor(null)).toBeNull();
   });
 });

@@ -1,14 +1,18 @@
-// Maps the real Backend-owned Guide `planner_state` (places, day_plan,
-// conversation_context.awaiting, frozen_plan — flat, delta-merged, no
-// phase field) into what TripPreview.jsx renders.
+// Maps `TripView` (plan + summary + context_recap) into what TripPreview.jsx
+// renders. TWM-220: no more raw `planner_state` / `trip_context` reads.
 
-export function planBuilderSummary(tripContext, plannerState) {
-  const dayPlan = plannerState?.day_plan || [];
-  const placeCount = (plannerState?.places || []).length;
+import { contextDestination } from './tripLifecycle.js';
+
+export function planBuilderSummary(view) {
+  const plan = view?.plan || {};
+  const dayPlan = plan.day_plan || [];
+  const destinationLabel = view?.summary?.destinations?.join(', ') || contextDestination(view) || '';
   return {
-    destinations: tripContext?.destinations || [],
-    durationDays: tripContext?.trip_duration ?? dayPlan.length,
-    placeCount,
+    destinationLabel,
+    destinationCount: view?.summary?.destinations?.length
+      ?? (destinationLabel ? destinationLabel.split(',').length : 0),
+    durationDays: view?.summary?.duration_days ?? dayPlan.length,
+    placeCount: (plan.places || []).length,
     dayCount: dayPlan.length,
   };
 }
