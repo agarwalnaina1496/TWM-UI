@@ -27,7 +27,6 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
   const { sendTripCommand } = useTrip();
 
   const [prefEditOpen, setPrefEditOpen] = useState(false);
-  const [prefEditMode, setPrefEditMode] = useState('exact');
   const [prefEditValue, setPrefEditValue] = useState('');
   const [prefEditTarget, setPrefEditTarget] = useState(null); // { type, id }
   const [prefEditPending, setPrefEditPending] = useState(false);
@@ -117,29 +116,61 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     () => fetchStayOptions(staySegment),
   );
 
+  function resetPrefEdit() {
+    setPrefEditOpen(false);
+    setPrefEditTarget(null);
+    setPrefEditValue('');
+    setPrefEditError(null);
+  }
+
   function openTransportDrawer(item) {
     setTransportDrawerItem(item);
     setTransportDrawerError(null);
     setTransportDrawerLoading(false);
+    resetPrefEdit();
   }
   function closeTransportDrawer() {
     setTransportDrawerItem(null);
+    resetPrefEdit();
   }
   function openStayDrawer(segmentId) {
     setStayDrawerSegmentId(segmentId);
     setStayDrawerError(null);
     setStayDrawerLoading(false);
+    resetPrefEdit();
   }
   function closeStayDrawer() {
     setStayDrawerSegmentId(null);
+    resetPrefEdit();
   }
 
-  function openPrefEditForm(targetType, entity, suggestedMode) {
-    const existing = searchPrefFor(entity);
-    const mode = suggestedMode === 'month' ? 'month' : (existing?.precision || 'exact');
+  // TWM-228: a genuinely dateless entity (`date_precision === 'none'`) opens
+  // with the date picker already expanded — a standard OTA form shows an empty
+  // date field, it does not hide it behind a link. A known date stays
+  // collapsed behind "· Change".
+  const openDateEntity = staySegment
+    ? { type: 'stay', id: staySegment.id, precision: staySegment.date_precision }
+    : transportItem
+      ? { type: 'transport', id: transportItem.id, precision: transportItem.date_precision }
+      : null;
+  useEffect(() => {
+    if (!openDateEntity || openDateEntity.precision !== 'none') return;
+    if (prefEditTarget?.id === openDateEntity.id) return;
+    setPrefEditTarget({ type: openDateEntity.type, id: openDateEntity.id });
+    setPrefEditValue('');
+    setPrefEditError(null);
+    setPrefEditOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openDateEntity?.id, openDateEntity?.precision]);
+
+  // TWM-228: the edit form is a single exact-date field — no precision choice.
+  // It seeds from the entity's current effective date (an exact override or an
+  // exact trip date); a month-precision or dateless entity starts empty so the
+  // traveller picks a specific day.
+  function openPrefEditForm(targetType, entity) {
+    const effective = searchPrefFor(entity);
     setPrefEditTarget({ type: targetType, id: entity.id });
-    setPrefEditMode(mode);
-    setPrefEditValue(existing?.precision === mode ? (mode === 'exact' ? existing.date : existing.month) || '' : '');
+    setPrefEditValue(effective?.precision === 'exact' ? effective.date : '');
     setPrefEditError(null);
     setPrefEditOpen(true);
   }
@@ -157,10 +188,10 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
         searchPrefUpdate: {
           target_type: prefEditTarget.type,
           target_id: prefEditTarget.id,
-          ...(prefEditMode === 'exact' ? { date: prefEditValue } : { month: prefEditValue }),
+          date: prefEditValue,
         },
       });
-      trackEvent('search_pref_updated', { target_type: prefEditTarget.type, precision: prefEditMode });
+      trackEvent('search_pref_updated', { target_type: prefEditTarget.type });
       setTransportData({});
       setStayData({});
       setPrefEditOpen(false);
@@ -253,8 +284,6 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     closeStayDrawer,
 
     prefEditOpen,
-    prefEditMode,
-    setPrefEditMode,
     prefEditValue,
     setPrefEditValue,
     prefEditTarget,

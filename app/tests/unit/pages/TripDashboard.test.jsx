@@ -383,9 +383,9 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     await waitFor(() => expect(within(drawer).getAllByText(/Flight|Train|Bus|Drive/).length).toBeGreaterThan(0));
     expect(bodies.filter(b => b.domain === 'transport')).toHaveLength(1);
     expect(bodies[0].targets.map(t => t.value)).toEqual(['flight', 'train', 'bus']);
-    // The per-leg date form is collapsed by default.
-    expect(within(drawer).queryByLabelText('Leg date')).toBeNull();
-    expect(within(drawer).getByRole('button', { name: /Add a date for this search/ })).toBeInTheDocument();
+    // TWM-228: a leg with no resolved date shows the date picker expanded and blank.
+    expect(within(drawer).getByLabelText('Leg date')).toHaveValue('');
+    expect(within(drawer).queryByRole('button', { name: /Add a date for this search/ })).toBeNull();
     void user;
   });
 
@@ -469,7 +469,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     await waitFor(() => expect(within(drawer).getAllByText(/Flight|Train|Bus/).length).toBeGreaterThan(0));
     const before = bodies.length;
 
-    await user.click(within(drawer).getByRole('button', { name: /Add a date for this search/ }));
+    // TWM-228: the picker is already expanded for a dateless leg.
     await user.type(within(drawer).getByLabelText('Leg date'), '2026-11-01');
     await user.click(within(drawer).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', expect.anything()));
@@ -521,7 +521,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(within(drawer).queryByText('Our pick')).not.toBeInTheDocument();
   });
 
-  it('labels the stay date-row action by whether a search date is already set', async () => {
+  it('shows a resolved check-in collapsed behind "Change", with a reset for an override', async () => {
     commandSnapshot = readyView({ context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     itineraryResponse = enrichedDoc({ staySegments: [{
@@ -530,10 +530,15 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
       date_source: 'search_pref', board_item_ids: ['test-trip:1:1', 'test-trip:2:0'],
     }] });
     global.fetch = makeFetch();
-    await openStayDrawer();
+    const user = await openStayDrawer();
     const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-    expect(within(drawer).getByText(/your search date/)).toBeInTheDocument();
-    expect(within(drawer).getByRole('button', { name: /Change this search date/ })).toBeInTheDocument();
+    // Collapsed by default — the value is shown, the picker is not.
+    expect(within(drawer).getByText(/Check-in: Nov 1/)).toBeInTheDocument();
+    expect(within(drawer).queryByLabelText('Check-in date')).toBeNull();
+    await user.click(within(drawer).getByRole('button', { name: 'Change' }));
+    expect(within(drawer).getByLabelText('Check-in date')).toHaveValue('2026-11-01');
+    // An explicit override offers a reset to the inherited trip date.
+    expect(within(drawer).getByRole('button', { name: /Reset to the default date/ })).toBeInTheDocument();
   });
 
   // ---- Party editor -------------------------------------------------

@@ -4,11 +4,24 @@ import { DrawerDateRow, DrawerPartyRow } from '../../components/drawers/DrawerRo
 import ScheduleDateForm from '../../components/drawers/ScheduleDateForm.jsx';
 import TravelerEditForm from '../../components/drawers/TravelerEditForm.jsx';
 import { legFromItem, normalizePrefEntity } from '../../lib/booking/legsFromItinerary.js';
-import { searchPrefFor } from '../../constants/bookingSetup.js';
+import { monthLabel, dayLabel } from '../../lib/booking/dateLabels.js';
+import { searchPrefFor, isSearchPrefOverride } from '../../constants/bookingSetup.js';
 
-// TWM-216/TWM-220: renders whichever booking drawer is open, plus the two
-// editors that live inside every drawer — the shared party editor (with the
-// `set_party` open-gap prompt) and the per-entity search-date preference.
+// TWM-216/TWM-220/TWM-228: renders whichever booking drawer is open, plus the
+// two editors that live inside every drawer — the shared party editor (with
+// the `set_party` open-gap prompt) and the per-entity search-date field. Both
+// drawers render through the same `DrawerRows` components and the same
+// `useBookingDrawers` edit state; nothing here is per-drawer.
+
+// The collapsed label for one normalized entity ({ precision, date, month }):
+// an exact date renders "Sep 26", a month renders "October 2026".
+function collapsedDateLabel(entity) {
+  if (!entity) return null;
+  if (entity.precision === 'month') return monthLabel(entity.month);
+  if (entity.precision === 'exact') return dayLabel(entity.date);
+  return null;
+}
+
 export default function BookingDrawers({ drawers: d }) {
   const { transportDrawerItem, transportItem, staySegment, stay, stayDrawerSegmentId, days } = d;
 
@@ -44,13 +57,11 @@ export default function BookingDrawers({ drawers: d }) {
       existing={searchPrefFor(prefEntity)}
       dateLabel={d.prefEditTarget?.type === 'stay' ? 'Check-in date' : 'Leg date'}
       helper="Prefill this one search with a specific date. It does not change your itinerary or any other search."
-      mode={d.prefEditMode}
-      setMode={d.setPrefEditMode}
       value={d.prefEditValue}
       setValue={d.setPrefEditValue}
       onSubmit={d.submitPrefEdit}
       onCancel={d.closePrefEditForm}
-      onClear={d.clearPrefEdit}
+      onClear={isSearchPrefOverride(prefEntity) ? d.clearPrefEdit : undefined}
       pending={d.prefEditPending}
       error={d.prefEditError}
     />
@@ -61,11 +72,9 @@ export default function BookingDrawers({ drawers: d }) {
     return (
       <DrawerDateRow
         label="This leg"
-        source={transportItem.date_source}
-        precision={transportItem.date_precision}
-        valueLabel={transportItem.resolved_date}
-        editable={transportItem.date_source !== 'trip_dates'}
-        onEdit={() => d.openPrefEditForm('transport', entity, 'exact')}
+        precision={entity.precision}
+        valueLabel={collapsedDateLabel(entity)}
+        onEdit={() => d.openPrefEditForm('transport', entity)}
         editOpen={d.prefEditOpen && d.prefEditTarget?.type === 'transport'}
         editForm={prefEditForm}
       />
@@ -77,12 +86,10 @@ export default function BookingDrawers({ drawers: d }) {
     return (
       <DrawerDateRow
         label="Check-in"
-        source={staySegment.date_source}
-        precision={staySegment.date_precision}
-        valueLabel={staySegment.date_precision === 'month' ? staySegment.month : staySegment.checkin_date}
-        checkoutLabel={staySegment.checkout_date}
-        editable={staySegment.date_source !== 'trip_dates'}
-        onEdit={() => d.openPrefEditForm('stay', entity, 'exact')}
+        precision={entity.precision}
+        valueLabel={collapsedDateLabel(entity)}
+        checkoutLabel={dayLabel(staySegment.checkout_date)}
+        onEdit={() => d.openPrefEditForm('stay', entity)}
         editOpen={d.prefEditOpen && d.prefEditTarget?.type === 'stay'}
         editForm={prefEditForm}
       />

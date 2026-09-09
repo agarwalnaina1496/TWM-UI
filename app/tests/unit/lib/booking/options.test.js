@@ -156,6 +156,23 @@ describe('stayOptionsFor — one batch call', () => {
   });
 });
 
+describe('a search with no exact date omits the date params (TWM-228)', () => {
+  it('stayOptionsFor sends no departure_date / return_date when the segment has no check-in', async () => {
+    resolveBookingOptions.mockResolvedValueOnce({ results: [resolvedEntry({ kind: 'partner', value: 'booking_com' })] });
+    await stayOptionsFor('trip-1', { id: 's1', location: 'Goa', nights: 2, departureDate: null, checkoutDate: null }, null);
+    const payload = resolveBookingOptions.mock.calls[0][1];
+    expect(payload).not.toHaveProperty('departure_date');
+    expect(payload).not.toHaveProperty('return_date');
+    expect(payload.destination).toBe('Goa');
+  });
+
+  it('transportOptionsFor sends no departure_date when the leg has no exact date', async () => {
+    resolveBookingOptions.mockResolvedValueOnce({ results: [resolvedEntry({ kind: 'mode', value: 'train' })] });
+    await transportOptionsFor('trip-1', { from: 'Delhi', to: 'Goa', departureDate: null }, null, ['train']);
+    expect(resolveBookingOptions.mock.calls[0][1]).not.toHaveProperty('departure_date');
+  });
+});
+
 describe('PARTNER_LABEL', () => {
   it('names the confirmed partners', () => {
     expect(PARTNER_LABEL.booking_com).toBe('Booking.com');
