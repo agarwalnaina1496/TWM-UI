@@ -334,11 +334,12 @@
 .transport-drawer-not-feasible li{font-size:12.5px;color:var(--tm);display:flex;align-items:center;gap:8px;}
 
 /* TWM-215: candidate gateway-hub picker for a hubless leg endpoint. */
-.hub-picker{display:flex;flex-direction:column;gap:8px;margin:4px 0 2px;}
-.hub-picker-intro{margin:0;font-size:12.5px;color:var(--tm);}
-.hub-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;text-align:left;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface,#fff);cursor:pointer;font:inherit;}
+.hub-picker{display:flex;flex-direction:column;gap:8px;margin:4px 0 2px;border:0;padding:0;}
+.hub-picker-intro{margin:0 0 2px;padding:0;font-size:12.5px;color:var(--tm);}
+.hub-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface,#fff);cursor:pointer;}
 .hub-row:hover{border-color:var(--tp);}
 .hub-row.selected{border-color:var(--tp);box-shadow:inset 0 0 0 1px var(--tp);}
+.hub-row input[type="radio"]{margin:0;}
 .hub-row strong{font-size:14px;}
 .hub-row-modes{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-left:auto;}
 .hub-last-mile-note{margin:2px 0 0;font-size:12.5px;color:var(--tm);}

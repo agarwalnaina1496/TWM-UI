@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { legFromItem, hubFromEntry, legForHub } from '../../../../src/lib/booking/legsFromItinerary.js';
+import { legFromItem, hubFromEntry, legForHub, transportHubState } from '../../../../src/lib/booking/legsFromItinerary.js';
 
 const HUB_ENTRY = {
   city: 'Udaipur', side: 'destination', last_mile_km: 100,
@@ -48,5 +48,42 @@ describe('legForHub', () => {
 
   it('returns the leg unchanged when there is no hub', () => {
     expect(legForHub(leg, null)).toBe(leg);
+  });
+});
+
+describe('transportHubState', () => {
+  function item(hubs) {
+    return { from_city: 'Bengaluru', to_city: 'Sumerpur', date_precision: 'none', hubs };
+  }
+
+  it('one hubless endpoint: the whole hub set is the picker, no auto origin', () => {
+    const state = transportHubState(item([
+      { city: 'Udaipur', side: 'destination', last_mile_km: 100 },
+      { city: 'Ahmedabad', side: 'destination', last_mile_km: 220 },
+    ]), null);
+    expect(state.pickerHubs.map(h => h.city)).toEqual(['Udaipur', 'Ahmedabad']);
+    expect(state.autoOriginHub).toBe(null);
+    expect(state.selected.city).toBe('Udaipur');
+    expect(state.effectiveLeg).toMatchObject({ from: 'Bengaluru', to: 'Udaipur' });
+  });
+
+  it('both endpoints hubless: picker is the destination side, origin auto-picks its first candidate', () => {
+    const state = transportHubState(item([
+      { city: 'Jodhpur', side: 'origin', last_mile_km: 40 },
+      { city: 'Udaipur', side: 'destination', last_mile_km: 100 },
+      { city: 'Ahmedabad', side: 'destination', last_mile_km: 220 },
+    ]), 'Ahmedabad');
+    expect(state.pickerHubs.map(h => h.city)).toEqual(['Udaipur', 'Ahmedabad']);
+    expect(state.autoOriginHub.city).toBe('Jodhpur');
+    expect(state.selected.city).toBe('Ahmedabad');
+    // both endpoints substituted
+    expect(state.effectiveLeg).toEqual({ from: 'Jodhpur', to: 'Ahmedabad', departureDate: null, departureMonth: null, hubs: expect.any(Array) });
+  });
+
+  it('directly connected leg: no hubs, no substitution', () => {
+    const state = transportHubState({ from_city: 'Delhi', to_city: 'Jaipur', date_precision: 'none' }, null);
+    expect(state.pickerHubs).toEqual([]);
+    expect(state.selected).toBe(null);
+    expect(state.effectiveLeg).toMatchObject({ from: 'Delhi', to: 'Jaipur' });
   });
 });

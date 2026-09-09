@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { transportOptionsFor, feasibleTransportOptions, recommendedMode } from '../../../../src/lib/booking/transportOptions.js';
+import { transportOptionsFor, feasibleTransportOptions, recommendedMode, loadTransportBundle } from '../../../../src/lib/booking/transportOptions.js';
 import { stayOptionsFor } from '../../../../src/lib/booking/stayOptions.js';
 import { modeLabel, PARTNER_LABEL } from '../../../../src/lib/booking/shared.js';
-import { resolveBookingOptions, searchFlights } from '../../../../src/lib/tripApi.js';
+import { resolveBookingOptions, searchFlights, getTripFeasibility } from '../../../../src/lib/tripApi.js';
 
 vi.mock('../../../../src/lib/tripApi.js', () => ({
   resolveBookingOptions: vi.fn(),
   searchFlights: vi.fn(),
+  getTripFeasibility: vi.fn(),
 }));
 
 function resolvedEntry(target, { url = 'https://partner.example/search', partner = target.value, capability = null, ctaLabel = null } = {}) {
@@ -177,5 +178,32 @@ describe('PARTNER_LABEL', () => {
   it('names the confirmed partners', () => {
     expect(PARTNER_LABEL.booking_com).toBe('Booking.com');
     expect(PARTNER_LABEL.aviasales).toBe('Aviasales');
+  });
+});
+
+describe('loadTransportBundle — the hub-substituted leg reaches every downstream call (TWM-215)', () => {
+  it('sends the hub city, not the town, to feasibility and booking-options', async () => {
+    getTripFeasibility.mockResolvedValue({ modes: [{ mode: 'train' }, { mode: 'bus' }] });
+    resolveBookingOptions.mockResolvedValue({ results: [] });
+    searchFlights.mockResolvedValue(flightClarification);
+    const hubLeg = { from: 'Bengaluru', to: 'Udaipur', departureDate: '2026-05-01' };
+    const hub = { city: 'Udaipur', side: 'destination', longHaulDistanceKm: 660 };
+
+    const { feasibility } = await loadTransportBundle('trip-1', hubLeg, hub, { adults: 2, children: 0, infants: 0 });
+
+    expect(getTripFeasibility).toHaveBeenCalledWith('trip-1', {
+      origin: 'Bengaluru', destination: 'Udaipur', longHaulDistanceKm: 660,
+    });
+    expect(resolveBookingOptions.mock.calls[0][1]).toMatchObject({ from_city: 'Bengaluru', to_city: 'Udaipur' });
+    expect(feasibility.modes.map(m => m.mode)).toEqual(['train', 'bus']);
+  });
+
+  it('passes no distance fallback for a directly-connected leg (no hub)', async () => {
+    getTripFeasibility.mockResolvedValue({ modes: [] });
+    resolveBookingOptions.mockResolvedValue({ results: [] });
+    await loadTransportBundle('trip-1', { from: 'Delhi', to: 'Jaipur' }, null, { adults: 1, children: 0, infants: 0 });
+    expect(getTripFeasibility).toHaveBeenCalledWith('trip-1', {
+      origin: 'Delhi', destination: 'Jaipur', longHaulDistanceKm: null,
+    });
   });
 });

@@ -72,27 +72,39 @@ export function resolveSelectedHub(hubs, selectedCity) {
 }
 
 // Everything the transport drawer needs derived from the open enriched item
-// and the currently-chosen hub city: the base leg, its candidate hubs, the
-// selected hub, and the hub-substituted leg the drawer actually searches.
+// and the currently-chosen hub city.
+//
+// A leg normally has candidate hubs on one side only (one hubless endpoint).
+// When Atlas emits hubs on *both* sides (both endpoints hubless — rare), the
+// traveller picks a destination gateway and the origin auto-picks its first
+// candidate (TWM-215 D7): resolving each side is independent, and a second
+// picker for the departure side is not worth the friction.
 export function transportHubState(item, selectedCity) {
   const leg = item ? legFromItem(item) : null;
   const hubs = leg?.hubs ?? [];
-  const selected = resolveSelectedHub(hubs, selectedCity);
+  const originHubs = hubs.filter(h => h.side === 'origin');
+  const destinationHubs = hubs.filter(h => h.side !== 'origin');
+  const bothSidesHubless = originHubs.length > 0 && destinationHubs.length > 0;
+  const pickerHubs = bothSidesHubless ? destinationHubs : hubs;
+  const autoOriginHub = bothSidesHubless ? originHubs[0] : null;
+  const selected = resolveSelectedHub(pickerHubs, selectedCity);
   return {
     leg,
-    hubs,
+    pickerHubs,
+    autoOriginHub,
     selected,
     selectedCity: selected?.city ?? null,
-    effectiveLeg: leg ? legForHub(leg, selected) : null,
+    effectiveLeg: leg ? legForHub(legForHub(leg, autoOriginHub), selected) : null,
   };
 }
 
-// The per-drawer option-cache key: route (hub-substituted) + resolved date +
-// party size. Switching hub changes the route segment, so the drawer
-// re-resolves for the new hub.
-export function transportCacheKey(item, hub, partyTotal) {
+// The per-drawer option-cache key: route (both hubs substituted) + resolved
+// date + party size. Switching the destination hub changes the route segment,
+// so the drawer re-resolves for the new hub.
+export function transportCacheKey(item, originHub, hub, partyTotal) {
   if (!item) return null;
-  return `${legKey(legForHub(legFromItem(item), hub))}::${item.resolved_date ?? 'flex'}::${partyTotal ?? 'p?'}`;
+  const leg = legForHub(legForHub(legFromItem(item), originHub), hub);
+  return `${legKey(leg)}::${item.resolved_date ?? 'flex'}::${partyTotal ?? 'p?'}`;
 }
 
 // Normalize an enriched entity (timeline item or stay segment) to the flat

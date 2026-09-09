@@ -139,37 +139,40 @@ function hublessTownName(leg, hub) {
 
 // TWM-215: passive context only — the hub → town last mile is arranged
 // locally, never its own bookable search.
-function HubLastMileNote({ leg, hub }) {
+function HubLastMileNote({ townName, hub, direction }) {
   const label = hubLastMileLabel(hub);
   if (!label) return null;
-  return (
+  return direction === 'origin' ? (
     <p className="hub-last-mile-note">
-      Then ~{label} onward to {hublessTownName(leg, hub)} — arrange this short leg locally.
+      Getting to {hub.city}: ~{label} from {townName} — arrange this short leg locally.
+    </p>
+  ) : (
+    <p className="hub-last-mile-note">
+      Then ~{label} onward to {townName} — arrange this short leg locally.
     </p>
   );
 }
 
-// The candidate-gateway picker: one row per hub with its last-mile estimate
-// and Backend-resolved feasible modes. Unranked — the first row is only the
-// default selection, not a recommendation.
-function HubPicker({ leg, hubs, selectedCity, onSelect }) {
+// The candidate-gateway picker: one native radio per hub with its last-mile
+// estimate and Backend-resolved feasible modes. Unranked — the first option is
+// only the default selection, not a recommendation.
+function HubPicker({ townName, hubs, selectedCity, onSelect }) {
   return (
-    <div className="hub-picker" role="radiogroup" aria-label="Choose a gateway city">
-      <p className="hub-picker-intro">
-        {hublessTownName(leg, hubs[0])} has no direct long-haul transport. Pick a nearby gateway city:
-      </p>
+    <fieldset className="hub-picker">
+      <legend className="hub-picker-intro">
+        {townName} has no direct long-haul transport. Pick a nearby gateway city:
+      </legend>
       {hubs.map(hub => {
-        const selected = hub.city === selectedCity;
         const lastMile = hubLastMileLabel(hub);
         return (
-          <button
-            type="button"
-            key={hub.city}
-            className={`hub-row${selected ? ' selected' : ''}`}
-            role="radio"
-            aria-checked={selected}
-            onClick={() => onSelect(hub.city)}
-          >
+          <label key={hub.city} className={`hub-row${hub.city === selectedCity ? ' selected' : ''}`}>
+            <input
+              type="radio"
+              name="gateway-hub"
+              value={hub.city}
+              checked={hub.city === selectedCity}
+              onChange={() => onSelect(hub.city)}
+            />
             <strong>{hub.city}</strong>
             {lastMile && <span className="stay-option-tag">{lastMile} last mile</span>}
             <span className="hub-row-modes">
@@ -177,10 +180,10 @@ function HubPicker({ leg, hubs, selectedCity, onSelect }) {
                 ? hub.feasibleModes.map(mode => <ModeTag key={mode} mode={mode} />)
                 : <span className="stay-option-tag">No modes resolved</span>}
             </span>
-          </button>
+          </label>
         );
       })}
-    </div>
+    </fieldset>
   );
 }
 
@@ -239,14 +242,11 @@ function RecommendedModeCard({ option }) {
 }
 
 export default function TransportDrawer({
-  leg, hubs = [], selectedHubCity, onSelectHub,
+  leg, hubs = [], selectedHub = null, autoOriginHub = null, onSelectHub,
   options, feasibility, loading, error, dateRow, partyRow, onClose,
 }) {
   if (!leg) return null;
-  const hubList = hubs || [];
-  const selectedHub = hubList.length
-    ? (hubList.find(h => h.city === selectedHubCity) ?? hubList[0])
-    : null;
+  const hubList = hubs || []; // the picker side only (destination when both endpoints are hubless)
   const resolvedOptions = feasibleTransportOptions(options || [], feasibility);
   const feasibleModeNames = new Set((feasibility?.modes || []).map(entry => entry.mode));
   const notFeasibleModes = MODES.filter(mode => !feasibleModeNames.has(mode));
@@ -269,15 +269,34 @@ export default function TransportDrawer({
         </div>
         {dateRow}
         {partyRow}
+        {autoOriginHub && (
+          <p className="hub-picker-intro">
+            {leg.from} has no direct long-haul transport — departing via {autoOriginHub.city}.
+          </p>
+        )}
+        {autoOriginHub && (
+          <HubLastMileNote townName={leg.from} hub={autoOriginHub} direction="origin" />
+        )}
         {hubList.length > 1 && (
-          <HubPicker leg={leg} hubs={hubList} selectedCity={selectedHub?.city} onSelect={onSelectHub} />
+          <HubPicker
+            townName={hublessTownName(leg, hubList[0])}
+            hubs={hubList}
+            selectedCity={selectedHub?.city}
+            onSelect={onSelectHub}
+          />
         )}
         {hubList.length === 1 && (
           <p className="hub-picker-intro">
             {hublessTownName(leg, hubList[0])} has no direct long-haul transport — routed via {hubList[0].city}.
           </p>
         )}
-        {selectedHub && <HubLastMileNote leg={leg} hub={selectedHub} />}
+        {selectedHub && (
+          <HubLastMileNote
+            townName={hublessTownName(leg, selectedHub)}
+            hub={selectedHub}
+            direction={selectedHub.side === 'origin' ? 'origin' : 'destination'}
+          />
+        )}
         {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
         {error && <p className="already-booked-note" role="alert">{error}</p>}
         {!loading && !error && (

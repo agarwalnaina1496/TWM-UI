@@ -3,8 +3,8 @@ import { useTrip } from '../context/TripContext.jsx';
 import { loadTransportBundle } from '../lib/booking/transportOptions.js';
 import { stayOptionsFor } from '../lib/booking/stayOptions.js';
 import {
-  legForHub, legFromItem, stayFromSegment,
-  transportCacheKey as buildTransportCacheKey, transportHubState, travelerPartyLabel,
+  stayFromSegment, transportCacheKey as buildTransportCacheKey,
+  transportHubState, travelerPartyLabel,
 } from '../lib/booking/legsFromItinerary.js';
 import { searchPrefFor } from '../constants/bookingSetup.js';
 import { trackEvent } from '../lib/analytics.js';
@@ -62,13 +62,13 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     ? (days.flatMap(d => d.timeline || []).find(i => i.id === transportDrawerItem.id) ?? transportDrawerItem)
     : null;
   const {
-    leg: transportLeg, hubs: transportHubs, selected: selectedHub,
+    leg: transportLeg, pickerHubs: transportHubs, autoOriginHub, selected: selectedHub,
     selectedCity: resolvedHubCity, effectiveLeg,
   } = transportHubState(transportItem, selectedHubCity);
   const staySegment = stayDrawerSegmentId ? staySegments.find(s => s.id === stayDrawerSegmentId) ?? null : null;
   const stay = stayFromSegment(staySegment);
 
-  const transportCacheKey = item => buildTransportCacheKey(item, selectedHub, partyTotal);
+  const transportCacheKey = item => buildTransportCacheKey(item, autoOriginHub, selectedHub, partyTotal);
   function stayCacheKey(segment) {
     if (!segment) return null;
     return `${segment.id}::${segment.checkin_date ?? 'flex'}::${segment.nights}::${partyTotal ?? 'p?'}`;
@@ -81,8 +81,7 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     setTransportDrawerError(null);
     setTransportDrawerLoading(true);
     try {
-      const leg = legForHub(legFromItem(item), selectedHub);
-      const bundle = await loadTransportBundle(tripId, leg, selectedHub, party);
+      const bundle = await loadTransportBundle(tripId, effectiveLeg, selectedHub, party);
       setTransportData(prev => ({ ...prev, [key]: bundle }));
     } catch (error) {
       setTransportDrawerError(error.message || 'Could not load transport options.');
@@ -274,6 +273,8 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     transportItem,
     transportLeg,
     transportHubs,
+    selectedHub,
+    autoOriginHub,
     selectedHubCity: resolvedHubCity,
     selectHub: setSelectedHubCity,
     effectiveLeg,
