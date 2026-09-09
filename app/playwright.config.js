@@ -15,6 +15,16 @@ export default defineConfig({
   // not a logic bug. One retry absorbs that class of flake in CI without
   // hiding a real, reproducible failure (which still fails on retry too).
   retries: process.env.CI ? 2 : 1,
+  // The flake above is CPU contention, not a per-test bug: `fullyParallel`
+  // workers competing with the on-demand Vite dev-server transform on a
+  // 2-core CI runner intermittently stall a mid-suite module compile past
+  // the 10s assertion timeout — and a run-wide degradation burns all
+  // retries at once (seen once on TWM-215's PR: all 3 attempts of "zero
+  // trips" failed, then the identical suite passed clean on rerun).
+  // Serialising e2e on CI removes that contention; the full suite is
+  // ~60-90s sequential, well inside the 15-min job cap. Local runs keep
+  // Playwright's default parallelism.
+  workers: process.env.CI ? 1 : undefined,
   use: {
     baseURL: 'http://localhost:5173/app/',
     trace: 'on-first-retry',

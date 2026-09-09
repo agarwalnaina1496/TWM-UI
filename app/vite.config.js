@@ -8,6 +8,10 @@ export default defineConfig(({ command }) => ({
   // Only the production build is served from /app/dist via the Vercel rewrite;
   // the dev server serves from its own root, so base must stay default there.
   base: command === 'build' ? '/app/dist/' : '/',
+  // Eagerly transform the entry graph when the dev server boots so the first
+  // Playwright test doesn't pay cold-compile cost inside its assertion
+  // timeout (dev-only; ignored by build/preview).
+  server: { warmup: { clientFiles: ['./src/main.jsx'] } },
   build: {
     rollupOptions: {
       output: {
