@@ -1,13 +1,14 @@
 // TWM-216/TWM-228: a drawer's own per-entity search date, presented as a
 // standard OTA search field. A known date sits pre-filled and collapsed
-// behind a "· Change" affordance; the date picker shows expanded only when
-// no date is resolved. There is no date-precision choice — precision is
+// behind a "· Change" affordance; opening the editor swaps that line for the
+// date picker (label → field). When no date is resolved the picker shows
+// expanded straight away. There is no date-precision choice — precision is
 // settled upstream (trip dates / TWM-227) and this field is exact-only.
 export function DrawerDateRow({ label, precision, valueLabel, checkoutLabel, onEdit, editOpen, editForm }) {
   const known = (precision === 'exact' || precision === 'month') && Boolean(valueLabel);
   return (
     <div className="booking-summary-strip">
-      {known ? (
+      {!editOpen && known && (
         <>
           <p className="transport-drawer-date">
             📅 {label}: {valueLabel}
@@ -18,9 +19,8 @@ export function DrawerDateRow({ label, precision, valueLabel, checkoutLabel, onE
             <p className="transport-drawer-date">Check-out {checkoutLabel}</p>
           )}
         </>
-      ) : editOpen ? (
-        <p className="transport-drawer-date">📅 Add a date for this search</p>
-      ) : (
+      )}
+      {!editOpen && !known && (
         <div className="booking-summary-row">
           <button type="button" className="btn btn-ghost btn-small" onClick={onEdit}>
             Add a date for this search

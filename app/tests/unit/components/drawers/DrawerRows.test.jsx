@@ -45,15 +45,27 @@ describe('DrawerDateRow', () => {
     expect(screen.queryByText('FORM')).not.toBeInTheDocument();
   });
 
-  it('shows the picker expanded inline when no date is resolved and the form is open', () => {
+  it('shows only the picker when no date is resolved and the form is open', () => {
     render(
       <DrawerDateRow
         label="Check-in" precision="none" valueLabel={null}
         onEdit={() => {}} editOpen editForm={<div>FORM</div>}
       />,
     );
-    expect(screen.getByText(/Add a date for this search/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add a date for this search' })).not.toBeInTheDocument();
+    expect(screen.getByText('FORM')).toBeInTheDocument();
+  });
+
+  it('swaps the collapsed line for the picker when a known date is being edited', () => {
+    render(
+      <DrawerDateRow
+        label="Check-in" precision="exact" valueLabel="Sep 26" checkoutLabel="Sep 28"
+        onEdit={() => {}} editOpen editForm={<div>FORM</div>}
+      />,
+    );
+    expect(screen.queryByText(/Check-in: Sep 26/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Change' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Check-out/)).not.toBeInTheDocument();
     expect(screen.getByText('FORM')).toBeInTheDocument();
   });
 

@@ -1,17 +1,10 @@
+import { monthLabel, todayIso } from '../../lib/booking/dateLabels.js';
+
 function monthDateBounds(monthValue) {
   if (!monthValue) return {};
   const [year, month] = monthValue.split('-').map(Number);
   const lastDay = new Date(year, month, 0).getDate();
   return { min: `${monthValue}-01`, max: `${monthValue}-${String(lastDay).padStart(2, '0')}` };
-}
-
-function monthLabel(monthValue) {
-  const [year, month] = monthValue.split('-').map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-}
-
-function todayIsoDate() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 // TWM-216/TWM-228: a standard OTA date field for one entity's booking search —
@@ -27,7 +20,7 @@ export default function ScheduleDateForm({
 }) {
   const monthValue = existing?.precision === 'month' ? existing.month : null;
   const bounds = monthValue ? monthDateBounds(monthValue) : {};
-  const min = bounds.min && bounds.min > todayIsoDate() ? bounds.min : todayIsoDate();
+  const min = bounds.min && bounds.min > todayIso() ? bounds.min : todayIso();
 
   return (
     <form className="confirmation-form" onSubmit={onSubmit}>
