@@ -29,14 +29,82 @@ export function stayFromSegment(segment) {
 }
 
 // A transport-drawer `leg` from an enriched gateway TRAVEL item — the item
-// already carries its resolved date + precision.
+// already carries its resolved date + precision, and (TWM-215) an optional
+// `hubs[]` set of candidate gateway cities for a hubless endpoint.
 export function legFromItem(item) {
   return {
     from: item.from_city,
     to: item.to_city,
     departureDate: item.date_precision === 'exact' ? item.resolved_date : null,
     departureMonth: item.date_precision === 'month' ? item.resolved_date : null,
+    hubs: (item.hubs || []).map(hubFromEntry),
   };
+}
+
+// One enriched `hubs[]` entry -> the flat shape the drawer's hub picker reads.
+// `feasibleModes` is Backend-resolved (deterministic, eager); the fare is not
+// here — it loads lazily when the hub is selected (TWM-229).
+export function hubFromEntry(entry) {
+  return {
+    city: entry.city,
+    side: entry.side,
+    lastMileKm: entry.last_mile_km ?? null,
+    lastMileDurationMinutes: entry.last_mile_duration_minutes ?? null,
+    longHaulDistanceKm: entry.long_haul_distance_km ?? null,
+    feasibleModes: entry.feasible_modes || [],
+  };
+}
+
+// Substitute a chosen gateway hub into the leg endpoint it serves, so a
+// booking-options / flight-offer / feasibility request for a hub-resolved leg
+// targets the hub city, not the hubless town. `origin`-side hubs replace
+// `from`; every other hub replaces `to`.
+export function legForHub(leg, hub) {
+  if (!hub) return leg;
+  return hub.side === 'origin' ? { ...leg, from: hub.city } : { ...leg, to: hub.city };
+}
+
+// The chosen hub for an open transport drawer: the matching candidate, or the
+// first one as the default. Null when the leg is directly connected.
+export function resolveSelectedHub(hubs, selectedCity) {
+  if (!hubs || !hubs.length) return null;
+  return hubs.find(h => h.city === selectedCity) ?? hubs[0];
+}
+
+// Everything the transport drawer needs derived from the open enriched item
+// and the currently-chosen hub city.
+//
+// A leg normally has candidate hubs on one side only (one hubless endpoint).
+// When Atlas emits hubs on *both* sides (both endpoints hubless — rare), the
+// traveller picks a destination gateway and the origin auto-picks its first
+// candidate (TWM-215 D7): resolving each side is independent, and a second
+// picker for the departure side is not worth the friction.
+export function transportHubState(item, selectedCity) {
+  const leg = item ? legFromItem(item) : null;
+  const hubs = leg?.hubs ?? [];
+  const originHubs = hubs.filter(h => h.side === 'origin');
+  const destinationHubs = hubs.filter(h => h.side !== 'origin');
+  const bothSidesHubless = originHubs.length > 0 && destinationHubs.length > 0;
+  const pickerHubs = bothSidesHubless ? destinationHubs : hubs;
+  const autoOriginHub = bothSidesHubless ? originHubs[0] : null;
+  const selected = resolveSelectedHub(pickerHubs, selectedCity);
+  return {
+    leg,
+    pickerHubs,
+    autoOriginHub,
+    selected,
+    selectedCity: selected?.city ?? null,
+    effectiveLeg: leg ? legForHub(legForHub(leg, autoOriginHub), selected) : null,
+  };
+}
+
+// The per-drawer option-cache key: route (both hubs substituted) + resolved
+// date + party size. Switching the destination hub changes the route segment,
+// so the drawer re-resolves for the new hub.
+export function transportCacheKey(item, originHub, hub, partyTotal) {
+  if (!item) return null;
+  const leg = legForHub(legForHub(legFromItem(item), originHub), hub);
+  return `${legKey(leg)}::${item.resolved_date ?? 'flex'}::${partyTotal ?? 'p?'}`;
 }
 
 // Normalize an enriched entity (timeline item or stay segment) to the flat

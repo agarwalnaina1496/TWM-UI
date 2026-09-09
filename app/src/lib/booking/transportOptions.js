@@ -1,6 +1,22 @@
-import { resolveBookingOptions } from '../tripApi.js';
+import { resolveBookingOptions, getTripFeasibility } from '../tripApi.js';
 import { modeLabel, partyEnvelope, toTransportOption } from './shared.js';
 import { searchFlightOffer } from './flightOffer.js';
+
+// TWM-215: one drawer's worth of transport data for a leg (already
+// hub-substituted by the caller when a gateway hub is chosen) — the
+// deterministic feasibility assessment plus the resolved bookable options.
+// `hub` only contributes its `longHaulDistanceKm` fallback for a rail-only
+// gateway with no resolvable airport.
+export async function loadTransportBundle(tripId, leg, hub, party) {
+  const feasibility = await getTripFeasibility(tripId, {
+    origin: leg.from,
+    destination: leg.to,
+    longHaulDistanceKm: hub?.longHaulDistanceKm ?? null,
+  });
+  const approvedModes = (feasibility?.modes || []).map(entry => entry.mode);
+  const options = await transportOptionsFor(tripId, leg, party, approvedModes);
+  return { options, feasibility };
+}
 
 // TWM-220/TWM-221: gateway-leg transport resolution — one booking-options
 // request for the Backend-approved modes, plus flight's separate live-offer

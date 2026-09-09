@@ -6,7 +6,11 @@ vi.mock('../../../src/context/TripContext.jsx', () => ({
   useTrip: () => ({ sendTripCommand }),
 }));
 vi.mock('../../../src/lib/tripApi.js', () => ({ getTripFeasibility: vi.fn().mockResolvedValue({ modes: [] }) }));
-vi.mock('../../../src/lib/booking/transportOptions.js', () => ({ transportOptionsFor: vi.fn().mockResolvedValue([]) }));
+vi.mock('../../../src/lib/booking/transportOptions.js', () => ({
+  transportOptionsFor: vi.fn().mockResolvedValue([]),
+  loadTransportBundle: vi.fn().mockResolvedValue({ options: [], feasibility: { modes: [] } }),
+}));
+import { loadTransportBundle } from '../../../src/lib/booking/transportOptions.js';
 vi.mock('../../../src/lib/booking/stayOptions.js', () => ({ stayOptionsFor: vi.fn().mockResolvedValue([]) }));
 const trackEvent = vi.fn();
 vi.mock('../../../src/lib/analytics.js', () => ({ trackEvent: (...a) => trackEvent(...a) }));
@@ -69,6 +73,12 @@ describe('useBookingDrawers — TWM-228 date edit form', () => {
     expect(trackEvent).toHaveBeenCalledWith('search_pref_updated', { target_type: 'stay' });
   });
 
+  it('exposes no hub state until a transport drawer with hubs is open', () => {
+    const { result } = setup();
+    expect(result.current.transportHubs).toEqual([]);
+    expect(result.current.selectedHubCity).toBe(null);
+  });
+
   it('submitTravelerEdit still sends the same set_party payload', async () => {
     const { result } = setup();
     act(() => result.current.openStayDrawer(STAY_TRIP_DATES.id));
@@ -77,6 +87,53 @@ describe('useBookingDrawers — TWM-228 date edit form', () => {
     await act(async () => { await result.current.submitTravelerEdit({ preventDefault() {} }); });
     expect(sendTripCommand).toHaveBeenCalledWith('set_party', {
       partyUpdate: { adults: 4, children: 0, infants: 0 },
+    });
+  });
+});
+
+describe('useBookingDrawers — TWM-215 gateway hub picker', () => {
+  const HUB_ITEM = {
+    id: 'trip:1:0', kind: 'TRAVEL', from_city: 'Bengaluru', to_city: 'Sumerpur',
+    is_gateway_leg: true, date_precision: 'none', resolved_date: null,
+    hubs: [
+      { city: 'Udaipur', side: 'destination', last_mile_km: 100, last_mile_duration_minutes: 150,
+        long_haul_distance_km: 660, feasible_modes: ['flight', 'train', 'bus'] },
+      { city: 'Rail Junction', side: 'destination', last_mile_km: 60, last_mile_duration_minutes: 90,
+        long_haul_distance_km: 300, feasible_modes: ['train', 'bus'] },
+    ],
+  };
+
+  function hubSetup() {
+    return renderHook(() => useBookingDrawers({
+      tripId: 'trip', view: { booking: { party: { adults: 2, children: 0, infants: 0 } } },
+      days: [{ day_number: 1, timeline: [HUB_ITEM] }], staySegments: [],
+    }));
+  }
+
+  it('defaults the selected hub to the first candidate and fetches its leg', async () => {
+    const { result } = hubSetup();
+    act(() => result.current.openTransportDrawer(HUB_ITEM));
+
+    expect(result.current.transportHubs.map(h => h.city)).toEqual(['Udaipur', 'Rail Junction']);
+    expect(result.current.selectedHubCity).toBe('Udaipur');
+
+    await waitFor(() => expect(loadTransportBundle).toHaveBeenCalled());
+    const [, leg] = loadTransportBundle.mock.calls.at(-1);
+    expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Udaipur' });
+  });
+
+  it('switching hubs re-fetches for the new hub and passes its distance fallback', async () => {
+    const { result } = hubSetup();
+    act(() => result.current.openTransportDrawer(HUB_ITEM));
+    await waitFor(() => expect(loadTransportBundle).toHaveBeenCalled());
+
+    act(() => result.current.selectHub('Rail Junction'));
+    expect(result.current.selectedHubCity).toBe('Rail Junction');
+
+    await waitFor(() => {
+      const [, leg, hub] = loadTransportBundle.mock.calls.at(-1);
+      expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Rail Junction' });
+      expect(hub).toMatchObject({ city: 'Rail Junction', longHaulDistanceKm: 300 });
     });
   });
 });
