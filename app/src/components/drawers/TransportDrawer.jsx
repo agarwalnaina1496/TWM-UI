@@ -126,6 +126,64 @@ function FlightLiveOfferInfo({ liveOffer, onAddDates }) {
   return null;
 }
 
+function hubLastMileLabel(hub) {
+  const parts = [];
+  if (hub.lastMileKm != null) parts.push(`${Math.round(hub.lastMileKm)} km`);
+  if (hub.lastMileDurationMinutes != null) parts.push(`${Math.round((hub.lastMileDurationMinutes / 60) * 10) / 10}h`);
+  return parts.join(' · ');
+}
+
+function hublessTownName(leg, hub) {
+  return hub?.side === 'origin' ? leg.from : leg.to;
+}
+
+// TWM-215: passive context only — the hub → town last mile is arranged
+// locally, never its own bookable search.
+function HubLastMileNote({ leg, hub }) {
+  const label = hubLastMileLabel(hub);
+  if (!label) return null;
+  return (
+    <p className="hub-last-mile-note">
+      Then ~{label} onward to {hublessTownName(leg, hub)} — arrange this short leg locally.
+    </p>
+  );
+}
+
+// The candidate-gateway picker: one row per hub with its last-mile estimate
+// and Backend-resolved feasible modes. Unranked — the first row is only the
+// default selection, not a recommendation.
+function HubPicker({ leg, hubs, selectedCity, onSelect }) {
+  return (
+    <div className="hub-picker" role="radiogroup" aria-label="Choose a gateway city">
+      <p className="hub-picker-intro">
+        {hublessTownName(leg, hubs[0])} has no direct long-haul transport. Pick a nearby gateway city:
+      </p>
+      {hubs.map(hub => {
+        const selected = hub.city === selectedCity;
+        const lastMile = hubLastMileLabel(hub);
+        return (
+          <button
+            type="button"
+            key={hub.city}
+            className={`hub-row${selected ? ' selected' : ''}`}
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onSelect(hub.city)}
+          >
+            <strong>{hub.city}</strong>
+            {lastMile && <span className="stay-option-tag">{lastMile} last mile</span>}
+            <span className="hub-row-modes">
+              {hub.feasibleModes.length
+                ? hub.feasibleModes.map(mode => <ModeTag key={mode} mode={mode} />)
+                : <span className="stay-option-tag">No modes resolved</span>}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function flightCtaLabel(option) {
   const partnerLabel = PARTNER_LABEL[option.partner] || option.partner || 'partner';
   return `Check availability on ${partnerLabel} ↗`;
@@ -180,12 +238,22 @@ function RecommendedModeCard({ option }) {
   );
 }
 
-export default function TransportDrawer({ leg, options, feasibility, loading, error, dateRow, partyRow, onClose }) {
+export default function TransportDrawer({
+  leg, hubs = [], selectedHubCity, onSelectHub,
+  options, feasibility, loading, error, dateRow, partyRow, onClose,
+}) {
   if (!leg) return null;
+  const hubList = hubs || [];
+  const selectedHub = hubList.length
+    ? (hubList.find(h => h.city === selectedHubCity) ?? hubList[0])
+    : null;
   const resolvedOptions = feasibleTransportOptions(options || [], feasibility);
   const feasibleModeNames = new Set((feasibility?.modes || []).map(entry => entry.mode));
   const notFeasibleModes = MODES.filter(mode => !feasibleModeNames.has(mode));
   const recommended = resolvedOptions.length ? recommendedMode(resolvedOptions) : undefined;
+  const emptyMessage = hubList.length === 0
+    ? 'No direct transport identified for this leg.'
+    : 'No bookable transport options for this gateway city — try another.';
   return (
     <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
       <aside
@@ -201,12 +269,21 @@ export default function TransportDrawer({ leg, options, feasibility, loading, er
         </div>
         {dateRow}
         {partyRow}
+        {hubList.length > 1 && (
+          <HubPicker leg={leg} hubs={hubList} selectedCity={selectedHub?.city} onSelect={onSelectHub} />
+        )}
+        {hubList.length === 1 && (
+          <p className="hub-picker-intro">
+            {hublessTownName(leg, hubList[0])} has no direct long-haul transport — routed via {hubList[0].city}.
+          </p>
+        )}
+        {selectedHub && <HubLastMileNote leg={leg} hub={selectedHub} />}
         {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
         {error && <p className="already-booked-note" role="alert">{error}</p>}
         {!loading && !error && (
           <>
             {resolvedOptions.length === 0 ? (
-              <p className="already-booked-note" role="status">No bookable transport options for this leg.</p>
+              <p className="already-booked-note" role="status">{emptyMessage}</p>
             ) : (
               <>
                 {recommended && <RecommendedModeCard option={recommended} />}

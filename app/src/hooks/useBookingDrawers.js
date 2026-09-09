@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useTrip } from '../context/TripContext.jsx';
-import { getTripFeasibility } from '../lib/tripApi.js';
-import { transportOptionsFor } from '../lib/booking/transportOptions.js';
+import { loadTransportBundle } from '../lib/booking/transportOptions.js';
 import { stayOptionsFor } from '../lib/booking/stayOptions.js';
-import { legFromItem, legKey, stayFromSegment, travelerPartyLabel } from '../lib/booking/legsFromItinerary.js';
+import {
+  legForHub, legFromItem, stayFromSegment,
+  transportCacheKey as buildTransportCacheKey, transportHubState, travelerPartyLabel,
+} from '../lib/booking/legsFromItinerary.js';
 import { searchPrefFor } from '../constants/bookingSetup.js';
 import { trackEvent } from '../lib/analytics.js';
 
@@ -42,6 +44,7 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
   const [transportDrawerItem, setTransportDrawerItem] = useState(null); // an enriched gateway TRAVEL item
   const [transportDrawerLoading, setTransportDrawerLoading] = useState(false);
   const [transportDrawerError, setTransportDrawerError] = useState(null);
+  const [selectedHubCity, setSelectedHubCity] = useState(null); // TWM-215: chosen gateway hub
 
   const [stayDrawerSegmentId, setStayDrawerSegmentId] = useState(null);
   const [stayDrawerLoading, setStayDrawerLoading] = useState(false);
@@ -58,12 +61,14 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
   const transportItem = transportDrawerItem
     ? (days.flatMap(d => d.timeline || []).find(i => i.id === transportDrawerItem.id) ?? transportDrawerItem)
     : null;
+  const {
+    leg: transportLeg, hubs: transportHubs, selected: selectedHub,
+    selectedCity: resolvedHubCity, effectiveLeg,
+  } = transportHubState(transportItem, selectedHubCity);
   const staySegment = stayDrawerSegmentId ? staySegments.find(s => s.id === stayDrawerSegmentId) ?? null : null;
   const stay = stayFromSegment(staySegment);
 
-  function transportCacheKey(item) {
-    return `${legKey(legFromItem(item))}::${item.resolved_date ?? 'flex'}::${partyTotal ?? 'p?'}`;
-  }
+  const transportCacheKey = item => buildTransportCacheKey(item, selectedHub, partyTotal);
   function stayCacheKey(segment) {
     if (!segment) return null;
     return `${segment.id}::${segment.checkin_date ?? 'flex'}::${segment.nights}::${partyTotal ?? 'p?'}`;
@@ -76,11 +81,9 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     setTransportDrawerError(null);
     setTransportDrawerLoading(true);
     try {
-      const leg = legFromItem(item);
-      const feasibility = await getTripFeasibility(tripId, { origin: leg.from, destination: leg.to });
-      const approvedModes = (feasibility?.modes || []).map(entry => entry.mode);
-      const options = await transportOptionsFor(tripId, leg, party, approvedModes);
-      setTransportData(prev => ({ ...prev, [key]: { options, feasibility } }));
+      const leg = legForHub(legFromItem(item), selectedHub);
+      const bundle = await loadTransportBundle(tripId, leg, selectedHub, party);
+      setTransportData(prev => ({ ...prev, [key]: bundle }));
     } catch (error) {
       setTransportDrawerError(error.message || 'Could not load transport options.');
     } finally {
@@ -125,12 +128,14 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
 
   function openTransportDrawer(item) {
     setTransportDrawerItem(item);
+    setSelectedHubCity(null); // default to the first candidate hub, if any
     setTransportDrawerError(null);
     setTransportDrawerLoading(false);
     resetPrefEdit();
   }
   function closeTransportDrawer() {
     setTransportDrawerItem(null);
+    setSelectedHubCity(null);
     resetPrefEdit();
   }
   function openStayDrawer(segmentId) {
@@ -267,6 +272,11 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
 
     transportDrawerItem,
     transportItem,
+    transportLeg,
+    transportHubs,
+    selectedHubCity: resolvedHubCity,
+    selectHub: setSelectedHubCity,
+    effectiveLeg,
     transportOptions: transportItem ? transportData[transportCacheKey(transportItem)]?.options : undefined,
     transportFeasibility: transportItem ? transportData[transportCacheKey(transportItem)]?.feasibility : undefined,
     transportDrawerLoading,

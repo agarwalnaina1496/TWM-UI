@@ -124,8 +124,12 @@ export async function resolveBookingOptions(id, payload) {
 
 // TWM-131/132: per-route feasibility across flight/train/bus/drive. May
 // return null (no assessment yet); treat that as "no feasibility data".
-export async function getTripFeasibility(id, { origin, destination }) {
-  return request(`/${id}/trusted-action/feasibility`, { method: 'POST', body: JSON.stringify({ origin, destination }) });
+export async function getTripFeasibility(id, { origin, destination, longHaulDistanceKm = null }) {
+  const body = { origin, destination };
+  // TWM-215: Atlas's gateway-hub ballpark — a fallback the Backend uses only
+  // when a rail-only hub city has no resolvable airport.
+  if (longHaulDistanceKm != null) body.long_haul_distance_km = longHaulDistanceKm;
+  return request(`/${id}/trusted-action/feasibility`, { method: 'POST', body: JSON.stringify(body) });
 }
 
 // TWM-146: explicit live flight search — status-discriminated response.
