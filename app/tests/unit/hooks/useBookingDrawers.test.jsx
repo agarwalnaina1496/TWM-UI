@@ -12,6 +12,7 @@ vi.mock('../../../src/lib/booking/transportOptions.js', () => ({
 }));
 import { loadTransportBundle } from '../../../src/lib/booking/transportOptions.js';
 vi.mock('../../../src/lib/booking/stayOptions.js', () => ({ stayOptionsFor: vi.fn().mockResolvedValue([]) }));
+import { stayOptionsFor } from '../../../src/lib/booking/stayOptions.js';
 const trackEvent = vi.fn();
 vi.mock('../../../src/lib/analytics.js', () => ({ trackEvent: (...a) => trackEvent(...a) }));
 
@@ -73,6 +74,39 @@ describe('useBookingDrawers — TWM-228 date edit form', () => {
     expect(trackEvent).toHaveBeenCalledWith('search_pref_updated', { target_type: 'stay' });
   });
 
+  it('seeds check-out and sends checkout_date when the traveller moves it', async () => {
+    const { result } = setup();
+    act(() => result.current.openStayDrawer(STAY_TRIP_DATES.id));
+    act(() => result.current.openPrefEditForm('stay', {
+      id: STAY_TRIP_DATES.id, date_source: 'trip_dates', precision: 'exact',
+      date: '2026-09-26', checkout: '2026-09-28',
+    }));
+    expect(result.current.prefEditCheckoutValue).toBe('2026-09-28');
+
+    act(() => result.current.setPrefEditCheckoutValue('2026-09-30'));
+    await act(async () => { await result.current.submitPrefEdit({ preventDefault() {} }); });
+    expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', {
+      searchPrefUpdate: {
+        target_type: 'stay', target_id: STAY_TRIP_DATES.id,
+        date: '2026-09-26', checkout_date: '2026-09-30',
+      },
+    });
+  });
+
+  it('does not send checkout_date for a transport leg', async () => {
+    const { result } = setup();
+    act(() => result.current.openStayDrawer(STAY_TRIP_DATES.id));
+    act(() => result.current.openPrefEditForm('transport', {
+      id: 't1', date_source: 'trip_dates', precision: 'exact', date: '2026-09-26',
+    }));
+    expect(result.current.prefEditCheckoutValue).toBe('');
+    act(() => result.current.setPrefEditValue('2026-10-05'));
+    await act(async () => { await result.current.submitPrefEdit({ preventDefault() {} }); });
+    expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', {
+      searchPrefUpdate: { target_type: 'transport', target_id: 't1', date: '2026-10-05' },
+    });
+  });
+
   it('exposes no hub state until a transport drawer with hubs is open', () => {
     const { result } = setup();
     expect(result.current.transportHubs).toEqual([]);
@@ -88,6 +122,24 @@ describe('useBookingDrawers — TWM-228 date edit form', () => {
     expect(sendTripCommand).toHaveBeenCalledWith('set_party', {
       partyUpdate: { adults: 4, children: 0, infants: 0 },
     });
+  });
+});
+
+describe('useBookingDrawers — option cache keyed by party composition', () => {
+  it('re-resolves stay options when the party changes even at the same head count', async () => {
+    stayOptionsFor.mockClear();
+    const { result, rerender } = renderHook(
+      ({ party }) => useBookingDrawers({ tripId: 'trip', view: { booking: { party } }, days: [], staySegments: [STAY_TRIP_DATES] }),
+      { initialProps: { party: { adults: 3, children: 0, infants: 0 } } },
+    );
+    act(() => result.current.openStayDrawer(STAY_TRIP_DATES.id));
+    await waitFor(() => expect(stayOptionsFor).toHaveBeenCalledTimes(1));
+    expect(stayOptionsFor.mock.calls[0][2]).toEqual({ adults: 3, children: 0, infants: 0 });
+
+    // 3 adults -> 2 adults + 1 child: head count still 3, redirect params differ.
+    rerender({ party: { adults: 2, children: 1, infants: 0 } });
+    await waitFor(() => expect(stayOptionsFor).toHaveBeenCalledTimes(2));
+    expect(stayOptionsFor.mock.calls[1][2]).toEqual({ adults: 2, children: 1, infants: 0 });
   });
 });
 

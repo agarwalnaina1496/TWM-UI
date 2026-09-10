@@ -321,6 +321,7 @@
    right, no navigation away from the page. */
 .transport-drawer-overlay{position:fixed;inset:0;background:rgba(28,22,16,0.35);z-index:210;display:flex;justify-content:flex-end;}
 .transport-drawer{width:min(420px,100%);height:100%;background:var(--surface);box-shadow:-8px 0 24px rgba(28,22,16,0.18);padding:22px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;}
+.transport-drawer>*{flex:none;}
 .transport-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .transport-drawer-head h3{margin:0;font-family:'Fraunces',serif;font-size:19px;}
 .transport-drawer-date{margin:0;font-size:13px;color:var(--tp);font-weight:700;}
@@ -344,11 +345,32 @@
 .hub-row-modes{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-left:auto;}
 .hub-last-mile-note{margin:2px 0 0;font-size:12.5px;color:var(--tm);}
 
-/* TWM-204/TWM-206: a clearly-labeled non-binding estimate, visually
-   distinct from the real partner-link cards below it. */
-.stay-estimate-block{border:1px dashed var(--border);border-radius:10px;padding:12px 14px;background:var(--bg);}
-.stay-estimate-label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--tm);margin-bottom:8px;}
+/* TWM-204/TWM-206/TWM-216: a quiet, clearly-labeled non-binding estimate —
+   secondary context below the search card, not a peer of the partner cards. */
+.stay-estimate-block,.drawer-context-band{border:1px dashed var(--border);border-radius:12px;padding:10px 14px;background:transparent;flex:none;}
+.drawer-context-band{display:flex;flex-direction:column;gap:8px;}
+.drawer-context-band .hub-picker-intro{margin:0;}
+.stay-estimate-label{display:block;font-size:11px;font-weight:600;color:var(--tm);margin-bottom:6px;}
 .stay-estimate-tiers{display:flex;flex-wrap:wrap;gap:14px;}
-.stay-estimate-tier{display:flex;flex-direction:column;gap:4px;align-items:flex-start;}
-.stay-estimate-tier strong{font-family:'Fraunces',serif;font-size:15px;}
-@media(max-width:480px){.transport-drawer{width:100%;}}
+.stay-estimate-tier{display:flex;flex-direction:column;gap:3px;align-items:flex-start;}
+.stay-estimate-tier strong{font-family:var(--font-mono,'IBM Plex Mono',monospace);font-size:13px;color:var(--ts);font-weight:500;}
+
+/* TWM-216: the booking drawer search card — Where / Dates / Guests. */
+.transport-drawer-head h3 .drawer-head-meta{color:var(--tm);font-weight:500;}
+.drawer-section-heading{margin:6px 0 -2px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);}
+.booking-search-card{border:.5px solid var(--border);border-radius:12px;background:var(--surface,#fff);overflow:hidden;flex:none;}
+.booking-search-row{padding:11px 14px;}
+.booking-search-row + .booking-search-row{border-top:.5px solid var(--border);}
+.booking-search-line{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.booking-search-label{font-size:12px;font-weight:700;color:var(--ts);flex:0 0 auto;}
+.booking-search-value{font-size:13.5px;color:var(--tp);font-weight:600;}
+.booking-search-note{font-size:12px;color:var(--tm);margin-left:auto;}
+.booking-search-change{margin-left:auto;background:none;border:0;padding:0;font:inherit;font-size:12.5px;font-weight:700;color:var(--accent);cursor:pointer;}
+.booking-search-change:hover{text-decoration:underline;}
+.booking-search-row .confirmation-form{margin:2px 0 0;border:0;padding:0;background:transparent;}
+.booking-date-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.booking-form-hint{margin:0;font-size:12px;color:var(--tm);line-height:1.45;}
+.booking-form-reset{margin-left:auto;}
+.stay-option-card .stay-option-tag.tone-sage{color:var(--sage);}
+.stay-option-card .stay-option-tag.tone-neutral{color:var(--tm);}
+@media(max-width:480px){.transport-drawer{width:100%;}.booking-date-grid{grid-template-columns:1fr;}}

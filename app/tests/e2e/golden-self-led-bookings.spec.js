@@ -254,7 +254,7 @@ test('Itinerary resolves a gateway transport leg and a stay via their drawers, s
   await expect(transportDrawer.getByRole('link', { name: /Check/ }).first()).toBeVisible();
   // TWM-228: no resolved date for this leg -> the date picker is expanded and
   // blank (a standard OTA form), with no exact/month precision toggle.
-  await expect(transportDrawer.getByLabel('Leg date')).toHaveValue('');
+  await expect(transportDrawer.getByLabel('Date')).toHaveValue('');
   await expect(transportDrawer.getByText('I know the exact date')).toHaveCount(0);
   await expect(transportDrawer.getByText('I only know the month')).toHaveCount(0);
   await page.getByRole('button', { name: 'Close transport options' }).click();

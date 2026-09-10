@@ -384,7 +384,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(bodies.filter(b => b.domain === 'transport')).toHaveLength(1);
     expect(bodies[0].targets.map(t => t.value)).toEqual(['flight', 'train', 'bus']);
     // TWM-228: a leg with no resolved date shows the date picker expanded and blank.
-    expect(within(drawer).getByLabelText('Leg date')).toHaveValue('');
+    expect(within(drawer).getByLabelText('Date')).toHaveValue('');
     expect(within(drawer).queryByRole('button', { name: /Add a date for this search/ })).toBeNull();
     void user;
   });
@@ -470,7 +470,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     const before = bodies.length;
 
     // TWM-228: the picker is already expanded for a dateless leg.
-    await user.type(within(drawer).getByLabelText('Leg date'), '2026-11-01');
+    await user.type(within(drawer).getByLabelText('Date'), '2026-11-01');
     await user.click(within(drawer).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', expect.anything()));
     await waitFor(() => expect(bodies.length).toBeGreaterThan(before));
@@ -487,7 +487,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     const user = await openStayDrawer();
     const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
     await waitFor(() => expect(within(drawer).getByText('Search Booking.com ↗')).toBeInTheDocument());
-    expect(within(drawer).getByText('Rishikesh · 2 nights')).toBeInTheDocument();
+    expect(within(drawer).getByRole('heading', { name: /Rishikesh.*2 nights/ })).toBeInTheDocument();
     expect(within(drawer).getByText('Browse ixigo hotels ↗')).toBeInTheDocument();
     const stayBodies = bodies.filter(b => b.domain === 'stay');
     expect(stayBodies).toHaveLength(1);
@@ -508,7 +508,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     global.fetch = makeFetch();
     await openStayDrawer();
     const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-    expect(within(drawer).getByText('Non-binding estimate, per night')).toBeInTheDocument();
+    expect(within(drawer).getByText('Rough nightly rate · not a quote')).toBeInTheDocument();
     expect(within(drawer).getByText('₹1,000–₹2,000')).toBeInTheDocument();
   });
 
@@ -521,7 +521,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(within(drawer).queryByText('Our pick')).not.toBeInTheDocument();
   });
 
-  it('shows a resolved check-in collapsed behind "Change", with a reset for an override', async () => {
+  it('shows a resolved check-in/check-out range collapsed behind "Change", with a reset for an override', async () => {
     commandSnapshot = readyView({ context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     itineraryResponse = enrichedDoc({ staySegments: [{
@@ -532,13 +532,14 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     global.fetch = makeFetch();
     const user = await openStayDrawer();
     const drawer = await screen.findByRole('dialog', { name: /Stay: Rishikesh/ });
-    // Collapsed by default — the value is shown, the picker is not.
-    expect(within(drawer).getByText(/Check-in: Nov 1/)).toBeInTheDocument();
-    expect(within(drawer).queryByLabelText('Check-in date')).toBeNull();
+    // Collapsed by default — the range is shown, the picker is not.
+    expect(within(drawer).getByText(/Nov 1 →.*Nov 3/)).toBeInTheDocument();
+    expect(within(drawer).queryByLabelText('Check-in')).toBeNull();
     await user.click(within(drawer).getByRole('button', { name: 'Change' }));
-    expect(within(drawer).getByLabelText('Check-in date')).toHaveValue('2026-11-01');
-    // An explicit override offers a reset to the inherited trip date.
-    expect(within(drawer).getByRole('button', { name: /Reset to the default date/ })).toBeInTheDocument();
+    expect(within(drawer).getByLabelText('Check-in')).toHaveValue('2026-11-01');
+    expect(within(drawer).getByLabelText('Check-out')).toHaveValue('2026-11-03');
+    // An explicit override offers a reset to the itinerary dates.
+    expect(within(drawer).getByRole('button', { name: /Reset to itinerary/ })).toBeInTheDocument();
   });
 
   // ---- Party editor -------------------------------------------------
@@ -553,11 +554,11 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     });
     const user = await openTransportDrawer();
     const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-    await user.click(within(drawer).getByRole('button', { name: /Set travellers/ }));
+    await user.click(within(drawer).getByRole('button', { name: /Add travellers/ }));
     await user.click(within(drawer).getByRole('button', { name: 'Save travelers' }));
     await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_party', expect.anything()));
     await waitFor(() => expect(
-      within(screen.getByRole('dialog', { name: /Delhi to Rishikesh/ })).getByRole('button', { name: /Booking for 1 adult . Change/ }),
+      within(screen.getByRole('dialog', { name: /Delhi to Rishikesh/ })).getByText('1 adult'),
     ).toBeInTheDocument());
   });
 

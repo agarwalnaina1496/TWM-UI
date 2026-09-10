@@ -1,96 +1,90 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DrawerDateRow, DrawerPartyRow } from '../../../../src/components/drawers/DrawerRows.jsx';
+import {
+  DrawerWhereRow, DrawerDateRow, DrawerPartyRow,
+} from '../../../../src/components/drawers/DrawerRows.jsx';
 
-// TWM-228: the shared drawer rows behave as a standard OTA search form —
-// a known value pre-filled and collapsed behind "· Change", the picker
-// expanded only when the value is unknown.
+// TWM-216: the booking drawer search card rows — Where (fixed), Dates, Guests.
+// Each row collapses to a value + a "Change" link and expands in place.
+describe('DrawerWhereRow', () => {
+  it('renders the destination with no edit affordance (it is fixed)', () => {
+    render(<DrawerWhereRow value="Sumerpur, Rajasthan" />);
+    expect(screen.getByText('Sumerpur, Rajasthan')).toBeInTheDocument();
+    expect(screen.getByText('from your itinerary')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+});
+
 describe('DrawerDateRow', () => {
-  it('renders an exact date collapsed behind "Change", with the check-out line', () => {
+  it('renders an exact date range collapsed behind "Change"', () => {
     render(
       <DrawerDateRow
-        label="Check-in" precision="exact" valueLabel="Sep 26" checkoutLabel="Sep 28"
+        precision="exact" rangeLabel="Fri, 26 Sep → Sun, 28 Sep 2026"
         onEdit={() => {}} editOpen={false} editForm={<div>FORM</div>}
       />,
     );
-    expect(screen.getByText(/Check-in: Sep 26/)).toBeInTheDocument();
+    expect(screen.getByText('Fri, 26 Sep → Sun, 28 Sep 2026')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
-    expect(screen.getByText('Check-out Sep 28')).toBeInTheDocument();
-    expect(screen.queryByText('Add a date for this search')).not.toBeInTheDocument();
     expect(screen.queryByText('FORM')).not.toBeInTheDocument();
   });
 
-  it('renders a month-precision date collapsed behind "Change", with no check-out line', () => {
+  it('renders a month-precision label collapsed behind "Change"', () => {
     render(
       <DrawerDateRow
-        label="Check-in" precision="month" valueLabel="October 2026" checkoutLabel="Nov 1"
+        precision="month" valueLabel="October 2026"
         onEdit={() => {}} editOpen={false} editForm={<div>FORM</div>}
       />,
     );
-    expect(screen.getByText(/Check-in: October 2026/)).toBeInTheDocument();
+    expect(screen.getByText('October 2026')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
-    expect(screen.queryByText(/Check-out/)).not.toBeInTheDocument();
   });
 
-  it('shows a collapsed "Add a date" button when no date is resolved and the form is closed', () => {
+  it('shows a collapsed "Add dates" button when no date is resolved and the form is closed', () => {
     render(
-      <DrawerDateRow
-        label="Check-in" precision="none" valueLabel={null}
-        onEdit={() => {}} editOpen={false} editForm={<div>FORM</div>}
-      />,
+      <DrawerDateRow precision="none" valueLabel={null} onEdit={() => {}} editOpen={false} editForm={<div>FORM</div>} />,
     );
-    expect(screen.getByRole('button', { name: 'Add a date for this search' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add dates' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change' })).not.toBeInTheDocument();
     expect(screen.queryByText('FORM')).not.toBeInTheDocument();
   });
 
-  it('shows only the picker when no date is resolved and the form is open', () => {
+  it('shows only the picker when the form is open', () => {
     render(
-      <DrawerDateRow
-        label="Check-in" precision="none" valueLabel={null}
-        onEdit={() => {}} editOpen editForm={<div>FORM</div>}
-      />,
+      <DrawerDateRow precision="exact" rangeLabel="Fri, 26 Sep → Sun, 28 Sep 2026" onEdit={() => {}} editOpen editForm={<div>FORM</div>} />,
     );
-    expect(screen.queryByRole('button', { name: 'Add a date for this search' })).not.toBeInTheDocument();
-    expect(screen.getByText('FORM')).toBeInTheDocument();
-  });
-
-  it('swaps the collapsed line for the picker when a known date is being edited', () => {
-    render(
-      <DrawerDateRow
-        label="Check-in" precision="exact" valueLabel="Sep 26" checkoutLabel="Sep 28"
-        onEdit={() => {}} editOpen editForm={<div>FORM</div>}
-      />,
-    );
-    expect(screen.queryByText(/Check-in: Sep 26/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Fri, 26 Sep → Sun, 28 Sep 2026')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change' })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Check-out/)).not.toBeInTheDocument();
     expect(screen.getByText('FORM')).toBeInTheDocument();
   });
 
   it('calls onEdit from either affordance', async () => {
     const onEdit = vi.fn();
     const { rerender } = render(
-      <DrawerDateRow label="Check-in" precision="exact" valueLabel="Sep 26" onEdit={onEdit} editOpen={false} editForm={null} />,
+      <DrawerDateRow precision="exact" rangeLabel="Fri, 26 Sep" onEdit={onEdit} editOpen={false} editForm={null} />,
     );
     await userEvent.click(screen.getByRole('button', { name: 'Change' }));
-    rerender(<DrawerDateRow label="Check-in" precision="none" valueLabel={null} onEdit={onEdit} editOpen={false} editForm={null} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Add a date for this search' }));
+    rerender(<DrawerDateRow precision="none" valueLabel={null} onEdit={onEdit} editOpen={false} editForm={null} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add dates' }));
     expect(onEdit).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('DrawerPartyRow', () => {
-  it('renders the party collapsed behind "· Change" once set', () => {
+  it('renders the party collapsed behind "Change" once set', () => {
     render(<DrawerPartyRow label="3 adults" onEdit={() => {}} editOpen={false} editForm={<div>FORM</div>} />);
-    expect(screen.getByRole('button', { name: /Booking for 3 adults · Change/ })).toBeInTheDocument();
+    expect(screen.getByText('3 adults')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
     expect(screen.queryByText('FORM')).not.toBeInTheDocument();
   });
 
-  it('renders the "Set travellers" prompt while unset', () => {
+  it('renders the "Add guests" prompt while unset', () => {
     render(<DrawerPartyRow label={null} onEdit={() => {}} editOpen editForm={<div>FORM</div>} />);
-    expect(screen.getByRole('button', { name: /Set travellers/ })).toBeInTheDocument();
     expect(screen.getByText('FORM')).toBeInTheDocument();
+  });
+
+  it('shows "Add guests" collapsed while unset and the form is closed', () => {
+    render(<DrawerPartyRow label={null} onEdit={() => {}} editOpen={false} editForm={<div>FORM</div>} />);
+    expect(screen.getByRole('button', { name: 'Add guests' })).toBeInTheDocument();
   });
 });
