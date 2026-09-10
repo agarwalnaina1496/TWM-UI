@@ -297,24 +297,32 @@ function modeSummary(option) {
   return 'No direct transport identified';
 }
 
+function selectableModeOptions(modeOptions) {
+  return modeOptions.filter(option => option.direct || (option.hubs || []).some(hub => hub.feasible !== false));
+}
+
 function ChooserBody({ leg, modeOptions, ruledOutModes, searchCard, onSelectMode }) {
   return (
     <>
       {searchCard}
       <p className="drawer-section-heading">Choose transport</p>
-      <div className="transport-mode-list">
-        {modeOptions.map(option => (
-          <button
-            key={option.mode}
-            type="button"
-            className="transport-mode-row"
-            onClick={() => onSelectMode(option.mode)}
-          >
-            <ModeTag mode={option.mode} />
-            <span>{modeSummary(option)}</span>
-          </button>
-        ))}
-      </div>
+      {modeOptions.length > 0 ? (
+        <div className="transport-mode-list">
+          {modeOptions.map(option => (
+            <button
+              key={option.mode}
+              type="button"
+              className="transport-mode-row"
+              onClick={() => onSelectMode(option.mode)}
+            >
+              <ModeTag mode={option.mode} />
+              <span>{modeSummary(option)}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="already-booked-note" role="status">No feasible transport identified for this leg.</p>
+      )}
       {ruledOutModes.length > 0 && (
         <ul className="transport-ruled-out-list">
           {ruledOutModes.map(mode => <li key={mode}><ModeTag mode={mode} /> Not available for this route.</li>)}
@@ -338,26 +346,29 @@ function NotFeasibleModes({ modes }) {
 }
 
 function SelectedTransportBody({
-  leg, selectedMode, hasPerModeOptions, currentModeOption, hubList,
+  leg, modeOptions, hasPerModeOptions, currentModeOption, hubList,
   selectedHub, autoOriginHub, onSelectHub, options, feasibility, loading,
   error, searchCard,
 }) {
   const resolvedOptions = feasibleTransportOptions(options || [], feasibility);
   const feasibleModeNames = new Set(
-    hasPerModeOptions ? [selectedMode] : (feasibility?.modes || []).map(entry => entry.mode),
+    hasPerModeOptions
+      ? selectableModeOptions(modeOptions).map(option => option.mode)
+      : (feasibility?.modes || []).map(entry => entry.mode),
   );
   const notFeasibleModes = MODES.filter(mode => !feasibleModeNames.has(mode));
   const recommended = resolvedOptions.length ? recommendedMode(resolvedOptions) : undefined;
-  const emptyMessage = currentModeOption && !currentModeOption.direct && hubList.length === 0
+  const activeHubList = currentModeOption?.direct ? [] : hubList;
+  const emptyMessage = currentModeOption && !currentModeOption.direct && activeHubList.length === 0
     ? 'No direct transport identified.'
-    : hubList.length === 0
+    : activeHubList.length === 0
       ? 'No direct transport identified for this leg.'
       : 'No bookable transport options for this gateway city — try another.';
   return (
     <>
       {searchCard}
       <TransportContextBand
-        leg={leg} hubList={currentModeOption?.direct ? [] : hubList} selectedHub={selectedHub}
+        leg={leg} hubList={activeHubList} selectedHub={selectedHub}
         autoOriginHub={autoOriginHub} onSelectHub={onSelectHub}
       />
       <p className="drawer-section-heading">How to get there</p>
@@ -394,7 +405,7 @@ export default function TransportDrawer({
     ? modeOptions.find(option => option.mode === selectedMode)
     : null;
   if (hasPerModeOptions && !selectedMode) {
-    const chooserModes = modeOptions.filter(option => option.direct || (option.hubs || []).some(hub => hub.feasible !== false));
+    const chooserModes = selectableModeOptions(modeOptions);
     const modeNames = new Set(chooserModes.map(option => option.mode));
     const ruledOutModes = MODES.filter(mode => !modeNames.has(mode));
     return (
@@ -425,7 +436,7 @@ export default function TransportDrawer({
     >
       <SelectedTransportBody
         leg={leg}
-        selectedMode={selectedMode}
+        modeOptions={modeOptions}
         hasPerModeOptions={hasPerModeOptions}
         currentModeOption={currentModeOption}
         hubList={hubList}

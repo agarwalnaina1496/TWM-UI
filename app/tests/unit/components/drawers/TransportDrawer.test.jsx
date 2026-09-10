@@ -119,7 +119,7 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
     renderDrawer({
       modeOptions: MODE_OPTIONS,
       selectedMode: 'train',
-      hubs: [],
+      hubs: HUBS,
       options: [{ mode: 'train', status: 'resolved', name: 'Train: Bengaluru → Sumerpur' }],
       feasibility: { modes: [{ mode: 'train', status: 'feasible' }] },
     });
@@ -127,5 +127,30 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     expect(screen.queryByText(/TWM doesn't book this leg/)).not.toBeInTheDocument();
     expect(screen.getByText(/Train: Bengaluru/)).toBeInTheDocument();
+  });
+
+  it('State 2 keeps other chooser-eligible modes out of the unavailable list', () => {
+    renderDrawer({
+      modeOptions: MODE_OPTIONS,
+      selectedMode: 'flight',
+      hubs: MODE_OPTIONS[0].hubs,
+      selectedHub: MODE_OPTIONS[0].hubs[0],
+      onSelectHub: () => {},
+    });
+
+    const unavailable = screen.getByText(/Other modes/).closest('details');
+    expect(within(unavailable).queryByText(/Train/)).not.toBeInTheDocument();
+    expect(within(unavailable).getByText(/Bus/).closest('li')).toHaveTextContent(/Not available/);
+  });
+
+  it('State 1 explains when every per-mode option is ruled out', () => {
+    renderDrawer({
+      modeOptions: [{ mode: 'flight', direct: false, hubs: [{ city: 'Udaipur', feasible: false }] }],
+      onSelectMode: vi.fn(),
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('No feasible transport identified for this leg.');
+    expect(screen.queryByRole('button', { name: /Flight/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Flight/).closest('li')).toHaveTextContent(/Not available/);
   });
 });

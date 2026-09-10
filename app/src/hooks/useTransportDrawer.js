@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { loadTransportBundle } from '../lib/booking/transportOptions.js';
 import {
   transportCacheKey as buildTransportCacheKey,
@@ -8,14 +8,7 @@ import {
   selectedTransportOption,
   transportModeCacheKey,
 } from '../lib/booking/legsFromItinerary.js';
-
-function useDrawerFetch(openKey, cache, loading, fetcher) {
-  useEffect(() => {
-    if (!openKey || cache[openKey] || loading) return;
-    fetcher();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openKey, cache, loading]);
-}
+import { useDrawerFetch } from './useDrawerFetch.js';
 
 export function useTransportDrawer({ tripId, days, party, partyKey, onOpened, onClosed }) {
   const [drawerItem, setDrawerItem] = useState(null);

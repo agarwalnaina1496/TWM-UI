@@ -4,18 +4,8 @@ import { stayOptionsFor } from '../lib/booking/stayOptions.js';
 import { stayFromSegment, travelerPartyLabel } from '../lib/booking/legsFromItinerary.js';
 import { searchPrefFor } from '../constants/bookingSetup.js';
 import { trackEvent } from '../lib/analytics.js';
+import { useDrawerFetch } from './useDrawerFetch.js';
 import { useTransportDrawer } from './useTransportDrawer.js';
-
-// TWM-215: the single generic "keep the open drawer's cache filled" hook —
-// regardless of how it got open (a fresh click, or a save elsewhere
-// invalidating the cache while the drawer stayed open).
-function useDrawerFetch(openKey, cache, loading, fetcher) {
-  useEffect(() => {
-    if (!openKey || cache[openKey] || loading) return;
-    fetcher();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openKey, cache, loading]);
-}
 
 // Owns both booking drawers (transport + stay), their per-key option caches,
 // and the two editors that live inside whichever drawer is open: the

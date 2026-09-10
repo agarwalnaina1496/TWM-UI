@@ -124,7 +124,7 @@ export default function BookingDrawers({ drawers: d }) {
           selectedMode={d.selectedTransportMode}
           onSelectMode={d.selectTransportMode}
           onBack={d.clearSelectedTransportMode}
-          hubs={d.transportModeHubs.length ? d.transportModeHubs : d.transportHubs}
+          hubs={d.selectedTransportMode ? d.transportModeHubs : d.transportHubs}
           selectedHub={d.selectedHub}
           autoOriginHub={d.autoOriginHub}
           onSelectHub={d.selectHub}
