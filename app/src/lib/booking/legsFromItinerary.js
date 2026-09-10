@@ -101,10 +101,10 @@ export function transportHubState(item, selectedCity) {
 // The per-drawer option-cache key: route (both hubs substituted) + resolved
 // date + party size. Switching the destination hub changes the route segment,
 // so the drawer re-resolves for the new hub.
-export function transportCacheKey(item, originHub, hub, partyTotal) {
+export function transportCacheKey(item, originHub, hub, partyKey) {
   if (!item) return null;
   const leg = legForHub(legForHub(legFromItem(item), originHub), hub);
-  return `${legKey(leg)}::${item.resolved_date ?? 'flex'}::${partyTotal ?? 'p?'}`;
+  return `${legKey(leg)}::${item.resolved_date ?? 'flex'}::${partyKey ?? 'p?'}`;
 }
 
 // Normalize an enriched entity (timeline item or stay segment) to the flat
@@ -117,6 +117,8 @@ export function normalizePrefEntity(entity, type) {
       date_source: entity.date_source,
       precision: entity.date_precision,
       date: entity.checkin_date,
+      checkout: entity.checkout_date,
+      nights: entity.nights,
       month: entity.month,
     };
   }

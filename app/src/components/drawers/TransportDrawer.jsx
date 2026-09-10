@@ -206,7 +206,6 @@ function TransportOptionCard({ option, best, onAddDates }) {
   const isFlight = option.mode === 'flight';
   return (
     <article className={`stay-option-card${best ? ' picked' : ''}`}>
-      {best && <span className="pick-badge">Our pick</span>}
       <ModeTag mode={option.mode} />
       <strong>{option.name}</strong>
       {durationDistance && (
@@ -243,7 +242,7 @@ function RecommendedModeCard({ option }) {
 
 export default function TransportDrawer({
   leg, hubs = [], selectedHub = null, autoOriginHub = null, onSelectHub,
-  options, feasibility, loading, error, dateRow, partyRow, onClose,
+  options, feasibility, loading, error, searchCard, onClose,
 }) {
   if (!leg) return null;
   const hubList = hubs || []; // the picker side only (destination when both endpoints are hubless)
@@ -267,8 +266,7 @@ export default function TransportDrawer({
           <h3>{leg.from} → {leg.to}</h3>
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close transport options">✕</button>
         </div>
-        {dateRow}
-        {partyRow}
+        {searchCard}
         {autoOriginHub && (
           <p className="hub-picker-intro">
             {leg.from} has no direct long-haul transport — departing via {autoOriginHub.city}.

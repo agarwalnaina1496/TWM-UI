@@ -30,6 +30,7 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
 
   const [prefEditOpen, setPrefEditOpen] = useState(false);
   const [prefEditValue, setPrefEditValue] = useState('');
+  const [prefEditCheckoutValue, setPrefEditCheckoutValue] = useState(''); // stay check-out only
   const [prefEditTarget, setPrefEditTarget] = useState(null); // { type, id }
   const [prefEditPending, setPrefEditPending] = useState(false);
   const [prefEditError, setPrefEditError] = useState(null);
@@ -54,7 +55,9 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
   const [stayData, setStayData] = useState({});
 
   const party = view?.booking?.party ?? null;
-  const partyTotal = party ? party.adults + party.children + party.infants : null;
+  // Cache key: the full a/c/i composition, not the head-count total — an
+  // adults↔children swap keeps the total but changes every provider redirect.
+  const partyKey = party ? `${party.adults}-${party.children}-${party.infants}` : null;
   const partyLabel = party ? travelerPartyLabel(party) : null;
   const openGapPrompt = view?.open_gaps?.find(gap => gap.resolution === 'set_party')?.detail ?? null;
 
@@ -68,10 +71,13 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
   const staySegment = stayDrawerSegmentId ? staySegments.find(s => s.id === stayDrawerSegmentId) ?? null : null;
   const stay = stayFromSegment(staySegment);
 
-  const transportCacheKey = item => buildTransportCacheKey(item, autoOriginHub, selectedHub, partyTotal);
+  const transportCacheKey = item => buildTransportCacheKey(item, autoOriginHub, selectedHub, partyKey);
+  // Drop every cached option bundle so the open drawer re-resolves its links.
+  const invalidateOptions = () => { setTransportData({}); setStayData({}); };
+
   function stayCacheKey(segment) {
     if (!segment) return null;
-    return `${segment.id}::${segment.checkin_date ?? 'flex'}::${segment.nights}::${partyTotal ?? 'p?'}`;
+    return `${segment.id}::${segment.checkin_date ?? 'flex'}::${segment.checkout_date ?? 'flex'}::${segment.nights}::${partyKey ?? 'p?'}`;
   }
 
   async function fetchTransportOptions(item) {
@@ -122,6 +128,7 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     setPrefEditOpen(false);
     setPrefEditTarget(null);
     setPrefEditValue('');
+    setPrefEditCheckoutValue('');
     setPrefEditError(null);
   }
 
@@ -148,10 +155,9 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     resetPrefEdit();
   }
 
-  // TWM-228: a genuinely dateless entity (`date_precision === 'none'`) opens
-  // with the date picker already expanded — a standard OTA form shows an empty
-  // date field, it does not hide it behind a link. A known date stays
-  // collapsed behind "· Change".
+  // TWM-228: a dateless entity opens with the picker already expanded (a
+  // standard OTA form shows an empty date field, not a link). Known dates stay
+  // collapsed behind "Change".
   const openDateEntity = staySegment
     ? { type: 'stay', id: staySegment.id, precision: staySegment.date_precision }
     : transportItem
@@ -162,19 +168,20 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     if (prefEditTarget?.id === openDateEntity.id) return;
     setPrefEditTarget({ type: openDateEntity.type, id: openDateEntity.id });
     setPrefEditValue('');
+    setPrefEditCheckoutValue('');
     setPrefEditError(null);
     setPrefEditOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openDateEntity?.id, openDateEntity?.precision]);
 
-  // TWM-228: the edit form is a single exact-date field — no precision choice.
-  // It seeds from the entity's current effective date (an exact override or an
-  // exact trip date); a month-precision or dateless entity starts empty so the
-  // traveller picks a specific day.
+  // TWM-228/TWM-216: the edit form seeds from the entity's current effective
+  // dates — an exact date (override or trip date), plus the stay's check-out
+  // (override or check-in + itinerary nights). Month/dateless starts empty.
   function openPrefEditForm(targetType, entity) {
     const effective = searchPrefFor(entity);
     setPrefEditTarget({ type: targetType, id: entity.id });
     setPrefEditValue(effective?.precision === 'exact' ? effective.date : '');
+    setPrefEditCheckoutValue(targetType === 'stay' ? (entity.checkout ?? '') : '');
     setPrefEditError(null);
     setPrefEditOpen(true);
   }
@@ -193,6 +200,7 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
           target_type: prefEditTarget.type,
           target_id: prefEditTarget.id,
           date: prefEditValue,
+          ...(prefEditTarget.type === 'stay' && prefEditCheckoutValue ? { checkout_date: prefEditCheckoutValue } : {}),
         },
       });
       trackEvent('search_pref_updated', { target_type: prefEditTarget.type });
@@ -241,18 +249,9 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     setTravelerEditPending(true);
     setTravelerEditError(null);
     try {
-      await sendTripCommand('set_party', {
-        partyUpdate: {
-          adults: travelerEditAdults,
-          children: travelerEditChildren,
-          infants: travelerEditInfants,
-        },
-      });
-      trackEvent('party_updated', {
-        adults: travelerEditAdults,
-        children: travelerEditChildren,
-        infants: travelerEditInfants,
-      });
+      const partyUpdate = { adults: travelerEditAdults, children: travelerEditChildren, infants: travelerEditInfants };
+      await sendTripCommand('set_party', { partyUpdate });
+      trackEvent('party_updated', partyUpdate);
       setTransportData({});
       setStayData({});
       setTravelerEditOpen(false);
@@ -297,6 +296,8 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     prefEditOpen,
     prefEditValue,
     setPrefEditValue,
+    prefEditCheckoutValue,
+    setPrefEditCheckoutValue,
     prefEditTarget,
     prefEditPending,
     prefEditError,

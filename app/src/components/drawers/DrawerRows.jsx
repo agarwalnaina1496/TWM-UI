@@ -1,30 +1,46 @@
-// TWM-216/TWM-228: a drawer's own per-entity search date, presented as a
-// standard OTA search field. A known date sits pre-filled and collapsed
-// behind a "· Change" affordance; opening the editor swaps that line for the
-// date picker (label → field). When no date is resolved the picker shows
-// expanded straight away. There is no date-precision choice — precision is
-// settled upstream (trip dates / TWM-227) and this field is exact-only.
-export function DrawerDateRow({ label, precision, valueLabel, checkoutLabel, onEdit, editOpen, editForm }) {
-  const known = (precision === 'exact' || precision === 'month') && Boolean(valueLabel);
+// TWM-216: the booking drawer's search card — one white panel with a row per
+// search input (Where / Dates / Guests), each collapsed to a value + a
+// "Change" link and expanding in place to its editor. Mirrors a standard OTA
+// search form; the only fixed input is Where (it is this itinerary item).
+
+function EditLink({ onEdit, children = 'Change' }) {
   return (
-    <div className="booking-summary-strip">
+    <button type="button" className="booking-search-change" onClick={onEdit}>{children}</button>
+  );
+}
+
+// Where — fixed. The destination/route comes from the itinerary and is not
+// editable (an editable destination would make this a generic search module).
+export function DrawerWhereRow({ value }) {
+  return (
+    <div className="booking-search-row">
+      <div className="booking-search-line">
+        <span className="booking-search-label">📍 Where</span>
+        <span className="booking-search-value">{value}</span>
+        <span className="booking-search-note">from your itinerary</span>
+      </div>
+    </div>
+  );
+}
+
+// Dates — collapsed to a check-in → check-out range (exact) or a month label.
+// Editing swaps the line for the date form (`editForm`). A genuinely dateless
+// entity opens straight into the form.
+export function DrawerDateRow({ label = 'Dates', precision, rangeLabel, valueLabel, onEdit, editOpen, editForm }) {
+  const known = (precision === 'exact' || precision === 'month') && Boolean(rangeLabel || valueLabel);
+  return (
+    <div className="booking-search-row">
       {!editOpen && known && (
-        <>
-          <p className="transport-drawer-date">
-            📅 {label}: {valueLabel}
-            {' · '}
-            <button type="button" className="btn btn-ghost btn-small" onClick={onEdit}>Change</button>
-          </p>
-          {precision === 'exact' && checkoutLabel && (
-            <p className="transport-drawer-date">Check-out {checkoutLabel}</p>
-          )}
-        </>
+        <div className="booking-search-line">
+          <span className="booking-search-label">📅 {label}</span>
+          <span className="booking-search-value">{rangeLabel || valueLabel}</span>
+          <EditLink onEdit={onEdit} />
+        </div>
       )}
       {!editOpen && !known && (
-        <div className="booking-summary-row">
-          <button type="button" className="btn btn-ghost btn-small" onClick={onEdit}>
-            Add a date for this search
-          </button>
+        <div className="booking-search-line">
+          <span className="booking-search-label">📅 {label}</span>
+          <EditLink onEdit={onEdit}>Add dates</EditLink>
         </div>
       )}
       {editOpen && editForm}
@@ -32,18 +48,25 @@ export function DrawerDateRow({ label, precision, valueLabel, checkoutLabel, onE
   );
 }
 
-// TWM-216: the trip-wide structured party (booking_setup.party), edited from
-// inside whichever booking drawer is open. Collapsed behind "· Change" once
-// set; the "Set travellers" prompt shows only while it is unset.
+// Guests — the trip-wide structured party (booking_setup.party), edited from
+// whichever drawer is open. Collapsed once set; "Add guests" while unset.
 export function DrawerPartyRow({ label, onEdit, editOpen, editForm }) {
   return (
-    <div className="booking-summary-strip">
-      <div className="booking-summary-row">
-        <button type="button" className="btn btn-ghost btn-small" onClick={onEdit}>
-          👤 {label ? `Booking for ${label} · Change` : 'Set travellers'}
-        </button>
-      </div>
+    <div className="booking-search-row">
+      {!editOpen && (
+        <div className="booking-search-line">
+          <span className="booking-search-label">👤 Guests</span>
+          {label
+            ? <><span className="booking-search-value">{label}</span><EditLink onEdit={onEdit} /></>
+            : <EditLink onEdit={onEdit}>Add guests</EditLink>}
+        </div>
+      )}
       {editOpen && editForm}
     </div>
   );
+}
+
+// The card wrapper both drawers place their rows in.
+export function DrawerSearchCard({ children }) {
+  return <div className="booking-search-card">{children}</div>;
 }

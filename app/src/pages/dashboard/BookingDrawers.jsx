@@ -1,17 +1,17 @@
 import TransportDrawer from '../../components/drawers/TransportDrawer.jsx';
 import StayDrawer from '../../components/drawers/StayDrawer.jsx';
-import { DrawerDateRow, DrawerPartyRow } from '../../components/drawers/DrawerRows.jsx';
+import {
+  DrawerWhereRow, DrawerDateRow, DrawerPartyRow, DrawerSearchCard,
+} from '../../components/drawers/DrawerRows.jsx';
 import ScheduleDateForm from '../../components/drawers/ScheduleDateForm.jsx';
 import TravelerEditForm from '../../components/drawers/TravelerEditForm.jsx';
 import { legFromItem, normalizePrefEntity } from '../../lib/booking/legsFromItinerary.js';
-import { monthLabel, dayLabel } from '../../lib/booking/dateLabels.js';
+import { monthLabel, dayLabel, rangeLabel } from '../../lib/booking/dateLabels.js';
 import { searchPrefFor, isSearchPrefOverride } from '../../constants/bookingSetup.js';
 
-// TWM-216/TWM-220/TWM-228: renders whichever booking drawer is open, plus the
-// two editors that live inside every drawer — the shared party editor (with
-// the `set_party` open-gap prompt) and the per-entity search-date field. Both
-// drawers render through the same `DrawerRows` components and the same
-// `useBookingDrawers` edit state; nothing here is per-drawer.
+// TWM-216: renders whichever booking drawer is open. Both drawers take one
+// `searchCard` — a Where / Dates / Guests panel built here from the same
+// `DrawerRows` components and the same `useBookingDrawers` edit state.
 
 // The collapsed label for one normalized entity ({ precision, date, month }):
 // an exact date renders "Sep 26", a month renders "October 2026".
@@ -49,16 +49,22 @@ export default function BookingDrawers({ drawers: d }) {
     />
   );
 
+  const isStayPref = d.prefEditTarget?.type === 'stay';
   const prefEntity = d.prefEditTarget
-    ? normalizePrefEntity(d.prefEditTarget.type === 'stay' ? staySegment : transportItem, d.prefEditTarget.type)
+    ? normalizePrefEntity(isStayPref ? staySegment : transportItem, d.prefEditTarget.type)
     : null;
   const prefEditForm = (
     <ScheduleDateForm
       existing={searchPrefFor(prefEntity)}
-      dateLabel={d.prefEditTarget?.type === 'stay' ? 'Check-in date' : 'Leg date'}
-      helper="Prefill this one search with a specific date. It does not change your itinerary or any other search."
+      dateLabel={isStayPref ? 'Check-in' : 'Leg date'}
+      helper={isStayPref ? undefined
+        : 'Prefill this one search with a specific date. It does not change your itinerary or any other search.'}
       value={d.prefEditValue}
       setValue={d.setPrefEditValue}
+      showCheckout={isStayPref}
+      checkoutValue={d.prefEditCheckoutValue}
+      setCheckoutValue={d.setPrefEditCheckoutValue}
+      itineraryNights={staySegment?.nights}
       onSubmit={d.submitPrefEdit}
       onCancel={d.closePrefEditForm}
       onClear={isSearchPrefOverride(prefEntity) ? d.clearPrefEdit : undefined}
@@ -67,32 +73,44 @@ export default function BookingDrawers({ drawers: d }) {
     />
   );
 
-  const transportDateRow = transportItem ? (() => {
+  const transportSearchCard = transportItem ? (() => {
     const entity = normalizePrefEntity(transportItem, 'transport');
+    const leg = d.transportLeg || legFromItem(transportItem);
     return (
-      <DrawerDateRow
-        label="This leg"
-        precision={entity.precision}
-        valueLabel={collapsedDateLabel(entity)}
-        onEdit={() => d.openPrefEditForm('transport', entity)}
-        editOpen={d.prefEditOpen && d.prefEditTarget?.type === 'transport'}
-        editForm={prefEditForm}
-      />
+      <DrawerSearchCard>
+        <DrawerWhereRow value={`${leg.from} → ${leg.to}`} />
+        <DrawerDateRow
+          label="Leg date"
+          precision={entity.precision}
+          valueLabel={collapsedDateLabel(entity)}
+          onEdit={() => d.openPrefEditForm('transport', entity)}
+          editOpen={d.prefEditOpen && d.prefEditTarget?.type === 'transport'}
+          editForm={prefEditForm}
+        />
+        {drawerPartyRow}
+      </DrawerSearchCard>
     );
   })() : null;
 
-  const stayDateRow = staySegment ? (() => {
+  const staySearchCard = staySegment ? (() => {
     const entity = normalizePrefEntity(staySegment, 'stay');
+    const range = entity.precision === 'exact'
+      ? rangeLabel(staySegment.checkin_date, staySegment.checkout_date)
+      : null;
     return (
-      <DrawerDateRow
-        label="Check-in"
-        precision={entity.precision}
-        valueLabel={collapsedDateLabel(entity)}
-        checkoutLabel={dayLabel(staySegment.checkout_date)}
-        onEdit={() => d.openPrefEditForm('stay', entity)}
-        editOpen={d.prefEditOpen && d.prefEditTarget?.type === 'stay'}
-        editForm={prefEditForm}
-      />
+      <DrawerSearchCard>
+        <DrawerWhereRow value={stay?.location} />
+        <DrawerDateRow
+          label="Dates"
+          precision={entity.precision}
+          rangeLabel={range}
+          valueLabel={collapsedDateLabel(entity)}
+          onEdit={() => d.openPrefEditForm('stay', entity)}
+          editOpen={d.prefEditOpen && d.prefEditTarget?.type === 'stay'}
+          editForm={prefEditForm}
+        />
+        {drawerPartyRow}
+      </DrawerSearchCard>
     );
   })() : null;
 
@@ -109,8 +127,7 @@ export default function BookingDrawers({ drawers: d }) {
           feasibility={d.transportFeasibility}
           loading={d.transportDrawerLoading}
           error={d.transportDrawerError}
-          dateRow={transportDateRow}
-          partyRow={drawerPartyRow}
+          searchCard={transportSearchCard}
           onClose={d.closeTransportDrawer}
         />
       )}
@@ -121,8 +138,7 @@ export default function BookingDrawers({ drawers: d }) {
           loading={d.stayDrawerLoading}
           error={d.stayDrawerError}
           stayPriceEstimate={days.find(day => day.day_number === stay.startDayNumber)?.stay_price_estimate}
-          dateRow={stayDateRow}
-          partyRow={drawerPartyRow}
+          searchCard={staySearchCard}
           onClose={d.closeStayDrawer}
         />
       )}
