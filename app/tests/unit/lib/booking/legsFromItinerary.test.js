@@ -98,13 +98,21 @@ describe('transportHubState', () => {
 
   it('one hubless endpoint: the whole hub set is the picker, no auto origin', () => {
     const state = transportHubState(item([
-      { city: 'Udaipur', side: 'destination', last_mile_km: 100 },
-      { city: 'Ahmedabad', side: 'destination', last_mile_km: 220 },
+      { city: 'Jodhpur', side: 'destination', last_mile_km: 155, long_haul_distance_km: 1300 },
+      { city: 'Udaipur', side: 'destination', last_mile_km: 135, long_haul_distance_km: 1250 },
     ]), null);
-    expect(state.pickerHubs.map(h => h.city)).toEqual(['Udaipur', 'Ahmedabad']);
+    expect(state.pickerHubs.map(h => h.city)).toEqual(['Jodhpur', 'Udaipur']);
     expect(state.autoOriginHub).toBe(null);
     expect(state.selected.city).toBe('Udaipur');
     expect(state.effectiveLeg).toMatchObject({ from: 'Bengaluru', to: 'Udaipur' });
+  });
+
+  it('keeps an explicit hub choice instead of re-defaulting to the nearest', () => {
+    const state = transportHubState(item([
+      { city: 'Jodhpur', side: 'destination', last_mile_km: 155 },
+      { city: 'Udaipur', side: 'destination', last_mile_km: 135 },
+    ]), 'Jodhpur');
+    expect(state.selected.city).toBe('Jodhpur');
   });
 
   it('both endpoints hubless: picker is the destination side, origin auto-picks its first candidate', () => {
