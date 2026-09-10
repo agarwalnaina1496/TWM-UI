@@ -55,8 +55,7 @@ export function transportOptionFromEntry(entry) {
 }
 
 // One enriched `hubs[]` entry -> the flat shape the drawer's hub picker reads.
-// `feasibleModes` is Backend-resolved (deterministic, eager); the fare is not
-// here — it loads lazily when the hub is selected (TWM-229).
+// The fare is not here — it loads lazily when the hub is selected (TWM-229).
 export function hubFromEntry(entry) {
   return {
     city: entry.city,
@@ -67,7 +66,6 @@ export function hubFromEntry(entry) {
     distanceKm: entry.distance_km ?? entry.long_haul_distance_km ?? null,
     accessGap: entry.access_gap ?? null,
     feasible: entry.feasible ?? true,
-    feasibleModes: entry.feasible_modes || [],
   };
 }
 
@@ -127,12 +125,6 @@ export function transportCacheKey(item, originHub, hub, partyKey) {
   if (!item) return null;
   const leg = legForHub(legForHub(legFromItem(item), originHub), hub);
   return `${legKey(leg)}::${item.resolved_date ?? 'flex'}::${partyKey ?? 'p?'}`;
-}
-
-export function transportModeCacheKey(item, mode, hub, partyKey) {
-  if (!item || !mode) return null;
-  const leg = legForHub(legFromItem(item), hub);
-  return `${mode}::${legKey(leg)}::${item.resolved_date ?? 'flex'}::${partyKey ?? 'p?'}`;
 }
 
 // Normalize an enriched entity (timeline item or stay segment) to the flat

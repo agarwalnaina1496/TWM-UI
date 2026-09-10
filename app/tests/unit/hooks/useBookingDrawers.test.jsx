@@ -154,9 +154,9 @@ describe('useBookingDrawers — TWM-215 gateway hub picker', () => {
     is_gateway_leg: true, date_precision: 'none', resolved_date: null,
     hubs: [
       { city: 'Udaipur', side: 'destination', last_mile_km: 100, last_mile_duration_minutes: 150,
-        long_haul_distance_km: 660, feasible_modes: ['flight', 'train', 'bus'] },
+        long_haul_distance_km: 660 },
       { city: 'Rail Junction', side: 'destination', last_mile_km: 60, last_mile_duration_minutes: 90,
-        long_haul_distance_km: 300, feasible_modes: ['train', 'bus'] },
+        long_haul_distance_km: 300 },
     ],
   };
 

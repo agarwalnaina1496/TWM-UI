@@ -238,11 +238,13 @@ function TransportOptionCard({ option, onAddDates }) {
 }
 
 function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSelectHub, mode, phase }) {
-  if (!hubList.length && !autoOriginHub) return null;
+  const showLastMile = selectedHub && phase !== 'before';
+  if (!hubList.length && !autoOriginHub && !showLastMile) return null;
   const heading = mode === 'train' ? 'Railhead' : 'Gateway';
+  const showGatewayControls = hubList.length > 0 || autoOriginHub;
   return (
     <div className="drawer-context-band">
-      <p className="drawer-section-heading">{heading}</p>
+      {showGatewayControls && <p className="drawer-section-heading">{heading}</p>}
       {autoOriginHub && (
         <>
           <p className="hub-picker-intro">{leg.from} has no direct {modeLabel(mode).toLowerCase()} access — start via {autoOriginHub.city}.</p>
@@ -255,7 +257,7 @@ function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSele
       {hubList.length === 1 && (
         <p className="hub-picker-intro">{hublessTownName(leg, hubList[0])} has no direct {modeLabel(mode).toLowerCase()} access — routed via {hubList[0].city}.</p>
       )}
-      {selectedHub && phase !== 'before' && (
+      {showLastMile && (
         <HubLastMileNote
           townName={hublessTownName(leg, selectedHub)}
           hub={selectedHub}
@@ -274,7 +276,9 @@ function modeSummary(option) {
     const lastMile = hubLastMileLabel(hubs[0]);
     return `Via ${hubs[0].city}${lastMile ? ` · ${lastMile}` : ''}${option.longJourneyNote ? ` · ${option.longJourneyNote}` : ''}`;
   }
-  if (hubs.length > 1) return `Via ${hubs.map(hub => hub.city).join(' / ')}`;
+  if (hubs.length > 1) {
+    return `Via ${hubs.map(hub => hub.city).join(' / ')}${option.longJourneyNote ? ` · ${option.longJourneyNote}` : ''}`;
+  }
   return 'No direct transport identified';
 }
 
@@ -366,9 +370,15 @@ function LegacyTransportContext({ leg, hubList, selectedHub, autoOriginHub, onSe
   );
 }
 
+function modeFromAccessGap(accessGap) {
+  if (accessGap === 'rail') return 'train';
+  if (accessGap === 'air') return 'flight';
+  return 'flight';
+}
+
 function PerModeTransportContext({ leg, currentModeOption, hubList, selectedHub, autoOriginHub, onSelectHub, phase }) {
   const beforeBook = phase === 'before';
-  const showBefore = beforeBook && (autoOriginHub || selectedHub?.side === 'origin');
+  const showBefore = beforeBook && (autoOriginHub || hubList.length > 0);
   const showAfter = !beforeBook && selectedHub?.side !== 'origin';
   if (!showBefore && !showAfter) return null;
   return (
@@ -378,7 +388,7 @@ function PerModeTransportContext({ leg, currentModeOption, hubList, selectedHub,
       selectedHub={selectedHub}
       autoOriginHub={beforeBook ? autoOriginHub : null}
       onSelectHub={onSelectHub}
-      mode={currentModeOption?.mode || selectedHub?.accessGap || 'flight'}
+      mode={currentModeOption?.mode || modeFromAccessGap(selectedHub?.accessGap)}
       phase={phase}
     />
   );
@@ -431,7 +441,7 @@ function SelectedTransportBody({
         <PerModeTransportContext
           leg={leg}
           currentModeOption={currentModeOption}
-          hubList={activeHubList}
+          hubList={[]}
           selectedHub={selectedHub}
           autoOriginHub={autoOriginHub}
           onSelectHub={onSelectHub}

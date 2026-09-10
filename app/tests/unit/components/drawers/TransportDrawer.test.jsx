@@ -55,7 +55,7 @@ describe('TransportDrawer — TWM-215 hub picker', () => {
   });
 
   it('both endpoints hubless: destination picker plus an auto "departing via" origin note', () => {
-    const originHub = { city: 'Jodhpur', side: 'origin', lastMileKm: 40, lastMileDurationMinutes: 60, feasibleModes: ['train'] };
+    const originHub = { city: 'Jodhpur', side: 'origin', lastMileKm: 40, lastMileDurationMinutes: 60 };
     renderDrawer({ hubs: HUBS, selectedHub: HUBS[0], autoOriginHub: originHub, onSelectHub: () => {} });
     expect(screen.getByText(/start via/)).toHaveTextContent(/Jodhpur/);
     expect(screen.getByText(/from Bengaluru/)).toBeInTheDocument();
@@ -120,9 +120,48 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
     expect(screen.getByRole('link', { name: /Cab/ })).toBeInTheDocument();
     expect(screen.queryByText(/Other modes/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Recommended mode/)).not.toBeInTheDocument();
+    const gateway = screen.getByText('Gateway');
+    const book = screen.getByText('Book');
+    const onward = screen.getByText(/onward to Sumerpur/);
+    expect(gateway.compareDocumentPosition(book) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(book.compareDocumentPosition(onward) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     await userEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(onBack).toHaveBeenCalled();
+  });
+
+  it('State 1 keeps long-journey note visible for multi-hub railhead options', () => {
+    renderDrawer({
+      modeOptions: [{
+        mode: 'train',
+        direct: false,
+        feasible: true,
+        longJourneyNote: 'Roughly 36 h long-haul journey before the local transfer.',
+        hubs: [
+          { city: 'Falna', side: 'destination', feasible: true },
+          { city: 'Marwar', side: 'destination', feasible: true },
+        ],
+      }],
+      onSelectMode: vi.fn(),
+    });
+
+    expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/Via Falna \/ Marwar/);
+    expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/Roughly 36 h/);
+  });
+
+  it('maps rail access-gap fallback to train copy and last-mile links', () => {
+    const railHub = { city: 'Falna', side: 'destination', accessGap: 'rail', lastMileKm: 15, lastMileDurationMinutes: 25 };
+    renderDrawer({
+      modeOptions: [{ mode: 'flight', direct: false, feasible: true, hubs: [railHub] }],
+      selectedMode: 'train',
+      hubs: [railHub],
+      selectedHub: railHub,
+      onSelectHub: () => {},
+    });
+
+    expect(screen.getByText('Railhead')).toBeInTheDocument();
+    expect(screen.getByText(/no direct train access/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Auto/ })).toBeInTheDocument();
   });
 
   it('direct selected mode skips the hub picker', () => {

@@ -5,7 +5,7 @@ import {
 
 const HUB_ENTRY = {
   city: 'Udaipur', side: 'destination', last_mile_km: 100,
-  last_mile_duration_minutes: 150, long_haul_distance_km: 660, feasible_modes: ['flight', 'train', 'bus'],
+  last_mile_duration_minutes: 150, long_haul_distance_km: 660,
 };
 
 describe('legFromItem', () => {
@@ -19,7 +19,7 @@ describe('legFromItem', () => {
     expect(leg.hubs).toEqual([{
       city: 'Udaipur', side: 'destination', lastMileKm: 100,
       lastMileDurationMinutes: 150, longHaulDistanceKm: 660, distanceKm: 660,
-      accessGap: null, feasible: true, feasibleModes: ['flight', 'train', 'bus'],
+      accessGap: null, feasible: true,
     }]);
   });
 
@@ -69,7 +69,7 @@ describe('hubFromEntry', () => {
   it('defaults missing numeric facts and modes', () => {
     expect(hubFromEntry({ city: 'X', side: 'origin' })).toEqual({
       city: 'X', side: 'origin', lastMileKm: null, lastMileDurationMinutes: null,
-      longHaulDistanceKm: null, distanceKm: null, accessGap: null, feasible: true, feasibleModes: [],
+      longHaulDistanceKm: null, distanceKm: null, accessGap: null, feasible: true,
     });
   });
 });
