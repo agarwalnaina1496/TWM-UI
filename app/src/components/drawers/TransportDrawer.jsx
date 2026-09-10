@@ -13,7 +13,7 @@ function durationDistanceLabel(option) {
 }
 
 function distanceLabel(km) {
-  return `~${Math.round(km).toLocaleString()} km`;
+  return `~${Math.round(km).toLocaleString('en-US')} km`;
 }
 
 function durationLabel(minutes) {
@@ -283,15 +283,23 @@ function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSele
   );
 }
 
+// A compact road-transfer hint for the chooser row — shown only when the
+// onward drive is long enough to weigh on the choice (>= ~1 h). The full
+// last-mile detail stays in State 2.
+function roadHint(hubs) {
+  const durations = hubs.map(hub => hub.lastMileDurationMinutes).filter(minutes => minutes != null);
+  const shortest = durations.length ? Math.min(...durations) : null;
+  if (shortest == null || shortest < 60) return '';
+  if (hubs.length === 1) return ` · +${durationLabel(shortest).replace('~', '')} road`;
+  return ' · + road transfer';
+}
+
 function modeSummary(option) {
   if (option.direct) return 'Direct';
   const hubs = option.hubs || [];
-  if (hubs.length === 1) {
-    return `Via ${hubs[0].city}${option.longJourneyNote ? ` · ${journeyHoursLabel(option.longJourneyNote)}` : ''}`;
-  }
-  if (hubs.length > 1) {
-    return `Via ${hubs.map(hub => hub.city).join(' / ')}${option.longJourneyNote ? ` · ${journeyHoursLabel(option.longJourneyNote)}` : ''}`;
-  }
+  const journey = option.longJourneyNote ? ` · ${journeyHoursLabel(option.longJourneyNote)}` : '';
+  if (hubs.length === 1) return `Via ${hubs[0].city}${roadHint(hubs)}${journey}`;
+  if (hubs.length > 1) return `Via ${hubs.map(hub => hub.city).join(' / ')}${roadHint(hubs)}${journey}`;
   return 'No direct transport identified';
 }
 

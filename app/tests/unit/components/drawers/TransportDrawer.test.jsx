@@ -91,9 +91,12 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
     renderDrawer({ modeOptions: MODE_OPTIONS, onSelectMode });
 
     expect(screen.getByRole('button', { name: /Flight/i })).toHaveTextContent(/Via Udaipur \/ Ahmedabad/);
+    // a substantial onward drive stays visible in the chooser; a trivial one does not
+    expect(screen.getByRole('button', { name: /Flight/i })).toHaveTextContent(/road transfer/);
     expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/Via Falna/);
     expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/~36 h journey/);
     expect(screen.getByRole('button', { name: /Train/i })).not.toHaveTextContent(/15 km/);
+    expect(screen.getByRole('button', { name: /Train/i })).not.toHaveTextContent(/road transfer/);
     expect(screen.getByText('Ruled out')).toBeInTheDocument();
     expect(screen.getByText(/Bus/).closest('li')).toHaveTextContent(/Too far for a bus/);
     expect(screen.getByText(/Drive/).closest('li')).toHaveTextContent(/Too far for a single road trip/);
