@@ -204,8 +204,7 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
         },
       });
       trackEvent('search_pref_updated', { target_type: prefEditTarget.type });
-      setTransportData({});
-      setStayData({});
+      invalidateOptions();
       setPrefEditOpen(false);
     } catch (error) {
       setPrefEditError(error.message || 'Could not save that date — your existing options are still available.');
@@ -223,8 +222,7 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
         searchPrefClear: { target_type: prefEditTarget.type, target_id: prefEditTarget.id },
       });
       trackEvent('search_pref_cleared', { target_type: prefEditTarget.type });
-      setTransportData({});
-      setStayData({});
+      invalidateOptions();
       setPrefEditOpen(false);
     } catch (error) {
       setPrefEditError(error.message || 'Could not reset that date — your existing options are still available.');
@@ -252,8 +250,7 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
       const partyUpdate = { adults: travelerEditAdults, children: travelerEditChildren, infants: travelerEditInfants };
       await sendTripCommand('set_party', { partyUpdate });
       trackEvent('party_updated', partyUpdate);
-      setTransportData({});
-      setStayData({});
+      invalidateOptions();
       setTravelerEditOpen(false);
     } catch (error) {
       setTravelerEditError(error.message || 'Could not save the party — your existing options are still available.');

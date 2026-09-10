@@ -1,3 +1,4 @@
+import BookingDrawer from './BookingDrawer.jsx';
 import { feasibleTransportOptions, recommendedMode } from '../../lib/booking/transportOptions.js';
 import { modeLabel, PARTNER_LABEL, MODES } from '../../lib/booking/shared.js';
 import { ModeTag, VerificationTag } from '../StatusPills.jsx';
@@ -240,6 +241,48 @@ function RecommendedModeCard({ option }) {
   );
 }
 
+// The quiet band under the search card — the gateway note + hub picker when
+// an endpoint has no direct long-haul route, styled like the stay drawer's
+// estimate band. Null (no band) for a directly-connected leg.
+function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSelectHub }) {
+  if (!hubList.length && !autoOriginHub) return null;
+  return (
+    <div className="drawer-context-band">
+      {autoOriginHub && (
+        <>
+          <p className="hub-picker-intro">{leg.from} has no direct long-haul route — departing via {autoOriginHub.city}.</p>
+          <HubLastMileNote townName={leg.from} hub={autoOriginHub} direction="origin" />
+        </>
+      )}
+      {hubList.length > 1 && (
+        <HubPicker townName={hublessTownName(leg, hubList[0])} hubs={hubList} selectedCity={selectedHub?.city} onSelect={onSelectHub} />
+      )}
+      {hubList.length === 1 && (
+        <p className="hub-picker-intro">{hublessTownName(leg, hubList[0])} has no direct long-haul route — routed via {hubList[0].city}.</p>
+      )}
+      {selectedHub && (
+        <HubLastMileNote
+          townName={hublessTownName(leg, selectedHub)}
+          hub={selectedHub}
+          direction={selectedHub.side === 'origin' ? 'origin' : 'destination'}
+        />
+      )}
+    </div>
+  );
+}
+
+function NotFeasibleModes({ modes }) {
+  if (!modes.length) return null;
+  return (
+    <details className="transport-drawer-not-feasible">
+      <summary>Other modes ({modes.length} not available for this route)</summary>
+      <ul className="trip-notes-list">
+        {modes.map(mode => <li key={mode}><ModeTag mode={mode} /> Not available for this route.</li>)}
+      </ul>
+    </details>
+  );
+}
+
 export default function TransportDrawer({
   leg, hubs = [], selectedHub = null, autoOriginHub = null, onSelectHub,
   options, feasibility, loading, error, searchCard, onClose,
@@ -254,76 +297,37 @@ export default function TransportDrawer({
     ? 'No direct transport identified for this leg.'
     : 'No bookable transport options for this gateway city — try another.';
   return (
-    <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
-      <aside
-        className="transport-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Transport: ${leg.from} to ${leg.to}`}
-        onClick={event => event.stopPropagation()}
-      >
-        <div className="transport-drawer-head">
-          <h3>{leg.from} → {leg.to}</h3>
-          <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close transport options">✕</button>
-        </div>
-        {searchCard}
-        {autoOriginHub && (
-          <p className="hub-picker-intro">
-            {leg.from} has no direct long-haul transport — departing via {autoOriginHub.city}.
-          </p>
-        )}
-        {autoOriginHub && (
-          <HubLastMileNote townName={leg.from} hub={autoOriginHub} direction="origin" />
-        )}
-        {hubList.length > 1 && (
-          <HubPicker
-            townName={hublessTownName(leg, hubList[0])}
-            hubs={hubList}
-            selectedCity={selectedHub?.city}
-            onSelect={onSelectHub}
-          />
-        )}
-        {hubList.length === 1 && (
-          <p className="hub-picker-intro">
-            {hublessTownName(leg, hubList[0])} has no direct long-haul transport — routed via {hubList[0].city}.
-          </p>
-        )}
-        {selectedHub && (
-          <HubLastMileNote
-            townName={hublessTownName(leg, selectedHub)}
-            hub={selectedHub}
-            direction={selectedHub.side === 'origin' ? 'origin' : 'destination'}
-          />
-        )}
-        {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
-        {error && <p className="already-booked-note" role="alert">{error}</p>}
-        {!loading && !error && (
+    <BookingDrawer
+      ariaLabel={`Transport: ${leg.from} to ${leg.to}`}
+      closeLabel="Close transport options"
+      title={`${leg.from} → ${leg.to}`}
+      searchCard={searchCard}
+      contextBand={(
+        <TransportContextBand
+          leg={leg} hubList={hubList} selectedHub={selectedHub}
+          autoOriginHub={autoOriginHub} onSelectHub={onSelectHub}
+        />
+      )}
+      sectionHeading="How to get there"
+      footer={!loading && !error ? <NotFeasibleModes modes={notFeasibleModes} /> : null}
+      onClose={onClose}
+    >
+      {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
+      {error && <p className="already-booked-note" role="alert">{error}</p>}
+      {!loading && !error && (
+        resolvedOptions.length === 0 ? (
+          <p className="already-booked-note" role="status">{emptyMessage}</p>
+        ) : (
           <>
-            {resolvedOptions.length === 0 ? (
-              <p className="already-booked-note" role="status">{emptyMessage}</p>
-            ) : (
-              <>
-                {recommended && <RecommendedModeCard option={recommended} />}
-                <div className="stay-options-grid">
-                  {resolvedOptions.map(option => (
-                    <TransportOptionCard key={option.mode} option={option} best={recommended ? option === recommended : false} />
-                  ))}
-                </div>
-              </>
-            )}
-            {notFeasibleModes.length > 0 && (
-              <details className="transport-drawer-not-feasible">
-                <summary>Other modes ({notFeasibleModes.length} not available for this route)</summary>
-                <ul className="trip-notes-list">
-                  {notFeasibleModes.map(mode => (
-                    <li key={mode}><ModeTag mode={mode} /> Not available for this route.</li>
-                  ))}
-                </ul>
-              </details>
-            )}
+            {recommended && <RecommendedModeCard option={recommended} />}
+            <div className="stay-options-grid">
+              {resolvedOptions.map(option => (
+                <TransportOptionCard key={option.mode} option={option} best={recommended ? option === recommended : false} />
+              ))}
+            </div>
           </>
-        )}
-      </aside>
-    </div>
+        )
+      )}
+    </BookingDrawer>
   );
 }

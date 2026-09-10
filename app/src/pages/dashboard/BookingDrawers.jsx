@@ -40,8 +40,9 @@ export default function BookingDrawers({ drawers: d }) {
       gapPrompt={!d.party ? d.openGapPrompt : null}
     />
   );
-  const drawerPartyRow = (
+  const partyRow = rowLabel => (
     <DrawerPartyRow
+      rowLabel={rowLabel}
       label={d.partyLabel}
       onEdit={d.openTravelerEditForm}
       editOpen={d.travelerEditOpen}
@@ -56,7 +57,7 @@ export default function BookingDrawers({ drawers: d }) {
   const prefEditForm = (
     <ScheduleDateForm
       existing={searchPrefFor(prefEntity)}
-      dateLabel={isStayPref ? 'Check-in' : 'Leg date'}
+      dateLabel={isStayPref ? 'Check-in' : 'Date'}
       helper={isStayPref ? undefined
         : 'Prefill this one search with a specific date. It does not change your itinerary or any other search.'}
       value={d.prefEditValue}
@@ -78,16 +79,16 @@ export default function BookingDrawers({ drawers: d }) {
     const leg = d.transportLeg || legFromItem(transportItem);
     return (
       <DrawerSearchCard>
-        <DrawerWhereRow value={`${leg.from} → ${leg.to}`} />
+        <DrawerWhereRow label="Route" value={`${leg.from} → ${leg.to}`} />
         <DrawerDateRow
-          label="Leg date"
+          label="Date"
           precision={entity.precision}
           valueLabel={collapsedDateLabel(entity)}
           onEdit={() => d.openPrefEditForm('transport', entity)}
           editOpen={d.prefEditOpen && d.prefEditTarget?.type === 'transport'}
           editForm={prefEditForm}
         />
-        {drawerPartyRow}
+        {partyRow('Travellers')}
       </DrawerSearchCard>
     );
   })() : null;
@@ -109,7 +110,7 @@ export default function BookingDrawers({ drawers: d }) {
           editOpen={d.prefEditOpen && d.prefEditTarget?.type === 'stay'}
           editForm={prefEditForm}
         />
-        {drawerPartyRow}
+        {partyRow('Guests')}
       </DrawerSearchCard>
     );
   })() : null;

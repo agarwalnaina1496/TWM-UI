@@ -384,7 +384,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(bodies.filter(b => b.domain === 'transport')).toHaveLength(1);
     expect(bodies[0].targets.map(t => t.value)).toEqual(['flight', 'train', 'bus']);
     // TWM-228: a leg with no resolved date shows the date picker expanded and blank.
-    expect(within(drawer).getByLabelText('Leg date')).toHaveValue('');
+    expect(within(drawer).getByLabelText('Date')).toHaveValue('');
     expect(within(drawer).queryByRole('button', { name: /Add a date for this search/ })).toBeNull();
     void user;
   });
@@ -470,7 +470,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     const before = bodies.length;
 
     // TWM-228: the picker is already expanded for a dateless leg.
-    await user.type(within(drawer).getByLabelText('Leg date'), '2026-11-01');
+    await user.type(within(drawer).getByLabelText('Date'), '2026-11-01');
     await user.click(within(drawer).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_search_pref', expect.anything()));
     await waitFor(() => expect(bodies.length).toBeGreaterThan(before));
@@ -554,7 +554,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     });
     const user = await openTransportDrawer();
     const drawer = await screen.findByRole('dialog', { name: /Delhi to Rishikesh/ });
-    await user.click(within(drawer).getByRole('button', { name: /Add guests/ }));
+    await user.click(within(drawer).getByRole('button', { name: /Add travellers/ }));
     await user.click(within(drawer).getByRole('button', { name: 'Save travelers' }));
     await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('set_party', expect.anything()));
     await waitFor(() => expect(

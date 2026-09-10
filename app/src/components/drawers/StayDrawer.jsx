@@ -1,4 +1,5 @@
 import { moneyRange } from '../BudgetBar.jsx';
+import BookingDrawer from './BookingDrawer.jsx';
 import TrustedActionCta from './TrustedActionCta.jsx';
 
 const STAY_TIER_LABEL = { budget: 'Budget', mid_range: 'Mid-range', premium: 'Premium' };
@@ -23,50 +24,46 @@ function StayOptionCard({ option }) {
   );
 }
 
+function StayEstimateBand({ tiers }) {
+  return (
+    <div className="stay-estimate-block">
+      <span className="stay-estimate-label">Rough nightly rate · not a quote</span>
+      <div className="stay-estimate-tiers">
+        {tiers.map(tier => (
+          <div className="stay-estimate-tier" key={tier.tier}>
+            <span className="stay-option-tag">{STAY_TIER_LABEL[tier.tier] || tier.tier}</span>
+            <strong>{moneyRange(tier.estimated_cost_low, tier.estimated_cost_high)}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function StayDrawer({ stay, options, loading, error, stayPriceEstimate, searchCard, onClose }) {
   if (!stay) return null;
   return (
-    <div className="transport-drawer-overlay" role="presentation" onClick={onClose}>
-      <aside
-        className="transport-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Stay: ${stay.location}`}
-        onClick={event => event.stopPropagation()}
-      >
-        <div className="transport-drawer-head">
-          <h3>{stay.location} <span className="drawer-head-meta">· {stay.nights} night{stay.nights === 1 ? '' : 's'}</span></h3>
-          <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Close stay options">✕</button>
-        </div>
-        {searchCard}
-        {stayPriceEstimate && (
-          <div className="stay-estimate-block">
-            <span className="stay-estimate-label">Rough nightly rate · not a quote</span>
-            <div className="stay-estimate-tiers">
-              {stayPriceEstimate.map(tier => (
-                <div className="stay-estimate-tier" key={tier.tier}>
-                  <span className="stay-option-tag">{STAY_TIER_LABEL[tier.tier] || tier.tier}</span>
-                  <strong>{moneyRange(tier.estimated_cost_low, tier.estimated_cost_high)}</strong>
-                </div>
-              ))}
-            </div>
+    <BookingDrawer
+      ariaLabel={`Stay: ${stay.location}`}
+      closeLabel="Close stay options"
+      title={stay.location}
+      meta={`${stay.nights} night${stay.nights === 1 ? '' : 's'}`}
+      searchCard={searchCard}
+      contextBand={stayPriceEstimate ? <StayEstimateBand tiers={stayPriceEstimate} /> : null}
+      sectionHeading="Where to book"
+      onClose={onClose}
+    >
+      {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
+      {error && <p className="already-booked-note" role="alert">{error}</p>}
+      {!loading && !error && (
+        options?.length ? (
+          <div className="stay-options-grid">
+            {options.map(option => <StayOptionCard key={option.name} option={option} />)}
           </div>
-        )}
-        <p className="drawer-section-heading">Where to book</p>
-        {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
-        {error && <p className="already-booked-note" role="alert">{error}</p>}
-        {!loading && !error && (
-          options?.length ? (
-            <div className="stay-options-grid">
-              {options.map(option => (
-                <StayOptionCard key={option.name} option={option} />
-              ))}
-            </div>
-          ) : (
-            <p className="already-booked-note" role="status">No stay partners available for this location.</p>
-          )
-        )}
-      </aside>
-    </div>
+        ) : (
+          <p className="already-booked-note" role="status">No stay partners available for this location.</p>
+        )
+      )}
+    </BookingDrawer>
   );
 }

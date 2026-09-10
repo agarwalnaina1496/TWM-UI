@@ -11,11 +11,11 @@ function EditLink({ onEdit, children = 'Change' }) {
 
 // Where — fixed. The destination/route comes from the itinerary and is not
 // editable (an editable destination would make this a generic search module).
-export function DrawerWhereRow({ value }) {
+export function DrawerWhereRow({ label = 'Where', value }) {
   return (
     <div className="booking-search-row">
       <div className="booking-search-line">
-        <span className="booking-search-label">📍 Where</span>
+        <span className="booking-search-label">📍 {label}</span>
         <span className="booking-search-value">{value}</span>
         <span className="booking-search-note">from your itinerary</span>
       </div>
@@ -50,15 +50,15 @@ export function DrawerDateRow({ label = 'Dates', precision, rangeLabel, valueLab
 
 // Guests — the trip-wide structured party (booking_setup.party), edited from
 // whichever drawer is open. Collapsed once set; "Add guests" while unset.
-export function DrawerPartyRow({ label, onEdit, editOpen, editForm }) {
+export function DrawerPartyRow({ rowLabel = 'Guests', label, onEdit, editOpen, editForm }) {
   return (
     <div className="booking-search-row">
       {!editOpen && (
         <div className="booking-search-line">
-          <span className="booking-search-label">👤 Guests</span>
+          <span className="booking-search-label">👤 {rowLabel}</span>
           {label
             ? <><span className="booking-search-value">{label}</span><EditLink onEdit={onEdit} /></>
-            : <EditLink onEdit={onEdit}>Add guests</EditLink>}
+            : <EditLink onEdit={onEdit}>Add {rowLabel.toLowerCase()}</EditLink>}
         </div>
       )}
       {editOpen && editForm}
