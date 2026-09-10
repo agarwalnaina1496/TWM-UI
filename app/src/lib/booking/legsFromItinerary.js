@@ -47,6 +47,9 @@ export function transportOptionFromEntry(entry) {
   return {
     mode: entry.mode,
     direct: Boolean(entry.direct),
+    feasible: entry.feasible ?? true,
+    ruledOutReason: entry.ruled_out_reason ?? null,
+    longJourneyNote: entry.long_journey_note ?? null,
     hubs: (entry.hubs || []).map(hubFromEntry),
   };
 }

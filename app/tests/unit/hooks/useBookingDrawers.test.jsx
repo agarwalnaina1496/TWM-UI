@@ -228,6 +228,7 @@ describe('useBookingDrawers — TWM-230 per-mode transport options', () => {
     expect(loadTransportBundle).not.toHaveBeenCalled();
 
     act(() => result.current.selectTransportMode('flight'));
+    expect(trackEvent).toHaveBeenCalledWith('transport_mode_selected', { mode: 'flight' });
     await waitFor(() => expect(loadTransportBundle).toHaveBeenCalledTimes(1));
     const [, leg, hub,, modeResolution] = loadTransportBundle.mock.calls[0];
     expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Udaipur' });
@@ -244,5 +245,16 @@ describe('useBookingDrawers — TWM-230 per-mode transport options', () => {
     act(() => result.current.clearSelectedTransportMode());
     expect(result.current.selectedTransportMode).toBe(null);
     expect(result.current.selectedHubCity).toBe(null);
+    expect(trackEvent).toHaveBeenCalledWith('transport_back_to_chooser', {});
+  });
+
+  it('tracks mode hub selections', async () => {
+    const { result } = modeSetup();
+    act(() => result.current.openTransportDrawer(ITEM));
+    act(() => result.current.selectTransportMode('flight'));
+    await waitFor(() => expect(result.current.selectedHubCity).toBe('Udaipur'));
+
+    act(() => result.current.selectHub('Udaipur'));
+    expect(trackEvent).toHaveBeenCalledWith('transport_hub_selected', { city: 'Udaipur', mode: 'flight' });
   });
 });

@@ -32,11 +32,18 @@ describe('legFromItem', () => {
       from_city: 'Bengaluru', to_city: 'Sumerpur', date_precision: 'none',
       transport_options: [
         { mode: 'flight', direct: false, hubs: [{ ...HUB_ENTRY, access_gap: 'air', feasible: true }] },
-        { mode: 'train', direct: true, hubs: [] },
+        { mode: 'train', direct: true, feasible: false, ruled_out_reason: 'No railhead.', long_journey_note: null, hubs: [] },
       ],
     });
     expect(leg.transportOptions[0].hubs[0]).toMatchObject({ city: 'Udaipur', accessGap: 'air', feasible: true });
-    expect(leg.transportOptions[1]).toEqual({ mode: 'train', direct: true, hubs: [] });
+    expect(leg.transportOptions[1]).toEqual({
+      mode: 'train',
+      direct: true,
+      feasible: false,
+      ruledOutReason: 'No railhead.',
+      longJourneyNote: null,
+      hubs: [],
+    });
   });
 });
 
@@ -46,7 +53,14 @@ describe('selectedTransportOption', () => {
       from_city: 'Bengaluru', to_city: 'Sumerpur', date_precision: 'none',
       transport_options: [{ mode: 'train', direct: true, hubs: [] }],
     };
-    expect(selectedTransportOption(item, 'train')).toEqual({ mode: 'train', direct: true, hubs: [] });
+    expect(selectedTransportOption(item, 'train')).toEqual({
+      mode: 'train',
+      direct: true,
+      feasible: true,
+      ruledOutReason: null,
+      longJourneyNote: null,
+      hubs: [],
+    });
     expect(selectedTransportOption(item, 'flight')).toBe(null);
   });
 });

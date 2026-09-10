@@ -6,8 +6,8 @@ import {
   legForHub,
   resolveSelectedHub,
   selectedTransportOption,
-  transportModeCacheKey,
 } from '../lib/booking/legsFromItinerary.js';
+import { trackEvent } from '../lib/analytics.js';
 import { useDrawerFetch } from './useDrawerFetch.js';
 
 export function useTransportDrawer({ tripId, days, party, partyKey, onOpened, onClosed }) {
@@ -24,16 +24,21 @@ export function useTransportDrawer({ tripId, days, party, partyKey, onOpened, on
   const legacy = transportHubState(item, selectedHubCity);
   const modeOption = selectedTransportOption(item, selectedMode);
   const modeHubs = (modeOption?.hubs || []).filter(hub => hub.feasible !== false);
+  const originModeHubs = modeHubs.filter(hub => hub.side === 'origin');
+  const destinationModeHubs = modeHubs.filter(hub => hub.side !== 'origin');
+  const bothModeSidesHubless = originModeHubs.length > 0 && destinationModeHubs.length > 0;
+  const pickerModeHubs = bothModeSidesHubless ? destinationModeHubs : modeHubs;
+  const autoModeOriginHub = bothModeSidesHubless ? originModeHubs[0] : null;
   const selectedModeHub = modeOption && !modeOption.direct
-    ? resolveSelectedHub(modeHubs, selectedHubCity)
+    ? resolveSelectedHub(pickerModeHubs, selectedHubCity)
     : null;
   const effectiveLeg = modeOption
-    ? legForHub(legacy.leg, selectedModeHub)
+    ? legForHub(legForHub(legacy.leg, autoModeOriginHub), selectedModeHub)
     : legacy.effectiveLeg;
 
   const cacheKey = subject => (
     modeOption
-      ? transportModeCacheKey(subject, selectedMode, selectedModeHub, partyKey)
+      ? `${selectedMode}::${effectiveLeg?.from ?? '?'}→${effectiveLeg?.to ?? '?'}::${subject?.resolved_date ?? 'flex'}::${partyKey ?? 'p?'}`
       : buildTransportCacheKey(subject, legacy.autoOriginHub, legacy.selected, partyKey)
   );
 
@@ -85,13 +90,24 @@ export function useTransportDrawer({ tripId, days, party, partyKey, onOpened, on
     hubs: legacy.pickerHubs,
     modeOptions: legacy.leg?.transportOptions || [],
     selectedMode,
-    selectMode: mode => { setSelectedMode(mode); setSelectedHubCity(null); },
-    clearSelectedMode: () => { setSelectedMode(null); setSelectedHubCity(null); },
-    modeHubs,
+    selectMode: mode => {
+      setSelectedMode(mode);
+      setSelectedHubCity(null);
+      trackEvent('transport_mode_selected', { mode });
+    },
+    clearSelectedMode: () => {
+      setSelectedMode(null);
+      setSelectedHubCity(null);
+      trackEvent('transport_back_to_chooser', {});
+    },
+    modeHubs: pickerModeHubs,
     selectedHub: selectedModeHub || legacy.selected,
-    autoOriginHub: legacy.autoOriginHub,
+    autoOriginHub: autoModeOriginHub || legacy.autoOriginHub,
     selectedHubCity: (selectedModeHub || legacy.selected)?.city ?? legacy.selectedCity,
-    selectHub: setSelectedHubCity,
+    selectHub: city => {
+      setSelectedHubCity(city);
+      trackEvent('transport_hub_selected', { city, mode: selectedMode });
+    },
     effectiveLeg,
     options: item ? data[cacheKey(item)]?.options : undefined,
     feasibility: item ? data[cacheKey(item)]?.feasibility : undefined,

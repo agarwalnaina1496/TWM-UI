@@ -320,9 +320,9 @@
    dims the Itinerary behind it but keeps it visible, slides in from the
    right, no navigation away from the page. */
 .transport-drawer-overlay{position:fixed;inset:0;background:rgba(28,22,16,0.35);z-index:210;display:flex;justify-content:flex-end;}
-.transport-drawer{width:min(420px,100%);height:100%;background:var(--surface);box-shadow:-8px 0 24px rgba(28,22,16,0.18);padding:22px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;}
+.transport-drawer{width:min(420px,100%);height:100%;background:var(--surface);box-shadow:-8px 0 24px rgba(28,22,16,0.18);padding:0 20px 22px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;}
 .transport-drawer>*{flex:none;}
-.transport-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.transport-drawer-head{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 -20px;padding:22px 20px 12px;background:var(--surface);border-bottom:.5px solid var(--border);}
 .transport-drawer-head h3{margin:0;font-family:'Fraunces',serif;font-size:19px;flex:1;}
 .drawer-back{font-size:22px;line-height:1;padding:4px 8px;}
 .transport-drawer-date{margin:0;font-size:13px;color:var(--tp);font-weight:700;}
