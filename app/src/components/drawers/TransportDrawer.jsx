@@ -16,6 +16,11 @@ function distanceLabel(km) {
   return `~${Math.round(km).toLocaleString('en-US')} km`;
 }
 
+function hubHaulLabel(hub) {
+  const km = hub?.longHaulDistanceKm ?? hub?.distanceKm;
+  return km != null ? distanceLabel(km) : null;
+}
+
 function durationLabel(minutes) {
   if (minutes < 60) return `~${Math.round(minutes)} min`;
   return `~${Math.max(1, Math.round(minutes / 60))} h`;
@@ -191,7 +196,7 @@ function HubPicker({ townName, hubs, selectedCity, onSelect, mode }) {
       </legend>
       {hubs.map(hub => {
         const lastMile = hubLastMileLabel(hub);
-        const distance = hub.longHaulDistanceKm ?? hub.distanceKm;
+        const haul = hubHaulLabel(hub);
         return (
           <label key={hub.city} className={`hub-row${hub.city === selectedCity ? ' selected' : ''}`}>
             <input
@@ -202,7 +207,7 @@ function HubPicker({ townName, hubs, selectedCity, onSelect, mode }) {
               onChange={() => onSelect(hub.city)}
             />
             <strong>{hub.city}</strong>
-            {distance != null && <span className="stay-option-tag">{distanceLabel(distance)} long haul</span>}
+            {haul && <span className="stay-option-tag">{haul} long haul</span>}
             {lastMile && <span className="stay-option-tag">{lastMile} last mile</span>}
           </label>
         );
@@ -269,7 +274,10 @@ function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSele
         <HubPicker townName={hublessTownName(leg, hubList[0])} hubs={hubList} selectedCity={selectedHub?.city} onSelect={onSelectHub} mode={mode} />
       )}
       {hubList.length === 1 && (
-        <p className="hub-picker-intro">{hublessTownName(leg, hubList[0])} has no direct {modeLabel(mode).toLowerCase()} access — routed via {hubList[0].city}.</p>
+        <p className="hub-picker-intro">
+          {hublessTownName(leg, hubList[0])} has no direct {modeLabel(mode).toLowerCase()} access — routed via {hubList[0].city}
+          {hubHaulLabel(hubList[0]) ? `, ${hubHaulLabel(hubList[0])} long haul` : ''}.
+        </p>
       )}
       {showLastMile && (
         <HubLastMileNote
