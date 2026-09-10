@@ -28,7 +28,7 @@ export function useTransportDrawer({ tripId, days, party, partyKey, onOpened, on
   const destinationModeHubs = modeHubs.filter(hub => hub.side !== 'origin');
   const bothModeSidesHubless = originModeHubs.length > 0 && destinationModeHubs.length > 0;
   const pickerModeHubs = bothModeSidesHubless ? destinationModeHubs : modeHubs;
-  const autoModeOriginHub = bothModeSidesHubless ? originModeHubs[0] : null;
+  const autoModeOriginHub = bothModeSidesHubless ? resolveSelectedHub(originModeHubs, null) : null;
   const selectedModeHub = modeOption && !modeOption.direct
     ? resolveSelectedHub(pickerModeHubs, selectedHubCity)
     : null;
