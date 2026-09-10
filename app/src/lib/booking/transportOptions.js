@@ -7,7 +7,12 @@ import { searchFlightOffer } from './flightOffer.js';
 // deterministic feasibility assessment plus the resolved bookable options.
 // `hub` only contributes its `longHaulDistanceKm` fallback for a rail-only
 // gateway with no resolvable airport.
-export async function loadTransportBundle(tripId, leg, hub, party) {
+export async function loadTransportBundle(tripId, leg, hub, party, modeResolution = null) {
+  if (modeResolution) {
+    const approvedModes = [modeResolution.mode];
+    const options = await transportOptionsFor(tripId, leg, party, approvedModes);
+    return { options, feasibility: feasibilityFromModeResolution(modeResolution, leg, hub) };
+  }
   const feasibility = await getTripFeasibility(tripId, {
     origin: leg.from,
     destination: leg.to,
@@ -16,6 +21,22 @@ export async function loadTransportBundle(tripId, leg, hub, party) {
   const approvedModes = (feasibility?.modes || []).map(entry => entry.mode);
   const options = await transportOptionsFor(tripId, leg, party, approvedModes);
   return { options, feasibility };
+}
+
+function feasibilityFromModeResolution(modeResolution, leg, hub) {
+  const distanceKm = hub?.distanceKm ?? hub?.longHaulDistanceKm ?? null;
+  return {
+    modes: [{
+      mode: modeResolution.mode,
+      status: 'feasible',
+      duration_source: 'computed',
+      estimated_distance_km: distanceKm,
+      reason: modeResolution.direct
+        ? `${modeLabel(modeResolution.mode)} is available directly for ${leg.from} → ${leg.to}.`
+        : `${modeLabel(modeResolution.mode)} is routed via ${hub?.city}.`,
+      verification: { status: 'GENERAL_GUIDANCE' },
+    }],
+  };
 }
 
 // TWM-220/TWM-221: gateway-leg transport resolution — one booking-options

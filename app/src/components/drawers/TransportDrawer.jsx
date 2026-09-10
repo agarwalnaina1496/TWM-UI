@@ -138,19 +138,33 @@ function hublessTownName(leg, hub) {
   return hub?.side === 'origin' ? leg.from : leg.to;
 }
 
+function lastMileLinks(hub, townName) {
+  const from = encodeURIComponent(hub?.city || '');
+  const to = encodeURIComponent(townName || '');
+  return [
+    { label: 'Cab', href: `https://www.google.com/search?q=${from}+to+${to}+cab` },
+    { label: 'Bus', href: `https://www.redbus.in/search?fromCityName=${from}&toCityName=${to}` },
+    { label: 'Train to railhead', href: `https://www.irctc.co.in/nget/train-search` },
+  ];
+}
+
 // TWM-215: passive context only — the hub → town last mile is arranged
 // locally, never its own bookable search.
 function HubLastMileNote({ townName, hub, direction }) {
   const label = hubLastMileLabel(hub);
   if (!label) return null;
-  return direction === 'origin' ? (
-    <p className="hub-last-mile-note">
-      Getting to {hub.city}: ~{label} from {townName} — arrange this short leg locally.
-    </p>
-  ) : (
-    <p className="hub-last-mile-note">
-      Then ~{label} onward to {townName} — arrange this short leg locally.
-    </p>
+  const copy = direction === 'origin'
+    ? `Getting to ${hub.city}: ~${label} from ${townName}.`
+    : `Then ~${label} onward to ${townName}.`;
+  return (
+    <div className="hub-last-mile-note">
+      <p>{copy} TWM doesn't book this leg.</p>
+      <div className="last-mile-links">
+        {lastMileLinks(hub, townName).map(link => (
+          <a key={link.label} className="stay-option-tag" href={link.href} target="_blank" rel="noreferrer">{link.label} ↗</a>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -165,6 +179,7 @@ function HubPicker({ townName, hubs, selectedCity, onSelect }) {
       </legend>
       {hubs.map(hub => {
         const lastMile = hubLastMileLabel(hub);
+        const feasibleModes = hub.feasibleModes || [];
         return (
           <label key={hub.city} className={`hub-row${hub.city === selectedCity ? ' selected' : ''}`}>
             <input
@@ -177,8 +192,8 @@ function HubPicker({ townName, hubs, selectedCity, onSelect }) {
             <strong>{hub.city}</strong>
             {lastMile && <span className="stay-option-tag">{lastMile} last mile</span>}
             <span className="hub-row-modes">
-              {hub.feasibleModes.length
-                ? hub.feasibleModes.map(mode => <ModeTag key={mode} mode={mode} />)
+              {feasibleModes.length
+                ? feasibleModes.map(mode => <ModeTag key={mode} mode={mode} />)
                 : <span className="stay-option-tag">No modes resolved</span>}
             </span>
           </label>
@@ -271,6 +286,53 @@ function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSele
   );
 }
 
+function modeSummary(option) {
+  if (option.direct) return 'Direct';
+  const hubs = option.hubs || [];
+  if (hubs.length === 1) {
+    const lastMile = hubLastMileLabel(hubs[0]);
+    return `Via ${hubs[0].city}${lastMile ? ` + ${lastMile}` : ''}`;
+  }
+  if (hubs.length > 1) return `Via ${hubs.map(hub => hub.city).join(' / ')}`;
+  return 'No direct transport identified';
+}
+
+function selectableModeOptions(modeOptions) {
+  return modeOptions.filter(option => option.direct || (option.hubs || []).some(hub => hub.feasible !== false));
+}
+
+function ChooserBody({ leg, modeOptions, ruledOutModes, searchCard, onSelectMode }) {
+  return (
+    <>
+      {searchCard}
+      <p className="drawer-section-heading">Choose transport</p>
+      {modeOptions.length > 0 ? (
+        <div className="transport-mode-list">
+          {modeOptions.map(option => (
+            <button
+              key={option.mode}
+              type="button"
+              className="transport-mode-row"
+              onClick={() => onSelectMode(option.mode)}
+            >
+              <ModeTag mode={option.mode} />
+              <span>{modeSummary(option)}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="already-booked-note" role="status">No feasible transport identified for this leg.</p>
+      )}
+      {ruledOutModes.length > 0 && (
+        <ul className="transport-ruled-out-list">
+          {ruledOutModes.map(mode => <li key={mode}><ModeTag mode={mode} /> Not available for this route.</li>)}
+        </ul>
+      )}
+      <p className="already-booked-note">{leg.from} → {leg.to}</p>
+    </>
+  );
+}
+
 function NotFeasibleModes({ modes }) {
   if (!modes.length) return null;
   return (
@@ -283,35 +345,33 @@ function NotFeasibleModes({ modes }) {
   );
 }
 
-export default function TransportDrawer({
-  leg, hubs = [], selectedHub = null, autoOriginHub = null, onSelectHub,
-  options, feasibility, loading, error, searchCard, onClose,
+function SelectedTransportBody({
+  leg, modeOptions, hasPerModeOptions, currentModeOption, hubList,
+  selectedHub, autoOriginHub, onSelectHub, options, feasibility, loading,
+  error, searchCard,
 }) {
-  if (!leg) return null;
-  const hubList = hubs || []; // the picker side only (destination when both endpoints are hubless)
   const resolvedOptions = feasibleTransportOptions(options || [], feasibility);
-  const feasibleModeNames = new Set((feasibility?.modes || []).map(entry => entry.mode));
+  const feasibleModeNames = new Set(
+    hasPerModeOptions
+      ? selectableModeOptions(modeOptions).map(option => option.mode)
+      : (feasibility?.modes || []).map(entry => entry.mode),
+  );
   const notFeasibleModes = MODES.filter(mode => !feasibleModeNames.has(mode));
   const recommended = resolvedOptions.length ? recommendedMode(resolvedOptions) : undefined;
-  const emptyMessage = hubList.length === 0
-    ? 'No direct transport identified for this leg.'
-    : 'No bookable transport options for this gateway city — try another.';
+  const activeHubList = currentModeOption?.direct ? [] : hubList;
+  const emptyMessage = currentModeOption && !currentModeOption.direct && activeHubList.length === 0
+    ? 'No direct transport identified.'
+    : activeHubList.length === 0
+      ? 'No direct transport identified for this leg.'
+      : 'No bookable transport options for this gateway city — try another.';
   return (
-    <BookingDrawer
-      ariaLabel={`Transport: ${leg.from} to ${leg.to}`}
-      closeLabel="Close transport options"
-      title={`${leg.from} → ${leg.to}`}
-      searchCard={searchCard}
-      contextBand={(
-        <TransportContextBand
-          leg={leg} hubList={hubList} selectedHub={selectedHub}
-          autoOriginHub={autoOriginHub} onSelectHub={onSelectHub}
-        />
-      )}
-      sectionHeading="How to get there"
-      footer={!loading && !error ? <NotFeasibleModes modes={notFeasibleModes} /> : null}
-      onClose={onClose}
-    >
+    <>
+      {searchCard}
+      <TransportContextBand
+        leg={leg} hubList={activeHubList} selectedHub={selectedHub}
+        autoOriginHub={autoOriginHub} onSelectHub={onSelectHub}
+      />
+      <p className="drawer-section-heading">How to get there</p>
       {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
       {error && <p className="already-booked-note" role="alert">{error}</p>}
       {!loading && !error && (
@@ -328,6 +388,67 @@ export default function TransportDrawer({
           </>
         )
       )}
+      {!loading && !error && <NotFeasibleModes modes={notFeasibleModes} />}
+    </>
+  );
+}
+
+export default function TransportDrawer({
+  leg, modeOptions = [], selectedMode = null, onSelectMode, onBack,
+  hubs = [], selectedHub = null, autoOriginHub = null, onSelectHub,
+  options, feasibility, loading, error, searchCard, onClose,
+}) {
+  if (!leg) return null;
+  const hubList = hubs || []; // the picker side only (destination when both endpoints are hubless)
+  const hasPerModeOptions = modeOptions.length > 0;
+  const currentModeOption = hasPerModeOptions
+    ? modeOptions.find(option => option.mode === selectedMode)
+    : null;
+  if (hasPerModeOptions && !selectedMode) {
+    const chooserModes = selectableModeOptions(modeOptions);
+    const modeNames = new Set(chooserModes.map(option => option.mode));
+    const ruledOutModes = MODES.filter(mode => !modeNames.has(mode));
+    return (
+      <BookingDrawer
+        ariaLabel={`Transport: ${leg.from} to ${leg.to}`}
+        closeLabel="Close transport options"
+        title={`${leg.from} → ${leg.to}`}
+        onClose={onClose}
+      >
+        <ChooserBody
+          leg={leg}
+          modeOptions={chooserModes}
+          ruledOutModes={ruledOutModes}
+          searchCard={searchCard}
+          onSelectMode={onSelectMode}
+        />
+      </BookingDrawer>
+    );
+  }
+  return (
+    <BookingDrawer
+      ariaLabel={`Transport: ${leg.from} to ${leg.to}`}
+      closeLabel="Close transport options"
+      title={`${leg.from} → ${leg.to}`}
+      meta={selectedMode ? modeLabel(selectedMode) : null}
+      onBack={hasPerModeOptions ? onBack : null}
+      onClose={onClose}
+    >
+      <SelectedTransportBody
+        leg={leg}
+        modeOptions={modeOptions}
+        hasPerModeOptions={hasPerModeOptions}
+        currentModeOption={currentModeOption}
+        hubList={hubList}
+        selectedHub={selectedHub}
+        autoOriginHub={autoOriginHub}
+        onSelectHub={onSelectHub}
+        options={options}
+        feasibility={feasibility}
+        loading={loading}
+        error={error}
+        searchCard={searchCard}
+      />
     </BookingDrawer>
   );
 }

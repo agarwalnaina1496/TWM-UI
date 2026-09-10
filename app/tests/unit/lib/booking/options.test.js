@@ -207,3 +207,21 @@ describe('loadTransportBundle — the hub-substituted leg reaches every downstre
     });
   });
 });
+
+describe('loadTransportBundle — TWM-230 itinerary-provided mode resolution', () => {
+  it('does not call the feasibility endpoint when transport_options already resolved the selected mode', async () => {
+    resolveBookingOptions.mockResolvedValue({ results: [resolvedEntry({ kind: 'mode', value: 'train' })] });
+    const leg = { from: 'Bengaluru', to: 'Falna', departureDate: null };
+    const modeResolution = { mode: 'train', direct: true, hubs: [] };
+
+    const bundle = await loadTransportBundle('trip-1', leg, null, null, modeResolution);
+
+    expect(getTripFeasibility).not.toHaveBeenCalled();
+    expect(resolveBookingOptions).toHaveBeenCalledWith('trip-1', expect.objectContaining({
+      from_city: 'Bengaluru',
+      to_city: 'Falna',
+      targets: [{ kind: 'mode', value: 'train' }],
+    }));
+    expect(bundle.feasibility.modes).toMatchObject([{ mode: 'train', status: 'feasible' }]);
+  });
+});

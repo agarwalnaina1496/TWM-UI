@@ -120,7 +120,11 @@ export default function BookingDrawers({ drawers: d }) {
       {transportDrawerItem && (
         <TransportDrawer
           leg={d.transportLeg || legFromItem(transportItem || transportDrawerItem)}
-          hubs={d.transportHubs}
+          modeOptions={d.transportModeOptions}
+          selectedMode={d.selectedTransportMode}
+          onSelectMode={d.selectTransportMode}
+          onBack={d.clearSelectedTransportMode}
+          hubs={d.selectedTransportMode ? d.transportModeHubs : d.transportHubs}
           selectedHub={d.selectedHub}
           autoOriginHub={d.autoOriginHub}
           onSelectHub={d.selectHub}

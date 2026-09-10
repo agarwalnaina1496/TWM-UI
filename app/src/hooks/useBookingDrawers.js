@@ -1,24 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useTrip } from '../context/TripContext.jsx';
-import { loadTransportBundle } from '../lib/booking/transportOptions.js';
 import { stayOptionsFor } from '../lib/booking/stayOptions.js';
-import {
-  stayFromSegment, transportCacheKey as buildTransportCacheKey,
-  transportHubState, travelerPartyLabel,
-} from '../lib/booking/legsFromItinerary.js';
+import { stayFromSegment, travelerPartyLabel } from '../lib/booking/legsFromItinerary.js';
 import { searchPrefFor } from '../constants/bookingSetup.js';
 import { trackEvent } from '../lib/analytics.js';
-
-// TWM-215: the single generic "keep the open drawer's cache filled" hook —
-// regardless of how it got open (a fresh click, or a save elsewhere
-// invalidating the cache while the drawer stayed open).
-function useDrawerFetch(openKey, cache, loading, fetcher) {
-  useEffect(() => {
-    if (!openKey || cache[openKey] || loading) return;
-    fetcher();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openKey, cache, loading]);
-}
+import { useDrawerFetch } from './useDrawerFetch.js';
+import { useTransportDrawer } from './useTransportDrawer.js';
 
 // Owns both booking drawers (transport + stay), their per-key option caches,
 // and the two editors that live inside whichever drawer is open: the
@@ -42,16 +29,10 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
   const [travelerEditPending, setTravelerEditPending] = useState(false);
   const [travelerEditError, setTravelerEditError] = useState(null);
 
-  const [transportDrawerItem, setTransportDrawerItem] = useState(null); // an enriched gateway TRAVEL item
-  const [transportDrawerLoading, setTransportDrawerLoading] = useState(false);
-  const [transportDrawerError, setTransportDrawerError] = useState(null);
-  const [selectedHubCity, setSelectedHubCity] = useState(null); // TWM-215: chosen gateway hub
-
   const [stayDrawerSegmentId, setStayDrawerSegmentId] = useState(null);
   const [stayDrawerLoading, setStayDrawerLoading] = useState(false);
   const [stayDrawerError, setStayDrawerError] = useState(null);
 
-  const [transportData, setTransportData] = useState({});
   const [stayData, setStayData] = useState({});
 
   const party = view?.booking?.party ?? null;
@@ -61,39 +42,23 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
   const partyLabel = party ? travelerPartyLabel(party) : null;
   const openGapPrompt = view?.open_gaps?.find(gap => gap.resolution === 'set_party')?.detail ?? null;
 
-  const transportItem = transportDrawerItem
-    ? (days.flatMap(d => d.timeline || []).find(i => i.id === transportDrawerItem.id) ?? transportDrawerItem)
-    : null;
-  const {
-    leg: transportLeg, pickerHubs: transportHubs, autoOriginHub, selected: selectedHub,
-    selectedCity: resolvedHubCity, effectiveLeg,
-  } = transportHubState(transportItem, selectedHubCity);
   const staySegment = stayDrawerSegmentId ? staySegments.find(s => s.id === stayDrawerSegmentId) ?? null : null;
   const stay = stayFromSegment(staySegment);
 
-  const transportCacheKey = item => buildTransportCacheKey(item, autoOriginHub, selectedHub, partyKey);
+  const transport = useTransportDrawer({
+    tripId,
+    days,
+    party,
+    partyKey,
+    onOpened: resetPrefEdit,
+    onClosed: resetPrefEdit,
+  });
   // Drop every cached option bundle so the open drawer re-resolves its links.
-  const invalidateOptions = () => { setTransportData({}); setStayData({}); };
+  const invalidateOptions = () => { transport.clearData(); setStayData({}); };
 
   function stayCacheKey(segment) {
     if (!segment) return null;
     return `${segment.id}::${segment.checkin_date ?? 'flex'}::${segment.checkout_date ?? 'flex'}::${segment.nights}::${partyKey ?? 'p?'}`;
-  }
-
-  async function fetchTransportOptions(item) {
-    if (!item) return;
-    const key = transportCacheKey(item);
-    if (transportData[key]) return;
-    setTransportDrawerError(null);
-    setTransportDrawerLoading(true);
-    try {
-      const bundle = await loadTransportBundle(tripId, effectiveLeg, selectedHub, party);
-      setTransportData(prev => ({ ...prev, [key]: bundle }));
-    } catch (error) {
-      setTransportDrawerError(error.message || 'Could not load transport options.');
-    } finally {
-      setTransportDrawerLoading(false);
-    }
   }
 
   async function fetchStayOptions(segment) {
@@ -112,12 +77,6 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
   }
 
   useDrawerFetch(
-    transportItem ? transportCacheKey(transportItem) : null,
-    transportData,
-    transportDrawerLoading,
-    () => fetchTransportOptions(transportItem),
-  );
-  useDrawerFetch(
     stayCacheKey(staySegment),
     stayData,
     stayDrawerLoading,
@@ -132,18 +91,6 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     setPrefEditError(null);
   }
 
-  function openTransportDrawer(item) {
-    setTransportDrawerItem(item);
-    setSelectedHubCity(null); // default to the first candidate hub, if any
-    setTransportDrawerError(null);
-    setTransportDrawerLoading(false);
-    resetPrefEdit();
-  }
-  function closeTransportDrawer() {
-    setTransportDrawerItem(null);
-    setSelectedHubCity(null);
-    resetPrefEdit();
-  }
   function openStayDrawer(segmentId) {
     setStayDrawerSegmentId(segmentId);
     setStayDrawerError(null);
@@ -160,8 +107,8 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
   // collapsed behind "Change".
   const openDateEntity = staySegment
     ? { type: 'stay', id: staySegment.id, precision: staySegment.date_precision }
-    : transportItem
-      ? { type: 'transport', id: transportItem.id, precision: transportItem.date_precision }
+    : transport.item
+      ? { type: 'transport', id: transport.item.id, precision: transport.item.date_precision }
       : null;
   useEffect(() => {
     if (!openDateEntity || openDateEntity.precision !== 'none') return;
@@ -265,21 +212,26 @@ export function useBookingDrawers({ tripId, view, days, staySegments }) {
     partyLabel,
     openGapPrompt,
 
-    transportDrawerItem,
-    transportItem,
-    transportLeg,
-    transportHubs,
-    selectedHub,
-    autoOriginHub,
-    selectedHubCity: resolvedHubCity,
-    selectHub: setSelectedHubCity,
-    effectiveLeg,
-    transportOptions: transportItem ? transportData[transportCacheKey(transportItem)]?.options : undefined,
-    transportFeasibility: transportItem ? transportData[transportCacheKey(transportItem)]?.feasibility : undefined,
-    transportDrawerLoading,
-    transportDrawerError,
-    openTransportDrawer,
-    closeTransportDrawer,
+    transportDrawerItem: transport.drawerItem,
+    transportItem: transport.item,
+    transportLeg: transport.leg,
+    transportHubs: transport.hubs,
+    transportModeOptions: transport.modeOptions,
+    selectedTransportMode: transport.selectedMode,
+    selectTransportMode: transport.selectMode,
+    clearSelectedTransportMode: transport.clearSelectedMode,
+    transportModeHubs: transport.modeHubs,
+    selectedHub: transport.selectedHub,
+    autoOriginHub: transport.autoOriginHub,
+    selectedHubCity: transport.selectedHubCity,
+    selectHub: transport.selectHub,
+    effectiveLeg: transport.effectiveLeg,
+    transportOptions: transport.options,
+    transportFeasibility: transport.feasibility,
+    transportDrawerLoading: transport.loading,
+    transportDrawerError: transport.error,
+    openTransportDrawer: transport.open,
+    closeTransportDrawer: transport.close,
 
     stayDrawerSegmentId,
     staySegment,
