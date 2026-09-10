@@ -7,9 +7,28 @@ import TrustedActionCta from './TrustedActionCta.jsx';
 
 function durationDistanceLabel(option) {
   const parts = [];
-  if (option.durationMinutes != null) parts.push(`${Math.round((option.durationMinutes / 60) * 10) / 10}h`);
-  if (option.distanceKm != null) parts.push(`${Math.round(option.distanceKm)} km`);
+  if (option.durationMinutes != null) parts.push(durationLabel(option.durationMinutes));
+  if (option.distanceKm != null) parts.push(distanceLabel(option.distanceKm));
   return parts.join(' · ');
+}
+
+function distanceLabel(km) {
+  return `~${Math.round(km).toLocaleString('en-US')} km`;
+}
+
+function hubHaulLabel(hub) {
+  const km = hub?.longHaulDistanceKm ?? hub?.distanceKm;
+  return km != null ? distanceLabel(km) : null;
+}
+
+function durationLabel(minutes) {
+  if (minutes < 60) return `~${Math.round(minutes)} min`;
+  return `~${Math.max(1, Math.round(minutes / 60))} h`;
+}
+
+function journeyHoursLabel(note) {
+  const match = /roughly\s+(\d+)\s*h/i.exec(note || '');
+  return match ? `~${match[1]} h journey` : note;
 }
 
 function timeAgoLabel(isoTimestamp) {
@@ -129,8 +148,8 @@ function FlightLiveOfferInfo({ liveOffer, onAddDates }) {
 
 function hubLastMileLabel(hub) {
   const parts = [];
-  if (hub.lastMileKm != null) parts.push(`${Math.round(hub.lastMileKm)} km`);
-  if (hub.lastMileDurationMinutes != null) parts.push(`${Math.round((hub.lastMileDurationMinutes / 60) * 10) / 10}h`);
+  if (hub.lastMileKm != null) parts.push(distanceLabel(hub.lastMileKm));
+  if (hub.lastMileDurationMinutes != null) parts.push(durationLabel(hub.lastMileDurationMinutes));
   return parts.join(' · ');
 }
 
@@ -154,8 +173,8 @@ function HubLastMileNote({ townName, hub, direction, mode }) {
   const label = hubLastMileLabel(hub);
   if (!label) return null;
   const copy = direction === 'origin'
-    ? `Getting to ${hub.city}: ~${label} from ${townName}.`
-    : `Then ~${label} onward to ${townName}.`;
+    ? `Getting to ${hub.city}: ${label} from ${townName}.`
+    : `Then ${label} onward to ${townName}.`;
   return (
     <div className="hub-last-mile-note">
       <p>{copy} TWM doesn't book this leg.</p>
@@ -177,7 +196,7 @@ function HubPicker({ townName, hubs, selectedCity, onSelect, mode }) {
       </legend>
       {hubs.map(hub => {
         const lastMile = hubLastMileLabel(hub);
-        const distance = hub.longHaulDistanceKm ?? hub.distanceKm;
+        const haul = hubHaulLabel(hub);
         return (
           <label key={hub.city} className={`hub-row${hub.city === selectedCity ? ' selected' : ''}`}>
             <input
@@ -188,7 +207,7 @@ function HubPicker({ townName, hubs, selectedCity, onSelect, mode }) {
               onChange={() => onSelect(hub.city)}
             />
             <strong>{hub.city}</strong>
-            {distance != null && <span className="stay-option-tag">{Math.round(distance)} km long haul</span>}
+            {haul && <span className="stay-option-tag">{haul} long haul</span>}
             {lastMile && <span className="stay-option-tag">{lastMile} last mile</span>}
           </label>
         );
@@ -255,7 +274,10 @@ function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSele
         <HubPicker townName={hublessTownName(leg, hubList[0])} hubs={hubList} selectedCity={selectedHub?.city} onSelect={onSelectHub} mode={mode} />
       )}
       {hubList.length === 1 && (
-        <p className="hub-picker-intro">{hublessTownName(leg, hubList[0])} has no direct {modeLabel(mode).toLowerCase()} access — routed via {hubList[0].city}.</p>
+        <p className="hub-picker-intro">
+          {hublessTownName(leg, hubList[0])} has no direct {modeLabel(mode).toLowerCase()} access — routed via {hubList[0].city}
+          {hubHaulLabel(hubList[0]) ? `, ${hubHaulLabel(hubList[0])} long haul` : ''}.
+        </p>
       )}
       {showLastMile && (
         <HubLastMileNote
@@ -269,16 +291,23 @@ function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSele
   );
 }
 
+// A compact road-transfer hint for the chooser row — shown only when the
+// onward drive is long enough to weigh on the choice (>= ~1 h). The full
+// last-mile detail stays in State 2.
+function roadHint(hubs) {
+  const durations = hubs.map(hub => hub.lastMileDurationMinutes).filter(minutes => minutes != null);
+  const shortest = durations.length ? Math.min(...durations) : null;
+  if (shortest == null || shortest < 60) return '';
+  if (hubs.length === 1) return ` · +${durationLabel(shortest).replace('~', '')} road`;
+  return ' · + road transfer';
+}
+
 function modeSummary(option) {
   if (option.direct) return 'Direct';
   const hubs = option.hubs || [];
-  if (hubs.length === 1) {
-    const lastMile = hubLastMileLabel(hubs[0]);
-    return `Via ${hubs[0].city}${lastMile ? ` · ${lastMile}` : ''}${option.longJourneyNote ? ` · ${option.longJourneyNote}` : ''}`;
-  }
-  if (hubs.length > 1) {
-    return `Via ${hubs.map(hub => hub.city).join(' / ')}${option.longJourneyNote ? ` · ${option.longJourneyNote}` : ''}`;
-  }
+  const journey = option.longJourneyNote ? ` · ${journeyHoursLabel(option.longJourneyNote)}` : '';
+  if (hubs.length === 1) return `Via ${hubs[0].city}${roadHint(hubs)}${journey}`;
+  if (hubs.length > 1) return `Via ${hubs.map(hub => hub.city).join(' / ')}${roadHint(hubs)}${journey}`;
   return 'No direct transport identified';
 }
 
@@ -430,7 +459,7 @@ function SelectedTransportBody({
         />
       )}
       <p className="drawer-section-heading">Book</p>
-      {currentModeOption?.longJourneyNote && <p className="already-booked-note">{currentModeOption.longJourneyNote}</p>}
+      {currentModeOption?.longJourneyNote && <p className="transport-long-journey-note">{currentModeOption.longJourneyNote}</p>}
       <BookableOptions
         loading={loading}
         error={error}

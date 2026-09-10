@@ -79,10 +79,16 @@ export function legForHub(leg, hub) {
 }
 
 // The chosen hub for an open transport drawer: the matching candidate, or the
-// first one as the default. Null when the leg is directly connected.
+// nearest last-mile option as the default. Null when the leg is directly connected.
 export function resolveSelectedHub(hubs, selectedCity) {
   if (!hubs || !hubs.length) return null;
-  return hubs.find(h => h.city === selectedCity) ?? hubs[0];
+  const selected = hubs.find(h => h.city === selectedCity);
+  if (selected) return selected;
+  return [...hubs].sort((a, b) => (
+    (a.lastMileKm ?? Number.POSITIVE_INFINITY) - (b.lastMileKm ?? Number.POSITIVE_INFINITY)
+    || (a.longHaulDistanceKm ?? a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.longHaulDistanceKm ?? b.distanceKm ?? Number.POSITIVE_INFINITY)
+    || a.city.localeCompare(b.city)
+  ))[0];
 }
 
 // Everything the transport drawer needs derived from the open enriched item
@@ -100,7 +106,7 @@ export function transportHubState(item, selectedCity) {
   const destinationHubs = hubs.filter(h => h.side !== 'origin');
   const bothSidesHubless = originHubs.length > 0 && destinationHubs.length > 0;
   const pickerHubs = bothSidesHubless ? destinationHubs : hubs;
-  const autoOriginHub = bothSidesHubless ? originHubs[0] : null;
+  const autoOriginHub = bothSidesHubless ? resolveSelectedHub(originHubs, null) : null;
   const selected = resolveSelectedHub(pickerHubs, selectedCity);
   return {
     leg,

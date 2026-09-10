@@ -167,16 +167,16 @@ describe('useBookingDrawers — TWM-215 gateway hub picker', () => {
     }));
   }
 
-  it('defaults the selected hub to the first candidate and fetches its leg', async () => {
+  it('defaults the selected hub to the nearest candidate and fetches its leg', async () => {
     const { result } = hubSetup();
     act(() => result.current.openTransportDrawer(HUB_ITEM));
 
     expect(result.current.transportHubs.map(h => h.city)).toEqual(['Udaipur', 'Rail Junction']);
-    expect(result.current.selectedHubCity).toBe('Udaipur');
+    expect(result.current.selectedHubCity).toBe('Rail Junction');
 
     await waitFor(() => expect(loadTransportBundle).toHaveBeenCalled());
     const [, leg] = loadTransportBundle.mock.calls.at(-1);
-    expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Udaipur' });
+    expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Rail Junction' });
   });
 
   it('switching hubs re-fetches for the new hub and passes its distance fallback', async () => {
@@ -184,13 +184,13 @@ describe('useBookingDrawers — TWM-215 gateway hub picker', () => {
     act(() => result.current.openTransportDrawer(HUB_ITEM));
     await waitFor(() => expect(loadTransportBundle).toHaveBeenCalled());
 
-    act(() => result.current.selectHub('Rail Junction'));
-    expect(result.current.selectedHubCity).toBe('Rail Junction');
+    act(() => result.current.selectHub('Udaipur'));
+    expect(result.current.selectedHubCity).toBe('Udaipur');
 
     await waitFor(() => {
       const [, leg, hub] = loadTransportBundle.mock.calls.at(-1);
-      expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Rail Junction' });
-      expect(hub).toMatchObject({ city: 'Rail Junction', longHaulDistanceKm: 300 });
+      expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Udaipur' });
+      expect(hub).toMatchObject({ city: 'Udaipur', longHaulDistanceKm: 660 });
     });
   });
 });

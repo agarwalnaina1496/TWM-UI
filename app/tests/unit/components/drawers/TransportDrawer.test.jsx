@@ -27,8 +27,8 @@ describe('TransportDrawer — TWM-215 hub picker', () => {
     expect(radios[0]).toBeChecked();
     expect(radios[0].tagName).toBe('INPUT');
     const firstRow = radios[0].closest('label');
-    expect(within(firstRow).getByText(/100 km/)).toBeInTheDocument();
-    expect(within(firstRow).getByText(/660 km long haul/)).toBeInTheDocument();
+    expect(within(firstRow).getByText(/~100 km/)).toBeInTheDocument();
+    expect(within(firstRow).getByText(/~660 km long haul/)).toBeInTheDocument();
     const secondRow = radios[1].closest('label');
     expect(within(secondRow).queryByText(/No modes resolved/)).not.toBeInTheDocument();
   });
@@ -48,10 +48,10 @@ describe('TransportDrawer — TWM-215 hub picker', () => {
     expect(note.closest('label')).toBeNull();
   });
 
-  it('renders a plain "routed via" note for a single hub, no picker', () => {
+  it('renders a "routed via" note carrying the long-haul distance for a single hub, no picker', () => {
     renderDrawer({ hubs: [HUBS[0]], selectedHub: HUBS[0], onSelectHub: () => {} });
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    expect(screen.getByText(/routed via Udaipur/)).toBeInTheDocument();
+    expect(screen.getByText(/routed via Udaipur, ~660 km long haul/)).toBeInTheDocument();
   });
 
   it('both endpoints hubless: destination picker plus an auto "departing via" origin note', () => {
@@ -82,8 +82,8 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
     { mode: 'train', direct: false, feasible: true, longJourneyNote: 'Roughly 36 h long-haul journey before the local transfer.', hubs: [
       { city: 'Falna', side: 'destination', lastMileKm: 15, lastMileDurationMinutes: 25, longHaulDistanceKm: 1600, feasible: true },
     ] },
-    { mode: 'bus', direct: true, feasible: false, ruledOutReason: 'Too far for bus under TWM rule (~1,400 km).', hubs: [] },
-    { mode: 'drive', direct: true, feasible: false, ruledOutReason: 'Too far for a single-trip drive under TWM rule (~1,400 km).', hubs: [] },
+    { mode: 'bus', direct: true, feasible: false, ruledOutReason: 'Too far for a bus (~1,400 km).', hubs: [] },
+    { mode: 'drive', direct: true, feasible: false, ruledOutReason: 'Too far for a single road trip (~1,400 km).', hubs: [] },
   ];
 
   it('starts in State 1 with via summaries and backend ruled-out reasons', async () => {
@@ -91,11 +91,15 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
     renderDrawer({ modeOptions: MODE_OPTIONS, onSelectMode });
 
     expect(screen.getByRole('button', { name: /Flight/i })).toHaveTextContent(/Via Udaipur \/ Ahmedabad/);
+    // a substantial onward drive stays visible in the chooser; a trivial one does not
+    expect(screen.getByRole('button', { name: /Flight/i })).toHaveTextContent(/road transfer/);
     expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/Via Falna/);
-    expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/Roughly 36 h/);
+    expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/~36 h journey/);
+    expect(screen.getByRole('button', { name: /Train/i })).not.toHaveTextContent(/15 km/);
+    expect(screen.getByRole('button', { name: /Train/i })).not.toHaveTextContent(/road transfer/);
     expect(screen.getByText('Ruled out')).toBeInTheDocument();
-    expect(screen.getByText(/Bus/).closest('li')).toHaveTextContent(/Too far for bus/);
-    expect(screen.getByText(/Drive/).closest('li')).toHaveTextContent(/Too far for a single-trip drive/);
+    expect(screen.getByText(/Bus/).closest('li')).toHaveTextContent(/Too far for a bus/);
+    expect(screen.getByText(/Drive/).closest('li')).toHaveTextContent(/Too far for a single road trip/);
     expect(screen.getByRole('heading', { name: 'Bengaluru → Sumerpur' })).toBeInTheDocument();
     expect(screen.queryByText('Bengaluru → Sumerpur', { selector: 'p' })).not.toBeInTheDocument();
 
@@ -116,6 +120,9 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
 
     expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
     expect(screen.getAllByRole('radio')).toHaveLength(2);
+    const selectedGatewayRow = screen.getByRole('radio', { name: /Udaipur/ }).closest('label');
+    expect(within(selectedGatewayRow).getByText(/~100 km/)).toBeInTheDocument();
+    expect(within(selectedGatewayRow).getByText(/~3 h/)).toBeInTheDocument();
     expect(screen.getByText(/TWM doesn't book this leg/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Cab/ })).toBeInTheDocument();
     expect(screen.queryByText(/Other modes/)).not.toBeInTheDocument();
@@ -168,7 +175,19 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
     });
 
     expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/Via Falna \/ Marwar/);
-    expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/Roughly 36 h/);
+    expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/~36 h journey/);
+  });
+
+  it('State 2 gives the long-journey note callout weight', () => {
+    renderDrawer({
+      modeOptions: MODE_OPTIONS,
+      selectedMode: 'train',
+      hubs: MODE_OPTIONS[1].hubs,
+      selectedHub: MODE_OPTIONS[1].hubs[0],
+      onSelectHub: () => {},
+    });
+
+    expect(screen.getByText(/Roughly 36 h long-haul journey/)).toHaveClass('transport-long-journey-note');
   });
 
   it('maps rail access-gap fallback to train copy and last-mile links', () => {
