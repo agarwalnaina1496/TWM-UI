@@ -238,7 +238,7 @@ function TransportOptionCard({ option, onAddDates }) {
 }
 
 function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSelectHub, mode, phase }) {
-  const showLastMile = selectedHub && phase !== 'before';
+  const showLastMile = selectedHub && (phase !== 'before' || selectedHub.side === 'origin');
   if (!hubList.length && !autoOriginHub && !showLastMile) return null;
   const heading = mode === 'train' ? 'Railhead' : 'Gateway';
   const showGatewayControls = hubList.length > 0 || autoOriginHub;

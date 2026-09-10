@@ -130,6 +130,28 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
     expect(onBack).toHaveBeenCalled();
   });
 
+  it('State 2 shows origin-side gateway distance before booking when origin has multiple gateways', () => {
+    const originHubs = [
+      { city: 'Jodhpur', side: 'origin', lastMileKm: 40, lastMileDurationMinutes: 60, feasible: true },
+      { city: 'Udaipur', side: 'origin', lastMileKm: 120, lastMileDurationMinutes: 180, feasible: true },
+    ];
+    renderDrawer({
+      modeOptions: [{ mode: 'flight', direct: false, feasible: true, hubs: originHubs }],
+      selectedMode: 'flight',
+      hubs: originHubs,
+      selectedHub: originHubs[0],
+      onSelectHub: () => {},
+    });
+
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    const gateway = screen.getByText('Gateway');
+    const originNote = screen.getByText(/Getting to Jodhpur/);
+    const book = screen.getByText('Book');
+    expect(originNote).toHaveTextContent(/from Bengaluru/);
+    expect(gateway.compareDocumentPosition(originNote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(originNote.compareDocumentPosition(book) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('State 1 keeps long-journey note visible for multi-hub railhead options', () => {
     renderDrawer({
       modeOptions: [{
