@@ -1,5 +1,5 @@
 import BookingDrawer from './BookingDrawer.jsx';
-import { feasibleTransportOptions, recommendedMode } from '../../lib/booking/transportOptions.js';
+import { feasibleTransportOptions } from '../../lib/booking/transportOptions.js';
 import { modeLabel, PARTNER_LABEL, MODES } from '../../lib/booking/shared.js';
 import { ModeTag, VerificationTag } from '../StatusPills.jsx';
 import StatusPill from '../ui/StatusPill.jsx';
@@ -138,19 +138,19 @@ function hublessTownName(leg, hub) {
   return hub?.side === 'origin' ? leg.from : leg.to;
 }
 
-function lastMileLinks(hub, townName) {
+function lastMileLinks(hub, townName, mode) {
   const from = encodeURIComponent(hub?.city || '');
   const to = encodeURIComponent(townName || '');
-  return [
-    { label: 'Cab', href: `https://www.google.com/search?q=${from}+to+${to}+cab` },
-    { label: 'Bus', href: `https://www.redbus.in/search?fromCityName=${from}&toCityName=${to}` },
-    { label: 'Train to railhead', href: `https://www.irctc.co.in/nget/train-search` },
-  ];
+  const links = [{ label: 'Cab', href: `https://www.google.com/search?q=${from}+to+${to}+cab` }];
+  links.push(mode === 'train'
+    ? { label: 'Auto', href: `https://www.google.com/search?q=${from}+to+${to}+auto` }
+    : { label: 'Bus', href: `https://www.redbus.in/search?fromCityName=${from}&toCityName=${to}` });
+  return links;
 }
 
 // TWM-215: passive context only — the hub → town last mile is arranged
 // locally, never its own bookable search.
-function HubLastMileNote({ townName, hub, direction }) {
+function HubLastMileNote({ townName, hub, direction, mode }) {
   const label = hubLastMileLabel(hub);
   if (!label) return null;
   const copy = direction === 'origin'
@@ -160,7 +160,7 @@ function HubLastMileNote({ townName, hub, direction }) {
     <div className="hub-last-mile-note">
       <p>{copy} TWM doesn't book this leg.</p>
       <div className="last-mile-links">
-        {lastMileLinks(hub, townName).map(link => (
+        {lastMileLinks(hub, townName, mode).map(link => (
           <a key={link.label} className="stay-option-tag" href={link.href} target="_blank" rel="noreferrer">{link.label} ↗</a>
         ))}
       </div>
@@ -168,18 +168,16 @@ function HubLastMileNote({ townName, hub, direction }) {
   );
 }
 
-// The candidate-gateway picker: one native radio per hub with its last-mile
-// estimate and Backend-resolved feasible modes. Unranked — the first option is
-// only the default selection, not a recommendation.
-function HubPicker({ townName, hubs, selectedCity, onSelect }) {
+function HubPicker({ townName, hubs, selectedCity, onSelect, mode }) {
+  const label = mode === 'train' ? 'railhead' : 'gateway city';
   return (
     <fieldset className="hub-picker">
       <legend className="hub-picker-intro">
-        {townName} has no direct long-haul transport. Pick a nearby gateway city:
+        {townName} has no direct {modeLabel(mode).toLowerCase()} access. Pick a nearby {label}:
       </legend>
       {hubs.map(hub => {
         const lastMile = hubLastMileLabel(hub);
-        const feasibleModes = hub.feasibleModes || [];
+        const distance = hub.longHaulDistanceKm ?? hub.distanceKm;
         return (
           <label key={hub.city} className={`hub-row${hub.city === selectedCity ? ' selected' : ''}`}>
             <input
@@ -190,12 +188,8 @@ function HubPicker({ townName, hubs, selectedCity, onSelect }) {
               onChange={() => onSelect(hub.city)}
             />
             <strong>{hub.city}</strong>
+            {distance != null && <span className="stay-option-tag">{Math.round(distance)} km long haul</span>}
             {lastMile && <span className="stay-option-tag">{lastMile} last mile</span>}
-            <span className="hub-row-modes">
-              {feasibleModes.length
-                ? feasibleModes.map(mode => <ModeTag key={mode} mode={mode} />)
-                : <span className="stay-option-tag">No modes resolved</span>}
-            </span>
           </label>
         );
       })}
@@ -217,11 +211,11 @@ function flightAffiliateCaption(option) {
   return `No TWM-resolved price yet — search directly on ${partnerLabel}`;
 }
 
-function TransportOptionCard({ option, best, onAddDates }) {
+function TransportOptionCard({ option, onAddDates }) {
   const durationDistance = durationDistanceLabel(option);
   const isFlight = option.mode === 'flight';
   return (
-    <article className={`stay-option-card${best ? ' picked' : ''}`}>
+    <article className="stay-option-card">
       <ModeTag mode={option.mode} />
       <strong>{option.name}</strong>
       {durationDistance && (
@@ -237,49 +231,38 @@ function TransportOptionCard({ option, best, onAddDates }) {
       <TrustedActionCta
         option={option}
         label={isFlight ? flightCtaLabel(option) : 'Check ↗'}
-        best={best}
         secondary={isFlight}
       />
     </article>
   );
 }
 
-function RecommendedModeCard({ option }) {
-  if (!option) return null;
-  return (
-    <article className="dashboard-card recommended-mode-card" aria-label="Recommended mode">
-      <span className="pick-badge">Recommended</span>
-      <ModeTag mode={option.mode} />
-      <strong>{modeLabel(option.mode)}</strong>
-      <TrustedActionCta option={option} label="Check ↗" best />
-    </article>
-  );
-}
-
-// The quiet band under the search card — the gateway note + hub picker when
-// an endpoint has no direct long-haul route, styled like the stay drawer's
-// estimate band. Null (no band) for a directly-connected leg.
-function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSelectHub }) {
-  if (!hubList.length && !autoOriginHub) return null;
+function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSelectHub, mode, phase }) {
+  const showLastMile = selectedHub && (phase !== 'before' || selectedHub.side === 'origin');
+  if (!hubList.length && !autoOriginHub && !showLastMile) return null;
+  const heading = mode === 'train' ? 'Railhead' : 'Gateway';
+  const showGatewayControls = hubList.length > 0 || autoOriginHub;
   return (
     <div className="drawer-context-band">
+      {showGatewayControls && <p className="drawer-section-heading">{heading}</p>}
       {autoOriginHub && (
         <>
-          <p className="hub-picker-intro">{leg.from} has no direct long-haul route — departing via {autoOriginHub.city}.</p>
-          <HubLastMileNote townName={leg.from} hub={autoOriginHub} direction="origin" />
+          <p className="hub-picker-intro">{leg.from} has no direct {modeLabel(mode).toLowerCase()} access — start via {autoOriginHub.city}.</p>
+          <HubLastMileNote townName={leg.from} hub={autoOriginHub} direction="origin" mode={mode} />
         </>
       )}
       {hubList.length > 1 && (
-        <HubPicker townName={hublessTownName(leg, hubList[0])} hubs={hubList} selectedCity={selectedHub?.city} onSelect={onSelectHub} />
+        <HubPicker townName={hublessTownName(leg, hubList[0])} hubs={hubList} selectedCity={selectedHub?.city} onSelect={onSelectHub} mode={mode} />
       )}
       {hubList.length === 1 && (
-        <p className="hub-picker-intro">{hublessTownName(leg, hubList[0])} has no direct long-haul route — routed via {hubList[0].city}.</p>
+        <p className="hub-picker-intro">{hublessTownName(leg, hubList[0])} has no direct {modeLabel(mode).toLowerCase()} access — routed via {hubList[0].city}.</p>
       )}
-      {selectedHub && (
+      {showLastMile && (
         <HubLastMileNote
           townName={hublessTownName(leg, selectedHub)}
           hub={selectedHub}
           direction={selectedHub.side === 'origin' ? 'origin' : 'destination'}
+          mode={mode}
         />
       )}
     </div>
@@ -291,17 +274,21 @@ function modeSummary(option) {
   const hubs = option.hubs || [];
   if (hubs.length === 1) {
     const lastMile = hubLastMileLabel(hubs[0]);
-    return `Via ${hubs[0].city}${lastMile ? ` + ${lastMile}` : ''}`;
+    return `Via ${hubs[0].city}${lastMile ? ` · ${lastMile}` : ''}${option.longJourneyNote ? ` · ${option.longJourneyNote}` : ''}`;
   }
-  if (hubs.length > 1) return `Via ${hubs.map(hub => hub.city).join(' / ')}`;
+  if (hubs.length > 1) {
+    return `Via ${hubs.map(hub => hub.city).join(' / ')}${option.longJourneyNote ? ` · ${option.longJourneyNote}` : ''}`;
+  }
   return 'No direct transport identified';
 }
 
 function selectableModeOptions(modeOptions) {
-  return modeOptions.filter(option => option.direct || (option.hubs || []).some(hub => hub.feasible !== false));
+  return modeOptions.filter(option => option.mode !== 'drive' && option.feasible !== false && (
+    option.direct || (option.hubs || []).some(hub => hub.feasible !== false)
+  ));
 }
 
-function ChooserBody({ leg, modeOptions, ruledOutModes, searchCard, onSelectMode }) {
+function ChooserBody({ modeOptions, ruledOutModes, searchCard, onSelectMode }) {
   return (
     <>
       {searchCard}
@@ -324,11 +311,17 @@ function ChooserBody({ leg, modeOptions, ruledOutModes, searchCard, onSelectMode
         <p className="already-booked-note" role="status">No feasible transport identified for this leg.</p>
       )}
       {ruledOutModes.length > 0 && (
-        <ul className="transport-ruled-out-list">
-          {ruledOutModes.map(mode => <li key={mode}><ModeTag mode={mode} /> Not available for this route.</li>)}
-        </ul>
+        <>
+          <p className="drawer-section-heading">Ruled out</p>
+          <ul className="transport-ruled-out-list">
+            {ruledOutModes.map(option => (
+              <li key={option.mode}>
+                <ModeTag mode={option.mode} /> {option.ruledOutReason || 'Not available for this route.'}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
-      <p className="already-booked-note">{leg.from} → {leg.to}</p>
     </>
   );
 }
@@ -345,19 +338,68 @@ function NotFeasibleModes({ modes }) {
   );
 }
 
+function BookableOptions({ loading, error, options, emptyMessage }) {
+  if (loading) {
+    return <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>;
+  }
+  if (error) return <p className="already-booked-note" role="alert">{error}</p>;
+  if (options.length === 0) {
+    return <p className="already-booked-note" role="status">{emptyMessage}</p>;
+  }
+  return (
+    <div className="stay-options-grid">
+      {options.map(option => (
+        <TransportOptionCard key={option.mode} option={option} />
+      ))}
+    </div>
+  );
+}
+
+function LegacyTransportContext({ leg, hubList, selectedHub, autoOriginHub, onSelectHub }) {
+  if (!selectedHub && !autoOriginHub && hubList.length === 0) return null;
+  return (
+    <TransportContextBand
+      leg={leg}
+      hubList={hubList}
+      selectedHub={selectedHub}
+      autoOriginHub={autoOriginHub}
+      onSelectHub={onSelectHub}
+      mode={selectedHub?.accessGap === 'rail' ? 'train' : 'flight'}
+      phase="legacy"
+    />
+  );
+}
+
+function modeFromAccessGap(accessGap) {
+  if (accessGap === 'rail') return 'train';
+  if (accessGap === 'air') return 'flight';
+  return 'flight';
+}
+
+function PerModeTransportContext({ leg, currentModeOption, hubList, selectedHub, autoOriginHub, onSelectHub, phase }) {
+  const beforeBook = phase === 'before';
+  const showBefore = beforeBook && (autoOriginHub || hubList.length > 0);
+  const showAfter = !beforeBook && selectedHub?.side !== 'origin';
+  if (!showBefore && !showAfter) return null;
+  return (
+    <TransportContextBand
+      leg={leg}
+      hubList={hubList}
+      selectedHub={selectedHub}
+      autoOriginHub={beforeBook ? autoOriginHub : null}
+      onSelectHub={onSelectHub}
+      mode={currentModeOption?.mode || modeFromAccessGap(selectedHub?.accessGap)}
+      phase={phase}
+    />
+  );
+}
+
 function SelectedTransportBody({
-  leg, modeOptions, hasPerModeOptions, currentModeOption, hubList,
+  leg, hasPerModeOptions, currentModeOption, hubList,
   selectedHub, autoOriginHub, onSelectHub, options, feasibility, loading,
   error, searchCard,
 }) {
   const resolvedOptions = feasibleTransportOptions(options || [], feasibility);
-  const feasibleModeNames = new Set(
-    hasPerModeOptions
-      ? selectableModeOptions(modeOptions).map(option => option.mode)
-      : (feasibility?.modes || []).map(entry => entry.mode),
-  );
-  const notFeasibleModes = MODES.filter(mode => !feasibleModeNames.has(mode));
-  const recommended = resolvedOptions.length ? recommendedMode(resolvedOptions) : undefined;
   const activeHubList = currentModeOption?.direct ? [] : hubList;
   const emptyMessage = currentModeOption && !currentModeOption.direct && activeHubList.length === 0
     ? 'No direct transport identified.'
@@ -367,28 +409,46 @@ function SelectedTransportBody({
   return (
     <>
       {searchCard}
-      <TransportContextBand
-        leg={leg} hubList={activeHubList} selectedHub={selectedHub}
-        autoOriginHub={autoOriginHub} onSelectHub={onSelectHub}
-      />
-      <p className="drawer-section-heading">How to get there</p>
-      {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
-      {error && <p className="already-booked-note" role="alert">{error}</p>}
-      {!loading && !error && (
-        resolvedOptions.length === 0 ? (
-          <p className="already-booked-note" role="status">{emptyMessage}</p>
-        ) : (
-          <>
-            {recommended && <RecommendedModeCard option={recommended} />}
-            <div className="stay-options-grid">
-              {resolvedOptions.map(option => (
-                <TransportOptionCard key={option.mode} option={option} best={recommended ? option === recommended : false} />
-              ))}
-            </div>
-          </>
-        )
+      {!hasPerModeOptions && (
+        <LegacyTransportContext
+          leg={leg}
+          hubList={activeHubList}
+          selectedHub={selectedHub}
+          autoOriginHub={autoOriginHub}
+          onSelectHub={onSelectHub}
+        />
       )}
-      {!loading && !error && <NotFeasibleModes modes={notFeasibleModes} />}
+      {hasPerModeOptions && (
+        <PerModeTransportContext
+          leg={leg}
+          currentModeOption={currentModeOption}
+          hubList={activeHubList}
+          selectedHub={selectedHub}
+          autoOriginHub={autoOriginHub}
+          onSelectHub={onSelectHub}
+          phase="before"
+        />
+      )}
+      <p className="drawer-section-heading">Book</p>
+      {currentModeOption?.longJourneyNote && <p className="already-booked-note">{currentModeOption.longJourneyNote}</p>}
+      <BookableOptions
+        loading={loading}
+        error={error}
+        options={resolvedOptions}
+        emptyMessage={emptyMessage}
+      />
+      {hasPerModeOptions && (
+        <PerModeTransportContext
+          leg={leg}
+          currentModeOption={currentModeOption}
+          hubList={[]}
+          selectedHub={selectedHub}
+          autoOriginHub={autoOriginHub}
+          onSelectHub={onSelectHub}
+          phase="after"
+        />
+      )}
+      {!hasPerModeOptions && !loading && !error && <NotFeasibleModes modes={MODES.filter(mode => !(feasibility?.modes || []).some(entry => entry.mode === mode && entry.status === 'feasible'))} />}
     </>
   );
 }
@@ -407,7 +467,7 @@ export default function TransportDrawer({
   if (hasPerModeOptions && !selectedMode) {
     const chooserModes = selectableModeOptions(modeOptions);
     const modeNames = new Set(chooserModes.map(option => option.mode));
-    const ruledOutModes = MODES.filter(mode => !modeNames.has(mode));
+    const ruledOutModes = modeOptions.filter(option => !modeNames.has(option.mode));
     return (
       <BookingDrawer
         ariaLabel={`Transport: ${leg.from} to ${leg.to}`}
@@ -416,7 +476,6 @@ export default function TransportDrawer({
         onClose={onClose}
       >
         <ChooserBody
-          leg={leg}
           modeOptions={chooserModes}
           ruledOutModes={ruledOutModes}
           searchCard={searchCard}
@@ -436,7 +495,6 @@ export default function TransportDrawer({
     >
       <SelectedTransportBody
         leg={leg}
-        modeOptions={modeOptions}
         hasPerModeOptions={hasPerModeOptions}
         currentModeOption={currentModeOption}
         hubList={hubList}

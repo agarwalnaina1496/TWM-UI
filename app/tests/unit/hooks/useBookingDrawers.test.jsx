@@ -154,9 +154,9 @@ describe('useBookingDrawers — TWM-215 gateway hub picker', () => {
     is_gateway_leg: true, date_precision: 'none', resolved_date: null,
     hubs: [
       { city: 'Udaipur', side: 'destination', last_mile_km: 100, last_mile_duration_minutes: 150,
-        long_haul_distance_km: 660, feasible_modes: ['flight', 'train', 'bus'] },
+        long_haul_distance_km: 660 },
       { city: 'Rail Junction', side: 'destination', last_mile_km: 60, last_mile_duration_minutes: 90,
-        long_haul_distance_km: 300, feasible_modes: ['train', 'bus'] },
+        long_haul_distance_km: 300 },
     ],
   };
 
@@ -228,6 +228,7 @@ describe('useBookingDrawers — TWM-230 per-mode transport options', () => {
     expect(loadTransportBundle).not.toHaveBeenCalled();
 
     act(() => result.current.selectTransportMode('flight'));
+    expect(trackEvent).toHaveBeenCalledWith('transport_mode_selected', { mode: 'flight' });
     await waitFor(() => expect(loadTransportBundle).toHaveBeenCalledTimes(1));
     const [, leg, hub,, modeResolution] = loadTransportBundle.mock.calls[0];
     expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Udaipur' });
@@ -244,5 +245,16 @@ describe('useBookingDrawers — TWM-230 per-mode transport options', () => {
     act(() => result.current.clearSelectedTransportMode());
     expect(result.current.selectedTransportMode).toBe(null);
     expect(result.current.selectedHubCity).toBe(null);
+    expect(trackEvent).toHaveBeenCalledWith('transport_back_to_chooser', {});
+  });
+
+  it('tracks mode hub selections', async () => {
+    const { result } = modeSetup();
+    act(() => result.current.openTransportDrawer(ITEM));
+    act(() => result.current.selectTransportMode('flight'));
+    await waitFor(() => expect(result.current.selectedHubCity).toBe('Udaipur'));
+
+    act(() => result.current.selectHub('Udaipur'));
+    expect(trackEvent).toHaveBeenCalledWith('transport_hub_selected', { city: 'Udaipur', mode: 'flight' });
   });
 });

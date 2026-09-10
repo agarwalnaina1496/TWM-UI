@@ -5,7 +5,7 @@ import {
 
 const HUB_ENTRY = {
   city: 'Udaipur', side: 'destination', last_mile_km: 100,
-  last_mile_duration_minutes: 150, long_haul_distance_km: 660, feasible_modes: ['flight', 'train', 'bus'],
+  last_mile_duration_minutes: 150, long_haul_distance_km: 660,
 };
 
 describe('legFromItem', () => {
@@ -19,7 +19,7 @@ describe('legFromItem', () => {
     expect(leg.hubs).toEqual([{
       city: 'Udaipur', side: 'destination', lastMileKm: 100,
       lastMileDurationMinutes: 150, longHaulDistanceKm: 660, distanceKm: 660,
-      accessGap: null, feasible: true, feasibleModes: ['flight', 'train', 'bus'],
+      accessGap: null, feasible: true,
     }]);
   });
 
@@ -32,11 +32,18 @@ describe('legFromItem', () => {
       from_city: 'Bengaluru', to_city: 'Sumerpur', date_precision: 'none',
       transport_options: [
         { mode: 'flight', direct: false, hubs: [{ ...HUB_ENTRY, access_gap: 'air', feasible: true }] },
-        { mode: 'train', direct: true, hubs: [] },
+        { mode: 'train', direct: true, feasible: false, ruled_out_reason: 'No railhead.', long_journey_note: null, hubs: [] },
       ],
     });
     expect(leg.transportOptions[0].hubs[0]).toMatchObject({ city: 'Udaipur', accessGap: 'air', feasible: true });
-    expect(leg.transportOptions[1]).toEqual({ mode: 'train', direct: true, hubs: [] });
+    expect(leg.transportOptions[1]).toEqual({
+      mode: 'train',
+      direct: true,
+      feasible: false,
+      ruledOutReason: 'No railhead.',
+      longJourneyNote: null,
+      hubs: [],
+    });
   });
 });
 
@@ -46,7 +53,14 @@ describe('selectedTransportOption', () => {
       from_city: 'Bengaluru', to_city: 'Sumerpur', date_precision: 'none',
       transport_options: [{ mode: 'train', direct: true, hubs: [] }],
     };
-    expect(selectedTransportOption(item, 'train')).toEqual({ mode: 'train', direct: true, hubs: [] });
+    expect(selectedTransportOption(item, 'train')).toEqual({
+      mode: 'train',
+      direct: true,
+      feasible: true,
+      ruledOutReason: null,
+      longJourneyNote: null,
+      hubs: [],
+    });
     expect(selectedTransportOption(item, 'flight')).toBe(null);
   });
 });
@@ -55,7 +69,7 @@ describe('hubFromEntry', () => {
   it('defaults missing numeric facts and modes', () => {
     expect(hubFromEntry({ city: 'X', side: 'origin' })).toEqual({
       city: 'X', side: 'origin', lastMileKm: null, lastMileDurationMinutes: null,
-      longHaulDistanceKm: null, distanceKm: null, accessGap: null, feasible: true, feasibleModes: [],
+      longHaulDistanceKm: null, distanceKm: null, accessGap: null, feasible: true,
     });
   });
 });

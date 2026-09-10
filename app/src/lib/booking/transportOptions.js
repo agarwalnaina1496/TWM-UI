@@ -32,8 +32,8 @@ function feasibilityFromModeResolution(modeResolution, leg, hub) {
       duration_source: 'computed',
       estimated_distance_km: distanceKm,
       reason: modeResolution.direct
-        ? `${modeLabel(modeResolution.mode)} is available directly for ${leg.from} → ${leg.to}.`
-        : `${modeLabel(modeResolution.mode)} is routed via ${hub?.city}.`,
+        ? modeResolution.ruledOutReason || `${modeLabel(modeResolution.mode)} is available directly for ${leg.from} → ${leg.to}.`
+        : modeResolution.ruledOutReason || `${modeLabel(modeResolution.mode)} is routed via ${hub?.city}.`,
       verification: { status: 'GENERAL_GUIDANCE' },
     }],
   };
@@ -47,7 +47,7 @@ function feasibilityFromModeResolution(modeResolution, leg, hub) {
 const BATCHABLE_MODES = new Set(['flight', 'train', 'bus']);
 
 export async function transportOptionsFor(tripId, leg, party, approvedModes) {
-  const modes = approvedModes || [];
+  const modes = (approvedModes || []).filter(mode => mode !== 'drive');
   const batchModes = modes.filter(mode => BATCHABLE_MODES.has(mode));
   const options = [];
 
@@ -73,9 +73,6 @@ export async function transportOptionsFor(tripId, leg, party, approvedModes) {
   const flightOption = options.find(option => option.mode === 'flight');
   if (flightOption) flightOption.liveOffer = await searchFlightOffer(tripId, leg, party);
 
-  if (modes.includes('drive')) {
-    options.push({ mode: 'drive', name: `${modeLabel('drive')}: ${leg.from} → ${leg.to}`, status: 'no_action' });
-  }
   return options;
 }
 
@@ -96,16 +93,4 @@ export function feasibleTransportOptions(options, feasibility) {
       feasibilityStatus: modeFeasibility.status,
     };
   });
-}
-
-// Fixed priority flight > drive > train > bus among modes that actually have
-// something actionable (a resolved trusted action, or drive's no_action).
-const MODE_PRIORITY = ['flight', 'drive', 'train', 'bus'];
-export function recommendedMode(feasibleOptions) {
-  const actionable = (feasibleOptions || []).filter(option => option.status === 'resolved' || option.status === 'no_action');
-  for (const mode of MODE_PRIORITY) {
-    const found = actionable.find(option => option.mode === mode);
-    if (found) return found;
-  }
-  return null;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { transportOptionsFor, feasibleTransportOptions, recommendedMode, loadTransportBundle } from '../../../../src/lib/booking/transportOptions.js';
+import { transportOptionsFor, feasibleTransportOptions, loadTransportBundle } from '../../../../src/lib/booking/transportOptions.js';
 import { stayOptionsFor } from '../../../../src/lib/booking/stayOptions.js';
 import { modeLabel, PARTNER_LABEL } from '../../../../src/lib/booking/shared.js';
 import { resolveBookingOptions, searchFlights, getTripFeasibility } from '../../../../src/lib/tripApi.js';
@@ -69,9 +69,7 @@ describe('transportOptionsFor — one batch call', () => {
       party: { adults: 2, children: 1, infants: 0 },
       targets: [{ kind: 'mode', value: 'flight' }, { kind: 'mode', value: 'train' }, { kind: 'mode', value: 'bus' }],
     }));
-    // flight + train + bus + a drive no_action placeholder
-    expect(options.map(o => o.mode)).toEqual(['flight', 'train', 'bus', 'drive']);
-    expect(options.find(o => o.mode === 'drive').status).toBe('no_action');
+    expect(options.map(o => o.mode)).toEqual(['flight', 'train', 'bus']);
   });
 
   it('resolves nothing and makes no call for an empty approved-mode list', async () => {
@@ -122,18 +120,6 @@ describe('feasibleTransportOptions', () => {
     const options = [{ mode: 'flight', status: 'resolved' }];
     expect(feasibleTransportOptions(options, null)).toEqual(options);
     expect(feasibleTransportOptions([], { modes: [] })).toEqual([]);
-  });
-});
-
-describe('recommendedMode', () => {
-  it('prefers flight > drive > train > bus among actionable options', () => {
-    expect(recommendedMode([
-      { mode: 'bus', status: 'resolved' }, { mode: 'drive', status: 'no_action' }, { mode: 'train', status: 'resolved' },
-    ]).mode).toBe('drive');
-  });
-
-  it('is null when nothing is actionable', () => {
-    expect(recommendedMode([{ mode: 'flight', status: 'missing_input' }])).toBeNull();
   });
 });
 
