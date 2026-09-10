@@ -32,7 +32,12 @@ function setup(staySegments = [STAY_TRIP_DATES]) {
   }));
 }
 
-beforeEach(() => { sendTripCommand.mockReset().mockResolvedValue({}); trackEvent.mockReset(); });
+beforeEach(() => {
+  sendTripCommand.mockReset().mockResolvedValue({});
+  loadTransportBundle.mockClear();
+  stayOptionsFor.mockClear();
+  trackEvent.mockReset();
+});
 
 describe('useBookingDrawers — TWM-228 date edit form', () => {
   it('exposes no precision-toggle state', () => {
@@ -187,5 +192,57 @@ describe('useBookingDrawers — TWM-215 gateway hub picker', () => {
       expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Rail Junction' });
       expect(hub).toMatchObject({ city: 'Rail Junction', longHaulDistanceKm: 300 });
     });
+  });
+});
+
+describe('useBookingDrawers — TWM-230 per-mode transport options', () => {
+  const ITEM = {
+    id: 'trip:1:0', kind: 'TRAVEL', from_city: 'Bengaluru', to_city: 'Sumerpur',
+    is_gateway_leg: true, date_precision: 'none', resolved_date: null,
+    transport_options: [
+      {
+        mode: 'flight',
+        direct: false,
+        hubs: [
+          { city: 'Udaipur', side: 'destination', access_gap: 'air', last_mile_km: 100,
+            last_mile_duration_minutes: 150, distance_km: 660, long_haul_distance_km: 660, feasible: true },
+        ],
+      },
+      { mode: 'train', direct: true, hubs: [] },
+    ],
+  };
+
+  function modeSetup() {
+    return renderHook(() => useBookingDrawers({
+      tripId: 'trip', view: { booking: { party: { adults: 2, children: 0, infants: 0 } } },
+      days: [{ day_number: 1, timeline: [ITEM] }], staySegments: [],
+    }));
+  }
+
+  it('does not fetch until a mode is selected, then targets that mode hub', async () => {
+    const { result } = modeSetup();
+    act(() => result.current.openTransportDrawer(ITEM));
+
+    expect(result.current.transportModeOptions.map(option => option.mode)).toEqual(['flight', 'train']);
+    expect(result.current.selectedTransportMode).toBe(null);
+    expect(loadTransportBundle).not.toHaveBeenCalled();
+
+    act(() => result.current.selectTransportMode('flight'));
+    await waitFor(() => expect(loadTransportBundle).toHaveBeenCalledTimes(1));
+    const [, leg, hub,, modeResolution] = loadTransportBundle.mock.calls[0];
+    expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Udaipur' });
+    expect(hub).toMatchObject({ city: 'Udaipur', accessGap: 'air' });
+    expect(modeResolution).toMatchObject({ mode: 'flight', direct: false });
+  });
+
+  it('back navigation clears selected mode and hub', async () => {
+    const { result } = modeSetup();
+    act(() => result.current.openTransportDrawer(ITEM));
+    act(() => result.current.selectTransportMode('flight'));
+    await waitFor(() => expect(result.current.selectedHubCity).toBe('Udaipur'));
+
+    act(() => result.current.clearSelectedTransportMode());
+    expect(result.current.selectedTransportMode).toBe(null);
+    expect(result.current.selectedHubCity).toBe(null);
   });
 });

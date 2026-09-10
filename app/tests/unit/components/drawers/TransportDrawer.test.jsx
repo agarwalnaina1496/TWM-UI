@@ -68,3 +68,64 @@ describe('TransportDrawer — TWM-215 hub picker', () => {
     expect(screen.getByText('No direct transport identified for this leg.')).toBeInTheDocument();
   });
 });
+
+describe('TransportDrawer — TWM-230 per-mode chooser', () => {
+  const MODE_OPTIONS = [
+    {
+      mode: 'flight',
+      direct: false,
+      hubs: [
+        { city: 'Udaipur', side: 'destination', lastMileKm: 100, lastMileDurationMinutes: 150, feasible: true },
+        { city: 'Ahmedabad', side: 'destination', lastMileKm: 220, lastMileDurationMinutes: 300, feasible: true },
+      ],
+    },
+    { mode: 'train', direct: true, hubs: [] },
+  ];
+
+  it('starts in State 1 with direct/via summaries and a one-line ruled-out note', async () => {
+    const onSelectMode = vi.fn();
+    renderDrawer({ modeOptions: MODE_OPTIONS, onSelectMode });
+
+    expect(screen.getByRole('button', { name: /Flight/i })).toHaveTextContent(/Via Udaipur \/ Ahmedabad/);
+    expect(screen.getByRole('button', { name: /Train/i })).toHaveTextContent(/Direct/);
+    expect(screen.getByText(/Bus/).closest('li')).toHaveTextContent(/Not available/);
+    expect(screen.getByText(/Drive/).closest('li')).toHaveTextContent(/Not available/);
+
+    await userEvent.click(screen.getByRole('button', { name: /Flight/i }));
+    expect(onSelectMode).toHaveBeenCalledWith('flight');
+  });
+
+  it('State 2 shows only the selected mode hub picker and back returns to State 1', async () => {
+    const onBack = vi.fn();
+    renderDrawer({
+      modeOptions: MODE_OPTIONS,
+      selectedMode: 'flight',
+      hubs: MODE_OPTIONS[0].hubs,
+      selectedHub: MODE_OPTIONS[0].hubs[0],
+      onSelectHub: () => {},
+      onBack,
+    });
+
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    expect(screen.getByText(/TWM doesn't book this leg/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Cab/ })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  it('direct selected mode skips the hub picker', () => {
+    renderDrawer({
+      modeOptions: MODE_OPTIONS,
+      selectedMode: 'train',
+      hubs: [],
+      options: [{ mode: 'train', status: 'resolved', name: 'Train: Bengaluru → Sumerpur' }],
+      feasibility: { modes: [{ mode: 'train', status: 'feasible' }] },
+    });
+
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.queryByText(/TWM doesn't book this leg/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Train: Bengaluru/)).toBeInTheDocument();
+  });
+});

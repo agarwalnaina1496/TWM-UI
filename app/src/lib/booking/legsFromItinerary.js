@@ -33,11 +33,21 @@ export function stayFromSegment(segment) {
 // `hubs[]` set of candidate gateway cities for a hubless endpoint.
 export function legFromItem(item) {
   return {
+    id: item.id,
     from: item.from_city,
     to: item.to_city,
     departureDate: item.date_precision === 'exact' ? item.resolved_date : null,
     departureMonth: item.date_precision === 'month' ? item.resolved_date : null,
     hubs: (item.hubs || []).map(hubFromEntry),
+    transportOptions: (item.transport_options || []).map(transportOptionFromEntry),
+  };
+}
+
+export function transportOptionFromEntry(entry) {
+  return {
+    mode: entry.mode,
+    direct: Boolean(entry.direct),
+    hubs: (entry.hubs || []).map(hubFromEntry),
   };
 }
 
@@ -51,6 +61,9 @@ export function hubFromEntry(entry) {
     lastMileKm: entry.last_mile_km ?? null,
     lastMileDurationMinutes: entry.last_mile_duration_minutes ?? null,
     longHaulDistanceKm: entry.long_haul_distance_km ?? null,
+    distanceKm: entry.distance_km ?? entry.long_haul_distance_km ?? null,
+    accessGap: entry.access_gap ?? null,
+    feasible: entry.feasible ?? true,
     feasibleModes: entry.feasible_modes || [],
   };
 }
@@ -98,6 +111,12 @@ export function transportHubState(item, selectedCity) {
   };
 }
 
+export function selectedTransportOption(item, selectedMode) {
+  const options = item ? legFromItem(item).transportOptions : [];
+  if (!options.length || !selectedMode) return null;
+  return options.find(option => option.mode === selectedMode) ?? null;
+}
+
 // The per-drawer option-cache key: route (both hubs substituted) + resolved
 // date + party size. Switching the destination hub changes the route segment,
 // so the drawer re-resolves for the new hub.
@@ -105,6 +124,12 @@ export function transportCacheKey(item, originHub, hub, partyKey) {
   if (!item) return null;
   const leg = legForHub(legForHub(legFromItem(item), originHub), hub);
   return `${legKey(leg)}::${item.resolved_date ?? 'flex'}::${partyKey ?? 'p?'}`;
+}
+
+export function transportModeCacheKey(item, mode, hub, partyKey) {
+  if (!item || !mode) return null;
+  const leg = legForHub(legFromItem(item), hub);
+  return `${mode}::${legKey(leg)}::${item.resolved_date ?? 'flex'}::${partyKey ?? 'p?'}`;
 }
 
 // Normalize an enriched entity (timeline item or stay segment) to the flat

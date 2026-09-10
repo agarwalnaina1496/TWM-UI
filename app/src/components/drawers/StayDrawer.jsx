@@ -1,5 +1,5 @@
 import { moneyRange } from '../BudgetBar.jsx';
-import BookingDrawer from './BookingDrawer.jsx';
+import { BookingBody, DrawerShell } from './BookingDrawer.jsx';
 import TrustedActionCta from './TrustedActionCta.jsx';
 
 const STAY_TIER_LABEL = { budget: 'Budget', mid_range: 'Mid-range', premium: 'Premium' };
@@ -43,27 +43,30 @@ function StayEstimateBand({ tiers }) {
 export default function StayDrawer({ stay, options, loading, error, stayPriceEstimate, searchCard, onClose }) {
   if (!stay) return null;
   return (
-    <BookingDrawer
+    <DrawerShell
       ariaLabel={`Stay: ${stay.location}`}
       closeLabel="Close stay options"
       title={stay.location}
       meta={`${stay.nights} night${stay.nights === 1 ? '' : 's'}`}
-      searchCard={searchCard}
-      contextBand={stayPriceEstimate ? <StayEstimateBand tiers={stayPriceEstimate} /> : null}
-      sectionHeading="Where to book"
       onClose={onClose}
     >
-      {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
-      {error && <p className="already-booked-note" role="alert">{error}</p>}
-      {!loading && !error && (
-        options?.length ? (
-          <div className="stay-options-grid">
-            {options.map(option => <StayOptionCard key={option.name} option={option} />)}
-          </div>
-        ) : (
-          <p className="already-booked-note" role="status">No stay partners available for this location.</p>
-        )
-      )}
-    </BookingDrawer>
+      <BookingBody
+        searchCard={searchCard}
+        contextBand={stayPriceEstimate ? <StayEstimateBand tiers={stayPriceEstimate} /> : null}
+        sectionHeading="Where to book"
+      >
+        {loading && <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading options…</div>}
+        {error && <p className="already-booked-note" role="alert">{error}</p>}
+        {!loading && !error && (
+          options?.length ? (
+            <div className="stay-options-grid">
+              {options.map(option => <StayOptionCard key={option.name} option={option} />)}
+            </div>
+          ) : (
+            <p className="already-booked-note" role="status">No stay partners available for this location.</p>
+          )
+        )}
+      </BookingBody>
+    </DrawerShell>
   );
 }

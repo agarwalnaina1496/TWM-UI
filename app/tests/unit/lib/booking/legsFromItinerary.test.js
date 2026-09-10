@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { legFromItem, hubFromEntry, legForHub, transportHubState } from '../../../../src/lib/booking/legsFromItinerary.js';
+import {
+  legFromItem, hubFromEntry, legForHub, transportHubState, selectedTransportOption,
+} from '../../../../src/lib/booking/legsFromItinerary.js';
 
 const HUB_ENTRY = {
   city: 'Udaipur', side: 'destination', last_mile_km: 100,
@@ -16,12 +18,36 @@ describe('legFromItem', () => {
     expect(leg).toMatchObject({ from: 'Bengaluru', to: 'Sumerpur', departureDate: '2026-05-01', departureMonth: null });
     expect(leg.hubs).toEqual([{
       city: 'Udaipur', side: 'destination', lastMileKm: 100,
-      lastMileDurationMinutes: 150, longHaulDistanceKm: 660, feasibleModes: ['flight', 'train', 'bus'],
+      lastMileDurationMinutes: 150, longHaulDistanceKm: 660, distanceKm: 660,
+      accessGap: null, feasible: true, feasibleModes: ['flight', 'train', 'bus'],
     }]);
   });
 
   it('is an empty hubs[] for a directly-connected leg', () => {
     expect(legFromItem({ from_city: 'Delhi', to_city: 'Jaipur', date_precision: 'none' }).hubs).toEqual([]);
+  });
+
+  it('normalizes transport_options for per-mode drawer selection', () => {
+    const leg = legFromItem({
+      from_city: 'Bengaluru', to_city: 'Sumerpur', date_precision: 'none',
+      transport_options: [
+        { mode: 'flight', direct: false, hubs: [{ ...HUB_ENTRY, access_gap: 'air', feasible: true }] },
+        { mode: 'train', direct: true, hubs: [] },
+      ],
+    });
+    expect(leg.transportOptions[0].hubs[0]).toMatchObject({ city: 'Udaipur', accessGap: 'air', feasible: true });
+    expect(leg.transportOptions[1]).toEqual({ mode: 'train', direct: true, hubs: [] });
+  });
+});
+
+describe('selectedTransportOption', () => {
+  it('returns the selected mode resolution from an enriched item', () => {
+    const item = {
+      from_city: 'Bengaluru', to_city: 'Sumerpur', date_precision: 'none',
+      transport_options: [{ mode: 'train', direct: true, hubs: [] }],
+    };
+    expect(selectedTransportOption(item, 'train')).toEqual({ mode: 'train', direct: true, hubs: [] });
+    expect(selectedTransportOption(item, 'flight')).toBe(null);
   });
 });
 
@@ -29,7 +55,7 @@ describe('hubFromEntry', () => {
   it('defaults missing numeric facts and modes', () => {
     expect(hubFromEntry({ city: 'X', side: 'origin' })).toEqual({
       city: 'X', side: 'origin', lastMileKm: null, lastMileDurationMinutes: null,
-      longHaulDistanceKm: null, feasibleModes: [],
+      longHaulDistanceKm: null, distanceKm: null, accessGap: null, feasible: true, feasibleModes: [],
     });
   });
 });
@@ -77,7 +103,7 @@ describe('transportHubState', () => {
     expect(state.autoOriginHub.city).toBe('Jodhpur');
     expect(state.selected.city).toBe('Ahmedabad');
     // both endpoints substituted
-    expect(state.effectiveLeg).toEqual({ from: 'Jodhpur', to: 'Ahmedabad', departureDate: null, departureMonth: null, hubs: expect.any(Array) });
+    expect(state.effectiveLeg).toMatchObject({ from: 'Jodhpur', to: 'Ahmedabad', departureDate: null, departureMonth: null, hubs: expect.any(Array) });
   });
 
   it('directly connected leg: no hubs, no substitution', () => {
