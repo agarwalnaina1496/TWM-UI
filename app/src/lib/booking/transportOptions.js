@@ -1,5 +1,5 @@
 import { resolveBookingOptions, getTripFeasibility } from '../tripApi.js';
-import { modeLabel, partyEnvelope, toTransportOption } from './shared.js';
+import { modeLabel, PARTNER_LABEL, partyEnvelope, toTransportOption } from './shared.js';
 import { searchFlightOffer } from './flightOffer.js';
 
 // TWM-215: one drawer's worth of transport data for a leg (already
@@ -60,13 +60,25 @@ export async function transportOptionsFor(tripId, leg, party, approvedModes) {
       party: partyEnvelope(party),
       targets: batchModes.map(mode => ({ kind: 'mode', value: mode })),
     });
-    const byMode = new Map((batch.results || []).map(entry => [entry.target.value, entry]));
+    const byMode = new Map();
+    for (const entry of batch.results || []) {
+      const mode = entry.target?.value;
+      if (!mode) continue;
+      const entries = byMode.get(mode) || [];
+      entries.push(entry);
+      byMode.set(mode, entries);
+    }
     for (const mode of batchModes) {
-      const name = `${modeLabel(mode)}: ${leg.from} → ${leg.to}`;
-      const entry = byMode.get(mode);
-      options.push(entry
-        ? toTransportOption(mode, name, entry)
-        : { mode, name, status: 'error', errorMessage: 'Could not load this option.' });
+      const entries = byMode.get(mode) || [];
+      if (entries.length === 0) {
+        options.push({ mode, name: `${modeLabel(mode)}: ${leg.from} → ${leg.to}`, status: 'error', errorMessage: 'Could not load this option.' });
+        continue;
+      }
+      for (const entry of entries) {
+        const partner = entry.action?.target?.partner || entry.provider;
+        const partnerSuffix = partner ? ` — ${PARTNER_LABEL[partner] || partner}` : '';
+        options.push(toTransportOption(mode, `${modeLabel(mode)}: ${leg.from} → ${leg.to}${partnerSuffix}`, entry));
+      }
     }
   }
 

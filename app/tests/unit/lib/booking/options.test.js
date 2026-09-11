@@ -55,8 +55,9 @@ describe('transportOptionsFor — one batch call', () => {
   it('issues exactly one booking-options request for the batchable modes', async () => {
     resolveBookingOptions.mockResolvedValueOnce({ results: [
       resolvedEntry({ kind: 'mode', value: 'flight' }),
-      resolvedEntry({ kind: 'mode', value: 'train' }),
-      resolvedEntry({ kind: 'mode', value: 'bus' }),
+      resolvedEntry({ kind: 'mode', value: 'train' }, { partner: 'ixigo' }),
+      resolvedEntry({ kind: 'mode', value: 'train' }, { partner: 'irctc' }),
+      resolvedEntry({ kind: 'mode', value: 'bus' }, { partner: 'redbus' }),
     ] });
     const options = await transportOptionsFor('trip-1', leg, { adults: 2, children: 1, infants: 0 }, ['flight', 'train', 'bus', 'drive']);
 
@@ -69,7 +70,26 @@ describe('transportOptionsFor — one batch call', () => {
       party: { adults: 2, children: 1, infants: 0 },
       targets: [{ kind: 'mode', value: 'flight' }, { kind: 'mode', value: 'train' }, { kind: 'mode', value: 'bus' }],
     }));
-    expect(options.map(o => o.mode)).toEqual(['flight', 'train', 'bus']);
+    expect(options.map(o => `${o.mode}:${o.partner}`)).toEqual(['flight:flight', 'train:ixigo', 'train:irctc', 'bus:redbus']);
+    expect(options.map(o => o.name)).toContain('Train: Delhi → Goa — IRCTC');
+  });
+
+  it('keeps transport capability metadata for provider cards', async () => {
+    resolveBookingOptions.mockResolvedValueOnce({ results: [
+      resolvedEntry(
+        { kind: 'mode', value: 'train' },
+        { partner: 'irctc', capability: 'destination_redirect', ctaLabel: 'Open IRCTC' },
+      ),
+    ] });
+
+    const [option] = await transportOptionsFor('trip-1', leg, null, ['train']);
+
+    expect(option).toMatchObject({
+      mode: 'train',
+      partner: 'irctc',
+      capability: 'destination_redirect',
+      ctaLabel: 'Open IRCTC',
+    });
   });
 
   it('resolves nothing and makes no call for an empty approved-mode list', async () => {

@@ -8,7 +8,7 @@ export function modeLabel(mode) {
 }
 
 export const PARTNER_LABEL = {
-  aviasales: 'Aviasales', hotellook: 'Hotellook', booking_com: 'Booking.com', agoda: 'Agoda', hostelworld: 'Hostelworld', ixigo: 'ixigo',
+  aviasales: 'Aviasales', hotellook: 'Hotellook', booking_com: 'Booking.com', agoda: 'Agoda', hostelworld: 'Hostelworld', ixigo: 'ixigo', irctc: 'IRCTC', redbus: 'redBus',
 };
 
 // Always send a valid party envelope (the batch endpoint requires adults >= 1).
@@ -42,9 +42,12 @@ export function toTransportOption(mode, name, entry) {
       partner: action.target?.partner ?? null,
       internalCapability: action.internal_capability ?? null,
       affiliateDisclosure: !!action.affiliate_disclosure,
+      capability: action.capability ?? null,
+      ctaLabel: action.cta_label ?? null,
+      capabilityNote: action.capability_note ?? null,
     };
   }
-  return { mode, name, status: entry.status };
+  return { mode, name, status: entry.status, partner: entry.provider ?? null };
 }
 
 export function toStayOption(location, partner, entry) {
