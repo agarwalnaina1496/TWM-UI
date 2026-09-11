@@ -218,7 +218,7 @@ function HubPicker({ townName, hubs, selectedCity, onSelect, mode }) {
 
 function flightCtaLabel(option) {
   const partnerLabel = PARTNER_LABEL[option.partner] || option.partner || 'partner';
-  return `Check availability on ${partnerLabel} ↗`;
+  return `Check availability on ${partnerLabel}`;
 }
 
 function flightAffiliateCaption(option) {
@@ -230,13 +230,23 @@ function flightAffiliateCaption(option) {
   return `No TWM-resolved price yet — search directly on ${partnerLabel}`;
 }
 
+const CAPABILITY_TAG = {
+  prefilled_search: { text: 'Route, dates, and party prefilled', tone: 'sage' },
+  destination_search: { text: 'Route search opens on provider', tone: 'neutral' },
+  destination_redirect: { text: 'Opens provider — pick details there', tone: 'neutral' },
+  known_destination_search: { text: 'Known destination search', tone: 'sage' },
+};
+
 function TransportOptionCard({ option, onAddDates }) {
   const durationDistance = durationDistanceLabel(option);
   const isFlight = option.mode === 'flight';
+  const tag = CAPABILITY_TAG[option.capability];
   return (
     <article className="stay-option-card">
       <ModeTag mode={option.mode} />
       <strong>{option.name}</strong>
+      {tag && <span className={`stay-option-tag tone-${tag.tone}`}>{tag.text}</span>}
+      {option.capabilityNote && <p>{option.capabilityNote}</p>}
       {durationDistance && (
         <span className="stay-option-tag">
           {durationDistance}
@@ -249,7 +259,7 @@ function TransportOptionCard({ option, onAddDates }) {
       )}
       <TrustedActionCta
         option={option}
-        label={isFlight ? flightCtaLabel(option) : 'Check ↗'}
+        label={`${option.ctaLabel || (isFlight ? flightCtaLabel(option) : 'Check')} ↗`}
         secondary={isFlight}
       />
     </article>
@@ -378,7 +388,7 @@ function BookableOptions({ loading, error, options, emptyMessage }) {
   return (
     <div className="stay-options-grid">
       {options.map(option => (
-        <TransportOptionCard key={option.mode} option={option} />
+        <TransportOptionCard key={`${option.mode}-${option.partner || option.name}`} option={option} />
       ))}
     </div>
   );

@@ -220,6 +220,32 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
     expect(screen.getByText(/Flight: Bengaluru/)).toBeInTheDocument();
   });
 
+  it('State 2 renders one provider card per transport booking option with capability tags', () => {
+    const directTrain = { mode: 'train', direct: true, feasible: true, hubs: [] };
+    renderDrawer({
+      modeOptions: [directTrain],
+      selectedMode: 'train',
+      hubs: [],
+      options: [
+        {
+          mode: 'train',
+          partner: 'ixigo',
+          status: 'resolved',
+          name: 'Train: Bengaluru → Sumerpur — ixigo',
+          capability: 'prefilled_search',
+          capabilityNote: 'Station codes and date open prefilled on ixigo trains; confirm schedule, seats, and fare on ixigo.',
+          ctaLabel: 'Search ixigo trains',
+          url: 'https://www.ixigo.com/trains/search-pwa/from/SBC/to/FA/10-09-2026',
+        },
+      ],
+      feasibility: { modes: [{ mode: 'train', status: 'feasible' }] },
+    });
+
+    expect(screen.getByText(/Train: Bengaluru → Sumerpur — ixigo/)).toBeInTheDocument();
+    expect(screen.getByText('Route, dates, and party prefilled')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Search ixigo trains/ })).toBeInTheDocument();
+  });
+
   it('State 2 keeps other chooser-eligible modes out of the unavailable list', () => {
     renderDrawer({
       modeOptions: MODE_OPTIONS,

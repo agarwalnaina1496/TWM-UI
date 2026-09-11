@@ -442,7 +442,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(screen.getAllByText(/approx\. INR 8,?000\.00/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/IndiGo/).length).toBeGreaterThan(0);
     expect(document.querySelector('a[href*="aviasales"]')).not.toBeNull();
-    expect(screen.getAllByText('Check availability on Aviasales ↗').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /Search aviasales ↗/i }).length).toBeGreaterThan(0);
   });
 
   it('does not render an affiliate-disclosure line even when the action carries one', async () => {
