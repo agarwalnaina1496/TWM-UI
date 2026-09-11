@@ -218,7 +218,7 @@ function HubPicker({ townName, hubs, selectedCity, onSelect, mode }) {
 
 function flightCtaLabel(option) {
   const partnerLabel = PARTNER_LABEL[option.partner] || option.partner || 'partner';
-  return `Check availability on ${partnerLabel} ↗`;
+  return `Check availability on ${partnerLabel}`;
 }
 
 function flightAffiliateCaption(option) {
@@ -259,7 +259,7 @@ function TransportOptionCard({ option, onAddDates }) {
       )}
       <TrustedActionCta
         option={option}
-        label={`${option.ctaLabel || (isFlight ? flightCtaLabel(option).replace(' ↗', '') : 'Check')} ↗`}
+        label={`${option.ctaLabel || (isFlight ? flightCtaLabel(option) : 'Check')} ↗`}
         secondary={isFlight}
       />
     </article>

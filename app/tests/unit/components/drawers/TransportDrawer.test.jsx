@@ -232,31 +232,18 @@ describe('TransportDrawer — TWM-230 per-mode chooser', () => {
           partner: 'ixigo',
           status: 'resolved',
           name: 'Train: Bengaluru → Sumerpur — ixigo',
-          capability: 'destination_search',
-          capabilityNote: 'ixigo trains opens with the route context; confirm schedule, seats, and fare on ixigo.',
+          capability: 'prefilled_search',
+          capabilityNote: 'Station codes and date open prefilled on ixigo trains; confirm schedule, seats, and fare on ixigo.',
           ctaLabel: 'Search ixigo trains',
-          url: 'https://www.ixigo.com/trains',
-        },
-        {
-          mode: 'train',
-          partner: 'irctc',
-          status: 'resolved',
-          name: 'Train: Bengaluru → Sumerpur — IRCTC',
-          capability: 'destination_redirect',
-          capabilityNote: 'Official IRCTC train search opens; enter route and date on IRCTC before booking.',
-          ctaLabel: 'Open IRCTC',
-          url: 'https://www.irctc.co.in/nget/train-search',
+          url: 'https://www.ixigo.com/trains/search-pwa/from/SBC/to/FA/10-09-2026',
         },
       ],
       feasibility: { modes: [{ mode: 'train', status: 'feasible' }] },
     });
 
     expect(screen.getByText(/Train: Bengaluru → Sumerpur — ixigo/)).toBeInTheDocument();
-    expect(screen.getByText(/Train: Bengaluru → Sumerpur — IRCTC/)).toBeInTheDocument();
-    expect(screen.getByText('Route search opens on provider')).toBeInTheDocument();
-    expect(screen.getByText('Opens provider — pick details there')).toBeInTheDocument();
+    expect(screen.getByText('Route, dates, and party prefilled')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Search ixigo trains/ })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Open IRCTC/ })).toBeInTheDocument();
   });
 
   it('State 2 keeps other chooser-eligible modes out of the unavailable list', () => {
