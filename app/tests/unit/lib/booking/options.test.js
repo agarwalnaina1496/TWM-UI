@@ -145,8 +145,7 @@ describe('stayOptionsFor — one batch call', () => {
   it('issues one booking-options request for every stay partner and keeps only resolved+url', async () => {
     resolveBookingOptions.mockResolvedValueOnce({ results: [
       resolvedEntry({ kind: 'partner', value: 'booking_com' }, { url: 'https://booking.example', capability: 'prefilled_search', ctaLabel: 'Search Booking.com' }),
-      { target: { kind: 'partner', value: 'agoda' }, status: 'disabled', generated_at: 't', disabled: { reason: 'no capability' } },
-      resolvedEntry({ kind: 'partner', value: 'ixigo' }, { url: 'https://ixigo.example', capability: 'destination_redirect' }),
+      { target: { kind: 'partner', value: 'ixigo' }, status: 'disabled', generated_at: 't', disabled: { reason: 'no capability' } },
     ] });
     const options = await stayOptionsFor('trip-1', { id: 's1', location: 'Goa', nights: 2, departureDate: '2026-03-01' }, { adults: 2, children: 0, infants: 0 });
 
@@ -156,8 +155,8 @@ describe('stayOptionsFor — one batch call', () => {
     expect(payload.destination).toBe('Goa');
     expect(payload.return_date).toBe('2026-03-03'); // checkin + nights
     expect(payload.trip_shape).toBe('round_trip');
-    expect(payload.targets.map(t => t.value)).toEqual(['booking_com', 'agoda', 'ixigo']);
-    expect(options.map(o => o.partner)).toEqual(['booking_com', 'ixigo']);
+    expect(payload.targets.map(t => t.value)).toEqual(['booking_com', 'ixigo']);
+    expect(options.map(o => o.partner)).toEqual(['booking_com']);
   });
 });
 

@@ -207,7 +207,7 @@ function toEnrichedItinerary(record) {
 }
 
 function bookingOptionsResponse(body) {
-  const stayLabels = { booking_com: 'Search Booking.com', agoda: 'Search Agoda', ixigo: 'Browse ixigo hotels' };
+  const stayLabels = { booking_com: 'Search Booking.com', ixigo: 'Browse ixigo hotels' };
   return {
     results: (body.targets || []).map(target => {
       const isMode = target.kind === 'mode';

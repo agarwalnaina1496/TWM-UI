@@ -8,7 +8,7 @@ export function modeLabel(mode) {
 }
 
 export const PARTNER_LABEL = {
-  aviasales: 'Aviasales', booking_com: 'Booking.com', agoda: 'Agoda', ixigo: 'ixigo', redbus: 'redBus',
+  aviasales: 'Aviasales', booking_com: 'Booking.com', ixigo: 'ixigo', redbus: 'redBus',
 };
 
 // Always send a valid party envelope (the batch endpoint requires adults >= 1).
