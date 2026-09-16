@@ -111,7 +111,7 @@ describe('transportOptionsFor — one batch call', () => {
   });
 
   it('folds a live flight offer onto the flight option (a separate search, not in the batch)', async () => {
-    resolveBookingOptions.mockResolvedValueOnce({ results: [resolvedEntry({ kind: 'mode', value: 'flight' })] });
+    resolveBookingOptions.mockResolvedValueOnce({ results: [resolvedEntry({ kind: 'mode', value: 'flight' }, { partner: 'aviasales' })] });
     searchFlights.mockResolvedValueOnce({ status: 'offer', offers: [{
       money: { currency: 'INR', per_traveler_amount_minor_units: 500000, group_total_minor_units: 1000000, group_total_is_approximate: true },
       airline_name: 'IndiGo', stop_count: 0, price_found_at: 't', is_recommended: true,
@@ -120,6 +120,22 @@ describe('transportOptionsFor — one batch call', () => {
     expect(flight.liveOffer.status).toBe('offer');
     expect(flight.liveOffer.offers[0].airline).toBe('IndiGo');
     expect(searchFlights).toHaveBeenCalledTimes(1);
+  });
+
+  it('attaches the live offer only to the aviasales flight card, not ixigo (TWM-230)', async () => {
+    // ixigo is now also an approved flight partner -- the live cached
+    // price is Aviasales-specific (CHECK_PRICES, same Travelpayouts
+    // account), so it must never land on whichever flight card the batch
+    // happens to return first.
+    resolveBookingOptions.mockResolvedValueOnce({ results: [
+      resolvedEntry({ kind: 'mode', value: 'flight' }, { partner: 'ixigo' }),
+      resolvedEntry({ kind: 'mode', value: 'flight' }, { partner: 'aviasales' }),
+    ] });
+    searchFlights.mockResolvedValueOnce({ status: 'offer', offers: [] });
+    const options = await transportOptionsFor('trip-1', leg, { adults: 1, children: 0, infants: 0 }, ['flight']);
+    const byPartner = Object.fromEntries(options.map(o => [o.partner, o.liveOffer]));
+    expect(byPartner.ixigo).toBeUndefined();
+    expect(byPartner.aviasales?.status).toBe('offer');
   });
 });
 
@@ -145,8 +161,7 @@ describe('stayOptionsFor — one batch call', () => {
   it('issues one booking-options request for every stay partner and keeps only resolved+url', async () => {
     resolveBookingOptions.mockResolvedValueOnce({ results: [
       resolvedEntry({ kind: 'partner', value: 'booking_com' }, { url: 'https://booking.example', capability: 'prefilled_search', ctaLabel: 'Search Booking.com' }),
-      { target: { kind: 'partner', value: 'agoda' }, status: 'disabled', generated_at: 't', disabled: { reason: 'no capability' } },
-      resolvedEntry({ kind: 'partner', value: 'ixigo' }, { url: 'https://ixigo.example', capability: 'destination_redirect' }),
+      { target: { kind: 'partner', value: 'ixigo' }, status: 'disabled', generated_at: 't', disabled: { reason: 'no capability' } },
     ] });
     const options = await stayOptionsFor('trip-1', { id: 's1', location: 'Goa', nights: 2, departureDate: '2026-03-01' }, { adults: 2, children: 0, infants: 0 });
 
@@ -156,8 +171,8 @@ describe('stayOptionsFor — one batch call', () => {
     expect(payload.destination).toBe('Goa');
     expect(payload.return_date).toBe('2026-03-03'); // checkin + nights
     expect(payload.trip_shape).toBe('round_trip');
-    expect(payload.targets.map(t => t.value)).toEqual(['booking_com', 'agoda', 'ixigo']);
-    expect(options.map(o => o.partner)).toEqual(['booking_com', 'ixigo']);
+    expect(payload.targets.map(t => t.value)).toEqual(['booking_com', 'ixigo']);
+    expect(options.map(o => o.partner)).toEqual(['booking_com']);
   });
 });
 

@@ -31,9 +31,12 @@ function feasibilityFromModeResolution(modeResolution, leg, hub) {
       status: 'feasible',
       duration_source: 'computed',
       estimated_distance_km: distanceKm,
+      // "Routed via {hub}" would assert a real connecting service exists --
+      // a provider-owned fact we don't check (see BOOKING_HANDOFF.md). Hubs
+      // are a geographic suggestion only; the copy stays honest about that.
       reason: modeResolution.direct
         ? modeResolution.ruledOutReason || `${modeLabel(modeResolution.mode)} is available directly for ${leg.from} → ${leg.to}.`
-        : modeResolution.ruledOutReason || `${modeLabel(modeResolution.mode)} is routed via ${hub?.city}.`,
+        : modeResolution.ruledOutReason || `${hub?.city} is the suggested gateway for ${modeLabel(modeResolution.mode).toLowerCase()} — check connections from ${leg.from} there.`,
       verification: { status: 'GENERAL_GUIDANCE' },
     }],
   };
@@ -82,7 +85,11 @@ export async function transportOptionsFor(tripId, leg, party, approvedModes) {
     }
   }
 
-  const flightOption = options.find(option => option.mode === 'flight');
+  // The live cached price is Aviasales-specific (CHECK_PRICES, same
+  // Travelpayouts account) -- with ixigo also approved for flight
+  // (TWM-230), attach it only to the Aviasales card, never to whichever
+  // flight-mode card happens to come first in the batch response.
+  const flightOption = options.find(option => option.mode === 'flight' && option.partner === 'aviasales');
   if (flightOption) flightOption.liveOffer = await searchFlightOffer(tripId, leg, party);
 
   return options;

@@ -141,7 +141,7 @@ function resolvedAction(partner = 'aviasales', url = `https://www.${partner === 
   return { action_type: 'SEARCH_REDIRECT', domain: 'flight', target: { partner, path: 'search', query_params: {}, target_url: url }, internal_capability: null, affiliate_disclosure: true, capability: 'prefilled_search', cta_label: `Search ${partner}`, capability_note: null };
 }
 function stayAction(partner) {
-  const m = { booking_com: ['https://www.booking.com/searchresults.html?ss=Rishikesh', 'Search Booking.com'], agoda: ['https://www.agoda.com/search?city=1', 'Search Agoda'], ixigo: ['https://www.ixigo.com/hotels/hotels-in-rishikesh', 'Browse ixigo hotels'] }[partner];
+  const m = { booking_com: ['https://www.booking.com/searchresults.html?ss=Rishikesh', 'Search Booking.com'], ixigo: ['https://www.ixigo.com/hotels/hotels-in-rishikesh', 'Browse ixigo hotels'] }[partner];
   return { action_type: 'SEARCH_REDIRECT', domain: 'stay', target: { partner, path: 'search', query_params: {}, target_url: m[0] }, internal_capability: null, affiliate_disclosure: false, capability: 'destination_search', cta_label: m[1], capability_note: null };
 }
 
@@ -492,7 +492,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     const stayBodies = bodies.filter(b => b.domain === 'stay');
     expect(stayBodies).toHaveLength(1);
     expect(stayBodies[0].destination).toBe('Rishikesh');
-    expect(stayBodies[0].targets.map(t => t.value)).toEqual(['booking_com', 'agoda', 'ixigo']);
+    expect(stayBodies[0].targets.map(t => t.value)).toEqual(['booking_com', 'ixigo']);
     void user;
   });
 

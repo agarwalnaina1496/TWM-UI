@@ -234,7 +234,6 @@ const CAPABILITY_TAG = {
   prefilled_search: { text: 'Route, dates, and party prefilled', tone: 'sage' },
   destination_search: { text: 'Route search opens on provider', tone: 'neutral' },
   destination_redirect: { text: 'Opens provider — pick details there', tone: 'neutral' },
-  known_destination_search: { text: 'Known destination search', tone: 'sage' },
 };
 
 function TransportOptionCard({ option, onAddDates }) {
@@ -285,7 +284,10 @@ function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSele
       )}
       {hubList.length === 1 && (
         <p className="hub-picker-intro">
-          {hublessTownName(leg, hubList[0])} has no direct {modeLabel(mode).toLowerCase()} access — routed via {hubList[0].city}
+          {/* A hub is a geographic suggestion, not a confirmed connecting
+              service -- "routed via" would overclaim that (see
+              BOOKING_HANDOFF.md). */}
+          {hublessTownName(leg, hubList[0])} has no direct {modeLabel(mode).toLowerCase()} access — {hubList[0].city} is the suggested gateway
           {hubHaulLabel(hubList[0]) ? `, ${hubHaulLabel(hubList[0])} long haul` : ''}.
         </p>
       )}

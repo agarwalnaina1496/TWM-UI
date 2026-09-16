@@ -5,7 +5,7 @@ import { addDaysIso, partyEnvelope, toStayOption } from './shared.js';
 // request for every approved partner. Hidden providers are only those with
 // no resolved URL / capability from Backend.
 
-const STAY_PARTNERS = ['booking_com', 'agoda', 'ixigo'];
+const STAY_PARTNERS = ['booking_com', 'ixigo'];
 
 export async function stayOptionsFor(tripId, stay, party) {
   const checkoutDate = stay.checkoutDate || (stay.departureDate && stay.nights
