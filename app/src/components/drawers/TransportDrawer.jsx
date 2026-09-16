@@ -285,7 +285,10 @@ function TransportContextBand({ leg, hubList, selectedHub, autoOriginHub, onSele
       )}
       {hubList.length === 1 && (
         <p className="hub-picker-intro">
-          {hublessTownName(leg, hubList[0])} has no direct {modeLabel(mode).toLowerCase()} access — routed via {hubList[0].city}
+          {/* A hub is a geographic suggestion, not a confirmed connecting
+              service -- "routed via" would overclaim that (see
+              BOOKING_HANDOFF.md). */}
+          {hublessTownName(leg, hubList[0])} has no direct {modeLabel(mode).toLowerCase()} access — {hubList[0].city} is the suggested gateway
           {hubHaulLabel(hubList[0]) ? `, ${hubHaulLabel(hubList[0])} long haul` : ''}.
         </p>
       )}

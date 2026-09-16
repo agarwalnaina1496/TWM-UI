@@ -31,9 +31,12 @@ function feasibilityFromModeResolution(modeResolution, leg, hub) {
       status: 'feasible',
       duration_source: 'computed',
       estimated_distance_km: distanceKm,
+      // "Routed via {hub}" would assert a real connecting service exists --
+      // a provider-owned fact we don't check (see BOOKING_HANDOFF.md). Hubs
+      // are a geographic suggestion only; the copy stays honest about that.
       reason: modeResolution.direct
         ? modeResolution.ruledOutReason || `${modeLabel(modeResolution.mode)} is available directly for ${leg.from} → ${leg.to}.`
-        : modeResolution.ruledOutReason || `${modeLabel(modeResolution.mode)} is routed via ${hub?.city}.`,
+        : modeResolution.ruledOutReason || `${hub?.city} is the suggested gateway for ${modeLabel(modeResolution.mode).toLowerCase()} — check connections from ${leg.from} there.`,
       verification: { status: 'GENERAL_GUIDANCE' },
     }],
   };

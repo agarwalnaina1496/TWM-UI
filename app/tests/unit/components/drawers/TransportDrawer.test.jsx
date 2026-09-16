@@ -48,10 +48,12 @@ describe('TransportDrawer — TWM-215 hub picker', () => {
     expect(note.closest('label')).toBeNull();
   });
 
-  it('renders a "routed via" note carrying the long-haul distance for a single hub, no picker', () => {
+  it('renders a "suggested gateway" note carrying the long-haul distance for a single hub, no picker', () => {
     renderDrawer({ hubs: [HUBS[0]], selectedHub: HUBS[0], onSelectHub: () => {} });
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    expect(screen.getByText(/routed via Udaipur, ~660 km long haul/)).toBeInTheDocument();
+    // "suggested gateway", not "routed via" -- a hub is a geographic
+    // suggestion, not a confirmed connecting service (TWM-230).
+    expect(screen.getByText(/Udaipur is the suggested gateway, ~660 km long haul/)).toBeInTheDocument();
   });
 
   it('both endpoints hubless: destination picker plus an auto "departing via" origin note', () => {
