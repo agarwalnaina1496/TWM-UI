@@ -111,7 +111,7 @@ describe('transportOptionsFor — one batch call', () => {
   });
 
   it('folds a live flight offer onto the flight option (a separate search, not in the batch)', async () => {
-    resolveBookingOptions.mockResolvedValueOnce({ results: [resolvedEntry({ kind: 'mode', value: 'flight' })] });
+    resolveBookingOptions.mockResolvedValueOnce({ results: [resolvedEntry({ kind: 'mode', value: 'flight' }, { partner: 'aviasales' })] });
     searchFlights.mockResolvedValueOnce({ status: 'offer', offers: [{
       money: { currency: 'INR', per_traveler_amount_minor_units: 500000, group_total_minor_units: 1000000, group_total_is_approximate: true },
       airline_name: 'IndiGo', stop_count: 0, price_found_at: 't', is_recommended: true,
@@ -120,6 +120,22 @@ describe('transportOptionsFor — one batch call', () => {
     expect(flight.liveOffer.status).toBe('offer');
     expect(flight.liveOffer.offers[0].airline).toBe('IndiGo');
     expect(searchFlights).toHaveBeenCalledTimes(1);
+  });
+
+  it('attaches the live offer only to the aviasales flight card, not ixigo (TWM-230)', async () => {
+    // ixigo is now also an approved flight partner -- the live cached
+    // price is Aviasales-specific (CHECK_PRICES, same Travelpayouts
+    // account), so it must never land on whichever flight card the batch
+    // happens to return first.
+    resolveBookingOptions.mockResolvedValueOnce({ results: [
+      resolvedEntry({ kind: 'mode', value: 'flight' }, { partner: 'ixigo' }),
+      resolvedEntry({ kind: 'mode', value: 'flight' }, { partner: 'aviasales' }),
+    ] });
+    searchFlights.mockResolvedValueOnce({ status: 'offer', offers: [] });
+    const options = await transportOptionsFor('trip-1', leg, { adults: 1, children: 0, infants: 0 }, ['flight']);
+    const byPartner = Object.fromEntries(options.map(o => [o.partner, o.liveOffer]));
+    expect(byPartner.ixigo).toBeUndefined();
+    expect(byPartner.aviasales?.status).toBe('offer');
   });
 });
 

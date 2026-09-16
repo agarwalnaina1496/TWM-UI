@@ -82,7 +82,11 @@ export async function transportOptionsFor(tripId, leg, party, approvedModes) {
     }
   }
 
-  const flightOption = options.find(option => option.mode === 'flight');
+  // The live cached price is Aviasales-specific (CHECK_PRICES, same
+  // Travelpayouts account) -- with ixigo also approved for flight
+  // (TWM-230), attach it only to the Aviasales card, never to whichever
+  // flight-mode card happens to come first in the batch response.
+  const flightOption = options.find(option => option.mode === 'flight' && option.partner === 'aviasales');
   if (flightOption) flightOption.liveOffer = await searchFlightOffer(tripId, leg, party);
 
   return options;
