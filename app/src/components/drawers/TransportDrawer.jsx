@@ -234,7 +234,6 @@ const CAPABILITY_TAG = {
   prefilled_search: { text: 'Route, dates, and party prefilled', tone: 'sage' },
   destination_search: { text: 'Route search opens on provider', tone: 'neutral' },
   destination_redirect: { text: 'Opens provider — pick details there', tone: 'neutral' },
-  known_destination_search: { text: 'Known destination search', tone: 'sage' },
 };
 
 function TransportOptionCard({ option, onAddDates }) {
