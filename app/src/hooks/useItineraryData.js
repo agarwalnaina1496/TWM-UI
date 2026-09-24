@@ -42,11 +42,11 @@ export function useItineraryData() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlTripId, tripLoadStatus, view, navigate]);
 
-  const trackedThinState = useRef(false);
+  const trackedPrePlanView = useRef(false);
   useEffect(() => {
-    if (trackedThinState.current || tripLoadStatus !== 'ready' || frozenPlan) return;
-    trackedThinState.current = true;
-    trackEvent('dashboard_thin_state_viewed', { stage: view?.lifecycle?.stage ?? 'new' });
+    if (trackedPrePlanView.current || tripLoadStatus !== 'ready' || frozenPlan) return;
+    trackedPrePlanView.current = true;
+    trackEvent('dashboard_pre_plan_viewed', { stage: view?.lifecycle?.stage ?? 'new' });
   }, [tripLoadStatus, frozenPlan, view?.lifecycle?.stage]);
 
   // Reopen never re-invokes Atlas: once an itinerary exists, render the

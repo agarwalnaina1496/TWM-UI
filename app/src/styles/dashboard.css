@@ -165,12 +165,12 @@
 
 /* TWM-182: pre-freeze placeholder for a non-Overview tab, tapped from the
    now-always-visible tab bar. */
-.thin-tab-placeholder{margin:24px auto 0;text-align:center;color:var(--tm);padding:32px 24px}
+.tab-empty-state{margin:24px auto 0;text-align:center;color:var(--tm);padding:32px 24px}
 
 /* TWM-182: bottom unified CTA — whichever track is actually actionable
    right now (Route, else Day plan), so there's always one obvious next
    step regardless of which track it's on. */
-.thin-state-primary-cta{margin:24px auto 0;text-align:center}
+.overview-primary-cta{margin:24px auto 0;text-align:center}
 
 /* TWM-175: trip-shape day-strip on Overview — tappable, jumps into Itinerary. */
 .day-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 16px}
