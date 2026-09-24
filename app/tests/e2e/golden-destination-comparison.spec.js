@@ -109,20 +109,18 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
   // The exact persisted budget must survive verbatim, never a generic bucket.
   await expect(page.getByText('Budget: ₹1,00,000 total for both', { exact: true })).toBeVisible();
 
-  // TWM-173: options render as columns in a criteria x options comparison
-  // matrix, not separate cards — the detail card below shows whichever
-  // column is focused (rank #1, Madhya Pradesh, by default).
+  // Options render as independently comparable price-forward cards.
   await expect(page.getByRole('button', { name: /Kerala Culture, Backwaters and Coast/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Assam/ })).toBeVisible();
 
-  const detailCard = page.locator('.dest-detail-card');
-  await expect(detailCard.getByText('Madhya Pradesh Heritage and Nature')).toBeVisible();
+  const mpCard = page.locator('.dest-detail-card', { hasText: 'Madhya Pradesh Heritage and Nature' });
+  await expect(mpCard.getByRole('button', { name: /Madhya Pradesh Heritage and Nature/ })).toBeVisible();
 
   // The verbatim weather qualifier from the golden fixture criteria survives the handoff.
-  await detailCard.getByText('See why this fits').click();
-  await expect(detailCard.getByText(/Winter days generally support sightseeing/)).toBeVisible();
+  await mpCard.getByText('See why this fits').click();
+  await expect(mpCard.getByText(/Winter days generally support sightseeing/)).toBeVisible();
 
-  await detailCard.getByText('Plan this trip →').click();
+  await mpCard.getByText('Plan this trip →').click();
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await expect(page.getByText('Gwalior Fort')).toBeVisible();
 });

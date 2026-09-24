@@ -1,12 +1,6 @@
 export const OUTCOME_ICON = { MATCH: '✓', TRADEOFF: '⚠', MISMATCH: '✕' };
 export const OUTCOME_TONE = { MATCH: 'positive', TRADEOFF: 'caution', MISMATCH: 'negative' };
 
-export const BEEN_BEFORE_OPTIONS = [
-  { id: 'loved', icon: '❤️', label: 'Loved it' },
-  { id: 'would-go-back', icon: '🔁', label: 'Would go back' },
-  { id: 'not-for-me', icon: '😐', label: 'Not for me' },
-];
-
 export function optionLabel(option) {
   return option.type === 'circuit' ? 'Multi-stop circuit' : 'Single destination';
 }
@@ -22,6 +16,26 @@ const COST_ICON_RULES = [
   [/fuel|road|transport/i, '🚗'], [/stay|hotel|houseboat/i, '🏨'], [/activit/i, '🎟️'],
 ];
 export const costIcon = label => (COST_ICON_RULES.find(([re]) => re.test(label)) || [null, '💳'])[1];
+
+// Returns a formatted price range string from the first cost_breakdown detail, or null.
+export function priceRange(option) {
+  for (const ev of option.evaluations) {
+    for (const detail of ev.details) {
+      if (detail.type !== 'cost_breakdown') continue;
+      const items = detail.items ?? [];
+      if (!items.length) continue;
+      const currency = detail.currency ?? '';
+      let min = 0, max = 0;
+      for (const item of items) {
+        if (item.group?.minimum) min += item.group.minimum;
+        if (item.group?.maximum) max += item.group.maximum;
+      }
+      if (!max) continue;
+      return `${currency} ${min.toLocaleString('en-IN')}–${max.toLocaleString('en-IN')}`;
+    }
+  }
+  return null;
+}
 
 const ACCESS_LABEL_PATTERN = /access|route|connect|transfer|flight|airport|drive|reach/i;
 

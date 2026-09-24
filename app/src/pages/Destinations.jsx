@@ -12,9 +12,7 @@ import BackToTrip from '../components/BackToTrip.jsx';
 import ScreenHeader from '../components/ui/ScreenHeader.jsx';
 import Layout from '../components/Layout.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
-import ComparisonMatrix from '../components/destinations/ComparisonMatrix.jsx';
 import OptionDetailCard from '../components/destinations/OptionDetailCard.jsx';
-import RefinementDrawer from '../components/destinations/RefinementDrawer.jsx';
 import CheckpointOverlay from '../components/destinations/CheckpointOverlay.jsx';
 import { withTripId } from '../lib/tripUrl.js';
 import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
@@ -29,17 +27,12 @@ const MATCHING_STEPS = ['Reviewing what you told us', 'Matching against real des
 export default function Destinations() {
   const navigate = useNavigate();
   const { commandSnapshot: view, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState } = useTrip();
-  // TWM-185/TWM-221: reload/bookmark/deep-link safe — points currentTripId at
-  // the URL's trip so the ['trip', id] query resolves the right one.
   useTripFromUrl();
 
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState(null);
-  // Backend-persisted so both survive a refresh; local React state for
-  // instant interaction.
   const [focusedKey, setFocusedKey] = useState(() => uiState[FOCUSED_KEY] ?? null);
   const [evidenceOpen, setEvidenceOpen] = useState(() => !!uiState[EVIDENCE_OPEN_KEY]);
-  const [beenBefore, setBeenBefore] = useState({});
   const [clarifyInput, setClarifyInput] = useState('');
   const [planError, setPlanError] = useState(null);
   const [planningId, setPlanningId] = useState(null);
@@ -50,10 +43,9 @@ export default function Destinations() {
   const [checkpointError, setCheckpointError] = useState(null);
   const trackedCheckpointFields = useRef(new Set());
   const checkpointWasShown = useRef(false);
-  const [moreLikeThisId, setMoreLikeThisId] = useState(null);
-  const [moreLikeThisQualifier, setMoreLikeThisQualifier] = useState('');
   const [refinementOpen, setRefinementOpen] = useState(false);
   const [refinementValue, setRefinementValue] = useState('');
+  const [refinementScope, setRefinementScope] = useState(null);
   const [refinementBusy, setRefinementBusy] = useState(false);
   const triggered = useRef(false);
   const restoredFocus = useRef(false);
@@ -64,11 +56,6 @@ export default function Destinations() {
   const awaiting = view?.matcher?.awaiting;
   const lastMeridianMessage = view?.matcher?.last_message;
 
-  // TWM-221: the matcher round is a React Query read (['recommendations',
-  // id]) — lazy on mount, request-deduped. After a command it is written
-  // straight into that cache by TripContext's sendTripCommand; a turn that
-  // produced no round leaves the current one in place and the fresh
-  // `view.matcher` drives the clarification UI.
   const recommendationsQuery = useRecommendationsQuery(tripId);
   const latest = recommendationsQuery.data ?? null;
   const recoStatus = !tripId
@@ -81,8 +68,6 @@ export default function Destinations() {
   const recoError = recommendationsQuery.error?.message || 'Could not load recommendations.';
   const refreshLatest = recommendationsQuery.refetch;
 
-  // A command turn's round is already in the ['recommendations', id] cache
-  // by the time this runs; fire the generated-count analytics only.
   const applyCommandRound = useCallback(round => {
     if (round?.options?.length) {
       trackEvent('recommendations_generated', { recommendation_count: round.options.length });
@@ -99,10 +84,6 @@ export default function Destinations() {
       .finally(() => setTriggering(false));
   }
 
-  // Trigger matching once per mount if this trip has never reached Meridian,
-  // or resume an in-flight clarification round without re-asking. Waits for
-  // the lazy recommendations fetch to settle first — otherwise a fresh trip
-  // (no round yet) and a trip whose round just hasn't loaded look identical.
   useEffect(() => {
     if (triggered.current || tripLoadStatus !== 'ready' || recoStatus !== 'ready') return;
     if (latest || awaiting) return;
@@ -110,9 +91,6 @@ export default function Destinations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripLoadStatus, recoStatus, latest, awaiting]);
 
-  // Restores which option was focused (and whether its evidence was open)
-  // before a refresh, once, without clobbering a toggle the traveler makes
-  // afterward.
   useEffect(() => {
     if (restoredFocus.current || tripLoadStatus !== 'ready') return;
     restoredFocus.current = true;
@@ -126,10 +104,6 @@ export default function Destinations() {
     [latest]
   );
 
-  // recommendations_viewed fires once per distinct round the traveler is
-  // actually shown (freshly generated or resumed from a saved session) —
-  // separate from recommendations_generated so backend success can be told
-  // apart from the round actually rendering.
   const viewedVersion = useRef(null);
   useEffect(() => {
     if (outcome?.kind !== 'options' || !outcome.data || !latest?.version) return;
@@ -145,8 +119,6 @@ export default function Destinations() {
     trackEvent('terminal_failure_shown', { status: outcome.data.status });
   }, [outcome]);
 
-  // Once options are known, default focus to the best-ranked option so the
-  // detail card always shows something rather than nothing.
   useEffect(() => {
     if (focusedKey || outcome?.kind !== 'options' || !outcome.data) return;
     setFocusedKey(outcome.data.options[0]?.key ?? null);
@@ -163,28 +135,25 @@ export default function Destinations() {
     updateUiState({ [FOCUSED_KEY]: key, [EVIDENCE_OPEN_KEY]: false }).catch(() => {});
   }
 
-  // Persists both keys together, always — evidenceOpen alone would be
-  // ambiguous about *which* option it belongs to after a refresh. Persists
-  // focusedOption's key (what's actually on screen, falling back to
-  // options[0]) rather than the raw focusedKey state — the auto-focus
-  // effect above hasn't necessarily committed yet on the very first
-  // toggle, so focusedKey can still be null while the card already shows
-  // the top-ranked option.
   function toggleEvidence() {
     const next = !evidenceOpen;
     setEvidenceOpen(next);
     updateUiState({ [FOCUSED_KEY]: focusedOption?.key ?? null, [EVIDENCE_OPEN_KEY]: next }).catch(() => {});
   }
 
-  // TWM-173: one unified CTA — an already-selected option just navigates
-  // (no re-selection needed); every other option runs select_destination
-  // first. Same literal "Plan this trip →" text either way.
+  function handleToggleEvidence(option) {
+    if (option.key !== focusedKey) {
+      setFocusedKey(option.key);
+      setEvidenceOpen(true);
+      updateUiState({ [FOCUSED_KEY]: option.key, [EVIDENCE_OPEN_KEY]: true }).catch(() => {});
+    } else {
+      toggleEvidence();
+    }
+  }
+
   function planThis(option) {
     const isSelected = selectedOption && selectedOption.type === option.type && selectedOption.id === option.key;
     if (isSelected) {
-      // TWM-190: route by artifact existence — a prior planning session with
-      // no day_plan yet still belongs on ScoutChat's chat window, not the
-      // (now day_plan-only) Plan Builder.
       const destination = planReady(view?.plan) ? '/trip-preview' : '/scout-chat';
       navigate(withTripId(destination, view?.id));
       return;
@@ -192,11 +161,6 @@ export default function Destinations() {
     doPlanThis(option);
   }
 
-  // TWM-174: bootstraps Guide immediately (instead of leaving it to
-  // TripPreview's own mount) so the checkpoint gap — if any — can surface
-  // right here on Destinations, before navigating away. TripPreview's own
-  // boot effect already no-ops once plannerState/awaiting exists, so this
-  // doesn't double-start Guide.
   async function doPlanThis(option) {
     setPlanError(null);
     setPlanningId(option.key);
@@ -212,15 +176,9 @@ export default function Destinations() {
     }
   }
 
-  // Shared by both the initial start_planning bootstrap and each checkpoint
-  // answer — Guide gates one fixed field at a time, so a single answer may
-  // reveal another gap before all five are satisfied.
   function proceedFromGuideResponse(response) {
     const nextPlan = response.trip?.plan;
     const nextAwaiting = nextPlan?.awaiting;
-    // Guide can clear the fixed-field checkpoint gate on the same turn it
-    // finishes the plan — planReady must win over isFixedFieldGap, or a
-    // completed plan gets stuck showing a stale checkpoint prompt.
     if (!planReady(nextPlan) && isFixedFieldGap(nextAwaiting)) {
       setCheckpointAwaiting(nextAwaiting);
       setCheckpointMessage(response.message || '');
@@ -238,10 +196,6 @@ export default function Destinations() {
       navigate(withTripId('/trip-preview', tripId), { state: { guideMessage: response.message } });
       return;
     }
-    // TWM-190: Guide still needs more before it can propose a plan — that
-    // conversation now lives on ScoutChat (its own recap picks up the
-    // current awaiting question from trip_state), not TripPreview's
-    // retired inline gating branch.
     navigate(withTripId('/scout-chat', tripId));
   }
 
@@ -261,28 +215,37 @@ export default function Destinations() {
     }
   }
 
-  async function moreLikeThis(option) {
-    setMoreLikeThisId(option.key);
-    setPlanError(null);
-    const instructions = moreLikeThisQualifier.trim();
-    try {
-      const response = await sendTripCommand('more_like_this', {
-        refinement: {
-          type: 'MORE_LIKE_THIS',
-          reference: { type: option.type, id: option.key },
-          ...(instructions ? { instructions } : {}),
-        },
-      });
-      trackEvent('more_like_this_used', { with_qualifier: Boolean(instructions) });
-      applyCommandRound(response.recommendation);
-      setMoreLikeThisQualifier('');
-      setFocusedKey(null);
-      setEvidenceOpen(false);
-      updateUiState({ [FOCUSED_KEY]: null, [EVIDENCE_OPEN_KEY]: false }).catch(() => {});
-    } catch (commandError) {
-      setPlanError(commandError.message || 'Something went wrong.');
-    } finally {
-      setMoreLikeThisId(null);
+  // Unified refine handler. If refinementValue has text when "More like this" is
+  // clicked, sends immediately with that text as instructions. If empty, sets scope
+  // and opens the refine box for the user to type a qualifier.
+  async function handleMoreLikeThis(option) {
+    const instructions = refinementValue.trim();
+    if (instructions) {
+      setRefinementValue('');
+      setRefinementBusy(true);
+      setPlanError(null);
+      try {
+        trackEvent('more_like_this_used', { with_qualifier: true });
+        const response = await sendTripCommand('more_like_this', {
+          refinement: {
+            type: 'MORE_LIKE_THIS',
+            reference: { type: option.type, id: option.key },
+            instructions,
+          },
+        });
+        applyCommandRound(response.recommendation);
+        setFocusedKey(null);
+        setEvidenceOpen(false);
+        setRefinementScope(null);
+        updateUiState({ [FOCUSED_KEY]: null, [EVIDENCE_OPEN_KEY]: false }).catch(() => {});
+      } catch (commandError) {
+        setPlanError(commandError.message || 'Something went wrong.');
+      } finally {
+        setRefinementBusy(false);
+      }
+    } else {
+      setRefinementScope(option);
+      setRefinementOpen(true);
     }
   }
 
@@ -302,19 +265,34 @@ export default function Destinations() {
     }
   }
 
+  // Unified submit: if a scope is set, sends more_like_this; otherwise traveler_message.
   async function submitRefinement() {
     const value = refinementValue.trim();
-    if (!value) return;
+    if (!value && !refinementScope) return;
     setRefinementValue('');
     setRefinementBusy(true);
     setPlanError(null);
     try {
-      trackEvent('refinement_drawer_used', {});
-      const response = await sendTripCommand('traveler_message', { message: value });
+      let response;
+      if (refinementScope) {
+        trackEvent('more_like_this_used', { with_qualifier: Boolean(value) });
+        response = await sendTripCommand('more_like_this', {
+          refinement: {
+            type: 'MORE_LIKE_THIS',
+            reference: { type: refinementScope.type, id: refinementScope.key },
+            ...(value ? { instructions: value } : {}),
+          },
+        });
+      } else {
+        trackEvent('refinement_drawer_used', {});
+        response = await sendTripCommand('traveler_message', { message: value });
+      }
       applyCommandRound(response.recommendation);
       setFocusedKey(null);
       setEvidenceOpen(false);
       setRefinementOpen(false);
+      setRefinementScope(null);
+      updateUiState({ [FOCUSED_KEY]: null, [EVIDENCE_OPEN_KEY]: false }).catch(() => {});
     } catch (commandError) {
       setPlanError(commandError.message || 'Something went wrong.');
     } finally {
@@ -327,19 +305,10 @@ export default function Destinations() {
     setClarifyInput(suggestion);
   }
 
-  // recoStatus starts 'idle' before the lazy recommendations fetch effect
-  // has even fired — treating it as equivalent to "settled" here let
-  // awaiting-driven content (e.g. a clarification question, already known
-  // from trip_state's own matcher_state) render before that fetch was even
-  // dispatched, a real race exposed by a flaky CI assertion on fetch count.
   const recoSettled = recoStatus === 'ready' || recoStatus === 'error';
   const thinking = tripLoadStatus === 'loading' || !recoSettled || triggering
     || (tripLoadStatus === 'ready' && recoStatus === 'ready' && !latest && !awaiting && !triggerError);
 
-  // TWM-173: this trigger point is the initial Discover entry. The Direct-
-  // Plan reversal link (Guide's reopen_destination_discovery, per TWM-174)
-  // should fire this same component/event with trigger: 'destination_reversal'
-  // once that link exists, so funnel analysis can tell the two apart.
   useEffect(() => {
     if (!thinking || trackedTransitionShown.current) return;
     trackedTransitionShown.current = true;
@@ -351,8 +320,10 @@ export default function Destinations() {
   const focusedOption = outcome?.kind === 'options' && outcome.data
     ? outcome.data.options.find(o => o.key === focusedKey) ?? outcome.data.options[0]
     : null;
-  const isFocusedSelected = focusedOption && selectedOption
-    && selectedOption.type === focusedOption.type && selectedOption.id === focusedOption.key;
+
+  const selectedOptionName = selectedOption && outcome?.kind === 'options' && outcome.data
+    ? outcome.data.options.find(o => o.type === selectedOption.type && o.key === selectedOption.id)?.name
+    : null;
 
   return (
     <Layout>
@@ -371,7 +342,11 @@ export default function Destinations() {
       <ScreenHeader
         eyebrow="Destination matcher"
         title={<>Let's find <em>your</em> place</>}
-        lede="Matching against what you just told me — ranked by how well each fits."
+        lede={
+          selectedOptionName
+            ? `Not ${selectedOptionName} after all? Compare your options below and pick a different one.`
+            : 'Matching against what you just told me — ranked by how well each fits.'
+        }
       />
       {pills.length > 0 && <div className="trip-recap">{pills.map(p => <span key={p} className="recap-pill">{p}</span>)}</div>}
 
@@ -441,40 +416,61 @@ export default function Destinations() {
       {!showTripLoadError && !showRecoError && !thinking && !triggerError && outcome?.kind === 'options' && outcome.data && (
         <div>
           <h2 className="section-title">A few that fit well</h2>
-          <p className="lede recommendation-summary">{outcome.data.message}</p>
+          <div className="agent-summary-message">
+            <span className="agent-summary-badge">Guide</span>
+            <p>{outcome.data.message}</p>
+          </div>
           {planError && <div className="price-evidence state-unsafe" role="alert">{planError}</div>}
 
-          <ComparisonMatrix criteria={outcome.data.criteria} options={outcome.data.options} focusedKey={focusedOption?.key} onFocus={focusOption} />
+          <div className={`options-grid${refinementBusy ? ' options-busy' : ''}`}>
+            {outcome.data.options.map(option => {
+              const isSelected = selectedOption && selectedOption.type === option.type && selectedOption.id === option.key;
+              const isFocused = option.key === (focusedOption?.key ?? null);
+              return (
+                <OptionDetailCard
+                  key={option.key}
+                  option={option}
+                  criteria={outcome.data.criteria}
+                  isSelected={isSelected}
+                  isFocused={isFocused}
+                  evidenceOpen={isFocused && evidenceOpen}
+                  onFocus={() => focusOption(option.key)}
+                  onToggleEvidence={() => handleToggleEvidence(option)}
+                  onPlan={() => planThis(option)}
+                  planning={planningId === option.key}
+                  onMoreLikeThis={() => handleMoreLikeThis(option)}
+                  moreLikeThisBusy={refinementBusy}
+                />
+              );
+            })}
+          </div>
 
-          {focusedOption && (
-            <OptionDetailCard
-              option={focusedOption}
-              criteria={outcome.data.criteria}
-              isSelected={isFocusedSelected}
-              evidenceOpen={evidenceOpen}
-              onToggleEvidence={toggleEvidence}
-              onPlan={() => planThis(focusedOption)}
-              planning={planningId === focusedOption.key}
-              moreLikeThisQualifier={moreLikeThisQualifier}
-              onQualifierChange={setMoreLikeThisQualifier}
-              onMoreLikeThis={() => moreLikeThis(focusedOption)}
-              moreLikeThisBusy={moreLikeThisId === focusedOption.key}
-              beenBefore={beenBefore[focusedOption.key] ?? null}
-              onToggleBeenBefore={id => setBeenBefore(previous => ({ ...previous, [focusedOption.key]: previous[focusedOption.key] === id ? null : id }))}
-            />
-          )}
+          <div className="refinement-drawer">
+            <button type="button" className="refinement-toggle" onClick={() => setRefinementOpen(open => !open)} aria-expanded={refinementOpen}>
+              Not quite right? Tell us more <span>{refinementOpen ? '▴' : '▾'}</span>
+            </button>
+            {refinementOpen && (
+              <div className="refinement-body">
+                {refinementScope && (
+                  <div className="refine-scope-pill">
+                    ✨ Refining relative to <strong>{refinementScope.name}</strong>
+                    <button type="button" className="refine-scope-clear" onClick={() => setRefinementScope(null)} aria-label="Clear scope">×</button>
+                  </div>
+                )}
+                <textarea
+                  className="refinement-input"
+                  aria-label="Tell us more"
+                  placeholder={refinementScope
+                    ? `e.g. cheaper, closer, slower… (optional)`
+                    : `e.g. I'd rather avoid long overnight trains, or I want somewhere quieter…`}
+                  value={refinementValue}
+                  onChange={event => setRefinementValue(event.target.value)}
+                />
+                <button type="button" className="btn btn-primary" onClick={submitRefinement} disabled={refinementBusy || (!refinementValue.trim() && !refinementScope)}>Send</button>
+              </div>
+            )}
+          </div>
         </div>
-      )}
-
-      {!showTripLoadError && !thinking && outcome?.kind === 'options' && outcome.data && (
-        <RefinementDrawer
-          open={refinementOpen}
-          onToggle={() => setRefinementOpen(open => !open)}
-          value={refinementValue}
-          onChange={setRefinementValue}
-          onSubmit={submitRefinement}
-          busy={refinementBusy}
-        />
       )}
     </Layout>
   );
