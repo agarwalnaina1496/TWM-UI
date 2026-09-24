@@ -118,7 +118,7 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
 
   // The verbatim weather qualifier from the golden fixture criteria survives the handoff.
   await mpCard.getByText('See why this fits').click();
-  await expect(mpCard.getByText(/Winter days generally support sightseeing/)).toBeVisible();
+  await expect(mpCard.getByText(/Winter days generally support sightseeing/).first()).toBeVisible();
 
   await mpCard.getByText('Plan this trip →').click();
   await expect(page).toHaveURL(/\/app\/trip-preview/);
