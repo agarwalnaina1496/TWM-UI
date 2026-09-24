@@ -103,6 +103,23 @@ describe('TripPreview real Guide Plan Builder', () => {
     expect(sendTripCommand).not.toHaveBeenCalledWith('traveler_message', expect.anything());
   });
 
+  it('passes the clicked row day_number so duplicate place names scope removal correctly', async () => {
+    commandSnapshot = view(readyPlan({
+      places: ['Lunch', 'Lunch'],
+      day_plan: [
+        { day_number: 1, places: ['Lunch'], pace: 'relaxed', buffer_note: null },
+        { day_number: 2, places: ['Lunch'], pace: 'balanced', buffer_note: null },
+      ],
+    }));
+    sendTripCommand = vi.fn(async () => ({ message: 'Removed.', agent_meta: null, trip: commandSnapshot }));
+    const user = userEvent.setup();
+    render(<MemoryRouter><TripPreview /></MemoryRouter>);
+    const [day1Remove] = screen.getAllByRole('button', { name: 'Remove Lunch' });
+    await user.click(day1Remove);
+    expect(sendTripCommand).toHaveBeenCalledWith('remove_place', { placeName: 'Lunch', dayNumber: 1 });
+    expect(sendTripCommand).not.toHaveBeenCalledWith('remove_place', { placeName: 'Lunch', dayNumber: 2 });
+  });
+
   it('sends a chat drawer message as a real traveler_message command', async () => {
     commandSnapshot = view(readyPlan());
     sendTripCommand = vi.fn(async () => ({ message: 'Noted.', agent_meta: null, trip: commandSnapshot }));
