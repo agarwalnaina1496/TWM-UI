@@ -1,6 +1,7 @@
 import BudgetBar, { moneyRange } from '../../components/BudgetBar.jsx';
 import { BookingReadinessBadge, VerificationTag, VerifyChip } from '../../components/StatusPills.jsx';
 import { dayCostRange } from '../../lib/atlasView.js';
+import { ROUTES } from '../../constants/routes.js';
 
 const KIND_ICON = { TRAVEL: '🚗', STAY: '🏨', MEAL: '🍽️', FREE_TIME: '🕒' };
 
@@ -9,7 +10,7 @@ export default function ItineraryTab({ days, staySegmentByItemId, activeDay, onS
   if (!selectedDay) return (
     <div className="dashboard-card tab-empty-state content-narrow">
       <p>Your day-by-day plan will appear here once Guide finishes it.</p>
-      <a className="btn btn-primary" href="/scout-chat">Continue chat →</a>
+      <a className="btn btn-primary" href={ROUTES.scoutChat}>Continue chat →</a>
     </div>
   );
 

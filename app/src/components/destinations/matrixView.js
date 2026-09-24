@@ -1,5 +1,6 @@
 export const OUTCOME_ICON = { MATCH: '✓', TRADEOFF: '⚠', MISMATCH: '✕' };
 export const OUTCOME_TONE = { MATCH: 'positive', TRADEOFF: 'caution', MISMATCH: 'negative' };
+import { formatMoneyRange } from '../../lib/formatters.js';
 
 export function optionLabel(option) {
   return option.type === 'circuit' ? 'Multi-stop circuit' : 'Single destination';
@@ -24,8 +25,7 @@ export function priceRange(option) {
   for (const ev of option.evaluations) {
     for (const detail of ev.details) {
       if (detail.type !== 'cost_breakdown') continue;
-      const currency = detail.currency ?? '';
-      const fmt = n => n.toLocaleString('en-IN');
+      const currency = detail.currency ?? 'INR';
       const items = detail.items ?? [];
       if (items.length) {
         let min = 0, max = 0;
@@ -33,12 +33,12 @@ export function priceRange(option) {
           if (item.group?.minimum) min += item.group.minimum;
           if (item.group?.maximum) max += item.group.maximum;
         }
-        if (max) return `${currency} ${fmt(min)}–${fmt(max)}`;
+        if (max) return formatMoneyRange(min, max, currency);
       }
       // group_total / per_person_total shape (the common Meridian path)
       const totals = detail.group_total ?? detail.per_person_total;
       if (totals?.minimum != null && totals?.maximum != null) {
-        return `${currency} ${fmt(totals.minimum)}–${fmt(totals.maximum)}`;
+        return formatMoneyRange(totals.minimum, totals.maximum, currency);
       }
     }
   }

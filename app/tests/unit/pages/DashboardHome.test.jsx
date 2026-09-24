@@ -200,6 +200,18 @@ describe('DashboardHome', () => {
     expect(fetchMock.mock.calls.every(([url]) => url === '/api/trips' || /^\/api\/trips\/[^/]+$/.test(url))).toBe(true);
   });
 
+  it('searches a trip by its computed fallback display title', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({ id: 'trip-1', title: null, stage: 'matched', context: { origin_city: 'Delhi', trip_duration: '5' } }),
+      listItem({ id: 'trip-2', title: 'Manali trip', stage: 'matched', context: { origin_city: 'Delhi' } }),
+    ] }));
+    renderDashboardHome(GUEST);
+    await screen.findByText('Delhi · 5 days');
+    await userEvent.type(screen.getByLabelText('Search your trips'), 'Delhi · 5');
+    expect(screen.getByText('Delhi · 5 days')).toBeInTheDocument();
+    expect(screen.queryByText('Manali trip')).not.toBeInTheDocument();
+  });
+
   it('empty-state entry door creates no Backend record', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderDashboardHome(GUEST);

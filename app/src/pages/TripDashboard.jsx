@@ -104,7 +104,7 @@ export default function TripDashboard() {
 
       <DashboardTabs tab={tab} setTab={setTab} />
 
-      {tab === 'Overview' && (
+      {tab === 'Overview' && view && (
         <OverviewTab view={view} tripId={tripId} />
       )}
 

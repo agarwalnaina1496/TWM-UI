@@ -365,7 +365,7 @@ describe('Destinations (real Meridian integration)', () => {
     global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
-    expect(screen.getByText(/INR.*32,000/)).toBeInTheDocument();
+    expect(screen.getByText(/₹32,000/)).toBeInTheDocument();
   });
 
   it('shows a practical access fact in the collapsed card when the option carries one', async () => {

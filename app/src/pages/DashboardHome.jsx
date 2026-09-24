@@ -15,6 +15,8 @@ import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import { isDiscoverOnly, selectHeroTrip } from '../lib/tripHero.js';
 import { withTripId } from '../lib/tripUrl.js';
 import { decodeHtmlEntities } from '../lib/text.js';
+import { contextOrigin, contextDuration } from '../lib/tripLifecycle.js';
+import { ROUTES } from '../constants/routes.js';
 import '../styles/dashboard-home.css';
 
 const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution', 'b-matched': 'caution', 'b-done': 'positive' };
@@ -23,8 +25,8 @@ function displayTitle(t) {
   if (t.title) return decodeHtmlEntities(t.title);
   const destination = contextDestination(t);
   if (destination) return destination;
-  const origin = t.context_recap?.find(r => r.key === 'origin_city')?.value;
-  const duration = t.context_recap?.find(r => r.key === 'trip_duration')?.value;
+  const origin = contextOrigin(t);
+  const duration = contextDuration(t);
   if (origin && duration) return `${origin} · ${duration} days`;
   if (origin) return `Trip from ${origin}`;
   if (duration) return `${duration}-day trip`;
@@ -41,7 +43,7 @@ function matchesSearch(t, query) {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const destination = contextDestination(t) || '';
-  return (t.title || 'Untitled trip').toLowerCase().includes(q) || destination.toLowerCase().includes(q);
+  return (displayTitle(t) || '').toLowerCase().includes(q) || destination.toLowerCase().includes(q);
 }
 
 // TWM-221: hoisted to module scope so a DashboardHome re-render (e.g. a
@@ -65,7 +67,7 @@ function RenameName({ t, rename, showRename = true, label }) {
   }
   return (
     <div className="name">
-      {label || 'Untitled trip'}{' '}
+      {label || displayTitle(t) || 'Untitled trip'}{' '}
       {showRename && (
         <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => rename.start(t)}>
           Rename
@@ -78,53 +80,36 @@ function RenameName({ t, rename, showRename = true, label }) {
 // TWM-171: exactly one primary affordance per committed trip card, fixed
 // label regardless of stage — stage is communicated via the adjacent status
 // tag, not this button's text.
-function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
+function TripCard({ t, rename, busyId, onOpen, showRename = true, variant = 'committed' }) {
+  const isExplore = variant === 'explore';
   const badge = stageBadge(t);
   const destination = contextDestination(t);
   const recapPills = contextRecapPills(t);
   const timestamp = formatTripTimestamp(t);
   const statusLine = tripStatusLine(t);
   return (
-    <div className="trip-card">
+    <div className={`card ${isExplore ? 'explore-card' : 'trip-card'}`}>
       <div>
-        <RenameName t={t} rename={rename} showRename={showRename} label={decodeHtmlEntities(t.title)} />
-        {destination && <div className="trip-card-destination">{destination}</div>}
+        <RenameName t={t} rename={rename} showRename={showRename} label={displayTitle(t)} />
+        {!isExplore && destination && <div className="trip-card-destination">{destination}</div>}
         <div className="meta">
           <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
           {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
         </div>
         {statusLine && <p className="trip-card-status-line">{statusLine}</p>}
-        {recapPills.length > 0 && (
-          <div className="trip-card-recap">
-            {recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
-          </div>
-        )}
+        {recapPills.length > 0 && (isExplore
+          ? <p className="explore-card-recap-line">{recapPills.join(' · ')}</p>
+          : <div className="trip-card-recap">{recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}</div>)}
       </div>
       <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
-        Open trip →
+        {isExplore ? stageCta(t).label : 'Open trip →'}
       </button>
     </div>
   );
 }
 
 function ExploreRailCard({ t, rename, busyId, onOpen }) {
-  const cta = stageCta(t);
-  const badge = stageBadge(t);
-  const recapPills = contextRecapPills(t);
-  const statusLine = tripStatusLine(t);
-  return (
-    <div className="explore-card">
-      <RenameName t={t} rename={rename} label={displayTitle(t)} />
-      <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
-      {statusLine && <p className="explore-card-status-line">{statusLine}</p>}
-      {recapPills.length > 0 && (
-        <p className="explore-card-recap-line">{recapPills.join(' · ')}</p>
-      )}
-      <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
-        {cta.label}
-      </button>
-    </div>
-  );
+  return <TripCard t={t} variant="explore" rename={rename} busyId={busyId} onOpen={onOpen} />;
 }
 
 // Dashboard-as-home (TWM-163): the product's home surface once a traveler
@@ -194,14 +179,14 @@ export default function DashboardHome() {
     trackEvent('intent_selected', { intent: 'plan' });
     startNewTrip();
     setNewTripMenuOpen(false);
-    navigate(`/journey-entry?intent=${ENTRY_INTENTS.KNOWN_DESTINATION}`);
+    navigate(`${ROUTES.journeyEntry}?intent=${ENTRY_INTENTS.KNOWN_DESTINATION}`);
   }
 
   function handleDiscover() {
     trackEvent('intent_selected', { intent: 'discover' });
     startNewTrip();
     setNewTripMenuOpen(false);
-    navigate(`/journey-entry?intent=${ENTRY_INTENTS.DISCOVER}`);
+    navigate(`${ROUTES.journeyEntry}?intent=${ENTRY_INTENTS.DISCOVER}`);
   }
 
   // TWM-109: opening a trip that turned out to be gone (deleted, or a stale

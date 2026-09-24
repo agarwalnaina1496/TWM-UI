@@ -1,7 +1,7 @@
 import { decodeHtmlEntities } from '../lib/text.js';
 import { contextDestination } from '../lib/tripLifecycle.js';
+import { formatMoney } from '../lib/formatters.js';
 
-const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 
 // TWM-220: renders entirely from the composed `TripView.summary` — no raw
 // `finalItinerary.trip_summary` read. `summary.travelers` and
@@ -25,7 +25,7 @@ export default function TripHero({ view, actions = null }) {
   const dateLabel = prePlan ? 'Travel dates' : dates.precision === 'exact' ? 'Travel dates'
     : dates.precision === 'month' ? 'Travel month' : 'Trip dates';
   const durationValue = prePlan ? heroFactValue(view, 'trip_duration') : summary.duration_days;
-  const budgetValue = prePlan ? heroFactValue(view, 'budget') : `${money(budget.low)}–${money(budget.high)}`;
+  const budgetValue = prePlan ? heroFactValue(view, 'budget') : `${formatMoney(budget.low)}–${formatMoney(budget.high)}`;
   const destination = contextDestination(view);
 
   return (
