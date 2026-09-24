@@ -28,7 +28,7 @@ const generalReference = () => ({ status: 'GENERAL_GUIDANCE', source_title: null
 function enrichedItem(over) {
   return { estimated_cost_low: 0, estimated_cost_high: 0, movement_guidance: null, reference: generalReference(), booking_readiness: null, resolved_date: null, date_precision: 'none', date_source: 'none', is_gateway_leg: false, ...over };
 }
-function enrichedDoc({ trip_summary = {}, budget_summary = {}, days, staySegments, practical_notes = [], assumptions = [], before_you_go } = {}) {
+function enrichedDoc({ trip_summary = {}, budget_summary = {}, days, staySegments, practical_notes = [], assumptions = [] } = {}) {
   const d = days ?? [
     {
       day_number: 1, title: 'Arrival and ghats', primary_location: 'Rishikesh', summary: 'Settle in.',
@@ -112,8 +112,8 @@ function readyView(over = {}) {
     plan: over.plan,
   });
 }
-// A pre-frozen (thin-state) trip.
-function thinView(over = {}) {
+// A pre-plan trip before the itinerary is frozen.
+function prePlanView(over = {}) {
   return {
     id: 'trip-1', version: 1, title: 'T', product_mode: 'self_led', ui_state: {},
     lifecycle: { stage: over.stage ?? 'matching', status: 'free', active_agent: null, selected_option: null },
@@ -207,15 +207,24 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     global.fetch = makeFetch();
   });
 
+  it('does not crash while the trip view is still loading', () => {
+    tripLoadStatus = 'loading';
+    commandSnapshot = undefined;
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    expect(screen.getByRole('navigation', { name: 'Trip Dashboard tabs' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Trip overview' })).not.toBeInTheDocument();
+  });
+
   it('redirects home when the URL trip resolves to an empty trip', async () => {
-    commandSnapshot = thinView({ stage: 'new', context: {} });
+    commandSnapshot = prePlanView({ stage: 'new', context: {} });
     sendTripCommand = vi.fn();
     renderDashboard(['/dashboard?tripId=trip-1']);
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
   });
 
   it('does not redirect a trip reached with no URL tripId', () => {
-    commandSnapshot = thinView({ stage: 'new', context: {} });
+    commandSnapshot = prePlanView({ stage: 'new', context: {} });
     sendTripCommand = vi.fn();
     renderDashboard(['/dashboard']);
     expect(navigate).not.toHaveBeenCalledWith('/', { replace: true });
@@ -618,10 +627,10 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
-  // ---- thin-state Dashboard --------------------------------------
+  // ---- pre-plan Dashboard ----------------------------------------
 
   it('opens with only context populated and no itinerary — no crash', async () => {
-    commandSnapshot = thinView({ stage: 'matching', context: { origin_city: 'Delhi' } });
+    commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     await screen.findByText('Your trip so far');
@@ -629,8 +638,8 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
-  it('shows the tab bar in the thin state, Itinerary renders a placeholder, Support is always accessible', async () => {
-    commandSnapshot = thinView({ stage: 'matching' });
+  it('shows the tab bar in the pre-plan state, Itinerary renders its empty state, Support is always accessible', async () => {
+    commandSnapshot = prePlanView({ stage: 'matching' });
     sendTripCommand = vi.fn();
     renderDashboard();
     const tabs = await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
@@ -643,15 +652,15 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(screen.queryByText('Available once your itinerary is ready.')).not.toBeInTheDocument();
   });
 
-  it('shows a "Back to your trips" link in the thin state', async () => {
-    commandSnapshot = thinView({ stage: 'matching' });
+  it('shows a "Back to your trips" link in the pre-plan state', async () => {
+    commandSnapshot = prePlanView({ stage: 'matching' });
     sendTripCommand = vi.fn();
     renderDashboard();
     expect(await screen.findByRole('link', { name: '← Back to your trips' })).toHaveAttribute('href', '/');
   });
 
   it('shows budget as a row in "Your trip so far" when present', async () => {
-    commandSnapshot = thinView({ stage: 'matching', context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both' } });
+    commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');
@@ -660,7 +669,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
   });
 
   it('shows a bottom primary CTA pointing at discovery when Route is not done', async () => {
-    commandSnapshot = thinView({ stage: 'matching', context: { origin_city: 'Delhi' } });
+    commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     await screen.findByText('Your trip so far');
@@ -683,7 +692,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
   });
 
   it('a CTA click points currentTripId at the trip before navigating', async () => {
-    commandSnapshot = thinView({ stage: 'planning', context: { destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
+    commandSnapshot = prePlanView({ stage: 'planning', context: { destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const button = await screen.findByRole('button', { name: 'Continue chat →' });
@@ -692,7 +701,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
   });
 
   it('never attempts to boot Atlas before a plan is frozen', async () => {
-    commandSnapshot = thinView({ stage: 'planning', context: {}, plan: { places: [], day_plan: [], frozen: false, awaiting: null } });
+    commandSnapshot = prePlanView({ stage: 'planning', context: {}, plan: { places: [], day_plan: [], frozen: false, awaiting: null } });
     sendTripCommand = vi.fn();
     renderDashboard();
     await screen.findByText('Your trip so far');
@@ -700,7 +709,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
   });
 
   it('unknown-destination Discover path: Destination row shows "Continue chat"', async () => {
-    commandSnapshot = thinView({ stage: 'matching', context: { origin_city: 'Delhi' } });
+    commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');
@@ -709,7 +718,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
   });
 
   it('recommendations-ready: Destination row shows "Review recommendations"', async () => {
-    commandSnapshot = thinView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
+    commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');
@@ -718,7 +727,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
   });
 
   it('known-destination: Destination row shows the destination with no CTA', async () => {
-    commandSnapshot = thinView({ stage: 'planning', context: { origin_city: 'Delhi', destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
+    commandSnapshot = prePlanView({ stage: 'planning', context: { origin_city: 'Delhi', destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');

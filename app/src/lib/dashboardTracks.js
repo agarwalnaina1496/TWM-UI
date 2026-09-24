@@ -3,7 +3,7 @@
 // (lifecycle / context_recap / plan) — one shape now, no full-vs-thin
 // planner branch.
 
-import { RECOMMENDATIONS_READY_STAGES, contextDestination } from './tripLifecycle.js';
+import { contextDestination, stageCta } from './tripLifecycle.js';
 
 function plannerProgress(view) {
   const plan = view?.plan;
@@ -21,15 +21,8 @@ function plannerProgress(view) {
 function routeTrack(view) {
   const destination = contextDestination(view);
   if (destination) return { status: 'done', label: destination, cta: null };
-
-  const stage = view?.lifecycle?.stage ?? 'new';
-  if (RECOMMENDATIONS_READY_STAGES.has(stage)) {
-    return { status: 'progress', label: 'Recommendations ready', cta: { label: 'Review recommendations', to: '/destinations' } };
-  }
-  if (stage === 'matching' && view?.matcher?.has_recommendation) {
-    return { status: 'progress', label: 'Refining recommendations', cta: { label: 'Continue refining', to: '/destinations' } };
-  }
-  return { status: 'progress', label: 'Discovering your destination', cta: { label: 'Continue chat', to: '/scout-chat' } };
+  const cta = stageCta(view);
+  return { status: 'progress', label: cta.label, cta };
 }
 
 function dayPlanTrack(view) {
@@ -41,10 +34,10 @@ function dayPlanTrack(view) {
     if (progress.frozen) {
       return { status: 'done', label: `${progress.dayCount}-day plan approved`, cta: null };
     }
-    return { status: 'progress', label: 'Draft ready for review', cta: { label: 'Resume in Plan Builder', to: '/trip-preview' } };
+    return { status: 'progress', label: 'Draft ready for review', cta: stageCta(view) };
   }
   if (progress.known) {
-    return { status: 'progress', label: 'Guide is gathering trip details', cta: { label: 'Continue chat', to: '/scout-chat' } };
+    return { status: 'progress', label: 'Guide is gathering trip details', cta: stageCta(view) };
   }
   return { status: 'pending', label: 'Not started', cta: null };
 }

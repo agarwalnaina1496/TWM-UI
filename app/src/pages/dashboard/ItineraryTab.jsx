@@ -1,12 +1,18 @@
 import BudgetBar, { moneyRange } from '../../components/BudgetBar.jsx';
 import { BookingReadinessBadge, VerificationTag, VerifyChip } from '../../components/StatusPills.jsx';
 import { dayCostRange } from '../../lib/atlasView.js';
+import { ROUTES } from '../../constants/routes.js';
 
 const KIND_ICON = { TRAVEL: '🚗', STAY: '🏨', MEAL: '🍽️', FREE_TIME: '🕒' };
 
 export default function ItineraryTab({ days, staySegmentByItemId, activeDay, onSelectDay, onOpenStay, onOpenTransport }) {
   const selectedDay = days.find(day => day.day_number === activeDay) || days[0];
-  if (!selectedDay) return null;
+  if (!selectedDay) return (
+    <div className="dashboard-card tab-empty-state content-narrow">
+      <p>Your day-by-day plan will appear here once Guide finishes it.</p>
+      <a className="btn btn-primary" href={ROUTES.scoutChat}>Continue chat →</a>
+    </div>
+  );
 
   const selectedDayCost = dayCostRange(selectedDay);
   const allCosts = days.flatMap(day => { const range = dayCostRange(day); return [range.low, range.high]; });
