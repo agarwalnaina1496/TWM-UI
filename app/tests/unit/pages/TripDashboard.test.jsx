@@ -207,6 +207,15 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     global.fetch = makeFetch();
   });
 
+  it('does not crash while the trip view is still loading', () => {
+    tripLoadStatus = 'loading';
+    commandSnapshot = undefined;
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    expect(screen.getByRole('navigation', { name: 'Trip Dashboard tabs' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Trip overview' })).not.toBeInTheDocument();
+  });
+
   it('redirects home when the URL trip resolves to an empty trip', async () => {
     commandSnapshot = prePlanView({ stage: 'new', context: {} });
     sendTripCommand = vi.fn();
