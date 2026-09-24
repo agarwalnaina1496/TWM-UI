@@ -6,6 +6,7 @@ export default function FactsPanel({ contextRecap }) {
   if (facts.length === 0) return null;
   return (
     <div className="facts-panel" aria-label="What we know so far">
+      <h2 className="facts-panel-heading">What we know so far</h2>
       {facts.map(fact => (
         <span key={fact.key} className="facts-panel-item">{fact.label}: <strong>{fact.value}</strong></span>
       ))}

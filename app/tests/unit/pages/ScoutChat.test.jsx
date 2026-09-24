@@ -134,6 +134,7 @@ describe('ScoutChat refresh recap and hand-off note', () => {
     commandSnapshot = view({ context: { origin_city: 'Delhi', num_travelers: '2 people' } });
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     expect(screen.getByLabelText('What we know so far')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'What we know so far' })).toBeInTheDocument();
     expect(screen.getByText('Delhi')).toBeInTheDocument();
   });
 
