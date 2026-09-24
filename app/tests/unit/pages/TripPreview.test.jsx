@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -93,34 +93,14 @@ describe('TripPreview real Guide Plan Builder', () => {
     expect(screen.getByText('Triveni Ghat')).toBeInTheDocument();
   });
 
-  it('translates a place removal into a real traveler_message command', async () => {
+  it('dispatches remove_place (not traveler_message) when Remove is clicked', async () => {
     commandSnapshot = view(readyPlan());
-    sendTripCommand = vi.fn(async () => ({ message: 'Guide revised the plan.', agent_meta: null, trip: commandSnapshot }));
+    sendTripCommand = vi.fn(async () => ({ message: 'Removed.', agent_meta: null, trip: commandSnapshot }));
     const user = userEvent.setup();
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
     await user.click(screen.getByRole('button', { name: 'Remove Triveni Ghat' }));
-    expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', { message: 'Remove "Triveni Ghat" from the plan.' });
-  });
-
-  it('translates a place replacement into a real traveler_message command', async () => {
-    commandSnapshot = view(readyPlan());
-    sendTripCommand = vi.fn(async () => ({ message: 'Guide revised the plan.', agent_meta: null, trip: commandSnapshot }));
-    const user = userEvent.setup();
-    render(<MemoryRouter><TripPreview /></MemoryRouter>);
-    await user.click(screen.getByRole('button', { name: 'Replace Triveni Ghat' }));
-    await user.type(screen.getByRole('textbox', { name: 'Replace Triveni Ghat with' }), 'Ganga Aarti');
-    await user.click(screen.getByRole('button', { name: 'Confirm' }));
-    expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', { message: 'Replace "Triveni Ghat" with "Ganga Aarti".' });
-  });
-
-  it('translates a pace quick action into a real traveler_message command', async () => {
-    commandSnapshot = view(readyPlan());
-    sendTripCommand = vi.fn(async () => ({ message: 'Guide revised the plan.', agent_meta: null, trip: commandSnapshot }));
-    const user = userEvent.setup();
-    render(<MemoryRouter><TripPreview /></MemoryRouter>);
-    const day1Actions = screen.getByRole('group', { name: 'Adjust Day 1 pace' });
-    await user.click(within(day1Actions).getByRole('button', { name: 'Make packed' }));
-    expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', { message: 'Make Day 1 packed.' });
+    expect(sendTripCommand).toHaveBeenCalledWith('remove_place', { place_name: 'Triveni Ghat' });
+    expect(sendTripCommand).not.toHaveBeenCalledWith('traveler_message', expect.anything());
   });
 
   it('sends a chat drawer message as a real traveler_message command', async () => {
@@ -183,25 +163,6 @@ describe('TripPreview real Guide Plan Builder', () => {
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
     expect(sendTripCommand).toHaveBeenCalledWith('start_planning');
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.stringContaining('/scout-chat'), { replace: true }));
-  });
-
-  it('scopes the Replace-in-progress row to a single day', async () => {
-    commandSnapshot = view(readyPlan({
-      places: ['Lunch', 'Lunch'],
-      day_plan: [
-        { day_number: 1, places: ['Lunch'], pace: 'relaxed', buffer_note: null },
-        { day_number: 2, places: ['Lunch'], pace: 'balanced', buffer_note: null },
-      ],
-    }));
-    sendTripCommand = vi.fn();
-    const user = userEvent.setup();
-    render(<MemoryRouter><TripPreview /></MemoryRouter>);
-    const day1Row = screen.getByRole('group', { name: 'Adjust Day 1 pace' }).closest('.day-card');
-    await user.click(within(day1Row).getByRole('button', { name: 'Replace Lunch' }));
-    expect(within(day1Row).getByRole('textbox', { name: 'Replace Lunch with' })).toBeInTheDocument();
-    const day2Row = screen.getByRole('group', { name: 'Adjust Day 2 pace' }).closest('.day-card');
-    expect(within(day2Row).getByRole('button', { name: 'Replace Lunch' })).toBeInTheDocument();
-    expect(within(day2Row).queryByRole('textbox', { name: 'Replace Lunch with' })).not.toBeInTheDocument();
   });
 
   it('shows pace as a density meter and places as a numbered sequence', () => {

@@ -17,14 +17,3 @@ export function planBuilderSummary(view) {
   };
 }
 
-export function buildRemovePlaceMessage(place) {
-  return `Remove "${place}" from the plan.`;
-}
-
-export function buildReplacePlaceMessage(place, replacement) {
-  return `Replace "${place}" with "${replacement}".`;
-}
-
-export function buildSetPaceMessage(dayNumber, pace) {
-  return `Make Day ${dayNumber} ${pace}.`;
-}
