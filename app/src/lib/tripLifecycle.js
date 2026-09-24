@@ -31,6 +31,14 @@ export function contextDestination(trip) {
   return trip?.context_recap?.find(item => item.key === 'destinations')?.value || null;
 }
 
+export function contextOrigin(trip) {
+  return trip?.context_recap?.find(item => item.key === 'origin_city')?.value || null;
+}
+
+export function contextDuration(trip) {
+  return trip?.context_recap?.find(item => item.key === 'trip_duration')?.value || null;
+}
+
 // Bare display strings for the recap pill rows — the composer already
 // formatted each value; this only drops the destination (rendered
 // elsewhere) and prefixes the origin.
@@ -64,10 +72,10 @@ export function stageBadge(trip) {
 
 const STAGE_CTA = {
   new: { label: 'Start planning', to: '/' },
-  matching: { label: 'Resume matching', to: '/scout-chat' },
+  matching: { label: 'Continue chat', to: '/scout-chat' },
   recommended: { label: 'Review recommendations', to: '/destinations' },
   matched: { label: 'Review recommendations', to: '/destinations' },
-  planning: { label: 'Resume planning', to: '/scout-chat' },
+  planning: { label: 'Continue chat', to: '/scout-chat' },
   plan_ready: { label: 'Resume plan builder', to: '/trip-preview' },
   planned: { label: 'View trip', to: '/dashboard' },
   booked: { label: 'View trip', to: '/dashboard' },
@@ -88,7 +96,7 @@ export function stageCta(trip) {
   if ((stage === 'planning' || stage === 'plan_ready') && trip?.has_day_plan) {
     return { label: 'Resume plan builder', to: '/trip-preview' };
   }
-  if (stage === 'matching' && trip?.has_recommendation) {
+  if (stage === 'matching' && (trip?.has_recommendation || trip?.matcher?.has_recommendation)) {
     return { label: 'Continue refining', to: '/destinations' };
   }
   return STAGE_CTA[stage] || STAGE_CTA.new;
