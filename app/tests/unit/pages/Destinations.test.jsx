@@ -349,6 +349,25 @@ describe('Destinations (real Meridian integration)', () => {
     expect(screen.getByText('travel_dates: Dec–Jan')).toBeInTheDocument();
   });
 
+  it('shows a headline price range from group_total when items is empty (real Meridian shape)', async () => {
+    const withGroupTotal = successOutcome({
+      options: [{
+        rank: 1, type: 'circuit', name: 'Madhya Pradesh Heritage and Nature', circuit_id: 'gwalior-orchha-khajuraho-panna', summary: 'balance.',
+        evaluations: [
+          { criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Within budget.', details: [{ type: 'cost_breakdown', currency: 'INR', items: [], group_total: { minimum: 32000, maximum: 45000 } }] },
+          { criterion_id: 'pace', outcome: 'MATCH', conclusion: 'Relaxed.', details: [{ type: 'bullets', items: ['Easy.'] }] },
+        ],
+        other_considerations: [],
+      }],
+    });
+    const server = createServer({ recommendation: withGroupTotal });
+    fetchMock = createFetchMock(server);
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
+    renderDestinations();
+    await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+    expect(screen.getByText(/INR.*32,000/)).toBeInTheDocument();
+  });
+
   it('shows a practical access fact in the collapsed card when the option carries one', async () => {
     const withAccessFact = successOutcome({
       options: [{

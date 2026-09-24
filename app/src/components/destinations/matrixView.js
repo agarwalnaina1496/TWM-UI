@@ -18,20 +18,28 @@ const COST_ICON_RULES = [
 export const costIcon = label => (COST_ICON_RULES.find(([re]) => re.test(label)) || [null, '💳'])[1];
 
 // Returns a formatted price range string from the first cost_breakdown detail, or null.
+// Handles both shapes Meridian sends: summed items[] with group.min/max, and the more
+// common group_total / per_person_total totals (when items is empty).
 export function priceRange(option) {
   for (const ev of option.evaluations) {
     for (const detail of ev.details) {
       if (detail.type !== 'cost_breakdown') continue;
-      const items = detail.items ?? [];
-      if (!items.length) continue;
       const currency = detail.currency ?? '';
-      let min = 0, max = 0;
-      for (const item of items) {
-        if (item.group?.minimum) min += item.group.minimum;
-        if (item.group?.maximum) max += item.group.maximum;
+      const fmt = n => n.toLocaleString('en-IN');
+      const items = detail.items ?? [];
+      if (items.length) {
+        let min = 0, max = 0;
+        for (const item of items) {
+          if (item.group?.minimum) min += item.group.minimum;
+          if (item.group?.maximum) max += item.group.maximum;
+        }
+        if (max) return `${currency} ${fmt(min)}–${fmt(max)}`;
       }
-      if (!max) continue;
-      return `${currency} ${min.toLocaleString('en-IN')}–${max.toLocaleString('en-IN')}`;
+      // group_total / per_person_total shape (the common Meridian path)
+      const totals = detail.group_total ?? detail.per_person_total;
+      if (totals?.minimum != null && totals?.maximum != null) {
+        return `${currency} ${fmt(totals.minimum)}–${fmt(totals.maximum)}`;
+      }
     }
   }
   return null;
