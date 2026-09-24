@@ -167,11 +167,11 @@ export default function TripPreview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootStatus, planReady]);
 
-  async function removePlace(place) {
+  async function removePlace(place, dayNumber) {
     setPending(true);
     setMessage('');
     try {
-      const response = await sendTripCommand('remove_place', { place_name: place });
+      const response = await sendTripCommand('remove_place', { place_name: place, day_number: dayNumber });
       setMessage(response.message || '');
       trackEvent('plan_builder_edit', { edit_type: 'remove', planning_entry: planningEntry });
     } catch (error) {
@@ -346,7 +346,7 @@ export default function TripPreview() {
                       {place}
                     </span>
                     <span className="item-actions">
-                      <button type="button" disabled={pending} aria-label={`Remove ${place}`} onClick={() => removePlace(place)}>Remove</button>
+                      <button type="button" disabled={pending} aria-label={`Remove ${place}`} onClick={() => removePlace(place, dayEntry.day_number)}>Remove</button>
                     </span>
                   </li>
                 ))}

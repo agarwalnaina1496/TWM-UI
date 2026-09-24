@@ -99,7 +99,7 @@ describe('TripPreview real Guide Plan Builder', () => {
     const user = userEvent.setup();
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
     await user.click(screen.getByRole('button', { name: 'Remove Triveni Ghat' }));
-    expect(sendTripCommand).toHaveBeenCalledWith('remove_place', { place_name: 'Triveni Ghat' });
+    expect(sendTripCommand).toHaveBeenCalledWith('remove_place', { place_name: 'Triveni Ghat', day_number: 1 });
     expect(sendTripCommand).not.toHaveBeenCalledWith('traveler_message', expect.anything());
   });
 
