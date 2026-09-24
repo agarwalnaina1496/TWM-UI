@@ -629,15 +629,18 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
-  it('shows the tab bar in the thin state, non-Overview tabs rendering a placeholder', async () => {
+  it('shows the tab bar in the thin state, Itinerary renders a placeholder, Support is always accessible', async () => {
     commandSnapshot = thinView({ stage: 'matching' });
     sendTripCommand = vi.fn();
     renderDashboard();
     const tabs = await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
     expect(within(tabs).getByText('Overview')).toBeInTheDocument();
     const user = userEvent.setup();
+    await user.click(within(tabs).getByText('Itinerary'));
+    expect(screen.getByText('Your day-by-day plan will appear here once Guide finishes it.')).toBeInTheDocument();
     await user.click(within(tabs).getByText('Support'));
-    expect(screen.getByText('Available once your itinerary is ready.')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Frequently asked questions' })).toBeInTheDocument();
+    expect(screen.queryByText('Available once your itinerary is ready.')).not.toBeInTheDocument();
   });
 
   it('shows a "Back to your trips" link in the thin state', async () => {

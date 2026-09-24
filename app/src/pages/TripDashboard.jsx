@@ -5,12 +5,14 @@ import HonestTransition from '../components/ui/HonestTransition.jsx';
 import SupportContent from '../components/SupportContent.jsx';
 import BookingPromptOverlay from '../components/drawers/BookingPromptOverlay.jsx';
 import { DASHBOARD_TABS, DashboardBackLink, DashboardTabs } from './dashboard/chrome.jsx';
-import ThinStateDashboard from './dashboard/ThinStateDashboard.jsx';
 import OverviewTab from './dashboard/OverviewTab.jsx';
 import ItineraryTab from './dashboard/ItineraryTab.jsx';
 import BookingDrawers from './dashboard/BookingDrawers.jsx';
 import { useItineraryData } from '../hooks/useItineraryData.js';
 import { useBookingDrawers } from '../hooks/useBookingDrawers.js';
+import { useTrip } from '../context/TripContext.jsx';
+import { destinationFactRow, contextFactRows, dashboardPrimaryCta } from '../lib/dashboardTracks.js';
+import { withTripId } from '../lib/tripUrl.js';
 import { trackEvent } from '../lib/analytics.js';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import '../styles/dashboard.css';
@@ -26,6 +28,49 @@ function DashboardError({ title, message }) {
     </main>
   );
 }
+
+// Pre-freeze Overview: "your trip so far" recap + primary next-step CTA.
+function ThinStateOverview({ view, tripId }) {
+  const navigate = useNavigate();
+  const { setCurrentTripId } = useTrip();
+  const factRows = [...contextFactRows(view), destinationFactRow(view)];
+  const primaryCta = dashboardPrimaryCta(view);
+
+  function go(cta) {
+    setCurrentTripId(tripId);
+    navigate(withTripId(cta.to, tripId));
+  }
+
+  return (
+    <>
+      <div className="trip-facts content-narrow">
+        <h2 className="trip-facts-heading">Your trip so far</h2>
+        {factRows.map(row => (
+          <div className="trip-facts-row" key={row.label}>
+            <span className="trip-facts-label">{row.label}</span>
+            {row.cta ? (
+              <button type="button" className="btn btn-ghost" onClick={() => go(row.cta)}>{row.cta.label} →</button>
+            ) : (
+              <span className="trip-facts-value">{row.value}</span>
+            )}
+          </div>
+        ))}
+      </div>
+      {primaryCta && (
+        <div className="thin-state-primary-cta content-narrow">
+          <button type="button" className="btn btn-primary" onClick={() => go(primaryCta)}>{primaryCta.label} →</button>
+        </div>
+      )}
+    </>
+  );
+}
+
+const SUPPORT_SECTION = (
+  <section>
+    <div className="tab-intro"><div><h2>💬 Support</h2><p>Get help with your trip.</p></div></div>
+    <SupportContent intro="Questions about your trip, what's next, or how TravelWithMe works — the answers below cover the most common cases." />
+  </section>
+);
 
 export default function TripDashboard() {
   const navigate = useNavigate();
@@ -54,8 +99,22 @@ export default function TripDashboard() {
     );
   }
 
+  // Pre-freeze: unified shell — Overview shows trip-so-far recap, Itinerary
+  // shows a placeholder, Support is always accessible.
   if (tripLoadStatus === 'ready' && !frozenPlan) {
-    return <ThinStateDashboard view={view} tripId={tripId} />;
+    return (
+      <main className="wrap dashboard">
+        <DashboardBackLink />
+        <DashboardTabs tab={tab} setTab={setTab} />
+        {tab === 'Overview' && <ThinStateOverview view={view} tripId={tripId} />}
+        {tab === 'Itinerary' && (
+          <div className="dashboard-card thin-tab-placeholder content-narrow">
+            <p>Your day-by-day plan will appear here once Guide finishes it.</p>
+          </div>
+        )}
+        {tab === 'Support' && SUPPORT_SECTION}
+      </main>
+    );
   }
 
   if (bootStatus === 'error') {
