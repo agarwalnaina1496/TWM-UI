@@ -107,7 +107,7 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
   await expect(page.getByText('A few that fit well')).toBeVisible();
 
   // The exact persisted budget must survive verbatim, never a generic bucket.
-  await expect(page.getByText('₹1,00,000 total for both', { exact: true })).toBeVisible();
+  await expect(page.getByText('budget: ₹1,00,000 total for both', { exact: true })).toBeVisible();
 
   // TWM-173: options render as columns in a criteria x options comparison
   // matrix, not separate cards — the detail card below shows whichever
