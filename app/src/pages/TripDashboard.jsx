@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import TripHero from '../components/TripHero.jsx';
-import HonestTransition from '../components/ui/HonestTransition.jsx';
 import SupportContent from '../components/SupportContent.jsx';
 import BookingPromptOverlay from '../components/drawers/BookingPromptOverlay.jsx';
 import { DASHBOARD_TABS, DashboardBackLink, DashboardTabs } from './dashboard/chrome.jsx';
@@ -50,6 +49,18 @@ export default function TripDashboard() {
 
   const drawers = useBookingDrawers({ tripId, view, days, staySegments });
 
+  const building = bootStatus === 'booting' && !itineraryReady;
+
+  // Land the traveler on the tab that's actually building, once, the first
+  // time this state is seen — not on every render, and not overriding a
+  // manual tab switch (or an explicit ?tab= deep link) afterward.
+  const autoTabApplied = useRef(false);
+  useEffect(() => {
+    if (autoTabApplied.current || !building) return;
+    autoTabApplied.current = true;
+    if (!params.get('tab')) setTab('Itinerary');
+  }, [building, params]);
+
   function resolveBookingPrompt(destination) {
     trackEvent('booking_prompt_choice', { choice: destination });
     setShowBookingPrompt(false);
@@ -71,15 +82,6 @@ export default function TripDashboard() {
 
   if (itineraryStatus === 'error') {
     return <DashboardError title="Itinerary unavailable" message={itineraryFetchError} />;
-  }
-
-  if (bootStatus === 'booting' && !itineraryReady) {
-    return (
-      <main className="wrap dashboard">
-        <DashboardBackLink />
-        <HonestTransition steps={ARRIVAL_STEPS} label="Building your itinerary" stepDurationMs={ARRIVAL_STEP_DURATION_MS} />
-      </main>
-    );
   }
 
   // Single shell: tab content branches per tab, stage-aware internally.
@@ -116,6 +118,9 @@ export default function TripDashboard() {
           onSelectDay={setActiveDay}
           onOpenStay={drawers.openStayDrawer}
           onOpenTransport={drawers.openTransportDrawer}
+          building={building}
+          buildingSteps={ARRIVAL_STEPS}
+          buildingStepDurationMs={ARRIVAL_STEP_DURATION_MS}
         />
       )}
 

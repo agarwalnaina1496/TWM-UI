@@ -580,6 +580,23 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(await screen.findByRole('status', { name: 'Building your itinerary' })).toBeInTheDocument();
   });
 
+  it('keeps the dashboard shell mounted (hero, tab bar) through the build transition, auto-landing on Itinerary', async () => {
+    commandSnapshot = frozenView({ context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn(() => new Promise(() => {}));
+    renderDashboard();
+    expect(await screen.findByRole('status', { name: 'Building your itinerary' })).toBeInTheDocument();
+    // Shell stays up — no page-level swap.
+    expect(screen.getByRole('link', { name: '← Back to your trips' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Trip Dashboard tabs' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Rishikesh Getaway/ })).toBeInTheDocument();
+    // Landed on Itinerary automatically, not the default Overview tab.
+    expect(screen.getByRole('button', { name: /Itinerary/ })).toHaveAttribute('aria-current', 'page');
+    // Switching away and manually back is still possible — the auto-switch doesn't re-fire.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Overview/ }));
+    expect(await screen.findByText('Your trip so far')).toBeInTheDocument();
+  });
+
   it('honors the 20s-per-step cadence', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     commandSnapshot = frozenView();
