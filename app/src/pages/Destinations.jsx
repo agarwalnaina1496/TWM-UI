@@ -9,6 +9,7 @@ import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
 import { isFixedFieldGap } from '../lib/planChat.js';
 import { planReady } from '../hooks/useGuidePlanning.js';
 import BackToTrip from '../components/BackToTrip.jsx';
+import ScreenHeader from '../components/ui/ScreenHeader.jsx';
 import Layout from '../components/Layout.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
 import ComparisonMatrix from '../components/destinations/ComparisonMatrix.jsx';
@@ -311,6 +312,8 @@ export default function Destinations() {
       trackEvent('refinement_drawer_used', {});
       const response = await sendTripCommand('traveler_message', { message: value });
       applyCommandRound(response.recommendation);
+      setFocusedKey(null);
+      setEvidenceOpen(false);
       setRefinementOpen(false);
     } catch (commandError) {
       setPlanError(commandError.message || 'Something went wrong.');
@@ -365,9 +368,11 @@ export default function Destinations() {
         />
       )}
       <BackToTrip />
-      <span className="eyebrow">Destination matcher</span>
-      <h1>Let's find <em>your</em> place</h1>
-      <p className="lede">Matching against what you just told me — ranked by how well each fits.</p>
+      <ScreenHeader
+        eyebrow="Destination matcher"
+        title={<>Let's find <em>your</em> place</>}
+        lede="Matching against what you just told me — ranked by how well each fits."
+      />
       {pills.length > 0 && <div className="trip-recap">{pills.map(p => <span key={p} className="recap-pill">{p}</span>)}</div>}
 
       {showTripLoadError && (
@@ -456,13 +461,12 @@ export default function Destinations() {
               moreLikeThisBusy={moreLikeThisId === focusedOption.key}
               beenBefore={beenBefore[focusedOption.key] ?? null}
               onToggleBeenBefore={id => setBeenBefore(previous => ({ ...previous, [focusedOption.key]: previous[focusedOption.key] === id ? null : id }))}
-              travelers={view?.context_recap?.find(r => r.key === 'num_travelers')?.value}
             />
           )}
         </div>
       )}
 
-      {!showTripLoadError && !thinking && (
+      {!showTripLoadError && !thinking && outcome?.kind === 'options' && outcome.data && (
         <RefinementDrawer
           open={refinementOpen}
           onToggle={() => setRefinementOpen(open => !open)}

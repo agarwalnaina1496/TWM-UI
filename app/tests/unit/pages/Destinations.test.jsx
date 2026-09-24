@@ -190,8 +190,8 @@ describe('Destinations (real Meridian integration)', () => {
 
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
     expect(screen.getByText('From Delhi')).toBeInTheDocument();
-    expect(screen.getByText('₹1,00,000 total for both')).toBeInTheDocument();
-    expect(screen.getAllByText('2 travelers')[0]).toBeInTheDocument();
+    expect(screen.getByText('budget: ₹1,00,000 total for both')).toBeInTheDocument();
+    expect(screen.getAllByText('num_travelers: 2 travelers')[0]).toBeInTheDocument();
   });
 
   it('renders SOFT_FAIL results with a visible trade-off', async () => {
@@ -344,7 +344,7 @@ describe('Destinations (real Meridian integration)', () => {
     global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
-    expect(screen.getByText('Dec–Jan')).toBeInTheDocument();
+    expect(screen.getByText('travel_dates: Dec–Jan')).toBeInTheDocument();
   });
 
   it('shows a practical access fact in the collapsed card when the option carries one', async () => {
@@ -531,22 +531,17 @@ describe('Destinations (real Meridian integration)', () => {
     expect(JSON.parse(cmd[1].body).refinement).toEqual({ type: 'MORE_LIKE_THIS', reference: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna' }, instructions: 'cheaper, closer' });
   });
 
-  it('the general refinement drawer is functional pre-results', async () => {
+  it('the refinement drawer does not appear before options are ready', async () => {
     const server = createServer({
       recommendation: null,
       view: view({ stage: 'matching', matcher: { last_message: 'What is your budget?', awaiting: 'budget' } }),
     });
-    server.queueCommand({ message: null });
     fetchMock = createFetchMock(server);
     global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
     await waitFor(() => expect(screen.getByText('What is your budget?')).toBeInTheDocument());
-    fireEvent.click(screen.getByText(/Not quite right\? Tell us more/));
-    fireEvent.change(screen.getByLabelText('Tell us more'), { target: { value: 'Avoid overnight trains.' } });
-    fireEvent.click(within(document.querySelector('.refinement-body')).getByText('Send'));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({ body: expect.stringContaining('"command":"traveler_message"') })));
+    expect(screen.queryByText(/Not quite right\? Tell us more/)).not.toBeInTheDocument();
   });
 
   it('terminal-failure chips pre-fill the suggestion without auto-sending', async () => {

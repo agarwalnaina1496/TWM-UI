@@ -9,6 +9,8 @@ import { isTripEmpty } from '../lib/tripLifecycle.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import HonestTransition from '../components/ui/HonestTransition.jsx';
 import PaceMeter from '../components/ui/PaceMeter.jsx';
+import ScreenHeader from '../components/ui/ScreenHeader.jsx';
+import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import { withTripId } from '../lib/tripUrl.js';
 import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
 import '../styles/preview.css';
@@ -269,10 +271,7 @@ export default function TripPreview() {
     return (
       <main className="wrap plan-builder">
         <BackToTrip />
-        <div className="price-evidence state-unsafe" role="alert">
-          <strong>Planning could not start</strong>
-          <span>{bootError}</span>
-        </div>
+        <ErrorBanner message={<><strong>Planning could not start</strong><span>{bootError}</span></>} />
       </main>
     );
   }
@@ -295,9 +294,11 @@ export default function TripPreview() {
   return (
     <main className="wrap plan-builder">
       <BackToTrip />
-      <span className="eyebrow">Guide Plan Builder</span>
-      <h1>{summary.destinationLabel || 'Your trip'} <em>| {summary.durationDays} days</em></h1>
-      <p className="lede">Shape the places and day pace together. Dates can stay open until you book.</p>
+      <ScreenHeader
+        eyebrow="Guide Plan Builder"
+        title={<>{summary.destinationLabel || 'Your trip'} <em>| {summary.durationDays} days</em></>}
+        lede="Shape the places and day pace together. Dates can stay open until you book."
+      />
 
       <section className="plan-summary" aria-label="Plan summary">
         <div><strong>{summary.destinationCount}</strong><span>destinations</span></div>
@@ -306,7 +307,7 @@ export default function TripPreview() {
       </section>
 
       {message && <div className="revision-message" role="status">{message}</div>}
-      {reversalError && <div className="price-evidence state-unsafe" role="alert">{reversalError}</div>}
+      {reversalError && <ErrorBanner message={reversalError} />}
       {reopenChoicePending && (
         <div className="reversal-choice" role="group" aria-label="Choose how to reopen destination discovery">
           <button type="button" className="btn btn-ghost" disabled={pending || reversing} onClick={() => resolveReopenChoice('reopen_destination_revisit')}>

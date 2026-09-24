@@ -145,9 +145,15 @@ describe('relativeUpdatedAt', () => {
 });
 
 describe('context recap formatters', () => {
-  it('contextRecapPills prefixes origin and drops the destination', () => {
+  it('contextRecapPills prefixes origin, labels other fields, and drops destination', () => {
+    // recap() uses key as label in tests, so non-origin items render as "key: value"
     const t = trip({ context: { origin_city: 'Bengaluru', budget: 'INR 50000', destinations: 'Goa' } });
-    expect(contextRecapPills(t)).toEqual(['From Bengaluru', 'INR 50000']);
+    expect(contextRecapPills(t)).toEqual(['From Bengaluru', 'budget: INR 50000']);
+  });
+
+  it('contextRecapPills labels unit-less numeric fields (trip_duration, num_travelers)', () => {
+    const t = trip({ context: { trip_duration: '5', num_travelers: '2' } });
+    expect(contextRecapPills(t)).toEqual(['trip_duration: 5', 'num_travelers: 2']);
   });
 
   it('contextDestination reads the destinations recap item', () => {
