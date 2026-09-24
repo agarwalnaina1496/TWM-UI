@@ -37,7 +37,10 @@ export function contextDestination(trip) {
 export function contextRecapPills(trip) {
   return (trip?.context_recap || [])
     .filter(item => item.key !== 'destinations')
-    .map(item => (item.key === 'origin_city' ? `From ${item.value}` : item.value));
+    .map(item => {
+      if (item.key === 'origin_city') return `From ${item.value}`;
+      return `${item.label}: ${item.value}`;
+    });
 }
 
 const STAGE_BADGES = {

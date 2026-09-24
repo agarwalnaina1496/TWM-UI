@@ -11,6 +11,8 @@ import { buildPlanRecapTurn } from '../lib/planChat.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import FactsPanel from '../components/FactsPanel.jsx';
+import ScreenHeader from '../components/ui/ScreenHeader.jsx';
+import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import { withTripId } from '../lib/tripUrl.js';
 import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
 import '../styles/chat.css';
@@ -211,29 +213,19 @@ export default function ScoutChat() {
     <div className="chat-page chat-screen">
       {!isDiscoverEntry && !isKnownDestinationEntry && <BackToTrip />}
       <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
-      {isKnownDestinationEntry ? (
-        <>
-          <span className="eyebrow">Trip setup</span>
-          <h1>Start with <em>your destination</em></h1>
-        </>
-      ) : isDiscoverEntry ? (
-        <>
-          <span className="eyebrow">✦ Scout</span>
-          <h1>Let's find <em>your destination</em></h1>
-        </>
-      ) : (
-        <>
-          <span className="eyebrow">✦ Scout</span>
-          <h1>Tell Scout <em>in your own words</em></h1>
-        </>
-      )}
-      <p className="lede">
-        {isKnownDestinationEntry
+      <ScreenHeader
+        eyebrow={isKnownDestinationEntry ? 'Trip setup' : '✦ Scout'}
+        title={isKnownDestinationEntry
+          ? <>Start with <em>your destination</em></>
+          : isDiscoverEntry
+            ? <>Let's find <em>your destination</em></>
+            : <>Tell Scout <em>in your own words</em></>}
+        lede={isKnownDestinationEntry
           ? "Tell us where you are going. We'll take you straight to planning — no matching needed."
           : isDiscoverEntry
             ? "Tell Scout what matters to you, and it'll narrow down destinations that fit."
             : 'Scout keeps the nuance in what you say, asks only for material gaps, and hands the trip to the right specialist.'}
-      </p>
+      />
       <FactsPanel contextRecap={commandSnapshot?.context_recap} />
 
       <div className="chat-log" aria-live="polite">
@@ -252,7 +244,7 @@ export default function ScoutChat() {
             {quickReplies.map(reply => <button type="button" className="chip" key={reply} onClick={() => runAdvice(reply)}>{reply}</button>)}
           </div>
         )}
-        {error && <div className="price-evidence state-unsafe" role="alert">{error} <button type="button" className="btn btn-ghost" onClick={() => runAdvice(lastCommand.current?.message ?? '', { showUser: false })}>Try again</button></div>}
+        {error && <ErrorBanner message={error} actionLabel="Try again" onAction={() => runAdvice(lastCommand.current?.message ?? '', { showUser: false })} />}
         {((activeAgent === 'meridian' && !awaiting) || stage === 'recommended') && (
           <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>See destinations →</button>
         )}

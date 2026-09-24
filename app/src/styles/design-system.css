@@ -18,7 +18,7 @@
 .status-pill-outline.status-pill-neutral{color:var(--tone-neutral);}
 
 .back-to-trip{
-  display:inline-flex;align-items:center;gap:5px;
+  display:flex;align-items:center;gap:5px;
   font-size:var(--fs-body-sm);font-weight:600;color:var(--ts);
   text-decoration:none;margin:16px 0 4px;
 }

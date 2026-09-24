@@ -38,7 +38,8 @@
 
 .explore-rail-row{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;}
 .explore-card{flex:0 0 220px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);padding:14px 16px;}
-.explore-card .name{font-family:var(--font-display);font-size:14px;font-weight:600;margin-bottom:6px;}
+.explore-card .name{font-family:var(--font-display);font-size:15px;font-weight:600;display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;}
+.explore-card-recap-line{font-size:11.5px;color:var(--tm);margin:6px 0 0;}
 .explore-card .status-pill{margin-bottom:8px;}
 .explore-card-status-line{font-size:12px;color:var(--tm);margin:0 0 10px;}
 .explore-card .btn{margin-top:10px;width:100%;}

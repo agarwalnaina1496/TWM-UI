@@ -12,7 +12,7 @@ import {
 export default function OptionDetailCard({
   option, criteria, isSelected, evidenceOpen, onToggleEvidence, onPlan, planning,
   moreLikeThisQualifier, onQualifierChange, onMoreLikeThis, moreLikeThisBusy,
-  beenBefore, onToggleBeenBefore, travelers,
+  beenBefore, onToggleBeenBefore,
 }) {
   const access = accessFact(option);
   return (
@@ -22,7 +22,7 @@ export default function OptionDetailCard({
       <div className="dest-tag">{optionLabel(option)} · Rank #{option.rank}</div>
       <p className="dest-summary">{option.summary}</p>
       {access && <div className="decision-facts"><span>{access.value}</span></div>}
-      <div className="rollup-summary">{rollupSummary(option.evaluations)}{travelers ? ` for ${travelers}` : ''}</div>
+      <div className="rollup-summary">{rollupSummary(option.evaluations)}</div>
 
       <button type="button" className="reason-toggle" onClick={onToggleEvidence}>
         See why this fits <span>{evidenceOpen ? '▴' : '▾'}</span>

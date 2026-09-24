@@ -12,6 +12,7 @@ import BookingDrawers from './dashboard/BookingDrawers.jsx';
 import { useItineraryData } from '../hooks/useItineraryData.js';
 import { useBookingDrawers } from '../hooks/useBookingDrawers.js';
 import { trackEvent } from '../lib/analytics.js';
+import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import '../styles/dashboard.css';
 
 const ARRIVAL_STEPS = ['Reviewing your approved plan', 'Building your day-by-day itinerary', 'Checking practical details'];
@@ -21,10 +22,7 @@ function DashboardError({ title, message }) {
   return (
     <main className="wrap dashboard">
       <DashboardBackLink />
-      <div className="price-evidence state-unsafe" role="alert">
-        <strong>{title}</strong>
-        <span>{message}</span>
-      </div>
+      <ErrorBanner message={<><strong>{title}</strong><span>{message}</span></>} />
     </main>
   );
 }
@@ -50,10 +48,7 @@ export default function TripDashboard() {
   if (tripLoadStatus === 'ready' && !view) {
     return (
       <main className="wrap dashboard">
-        <div className="price-evidence state-unsafe" role="alert">
-          <strong>Trip unavailable</strong>
-          <span>This trip is no longer available.</span>
-        </div>
+        <ErrorBanner message={<><strong>Trip unavailable</strong><span>This trip is no longer available.</span></>} />
         <button type="button" className="btn btn-primary" onClick={() => navigate('/')}>Back to your trips</button>
       </main>
     );

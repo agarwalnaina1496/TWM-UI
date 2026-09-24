@@ -60,7 +60,7 @@ header{background:rgba(245,242,236,0.94);backdrop-filter:blur(8px);}
 .footer-bottom{margin-top:32px;padding-top:16px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--tm);}
 h1{font-family:'Fraunces',serif;font-size:28px;font-weight:600;margin:8px 0 6px;letter-spacing:-0.01em;}
 h1 em{font-style:italic;color:var(--accent);font-weight:500;}
-.lede{font-size:13.5px;color:var(--ts);line-height:1.55;margin:0 0 18px;max-width:52ch;}
+.lede{font-size:13.5px;color:var(--ts);line-height:1.55;margin:0 0 18px;max-width:52ch;text-wrap:pretty;}
 
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:14px;}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:'Inter',sans-serif;font-weight:700;font-size:13px;border-radius:10px;padding:12px 18px;cursor:pointer;border:none;text-decoration:none;transition:transform .15s ease, background .15s ease;}

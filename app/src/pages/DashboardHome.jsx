@@ -11,12 +11,25 @@ import {
   isTripEmpty, isCompletedTrip, stageBadge, stageCta, contextRecapPills, contextDestination,
   tripStatusLine, relativeUpdatedAt,
 } from '../lib/tripLifecycle.js';
+import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import { isDiscoverOnly, selectHeroTrip } from '../lib/tripHero.js';
 import { withTripId } from '../lib/tripUrl.js';
 import { decodeHtmlEntities } from '../lib/text.js';
 import '../styles/dashboard-home.css';
 
 const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution', 'b-matched': 'caution', 'b-done': 'positive' };
+
+function displayTitle(t) {
+  if (t.title) return decodeHtmlEntities(t.title);
+  const destination = contextDestination(t);
+  if (destination) return destination;
+  const origin = t.context_recap?.find(r => r.key === 'origin_city')?.value;
+  const duration = t.context_recap?.find(r => r.key === 'trip_duration')?.value;
+  if (origin && duration) return `${origin} · ${duration} days`;
+  if (origin) return `Trip from ${origin}`;
+  if (duration) return `${duration}-day trip`;
+  return null;
+}
 
 // updated_at is set on every mutation, but a never-touched-since-creation
 // trip can still have it null — fall back to created_at rather than show nothing.
@@ -101,13 +114,11 @@ function ExploreRailCard({ t, rename, busyId, onOpen }) {
   const statusLine = tripStatusLine(t);
   return (
     <div className="explore-card">
-      <RenameName t={t} rename={rename} label={t.title} />
+      <RenameName t={t} rename={rename} label={displayTitle(t)} />
       <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
       {statusLine && <p className="explore-card-status-line">{statusLine}</p>}
       {recapPills.length > 0 && (
-        <div className="trip-card-recap">
-          {recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
-        </div>
+        <p className="explore-card-recap-line">{recapPills.join(' · ')}</p>
       )}
       <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
         {cta.label}
@@ -271,7 +282,7 @@ export default function DashboardHome() {
         guestNote="Your current trip stays available on this device either way."
       />
 
-      {notice && <div className="price-evidence state-unsafe" role="alert">{notice}</div>}
+      {notice && <ErrorBanner message={notice} />}
 
       {stillLoading ? (
         <div className="empty-trips" aria-busy="true">
