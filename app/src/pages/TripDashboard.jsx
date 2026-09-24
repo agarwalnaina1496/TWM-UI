@@ -65,12 +65,43 @@ function ThinStateOverview({ view, tripId }) {
   );
 }
 
-const SUPPORT_SECTION = (
-  <section>
-    <div className="tab-intro"><div><h2>💬 Support</h2><p>Get help with your trip.</p></div></div>
-    <SupportContent intro="Questions about your trip, what's next, or how TravelWithMe works — the answers below cover the most common cases." />
-  </section>
-);
+function OverviewContent({ view, tripId, frozenPlan, itineraryReady }) {
+  if (!frozenPlan) return <ThinStateOverview view={view} tripId={tripId} />;
+  if (!itineraryReady || !view.summary) return null;
+  return <OverviewTab view={view} />;
+}
+
+function ItineraryContent({ frozenPlan, itineraryReady, days, staySegmentByItemId, activeDay, onSelectDay, onOpenStay, onOpenTransport }) {
+  if (!frozenPlan || !itineraryReady) {
+    return (
+      <div className="dashboard-card thin-tab-placeholder content-narrow">
+        <p>Your day-by-day plan will appear here once Guide finishes it.</p>
+      </div>
+    );
+  }
+  return (
+    <ItineraryTab
+      days={days}
+      staySegmentByItemId={staySegmentByItemId}
+      activeDay={activeDay}
+      onSelectDay={onSelectDay}
+      onOpenStay={onOpenStay}
+      onOpenTransport={onOpenTransport}
+    />
+  );
+}
+
+function SupportTab({ itineraryReady }) {
+  const intro = itineraryReady
+    ? 'Swapping something, adjusting dates, or anything unclear about the plan you\'ve already received — the answers below cover the most common cases.'
+    : 'Questions about your trip, what\'s next, or how TravelWithMe works — the answers below cover the most common cases.';
+  return (
+    <section>
+      <div className="tab-intro"><div><h2>💬 Support</h2><p>Get help with your trip.</p></div></div>
+      <SupportContent intro={intro} />
+    </section>
+  );
+}
 
 export default function TripDashboard() {
   const navigate = useNavigate();
@@ -99,24 +130,6 @@ export default function TripDashboard() {
     );
   }
 
-  // Pre-freeze: unified shell — Overview shows trip-so-far recap, Itinerary
-  // shows a placeholder, Support is always accessible.
-  if (tripLoadStatus === 'ready' && !frozenPlan) {
-    return (
-      <main className="wrap dashboard">
-        <DashboardBackLink />
-        <DashboardTabs tab={tab} setTab={setTab} />
-        {tab === 'Overview' && <ThinStateOverview view={view} tripId={tripId} />}
-        {tab === 'Itinerary' && (
-          <div className="dashboard-card thin-tab-placeholder content-narrow">
-            <p>Your day-by-day plan will appear here once Guide finishes it.</p>
-          </div>
-        )}
-        {tab === 'Support' && SUPPORT_SECTION}
-      </main>
-    );
-  }
-
   if (bootStatus === 'error') {
     return <DashboardError title="Itinerary unavailable" message={bootError} />;
   }
@@ -134,15 +147,8 @@ export default function TripDashboard() {
     );
   }
 
-  if (!itineraryReady || !view.summary) {
-    return (
-      <main className="wrap dashboard">
-        <DashboardBackLink />
-        <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Loading your trip…</div>
-      </main>
-    );
-  }
-
+  // Single shell: tab content branches per tab, stage-aware internally.
+  // The tab bar and Support are always present once a view exists.
   return (
     <main className="wrap dashboard">
       <DashboardBackLink />
@@ -152,19 +158,25 @@ export default function TripDashboard() {
           onLookAround={() => resolveBookingPrompt('overview')}
         />
       )}
-      <TripHero
-        summary={view.summary}
-        actions={<>
-          <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
-        </>}
-      />
+      {frozenPlan && itineraryReady && view.summary && (
+        <TripHero
+          summary={view.summary}
+          actions={<>
+            <button className="btn btn-ghost" type="button" onClick={() => alert('PDF generation is not available yet.')}>📄 PDF</button>
+          </>}
+        />
+      )}
 
       <DashboardTabs tab={tab} setTab={setTab} />
 
-      {tab === 'Overview' && <OverviewTab view={view} />}
+      {tab === 'Overview' && (
+        <OverviewContent view={view} tripId={tripId} frozenPlan={frozenPlan} itineraryReady={itineraryReady} />
+      )}
 
       {tab === 'Itinerary' && (
-        <ItineraryTab
+        <ItineraryContent
+          frozenPlan={frozenPlan}
+          itineraryReady={itineraryReady}
           days={days}
           staySegmentByItemId={staySegmentByItemId}
           activeDay={activeDay}
@@ -176,10 +188,7 @@ export default function TripDashboard() {
 
       <BookingDrawers drawers={drawers} />
 
-      {tab === 'Support' && <section>
-        <div className="tab-intro"><div><h2>💬 Support</h2><p>Get help with this specific itinerary.</p></div></div>
-        <SupportContent intro="Swapping something, adjusting dates, or anything unclear about the plan you've already received — the answers below cover the most common cases." />
-      </section>}
+      {tab === 'Support' && <SupportTab itineraryReady={itineraryReady} />}
     </main>
   );
 }
