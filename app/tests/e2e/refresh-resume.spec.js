@@ -35,7 +35,7 @@ test('Plan Builder edit survives refresh via the real Guide trip-command state',
 
   await mockTripCommandFlow(
     page,
-    [{ command: 'remove_place', body: { place_name: 'Gwalior Fort', day_number: 1 }, response: commandResponse('Removed "Gwalior Fort" from the plan.', afterRemoval) }],
+    [{ command: 'remove_place', body: { place_name: 'Gwalior Fort', day_number: 1 }, response: commandResponse('Removed from the plan.', afterRemoval) }],
     { initialTrip },
   );
 

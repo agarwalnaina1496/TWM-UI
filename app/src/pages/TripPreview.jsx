@@ -171,7 +171,7 @@ export default function TripPreview() {
     setPending(true);
     setMessage('');
     try {
-      const response = await sendTripCommand('remove_place', { place_name: place, day_number: dayNumber });
+      const response = await sendTripCommand('remove_place', { placeName: place, dayNumber });
       setMessage(response.message || '');
       trackEvent('plan_builder_edit', { edit_type: 'remove', planning_entry: planningEntry });
     } catch (error) {
