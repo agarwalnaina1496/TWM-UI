@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import {
-  buildRemovePlaceMessage, buildReplacePlaceMessage, buildSetPaceMessage, planBuilderSummary,
-} from '../lib/guidePlanAdapter.js';
+import { planBuilderSummary } from '../lib/guidePlanAdapter.js';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
 import BackToTrip from '../components/BackToTrip.jsx';
@@ -15,7 +13,6 @@ import { withTripId } from '../lib/tripUrl.js';
 import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
 import '../styles/preview.css';
 
-const PACE_OPTIONS = ['relaxed', 'balanced', 'packed'];
 const REOPEN_DESTINATION_MESSAGE = 'I want to change my destination and explore other options.';
 const REOPEN_STEPS = ['Stepping back from your current plan', 'Bringing in Meridian, who handles destination matching', 'Finding fresh options'];
 
@@ -85,8 +82,6 @@ export default function TripPreview() {
   const [message, setMessage] = useState(location.state?.guideMessage || '');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [freeText, setFreeText] = useState('');
-  const [replacingPlace, setReplacingPlace] = useState(null);
-  const [replacement, setReplacement] = useState('');
   const [reversing, setReversing] = useState(false);
   const [reversalError, setReversalError] = useState(null);
   // TWM-188 item 3: set once the reopen request comes back asking the
@@ -172,16 +167,28 @@ export default function TripPreview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootStatus, planReady]);
 
-  async function sendEdit(text, editType) {
+  async function removePlace(place, dayNumber) {
+    setPending(true);
+    setMessage('');
+    try {
+      const response = await sendTripCommand('remove_place', { placeName: place, dayNumber });
+      setMessage(response.message || '');
+      trackEvent('plan_builder_edit', { edit_type: 'remove', planning_entry: planningEntry });
+    } catch (error) {
+      setMessage(error.message || 'That change could not be applied. The plan shown is now the latest saved version.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function sendChat(text) {
     setPending(true);
     setMessage('');
     try {
       const response = await sendTripCommand('traveler_message', { message: text });
       setMessage(response.message || '');
-      if (editType) trackEvent('plan_builder_edit', { edit_type: editType, planning_entry: planningEntry });
+      trackEvent('plan_builder_edit', { edit_type: 'chat', planning_entry: planningEntry });
     } catch (error) {
-      // A 409 already refreshed commandSnapshot with the authoritative state;
-      // surface that instead of the traveler's stale local intent.
       setMessage(error.message || 'That change could not be applied. The plan shown is now the latest saved version.');
     } finally {
       setPending(false);
@@ -319,71 +326,33 @@ export default function TripPreview() {
         </div>
       )}
 
-      <section aria-label="Day plan">
-        {dayPlan.map(dayEntry => (
-          <article className="day-card" key={dayEntry.day_number}>
-            <header className="day-card-head">
-              <div className="day-card-title"><span className="daynum">{dayEntry.day_number}</span><div><h2>Day {dayEntry.day_number}</h2><PaceMeter pace={dayEntry.pace} /></div></div>
-              <div className="pace-actions" role="group" aria-label={`Adjust Day ${dayEntry.day_number} pace`}>
-                {PACE_OPTIONS.filter(pace => pace !== dayEntry.pace).map(pace => (
-                  <button
-                    type="button"
-                    key={pace}
-                    className="chip"
-                    disabled={pending}
-                    onClick={() => sendEdit(buildSetPaceMessage(dayEntry.day_number, pace), 'pace_adjust')}
-                  >Make {pace}</button>
-                ))}
-              </div>
-            </header>
-            {dayEntry.buffer_note && <p className="buffer-note">{dayEntry.buffer_note}</p>}
-            <ol className="plan-list">
-              {dayEntry.places.map((place, placeIndex) => {
-                const rowKey = `${dayEntry.day_number}-${place}`;
-                return (
-                <li className="item-row" key={rowKey}>
-                  {replacingPlace === rowKey ? (
-                    <span className="replace-row">
+      <section className={`day-timeline${pending ? ' plan-busy' : ''}`} aria-label="Day plan" aria-busy={pending}>
+        {dayPlan.map((dayEntry, dayIndex) => (
+          <div className="timeline-day" key={dayEntry.day_number}>
+            {dayIndex > 0 && <div className="timeline-connector" aria-hidden="true" />}
+            <article className="day-card">
+              <header className="day-card-head">
+                <div className="day-card-title">
+                  <span className="daynum">{dayEntry.day_number}</span>
+                  <div><h2>Day {dayEntry.day_number}</h2><PaceMeter pace={dayEntry.pace} /></div>
+                </div>
+              </header>
+              {dayEntry.buffer_note && <p className="buffer-note">{dayEntry.buffer_note}</p>}
+              <ol className="plan-list">
+                {dayEntry.places.map((place, placeIndex) => (
+                  <li className="item-row" key={`${dayEntry.day_number}-${place}`}>
+                    <span className="place-name">
                       <span className="place-number" aria-hidden="true">{placeIndex + 1}</span>
-                      <input
-                        aria-label={`Replace ${place} with`}
-                        value={replacement}
-                        disabled={pending}
-                        placeholder="Replacement place"
-                        onChange={event => setReplacement(event.target.value)}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter' && replacement.trim()) {
-                            sendEdit(buildReplacePlaceMessage(place, replacement.trim()), 'replace');
-                            setReplacingPlace(null);
-                            setReplacement('');
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        disabled={pending || !replacement.trim()}
-                        onClick={() => {
-                          sendEdit(buildReplacePlaceMessage(place, replacement.trim()), 'replace');
-                          setReplacingPlace(null);
-                          setReplacement('');
-                        }}
-                      >Confirm</button>
-                      <button type="button" className="btn-ghost" disabled={pending} onClick={() => { setReplacingPlace(null); setReplacement(''); }}>Cancel</button>
+                      {place}
                     </span>
-                  ) : (
-                    <>
-                      <span className="place-name"><span className="place-number" aria-hidden="true">{placeIndex + 1}</span>{place}</span>
-                      <span className="item-actions">
-                        <button type="button" disabled={pending} aria-label={`Replace ${place}`} onClick={() => { setReplacingPlace(rowKey); setReplacement(''); }}>Replace</button>
-                        <button type="button" disabled={pending} aria-label={`Remove ${place}`} onClick={() => sendEdit(buildRemovePlaceMessage(place), 'remove')}>Remove</button>
-                      </span>
-                    </>
-                  )}
-                </li>
-                );
-              })}
-            </ol>
-          </article>
+                    <span className="item-actions">
+                      <button type="button" disabled={pending} aria-label={`Remove ${place}`} onClick={() => removePlace(place, dayEntry.day_number)}>Remove</button>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </article>
+          </div>
         ))}
       </section>
 
@@ -399,7 +368,7 @@ export default function TripPreview() {
             onChange={setFreeText}
             pending={pending}
             placeholder="Tell Guide what to change…"
-            onSubmit={value => { setFreeText(''); sendEdit(value, 'chat'); }}
+            onSubmit={value => { setFreeText(''); sendChat(value); }}
           />
         </section>
       )}
