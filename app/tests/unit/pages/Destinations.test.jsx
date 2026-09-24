@@ -177,7 +177,7 @@ describe('Destinations (real Meridian integration)', () => {
     renderDestinations();
 
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
-    expect(screen.getByText('Multi-stop circuit')).toBeInTheDocument();
+    expect(screen.getByText(/Multi-stop circuit/)).toBeInTheDocument();
     expect(screen.getByText(/2 matches/)).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(c => c[0] === '/api/trips/trip-1/commands').length).toBe(0);
   });
@@ -312,7 +312,9 @@ describe('Destinations (real Meridian integration)', () => {
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
 
+    // Clicking with no qualifier text sets scope and opens the refine box; Send submits it.
     fireEvent.click(screen.getByText('✨ More like this'));
+    fireEvent.click(within(document.querySelector('.refinement-body')).getByText('Send'));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({ body: expect.stringContaining('"command":"more_like_this"') })));
     const cmd = fetchMock.mock.calls.find(c => c[1]?.body?.includes('"command":"more_like_this"'));
@@ -345,6 +347,25 @@ describe('Destinations (real Meridian integration)', () => {
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
     expect(screen.getByText('travel_dates: Dec–Jan')).toBeInTheDocument();
+  });
+
+  it('shows a headline price range from group_total when items is empty (real Meridian shape)', async () => {
+    const withGroupTotal = successOutcome({
+      options: [{
+        rank: 1, type: 'circuit', name: 'Madhya Pradesh Heritage and Nature', circuit_id: 'gwalior-orchha-khajuraho-panna', summary: 'balance.',
+        evaluations: [
+          { criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Within budget.', details: [{ type: 'cost_breakdown', currency: 'INR', items: [], group_total: { minimum: 32000, maximum: 45000 } }] },
+          { criterion_id: 'pace', outcome: 'MATCH', conclusion: 'Relaxed.', details: [{ type: 'bullets', items: ['Easy.'] }] },
+        ],
+        other_considerations: [],
+      }],
+    });
+    const server = createServer({ recommendation: withGroupTotal });
+    fetchMock = createFetchMock(server);
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
+    renderDestinations();
+    await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
+    expect(screen.getByText(/INR.*32,000/)).toBeInTheDocument();
   });
 
   it('shows a practical access fact in the collapsed card when the option carries one', async () => {
@@ -416,7 +437,7 @@ describe('Destinations (real Meridian integration)', () => {
     global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
-    expect(screen.getByText(/Comfortably within budget\./)).toBeInTheDocument();
+    expect(screen.getAllByText(/Comfortably within budget\./)[0]).toBeInTheDocument();
   });
 
   it('persists the focused option and its evidence-open state when toggled', async () => {
@@ -490,7 +511,7 @@ describe('Destinations (real Meridian integration)', () => {
     expect(screen.getByText('<b>Bold</b> claim embedded in a bullet.')).toBeInTheDocument();
   });
 
-  it('clicking a matrix column focuses that option', async () => {
+  it('renders all option cards with their summaries visible simultaneously', async () => {
     const twoOptions = successOutcome({
       options: [
         { rank: 1, type: 'single', name: 'Coorg', destination_id: 'coorg', summary: 'Rank one.', evaluations: [
@@ -509,10 +530,12 @@ describe('Destinations (real Meridian integration)', () => {
     renderDestinations();
 
     await waitFor(() => expect(screen.getAllByText('Coorg')[0]).toBeInTheDocument());
+    // Both cards and their summaries are visible simultaneously — independently comparable.
     expect(screen.getByText('Rank one.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Munnar/ }));
     expect(screen.getByText('Rank two.')).toBeInTheDocument();
-    expect(screen.queryByText('Rank one.')).not.toBeInTheDocument();
+    // Each card has its own CTA and More like this button.
+    expect(screen.getAllByText('Plan this trip →')).toHaveLength(2);
+    expect(screen.getAllByText('✨ More like this')).toHaveLength(2);
   });
 
   it('"More like this" works with the qualifier filled in', async () => {
@@ -523,7 +546,9 @@ describe('Destinations (real Meridian integration)', () => {
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
 
-    fireEvent.change(screen.getByLabelText(/Refine Madhya Pradesh Heritage and Nature/), { target: { value: 'cheaper, closer' } });
+    // Fill the unified refine box, then click "More like this" — sends immediately with instructions.
+    fireEvent.click(screen.getByText(/Not quite right\? Tell us more/));
+    fireEvent.change(screen.getByLabelText('Tell us more'), { target: { value: 'cheaper, closer' } });
     fireEvent.click(screen.getByText('✨ More like this'));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({ body: expect.stringContaining('"command":"more_like_this"') })));

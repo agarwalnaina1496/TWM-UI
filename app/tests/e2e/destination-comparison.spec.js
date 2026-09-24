@@ -81,8 +81,9 @@ test('loads real recommendations via the continue command, shows a disclosed tra
   await page.goto('destinations?next=preview');
   await expect(page.getByText('A few that fit well')).toBeVisible();
 
-  await expect(page.locator('.matrix-wrap').getByText('Multi-stop circuit')).toBeVisible();
-  await expect(page.locator('.matrix-wrap').getByText(/⚠/)).toBeVisible();
+  // Options render as independently comparable price-forward cards (no matrix).
+  await expect(page.locator('.dest-detail-card').getByText(/Multi-stop circuit/)).toBeVisible();
+  await expect(page.locator('.dest-detail-card').getByText(/⚠/)).toBeVisible();
 
   const detailCard = page.locator('.dest-detail-card');
   await detailCard.getByText('See why this fits').click();
@@ -116,7 +117,9 @@ test('More like this refreshes recommendations through the real command without 
   await expect(page.getByText('A few that fit well')).toBeVisible();
 
   const detailCard = page.locator('.dest-detail-card');
-  await detailCard.getByRole('button', { name: 'More like this' }).click();
+  // Clicking "More like this" with an empty refine box sets scope and opens it; Send submits.
+  await detailCard.getByRole('button', { name: /More like this/ }).click();
+  await page.locator('.refinement-body').getByText('Send').click();
   await expect(page.getByText(/Refreshed around Madhya Pradesh Heritage and Nature/)).toBeVisible();
   // Refreshing recommendations must not itself commit a selection — staying
   // on /destinations (never routed to /trip-preview) proves that.

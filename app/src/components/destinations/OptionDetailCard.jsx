@@ -2,27 +2,37 @@ import StatusPill from '../ui/StatusPill.jsx';
 import { rollupSummary } from '../../lib/recommendationViewModel.js';
 import DetailBlock from './DetailBlock.jsx';
 import {
-  BEEN_BEFORE_OPTIONS, OUTCOME_ICON, OUTCOME_TONE,
-  accessFact, criterionIcon, criterionLabel, optionLabel,
+  OUTCOME_ICON, OUTCOME_TONE,
+  accessFact, criterionIcon, criterionLabel, optionLabel, priceRange,
 } from './matrixView.js';
 
-// TWM-173: collapsed by default — name, type, rank, one-line summary, and
-// the single "Plan this trip →" CTA are all immediately visible without
-// expanding anything. Full evidence sits behind "See why this fits ▾".
 export default function OptionDetailCard({
-  option, criteria, isSelected, evidenceOpen, onToggleEvidence, onPlan, planning,
-  moreLikeThisQualifier, onQualifierChange, onMoreLikeThis, moreLikeThisBusy,
-  beenBefore, onToggleBeenBefore,
+  option, criteria, isSelected, isFocused, evidenceOpen, onFocus,
+  onToggleEvidence, onPlan, planning, onMoreLikeThis, moreLikeThisBusy,
 }) {
   const access = accessFact(option);
+  const price = priceRange(option);
   return (
-    <div className="dest-detail-card">
+    <div className={`dest-detail-card${isFocused ? ' focused' : ''}`}>
       {isSelected && <span className="pick-badge">Selected</span>}
-      <div className="dest-name">{option.name}</div>
+      <button type="button" className="dest-card-name-btn" onClick={onFocus}>
+        {option.name}
+      </button>
       <div className="dest-tag">{optionLabel(option)} · Rank #{option.rank}</div>
+      {price && <div className="dest-price">{price}</div>}
       <p className="dest-summary">{option.summary}</p>
       {access && <div className="decision-facts"><span>{access.value}</span></div>}
       <div className="rollup-summary">{rollupSummary(option.evaluations)}</div>
+
+      <div className="dest-criteria">
+        {option.evaluations.map(ev => (
+          <div key={ev.criterion_id} className="dest-criterion-row">
+            <span className="dest-criterion-icon">{criterionIcon(ev.criterion_id)}</span>
+            <span className="dest-criterion-outcome">{OUTCOME_ICON[ev.outcome]}</span>
+            <span className="dest-criterion-text">{ev.conclusion}</span>
+          </div>
+        ))}
+      </div>
 
       <button type="button" className="reason-toggle" onClick={onToggleEvidence}>
         See why this fits <span>{evidenceOpen ? '▴' : '▾'}</span>
@@ -51,35 +61,9 @@ export default function OptionDetailCard({
         </div>
       )}
 
-      <div className="more-like-this-row">
-        <input
-          type="text"
-          className="more-like-this-input"
-          placeholder="Optional: cheaper, closer, slower…"
-          aria-label={`Refine ${option.name}`}
-          value={moreLikeThisQualifier}
-          onChange={event => onQualifierChange(event.target.value)}
-        />
-        <button type="button" className="btn btn-ghost" onClick={onMoreLikeThis} disabled={moreLikeThisBusy}>✨ More like this</button>
-      </div>
-
-      {/* TWM-173: one consistent literal CTA regardless of state — the
-          former three-way "Continue planning"/"Plan this trip"/"Want to
-          plan this?" split was implementation-path noise, not a real
-          state difference the traveler needed to see. */}
       <div className="dest-actions">
         <button type="button" className="btn btn-primary" onClick={onPlan} disabled={planning}>Plan this trip →</button>
-      </div>
-
-      <div className="been-before">
-        <span className="been-before-label">Been here before? <em>tell us how it was</em></span>
-        <div className="been-before-opts">
-          {BEEN_BEFORE_OPTIONS.map(opt => (
-            <button type="button" key={opt.id} className={`been-before-pill${beenBefore === opt.id ? ' selected' : ''}`} onClick={() => onToggleBeenBefore(opt.id)}>
-              <span>{opt.icon}</span>{opt.label}
-            </button>
-          ))}
-        </div>
+        <button type="button" className="btn btn-ghost" onClick={onMoreLikeThis} disabled={moreLikeThisBusy}>✨ More like this</button>
       </div>
     </div>
   );
