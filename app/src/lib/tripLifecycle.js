@@ -1,3 +1,5 @@
+import { ROUTES } from '../constants/routes.js';
+
 // Canonical stage/status helpers shared by the adaptive landing resolver
 // and My Trips. TWM-220: every consumer now reads a `TripView` (full) or a
 // `TripListItem` (thin) — both carry `lifecycle` and `context_recap`; only
@@ -71,15 +73,15 @@ export function stageBadge(trip) {
 }
 
 const STAGE_CTA = {
-  new: { label: 'Start planning', to: '/' },
-  matching: { label: 'Continue chat', to: '/scout-chat' },
-  recommended: { label: 'Review recommendations', to: '/destinations' },
-  matched: { label: 'Review recommendations', to: '/destinations' },
-  planning: { label: 'Continue chat', to: '/scout-chat' },
-  plan_ready: { label: 'Resume plan builder', to: '/trip-preview' },
-  planned: { label: 'View trip', to: '/dashboard' },
-  booked: { label: 'View trip', to: '/dashboard' },
-  done: { label: 'View trip', to: '/dashboard' },
+  new: { label: 'Start planning', to: ROUTES.home },
+  matching: { label: 'Continue chat', to: ROUTES.scoutChat },
+  recommended: { label: 'Review recommendations', to: ROUTES.destinations },
+  matched: { label: 'Review recommendations', to: ROUTES.destinations },
+  planning: { label: 'Continue chat', to: ROUTES.scoutChat },
+  plan_ready: { label: 'Resume plan builder', to: ROUTES.tripPreview },
+  planned: { label: 'View trip', to: ROUTES.dashboard },
+  booked: { label: 'View trip', to: ROUTES.dashboard },
+  done: { label: 'View trip', to: ROUTES.dashboard },
 };
 
 // Stages where a recommendation list already exists and is ready to review —
@@ -88,16 +90,16 @@ export const RECOMMENDATIONS_READY_STAGES = new Set(['recommended', 'matched']);
 
 export function stageCta(trip) {
   const stage = trip?.lifecycle?.stage ?? 'new';
-  if (isItineraryReady(trip)) return { label: 'View trip', to: '/dashboard' };
-  if (stage === 'new' && hasContext(trip)) return { label: 'Resume chat', to: '/scout-chat' };
+  if (isItineraryReady(trip)) return { label: 'View trip', to: ROUTES.dashboard };
+  if (stage === 'new' && hasContext(trip)) return { label: 'Resume chat', to: ROUTES.scoutChat };
   // planning/matching route by whether the stage's defining artifact
   // actually exists yet (day_plan / a recommendation round), not by stage
   // string alone.
   if ((stage === 'planning' || stage === 'plan_ready') && trip?.has_day_plan) {
-    return { label: 'Resume plan builder', to: '/trip-preview' };
+    return { label: 'Resume plan builder', to: ROUTES.tripPreview };
   }
   if (stage === 'matching' && (trip?.has_recommendation || trip?.matcher?.has_recommendation)) {
-    return { label: 'Continue refining', to: '/destinations' };
+    return { label: 'Continue refining', to: ROUTES.destinations };
   }
   return STAGE_CTA[stage] || STAGE_CTA.new;
 }

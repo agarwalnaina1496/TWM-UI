@@ -88,7 +88,7 @@ function TripCard({ t, rename, busyId, onOpen, showRename = true, variant = 'com
   const timestamp = formatTripTimestamp(t);
   const statusLine = tripStatusLine(t);
   return (
-    <div className={`card trip-card${isExplore ? ' explore-card' : ''}`}>
+    <div className={`card ${isExplore ? 'explore-card' : 'trip-card'}`}>
       <div>
         <RenameName t={t} rename={rename} showRename={showRename} label={displayTitle(t)} />
         {!isExplore && destination && <div className="trip-card-destination">{destination}</div>}
