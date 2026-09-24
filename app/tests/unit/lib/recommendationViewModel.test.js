@@ -55,6 +55,51 @@ describe('recommendationViewModel', () => {
     expect(() => recommendationViewModel(unknown)).toThrow(/references or details/);
   });
 
+  it('accepts cost_breakdown with group_total/per_person_total and empty items', () => {
+    const payload = response();
+    payload.options[0].evaluations[0].details[0] = {
+      type: 'cost_breakdown',
+      currency: 'INR',
+      items: [],
+      group_total: { minimum: 40000, maximum: 60000 },
+      per_person_total: { minimum: 20000, maximum: 30000 },
+    };
+    expect(() => recommendationViewModel(payload)).not.toThrow();
+  });
+
+  it('accepts cost_breakdown with only group_total and no items (Meridian budget-evaluation shape)', () => {
+    // Regression: Meridian uses this shape for budget evaluations — previously rejected entirely.
+    const payload = response();
+    payload.options[0].evaluations[0].details[0] = {
+      type: 'cost_breakdown',
+      currency: 'INR',
+      group_total: { minimum: 55000, maximum: 80000 },
+    };
+    expect(() => recommendationViewModel(payload)).not.toThrow();
+    const result = recommendationViewModel(payload);
+    expect(result.options[0].evaluations[0].details[0].group_total).toEqual({ minimum: 55000, maximum: 80000 });
+  });
+
+  it('accepts cost_breakdown with only per_person_total and no items', () => {
+    const payload = response();
+    payload.options[0].evaluations[0].details[0] = {
+      type: 'cost_breakdown',
+      currency: 'INR',
+      per_person_total: { minimum: 10000, maximum: 15000 },
+    };
+    expect(() => recommendationViewModel(payload)).not.toThrow();
+  });
+
+  it('rejects cost_breakdown with no items and no totals', () => {
+    const payload = response();
+    payload.options[0].evaluations[0].details[0] = {
+      type: 'cost_breakdown',
+      currency: 'INR',
+      items: [],
+    };
+    expect(() => recommendationViewModel(payload)).toThrow(/references or details/);
+  });
+
   it('rejects malformed cost ranges', () => {
     const payload = response();
     payload.options[0].evaluations[0].details[0].items[0].per_person = { minimum: 2000, maximum: 1000 };

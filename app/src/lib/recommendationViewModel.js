@@ -21,12 +21,12 @@ function validDetail(detail) {
   if (!isObject(detail) || !DETAIL_TYPES.has(detail.type)) return false;
   if (detail.type === 'bullets') return Array.isArray(detail.items) && detail.items.length > 0;
   if (detail.type === 'facts') return Array.isArray(detail.facts) && detail.facts.length > 0;
-  return /^[A-Z]{3}$/.test(detail.currency ?? '')
-    && Array.isArray(detail.items)
-    && detail.items.length > 0
+  if (!/^[A-Z]{3}$/.test(detail.currency ?? '')) return false;
+  const validItems = Array.isArray(detail.items) && detail.items.length > 0
     && detail.items.every(item => isObject(item)
       && typeof item.label === 'string'
       && (validRange(item.per_person) || validRange(item.group)));
+  return validItems || validRange(detail.per_person_total) || validRange(detail.group_total);
 }
 
 const OPTION_STATUSES = new Set(['SUCCESS', 'SOFT_FAIL']);
