@@ -5,8 +5,14 @@
    facts sidebar lives INSIDE that 1200px box as a second grid column, not
    as extra width bolted on beside it. Individual message bubbles (.chat-bub)
    are still capped at a fixed 640px reading width (not a percentage of the
-   column) so they stay readable regardless of the chat column's width. */
-.chat-screen{height:calc(100dvh - 58px);max-width:1200px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:minmax(0,1fr) 260px;column-gap:20px;grid-template-rows:auto auto minmax(0,1fr) auto;overflow:hidden;}
+   column) so they stay readable regardless of the chat column's width.
+   `width:100%` is required (matching `.wrap`'s own explicit width:100%,
+   `_shared-layout.generated.css:20`): `.chat-screen` is itself a direct flex
+   item of `.app-shell` AND a grid container, and without an explicit width
+   Chrome/Firefox size its `fr` track using each column's own content
+   (shrink-to-fit) instead of stretching to the flex line's cross size —
+   confirmed live: it rendered at 960px, not the 1200px `max-width` cap. */
+.chat-screen{width:100%;height:calc(100dvh - 58px);max-width:1200px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:minmax(0,1fr) 260px;column-gap:20px;grid-template-rows:auto auto minmax(0,1fr) auto;overflow:hidden;}
 .chat-screen>.back-to-trip{grid-column:1 / -1;grid-row:1;}
 .chat-screen>.eyebrow,.chat-screen>h1,.chat-screen>.lede,.chat-screen>small{display:none;}
 .chat-context-bar{grid-column:1 / -1;grid-row:2;padding:10px 0;border-bottom:1px solid var(--border);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px;}
