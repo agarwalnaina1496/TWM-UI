@@ -51,9 +51,16 @@ export default function TripDashboard() {
 
   const building = bootStatus === 'booting' && !itineraryReady;
 
-  // Lifted out of ItineraryTab/HonestTransition so switching to another tab
-  // and back mid-build doesn't remount the progress steps back to zero.
+  // Owned here (not inside ItineraryTab/HonestTransition) so the honest-
+  // transition steps keep advancing in real wall-clock time regardless of
+  // which tab is active — switching to Overview/Support and back mid-build
+  // no longer pauses or restarts the current step from zero.
   const [buildingActiveIndex, setBuildingActiveIndex] = useState(0);
+  useEffect(() => {
+    if (!building || buildingActiveIndex >= ARRIVAL_STEPS.length - 1) return;
+    const timer = setTimeout(() => setBuildingActiveIndex(i => Math.min(i + 1, ARRIVAL_STEPS.length - 1)), ARRIVAL_STEP_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [building, buildingActiveIndex]);
 
   // Land the traveler on the tab that's actually building, once, the first
   // time this state is seen — not on every render, and not overriding a
@@ -124,9 +131,7 @@ export default function TripDashboard() {
           onOpenTransport={drawers.openTransportDrawer}
           building={building}
           buildingSteps={ARRIVAL_STEPS}
-          buildingStepDurationMs={ARRIVAL_STEP_DURATION_MS}
           buildingActiveIndex={buildingActiveIndex}
-          setBuildingActiveIndex={setBuildingActiveIndex}
         />
       )}
 

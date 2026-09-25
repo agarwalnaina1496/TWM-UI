@@ -614,6 +614,25 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     vi.useRealTimers();
   });
 
+  it('keeps advancing build progress in real time while the traveler is away from the Itinerary tab', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    commandSnapshot = frozenView({ context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn(() => new Promise(() => {}));
+    const user = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+    render(<MemoryRouter><TripDashboard /></MemoryRouter>);
+    await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
+    expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
+
+    // Step 2 finishes while the traveler is on Overview, not looking at Itinerary at all.
+    await user.click(screen.getByRole('button', { name: /Overview/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
+    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+    expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
+    expect(screen.getAllByRole('listitem')[1]).toHaveClass('done');
+    vi.useRealTimers();
+  });
+
   it('honors the 20s-per-step cadence', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     commandSnapshot = frozenView();

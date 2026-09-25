@@ -6,22 +6,16 @@ import HonestTransition from '../../components/ui/HonestTransition.jsx';
 
 const KIND_ICON = { TRAVEL: '🚗', STAY: '🏨', MEAL: '🍽️', FREE_TIME: '🕒' };
 
-// `building`/`buildingSteps`/`buildingStepDurationMs` cover the post-freeze
+// `building`/`buildingSteps`/`buildingActiveIndex` cover the post-freeze
 // Atlas-compile window: the plan is approved but the day-by-day document
 // isn't ready yet. Rendered inline (not a page-level swap) so the dashboard
 // shell — header, TripHero, tab bar — stays mounted the whole time; only
-// this tab's own content area shows the build in progress.
-export default function ItineraryTab({ days, staySegmentByItemId, activeDay, onSelectDay, onOpenStay, onOpenTransport, building = false, buildingSteps, buildingStepDurationMs, buildingActiveIndex, setBuildingActiveIndex }) {
+// this tab's own content area shows the build in progress. TripDashboard
+// owns the actual step timer (`buildingActiveIndex`) so it keeps advancing
+// even while this tab isn't mounted — passed here purely to render.
+export default function ItineraryTab({ days, staySegmentByItemId, activeDay, onSelectDay, onOpenStay, onOpenTransport, building = false, buildingSteps, buildingActiveIndex }) {
   if (building) {
-    return (
-      <HonestTransition
-        steps={buildingSteps}
-        label="Building your itinerary"
-        stepDurationMs={buildingStepDurationMs}
-        activeIndex={buildingActiveIndex}
-        setActiveIndex={setBuildingActiveIndex}
-      />
-    );
+    return <HonestTransition steps={buildingSteps} label="Building your itinerary" activeIndex={buildingActiveIndex} />;
   }
 
   const selectedDay = days.find(day => day.day_number === activeDay) || days[0];

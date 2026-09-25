@@ -19,21 +19,24 @@ import '../../styles/design-system.css';
 // per caller — a long-running wait (e.g. TWM-175's Plan Builder→Dashboard
 // arrival, up to ~180s) should pass a slower cadence so the optimistic
 // steps don't all clear in the first couple of seconds and then sit idle.
-// `activeIndex`/`setActiveIndex` let a caller lift this progress out of the
-// component itself — e.g. TripDashboard keeps it alive across ItineraryTab
-// unmounting/remounting on a tab switch, so switching away and back mid-build
-// doesn't visually reset progress to step one. Omit both for the original
-// self-contained/uncontrolled behavior.
-export default function HonestTransition({ steps, label, stepDurationMs = 1100, activeIndex: controlledActiveIndex, setActiveIndex: controlledSetActiveIndex }) {
+// `activeIndex` lets a caller lift this progress (and the timer that drives
+// it) out of the component entirely — e.g. TripDashboard owns the ticking
+// itself so it keeps advancing in real wall-clock time regardless of
+// whether ItineraryTab is currently mounted, instead of pausing (and
+// restarting a step from zero) whenever the traveler tabs away and back.
+// Passing `activeIndex` switches this component to purely presentational:
+// it renders the given index and runs no timer of its own. Omit it for the
+// original self-contained/uncontrolled behavior.
+export default function HonestTransition({ steps, label, stepDurationMs = 1100, activeIndex: controlledActiveIndex }) {
+  const isControlled = controlledActiveIndex != null;
   const [internalActiveIndex, setInternalActiveIndex] = useState(0);
-  const activeIndex = controlledActiveIndex ?? internalActiveIndex;
-  const setActiveIndex = controlledSetActiveIndex ?? setInternalActiveIndex;
+  const activeIndex = isControlled ? controlledActiveIndex : internalActiveIndex;
 
   useEffect(() => {
-    if (activeIndex >= steps.length - 1) return;
-    const timer = setTimeout(() => setActiveIndex(i => Math.min(i + 1, steps.length - 1)), stepDurationMs);
+    if (isControlled || activeIndex >= steps.length - 1) return;
+    const timer = setTimeout(() => setInternalActiveIndex(i => Math.min(i + 1, steps.length - 1)), stepDurationMs);
     return () => clearTimeout(timer);
-  }, [activeIndex, steps.length, stepDurationMs, setActiveIndex]);
+  }, [isControlled, activeIndex, steps.length, stepDurationMs]);
 
   return (
     <div className="honest-transition" role="status" aria-label={label}>
