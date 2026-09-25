@@ -11,9 +11,17 @@ const KIND_ICON = { TRAVEL: '🚗', STAY: '🏨', MEAL: '🍽️', FREE_TIME: '�
 // isn't ready yet. Rendered inline (not a page-level swap) so the dashboard
 // shell — header, TripHero, tab bar — stays mounted the whole time; only
 // this tab's own content area shows the build in progress.
-export default function ItineraryTab({ days, staySegmentByItemId, activeDay, onSelectDay, onOpenStay, onOpenTransport, building = false, buildingSteps, buildingStepDurationMs }) {
+export default function ItineraryTab({ days, staySegmentByItemId, activeDay, onSelectDay, onOpenStay, onOpenTransport, building = false, buildingSteps, buildingStepDurationMs, buildingActiveIndex, setBuildingActiveIndex }) {
   if (building) {
-    return <HonestTransition steps={buildingSteps} label="Building your itinerary" stepDurationMs={buildingStepDurationMs} />;
+    return (
+      <HonestTransition
+        steps={buildingSteps}
+        label="Building your itinerary"
+        stepDurationMs={buildingStepDurationMs}
+        activeIndex={buildingActiveIndex}
+        setActiveIndex={setBuildingActiveIndex}
+      />
+    );
   }
 
   const selectedDay = days.find(day => day.day_number === activeDay) || days[0];

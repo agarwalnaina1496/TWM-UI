@@ -597,6 +597,23 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(await screen.findByText('Your trip so far')).toBeInTheDocument();
   });
 
+  it('does not reset build progress to step one when switching tabs away and back', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    commandSnapshot = frozenView({ context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn(() => new Promise(() => {}));
+    const user = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+    render(<MemoryRouter><TripDashboard /></MemoryRouter>);
+    await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
+    expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
+
+    await user.click(screen.getByRole('button', { name: /Overview/ }));
+    expect(await screen.findByText('Your trip so far')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Itinerary/ }));
+
+    expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
+    vi.useRealTimers();
+  });
+
   it('honors the 20s-per-step cadence', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     commandSnapshot = frozenView();

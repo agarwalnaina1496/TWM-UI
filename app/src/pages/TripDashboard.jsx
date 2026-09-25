@@ -51,6 +51,10 @@ export default function TripDashboard() {
 
   const building = bootStatus === 'booting' && !itineraryReady;
 
+  // Lifted out of ItineraryTab/HonestTransition so switching to another tab
+  // and back mid-build doesn't remount the progress steps back to zero.
+  const [buildingActiveIndex, setBuildingActiveIndex] = useState(0);
+
   // Land the traveler on the tab that's actually building, once, the first
   // time this state is seen — not on every render, and not overriding a
   // manual tab switch (or an explicit ?tab= deep link) afterward.
@@ -121,6 +125,8 @@ export default function TripDashboard() {
           building={building}
           buildingSteps={ARRIVAL_STEPS}
           buildingStepDurationMs={ARRIVAL_STEP_DURATION_MS}
+          buildingActiveIndex={buildingActiveIndex}
+          setBuildingActiveIndex={setBuildingActiveIndex}
         />
       )}
 
