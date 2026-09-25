@@ -1,19 +1,17 @@
 .chat-page{padding-bottom:100px;}
-/* Grid is capped at 1200px (chat) + 280px (facts sidebar) = 1480px and
-   centered as one unit, mirroring how the header/`.wrap` centers its own
-   1200px container — the chat column and the sidebar sit side by side with
-   no gap between them, instead of each independently centering inside
-   whatever's left of a full-bleed row (which pushed the sidebar to the
-   viewport's far edge on wide screens, stranding it away from the chat). */
-.chat-screen{height:calc(100dvh - 58px);max-width:1480px;margin:0 auto;padding:0;display:grid;grid-template-columns:minmax(0,1fr) 280px;grid-template-rows:auto auto minmax(0,1fr) auto;overflow:hidden;}
+/* The chat screen (chat column + facts sidebar together) is the exact same
+   box as the header's `.wrap` (1200px, `0 20px` padding) — its left/right
+   edges line up with the logo and Log out, same as every other page. The
+   facts sidebar lives INSIDE that 1200px box as a second grid column, not
+   as extra width bolted on beside it. Individual message bubbles (.chat-bub)
+   are still capped at a fixed 640px reading width (not a percentage of the
+   column) so they stay readable regardless of the chat column's width. */
+.chat-screen{height:calc(100dvh - 58px);max-width:1200px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:minmax(0,1fr) 260px;column-gap:20px;grid-template-rows:auto auto minmax(0,1fr) auto;overflow:hidden;}
 .chat-screen>.back-to-trip{grid-column:1 / -1;grid-row:1;}
 .chat-screen>.eyebrow,.chat-screen>h1,.chat-screen>.lede,.chat-screen>small{display:none;}
-/* Individual message bubbles (.chat-bub) are capped at a fixed 640px
-   reading width (not a percentage of the container) so they stay readable
-   regardless of how wide the chat column is. */
-.chat-context-bar{grid-column:1 / -1;grid-row:2;padding:10px 20px;border-bottom:1px solid var(--border);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px;}
+.chat-context-bar{grid-column:1 / -1;grid-row:2;padding:10px 0;border-bottom:1px solid var(--border);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px;}
 .chat-log{display:flex;flex-direction:column;gap:12px;margin-top:18px;}
-.chat-screen>.chat-log{grid-column:1;grid-row:3;min-height:0;width:100%;margin:0;padding:28px 20px;overflow-y:auto;}
+.chat-screen>.chat-log{grid-column:1;grid-row:3;min-height:0;width:100%;margin:0;padding:28px 0;overflow-y:auto;}
 .chat-row{display:flex;flex-direction:column;gap:8px;}
 .chat-row-user{align-items:flex-end;}
 .chat-row-assistant{align-items:flex-start;}
@@ -24,7 +22,7 @@
 .chat-chip-long{max-width:100%;text-align:left;white-space:normal;line-height:1.45;}
 
 /* TWM-173: live-updating known-fields-only facts panel. */
-.facts-panel{grid-column:2;grid-row:3 / 5;display:flex;flex-direction:column;gap:10px;min-width:0;overflow-y:auto;padding:22px 20px;border-left:1px solid var(--border);background:var(--surface);}
+.facts-panel{grid-column:2;grid-row:3 / 5;display:flex;flex-direction:column;gap:10px;min-width:0;overflow-y:auto;padding:22px 0 22px 16px;border-left:1px solid var(--border);}
 .facts-panel-heading{margin:0 0 2px;font-size:12px;font-weight:700;color:var(--tp);}
 .facts-panel-item{font-size:11px;font-weight:600;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:5px 11px;color:var(--ts);}
 .facts-panel-item strong{color:var(--tp);font-weight:700;}
@@ -34,12 +32,12 @@
 .chat-system-note{font-size:11.5px;font-weight:600;color:var(--tm);background:var(--bg);border:1px dashed var(--border);border-radius:99px;padding:6px 14px;}
 
 .chat-input-bar{position:sticky;bottom:0;background:var(--bg);padding:14px 0 20px;margin-top:18px;display:flex;gap:8px;align-items:center;}
-.chat-screen>.chat-input-bar{grid-column:1;grid-row:4;position:relative;width:calc(100% - 40px);margin:0 20px;padding:14px 0 18px;border-top:1px solid var(--border);box-shadow:0 -12px 24px rgba(33,28,22,.035);}
+.chat-screen>.chat-input-bar{grid-column:1;grid-row:4;position:relative;width:100%;margin:0;padding:14px 0 18px;border-top:1px solid var(--border);box-shadow:0 -12px 24px rgba(33,28,22,.035);}
 .chat-input{flex:1;border:1px solid var(--border);border-radius:12px;padding:12px 15px;font-size:13.5px;font-family:'Inter',sans-serif;background:var(--surface);transition:border-color .15s ease;}
 .chat-input:focus{outline:none;border-color:var(--accent);}
 .chat-send{width:40px;height:40px;flex-shrink:0;border-radius:10px;border:none;background:var(--tp);color:var(--bg);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s ease;}
 .chat-send:hover{background:var(--accent);}
-@media (max-width:760px){.chat-screen{height:calc(100dvh - 54px);max-width:none;display:flex;flex-direction:column}.chat-screen>.chat-log{flex:1 1 auto;order:4;padding:20px 14px}.chat-screen>.chat-input-bar{order:5;width:calc(100% - 28px);margin:0 auto}.chat-context-bar{order:2}.facts-panel{order:3;flex:0 0 auto;display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;overflow-x:auto;overflow-y:hidden;padding:8px 14px;border-left:0;border-bottom:1px solid var(--border)}.facts-panel-heading{flex:0 0 100%;}.facts-panel-item{white-space:nowrap}}
+@media (max-width:760px){.chat-screen{height:calc(100dvh - 54px);max-width:none;padding:0;display:flex;flex-direction:column}.chat-screen>.chat-log{flex:1 1 auto;order:4;padding:20px 14px}.chat-screen>.chat-input-bar{order:5;width:calc(100% - 28px);margin:0 auto}.chat-context-bar{order:2;padding:10px 14px}.facts-panel{order:3;flex:0 0 auto;display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;overflow-x:auto;overflow-y:hidden;padding:8px 14px;border-left:0;border-bottom:1px solid var(--border)}.facts-panel-heading{flex:0 0 100%;}.facts-panel-item{white-space:nowrap}}
 
 /* Small-mobile pass (<480px): tighter padding/type so chat bubbles and the
    context/facts bars don't feel cramped on true small phones. */
