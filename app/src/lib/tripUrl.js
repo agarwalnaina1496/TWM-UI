@@ -18,3 +18,18 @@ export function withTripId(to, tripId) {
   params.set(TRIP_ID_PARAM, tripId);
   return `${path}?${params.toString()}`;
 }
+
+// TWM-233: updates the address bar's query string in place via the raw
+// History API, deliberately bypassing react-router's own navigate() --
+// several routes (e.g. /journey-entry, see App.jsx's `key={location.search}`)
+// intentionally remount their page on any react-router-visible search-param
+// change. A page that just created a trip and wants to anchor ?tripId= (or
+// drop a consumed ?msg=) needs the opposite: the browser's own address bar
+// updated, so a subsequent *reload* reads it correctly, without disturbing
+// the current render at all. react-router's own useSearchParams() will not
+// reflect this change until the next real navigation or reload -- callers
+// relying on already-fresh in-memory state (e.g. TripContext's
+// currentTripId) for the rest of the live session are unaffected by that.
+export function syncUrlParamsSilently(nextParams) {
+  window.history.replaceState(null, '', `${window.location.pathname}?${nextParams.toString()}`);
+}

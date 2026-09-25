@@ -13,7 +13,7 @@ import BackToTrip from '../components/BackToTrip.jsx';
 import FactsPanel from '../components/FactsPanel.jsx';
 import ScreenHeader from '../components/ui/ScreenHeader.jsx';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
-import { withTripId } from '../lib/tripUrl.js';
+import { TRIP_ID_PARAM, syncUrlParamsSilently, withTripId } from '../lib/tripUrl.js';
 import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
 import '../styles/chat.css';
 
@@ -98,6 +98,23 @@ export default function ScoutChat() {
           entryIntent: intent === ENTRY_INTENTS.DISCOVER ? 'discover' : 'known_destination',
           message: text,
         });
+        // TWM-233: anchor the new trip's id into the URL the instant it
+        // exists — every other trip-bearing page in the app already does
+        // this (withTripId). Without it, `currentTripId` is the only signal
+        // this conversation isn't fresh anymore; that's pure in-memory
+        // React state, wiped by any reload, so a reload mid-conversation
+        // (before the async boot-list re-resolves it) reads as a genuinely
+        // fresh entry again and creates a second, orphaned trip. Also drops
+        // `msg` — it's been consumed either way, and leaving it on the URL
+        // would let the very next reload replay it a second time too.
+        // Uses the raw History API (not navigate()): this route remounts on
+        // any react-router-visible search-param change (App.jsx's
+        // `key={location.search}` on /journey-entry), which would otherwise
+        // wipe the conversation state we're in the middle of rendering.
+        const syncedParams = new URLSearchParams(params);
+        syncedParams.delete('msg');
+        syncedParams.set(TRIP_ID_PARAM, response.trip.id);
+        syncUrlParamsSilently(syncedParams);
         trackEvent(
           intent === ENTRY_INTENTS.DISCOVER ? 'discovery_started' : 'destination_provided',
           intent === ENTRY_INTENTS.DISCOVER ? { entry_method: 'journey_entry' } : { destination_source: 'user_input' }
@@ -159,7 +176,17 @@ export default function ScoutChat() {
       : buildRecapTurn(commandSnapshot, { awaiting });
     say('assistant', recap || COLD_OPEN);
     const message = params.get('msg')?.trim();
-    if (message) runAdvice(message);
+    if (message) {
+      // TWM-233: drop `msg` from the URL the instant it's read, before the
+      // send even resolves — otherwise a reload while it's still present
+      // (send in flight, or the network drops before the response lands)
+      // replays it a second time on the next mount. Raw History API, same
+      // reasoning as the tripId anchor above (no remount).
+      const syncedParams = new URLSearchParams(params);
+      syncedParams.delete('msg');
+      syncUrlParamsSilently(syncedParams);
+      runAdvice(message);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripLoadStatus]);
 

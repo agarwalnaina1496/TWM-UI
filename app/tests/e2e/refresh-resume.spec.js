@@ -82,3 +82,46 @@ test('refreshing mid-Discover-conversation shows a recap turn, not the cold-open
   await expect(page.getByText(/Picking up where you left off/)).toBeVisible();
   await expect(page.getByText(/Hey there! I'm Scout/)).not.toBeVisible();
 });
+
+// TWM-233: a reload right after a live fresh-entry conversation creates its
+// trip must resume that same trip, not create a second one. Only one
+// first-message step is scripted below -- if the reload replayed it (the
+// exact bug this guards), the mock has no second step and the request would
+// fail outright, so this also fails closed rather than silently passing.
+test('reloading immediately after a fresh Discover entry creates its trip does not create a second one', async ({ page }) => {
+  await mockTripCommandFlow(page, [
+    {
+      entryIntent: 'discover',
+      response: commandResponse('Where will you be travelling from?', tripRecord({
+        version: 2,
+        trip_state: {
+          stage: 'new', active_agent: 'scout',
+          trip_context: { original_traveler_request: 'a relaxing beach trip' },
+          matcher_state: { conversation_context: { awaiting: 'origin_city' } },
+        },
+      })),
+    },
+  ]);
+
+  await page.goto('login');
+  await page.getByText('Continue without login').click();
+  await page.getByText('Discover Destination').click();
+  await expect(page).toHaveURL(/\/app\/journey-entry/);
+  await page.getByPlaceholder('Tell Scout about your trip…').fill('a relaxing beach trip');
+  await page.getByLabel('Send').click();
+
+  await expect(page.getByText('Where will you be travelling from?')).toBeVisible();
+  // The new trip's id is anchored into the URL the instant it exists.
+  await expect(page).toHaveURL(/tripId=/);
+  const tripIdAfterFirstSend = new URL(page.url()).searchParams.get('tripId');
+  expect(tripIdAfterFirstSend).toBeTruthy();
+
+  await page.reload();
+
+  // Same trip id after the reload -- a second, orphaned trip would carry a
+  // different one. No error either (the mock has only one first-message
+  // step scripted; a replayed call would have nothing left to serve it).
+  await expect(page).toHaveURL(/tripId=/);
+  expect(new URL(page.url()).searchParams.get('tripId')).toBe(tripIdAfterFirstSend);
+  await expect(page.getByRole('alert')).not.toBeVisible();
+});

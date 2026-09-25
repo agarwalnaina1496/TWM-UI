@@ -7,13 +7,14 @@ import ScoutChat from '../../../src/pages/ScoutChat.jsx';
 const navigate = vi.fn();
 let commandSnapshot;
 let sendTripCommand;
+let startTrip;
 let tripLoadStatus;
 let openTrip;
 let setCurrentTripId;
 let searchParams = new URLSearchParams();
 
 vi.mock('../../../src/context/TripContext.jsx', () => ({
-  useTrip: () => ({ commandSnapshot, sendTripCommand, tripLoadStatus, currentTripId: commandSnapshot?.id ?? null, setCurrentTripId, prefetchTrip: openTrip }),
+  useTrip: () => ({ commandSnapshot, sendTripCommand, startTrip, tripLoadStatus, currentTripId: commandSnapshot?.id ?? null, setCurrentTripId, prefetchTrip: openTrip }),
 }));
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
@@ -25,9 +26,9 @@ vi.mock('react-router-dom', async () => ({
 function recap(entries) {
   return Object.entries(entries).map(([key, value]) => ({ key, label: key, value }));
 }
-function view({ stage = 'new', activeAgent = null, context = {}, plan = null, matcher = {} } = {}) {
+function view({ id = 'trip-1', stage = 'new', activeAgent = null, context = {}, plan = null, matcher = {} } = {}) {
   return {
-    id: 'trip-1',
+    id,
     lifecycle: { stage, status: 'free', active_agent: activeAgent, selected_option: null },
     context_recap: recap(context), plan,
     matcher: { last_message: null, awaiting: null, has_recommendation: false, ...matcher },
@@ -42,6 +43,7 @@ describe('ScoutChat advice-entry chat', () => {
     tripLoadStatus = 'ready';
     openTrip = vi.fn();
     setCurrentTripId = vi.fn();
+    startTrip = vi.fn();
     searchParams = new URLSearchParams();
   });
 
@@ -96,6 +98,60 @@ describe('ScoutChat advice-entry chat', () => {
     await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), 'Plan a Coorg trip{Enter}');
     expect(await screen.findByText('And roughly what budget?')).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  // TWM-233: a fresh live entry (?intent=, no trip anywhere yet) must create
+  // exactly one trip and immediately anchor its id into the URL -- otherwise
+  // a reload mid-conversation re-reads as fresh and creates a duplicate.
+  describe('TWM-233: trip-id URL anchoring on a fresh entry', () => {
+    it('anchors the new trip id into the URL right after the first send creates it, without navigating (no remount)', async () => {
+      searchParams = new URLSearchParams('intent=discover_destination');
+      startTrip = vi.fn(async () => ({
+        message: 'Where will you be traveling from?',
+        trip: view({ id: 'trip-new', activeAgent: 'meridian' }),
+      }));
+      const replaceState = vi.spyOn(window.history, 'replaceState');
+      const user = userEvent.setup();
+      render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+      await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'A relaxing beach trip{Enter}');
+      expect(startTrip).toHaveBeenCalledTimes(1);
+      // Anchored via the raw History API, not react-router's navigate() --
+      // some routes remount on any react-router-visible search-param change
+      // (App.jsx's `key={location.search}`), which would wipe this
+      // in-progress conversation right after creating its trip.
+      expect(navigate).not.toHaveBeenCalled();
+      const [, , to] = replaceState.mock.calls.at(-1);
+      const synced = new URLSearchParams(to.split('?')[1]);
+      expect(synced.get('tripId')).toBe('trip-new');
+      expect(synced.get('intent')).toBe('discover_destination');
+      expect(synced.has('msg')).toBe(false);
+      replaceState.mockRestore();
+    });
+
+    it('does not call startTrip again once ?tripId= is on the URL, even with ?intent= still present (the reload-safe case)', async () => {
+      searchParams = new URLSearchParams('intent=discover_destination&tripId=trip-1');
+      commandSnapshot = view({ context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn(async () => ({ message: 'Got it.', trip: view({ context: { origin_city: 'Delhi' } }) }));
+      const user = userEvent.setup();
+      render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+      await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'Actually make it 4 days{Enter}');
+      expect(startTrip).not.toHaveBeenCalled();
+      expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', expect.objectContaining({ message: 'Actually make it 4 days' }));
+    });
+
+    it('strips ?msg= from the URL as soon as it is read, before the auto-sent reply resolves', async () => {
+      searchParams = new URLSearchParams('tripId=trip-1&msg=Hello+Scout');
+      commandSnapshot = view({ context: { origin_city: 'Delhi' } });
+      sendTripCommand = vi.fn(async () => ({ message: 'Got it.', trip: view({ context: { origin_city: 'Delhi' } }) }));
+      const replaceState = vi.spyOn(window.history, 'replaceState');
+      render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+      await screen.findByText('Got it.');
+      const [, , to] = replaceState.mock.calls.at(0);
+      const synced = new URLSearchParams(to.split('?')[1]);
+      expect(synced.has('msg')).toBe(false);
+      expect(synced.get('tripId')).toBe('trip-1');
+      replaceState.mockRestore();
+    });
   });
 });
 
