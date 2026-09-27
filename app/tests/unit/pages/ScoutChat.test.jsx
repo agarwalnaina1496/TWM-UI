@@ -128,6 +128,18 @@ describe('ScoutChat advice-entry chat', () => {
       replaceState.mockRestore();
     });
 
+    it('passes a per-attempt idempotencyKey to startTrip on the fresh-entry send', async () => {
+      searchParams = new URLSearchParams('intent=discover_destination');
+      startTrip = vi.fn(async () => ({
+        message: 'Where will you be traveling from?',
+        trip: view({ id: 'trip-new', activeAgent: 'meridian' }),
+      }));
+      const user = userEvent.setup();
+      render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+      await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'A relaxing beach trip{Enter}');
+      expect(startTrip).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: expect.any(String) }));
+    });
+
     it('does not call startTrip again once ?tripId= is on the URL, even with ?intent= still present (the reload-safe case)', async () => {
       searchParams = new URLSearchParams('intent=discover_destination&tripId=trip-1');
       commandSnapshot = view({ context: { origin_city: 'Delhi' } });

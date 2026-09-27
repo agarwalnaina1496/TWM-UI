@@ -97,6 +97,12 @@ export default function ScoutChat() {
         response = await startTrip({
           entryIntent: intent === ENTRY_INTENTS.DISCOVER ? 'discover' : 'known_destination',
           message: text,
+          // TWM-233: same stable-per-attempt key reused on a same-text
+          // retry below for sendTripCommand — a network-level retry after
+          // the Backend already committed the trip (client just never saw
+          // the response) replays the original trip instead of creating a
+          // second, orphaned one.
+          idempotencyKey,
         });
         // TWM-233: anchor the new trip's id into the URL the instant it
         // exists — every other trip-bearing page in the app already does

@@ -122,8 +122,8 @@ export function TripProvider({ children }) {
 
   // TWM-189: the only place a trip is created — runs the traveler's first
   // message, then fetches the composed TripView for the new row.
-  const startTrip = useCallback(async ({ entryIntent, message, title } = {}) => {
-    const response = await startTripFromFirstMessage({ entryIntent, message, title });
+  const startTrip = useCallback(async ({ entryIntent, message, title, idempotencyKey } = {}) => {
+    const response = await startTripFromFirstMessage({ entryIntent, message, title, idempotencyKey });
     const view = await queryClient.fetchQuery({ queryKey: tripKeys.trip(response.tripId), queryFn: () => getTrip(response.tripId) });
     queryClient.setQueryData(tripKeys.list, prev => [toListItem(view), ...(prev || []).filter(t => t.id !== view.id)]);
     setCurrentTripId(view.id);
