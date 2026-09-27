@@ -35,13 +35,26 @@ describe('tripApi', () => {
       recommendation: null,
       trip: { id: 'trip-1', version: 1, trip_state: {} },
     }));
-    const response = await startTripFromFirstMessage({ entryIntent: 'discover', message: 'Suggest mountains' });
+    const response = await startTripFromFirstMessage({ entryIntent: 'discover', message: 'Suggest mountains', idempotencyKey: 'key-1' });
     expect(fetchMock).toHaveBeenCalledWith('/api/trips/first-message', expect.objectContaining({
       credentials: 'include',
       method: 'POST',
-      body: JSON.stringify({ entry_intent: 'discover', message: 'Suggest mountains' }),
+      body: JSON.stringify({ entry_intent: 'discover', message: 'Suggest mountains', idempotency_key: 'key-1' }),
     }));
     expect(response).toMatchObject({ tripId: 'trip-1', version: 1, message: 'Got it.' });
+  });
+
+  // TWM-233: the Backend now requires idempotency_key on every first-message
+  // call — a caller that doesn't pass one must still get a generated one,
+  // not send the field missing (which the Backend now rejects with 422).
+  it('startTripFromFirstMessage generates an idempotency_key when none is passed', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      message: 'Got it.', agent_meta: null, recommendation: null,
+      trip: { id: 'trip-1', version: 1, trip_state: {} },
+    }));
+    await startTripFromFirstMessage({ entryIntent: 'discover', message: 'Suggest mountains' });
+    const [, options] = fetchMock.mock.calls[0];
+    expect(JSON.parse(options.body).idempotency_key).toBeTruthy();
   });
 
   it('listTrips fetches the list in a single request, sorted by updated_at descending', async () => {
