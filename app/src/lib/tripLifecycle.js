@@ -33,14 +33,6 @@ export function contextDestination(trip) {
   return trip?.context_recap?.find(item => item.key === 'destinations')?.value || null;
 }
 
-export function contextOrigin(trip) {
-  return trip?.context_recap?.find(item => item.key === 'origin_city')?.value || null;
-}
-
-export function contextDuration(trip) {
-  return trip?.context_recap?.find(item => item.key === 'trip_duration')?.value || null;
-}
-
 // TWM-232 PR 12 follow-up: the Backend's context_recap now carries every
 // extracted fact, not just these 5 — right for ScoutChat's facts panel
 // (a growing detail list), but a Home card is a scan surface, per PR 2's own

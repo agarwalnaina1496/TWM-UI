@@ -15,35 +15,17 @@ import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import { isDiscoverOnly, selectHeroTrip } from '../lib/tripHero.js';
 import { withTripId } from '../lib/tripUrl.js';
 import { decodeHtmlEntities } from '../lib/text.js';
-import { contextOrigin, contextDuration } from '../lib/tripLifecycle.js';
 import { ROUTES } from '../constants/routes.js';
 import '../styles/dashboard-home.css';
 
 const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution', 'b-matched': 'caution', 'b-done': 'positive' };
 
-// TWM-232: the Backend defaults every fresh trip's title to the literal
-// string "Untitled Trip" (twm/schemas/trips.py's TripFirstMessageRequest
-// default) -- never null/empty -- so `if (t.title)` always short-circuited
-// true and the origin/duration/destination fallback below never actually
-// ran. Treat that one default string as "no real title yet" too.
-// trip_duration is extracted verbatim from the traveler's own words (see
-// twm/prompts/scout.md) and passed through unchanged by the Backend's
-// context_recap composer -- it may already read "5 days" or "a week", not
-// just a bare number. Only append the "days" unit when the value is numeric.
-function formatDuration(duration) {
-  return /^\d+$/.test(duration) ? `${duration} days` : duration;
-}
-
+// TWM-232: the Backend now owns title composition entirely -- a real
+// traveler-set title, or an LLM-generated one Meridian/Guide produce once
+// the traveler answers the "anything else?" gate, or the placeholder
+// "Untitled Trip" until either exists. No client-side fallback chain.
 function displayTitle(t) {
-  if (t.title && t.title !== 'Untitled Trip') return decodeHtmlEntities(t.title);
-  const destination = contextDestination(t);
-  if (destination) return destination;
-  const origin = contextOrigin(t);
-  const duration = contextDuration(t);
-  if (origin && duration) return `${origin} · ${formatDuration(duration)}`;
-  if (origin) return `Trip from ${origin}`;
-  if (duration) return /^\d+$/.test(duration) ? `${duration}-day trip` : duration;
-  return null;
+  return t.title ? decodeHtmlEntities(t.title) : null;
 }
 
 // updated_at is set on every mutation, but a never-touched-since-creation

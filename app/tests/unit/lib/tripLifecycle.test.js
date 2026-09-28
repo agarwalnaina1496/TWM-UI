@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, tripStatusLine, relativeUpdatedAt,
-  contextRecapPills, contextDestination, contextOrigin, contextDuration,
+  contextRecapPills, contextDestination,
 } from '../../../src/lib/tripLifecycle.js';
 
 // TWM-220: every helper reads a `TripView` (full) or a `TripListItem` (thin).
@@ -14,15 +14,6 @@ function trip(overrides = {}) {
   const { stage = 'new', context = {}, ...rest } = overrides;
   return { lifecycle: { stage }, context_recap: recap(context), ...rest };
 }
-
-describe('context field helpers', () => {
-  it('reads canonical origin and duration values', () => {
-    const value = trip({ context: { origin_city: 'Delhi', trip_duration: '5' } });
-    expect(contextOrigin(value)).toBe('Delhi');
-    expect(contextDuration(value)).toBe('5');
-    expect(contextOrigin({})).toBeNull();
-  });
-});
 
 describe('tripLifecycle stage helpers', () => {
   it.each([

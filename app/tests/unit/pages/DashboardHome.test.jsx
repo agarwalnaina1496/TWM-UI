@@ -146,28 +146,15 @@ describe('DashboardHome', () => {
     expect(within(committedCard).getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
   });
 
-  it('falls back to origin+duration when the title is still the Backend default "Untitled Trip"', async () => {
-    // TWM-232: the Backend defaults every fresh trip's title to the literal
-    // string "Untitled Trip" -- `if (t.title)` alone never falls through to
-    // this fallback, so the auto-generated title never actually showed.
+  it('renders whatever title the Backend sends, including the placeholder', async () => {
+    // TWM-232: title composition (real title, LLM-generated, or the
+    // placeholder) is entirely Backend-owned now -- the UI has no
+    // client-side fallback chain and just renders t.title verbatim.
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'matching', context: { origin_city: 'Delhi', trip_duration: '5' } }),
+      listItem({ id: 'trip-1', title: '5 days from Bangalore', stage: 'matching', context: { origin_city: 'Bangalore', trip_duration: '5' } }),
     ] }));
     renderDashboardHome(GUEST);
-    expect(await screen.findByText('Delhi · 5 days')).toBeInTheDocument();
-    expect(screen.queryByText('Untitled Trip')).not.toBeInTheDocument();
-  });
-
-  it('does not double up the unit when trip_duration was extracted verbatim with one already ("5 days")', async () => {
-    // Meridian/Scout extract trip_duration verbatim from the traveler's own
-    // words (twm/prompts/scout.md) and the Backend passes it through
-    // unchanged -- it can already read "5 days", not just "5".
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'matching', context: { origin_city: 'Bangalore', trip_duration: '5 days' } }),
-    ] }));
-    renderDashboardHome(GUEST);
-    expect(await screen.findByText('Bangalore · 5 days')).toBeInTheDocument();
-    expect(screen.queryByText('Bangalore · 5 days days')).not.toBeInTheDocument();
+    expect(await screen.findByText('5 days from Bangalore')).toBeInTheDocument();
   });
 
   it('caps the explore-card recap chips at 2, with a "+N more" chip for the rest', async () => {
@@ -238,15 +225,17 @@ describe('DashboardHome', () => {
     expect(fetchMock.mock.calls.every(([url]) => url === '/api/trips' || /^\/api\/trips\/[^/]+$/.test(url))).toBe(true);
   });
 
-  it('searches a trip by its computed fallback display title', async () => {
+  it('searches a trip by its Backend-provided title', async () => {
+    // TWM-232: title composition (real, LLM-generated, or placeholder) is
+    // entirely Backend-owned -- search just matches whatever t.title is.
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: null, stage: 'matched', context: { origin_city: 'Delhi', trip_duration: '5' } }),
+      listItem({ id: 'trip-1', title: '5 days from Delhi', stage: 'matched', context: { origin_city: 'Delhi', trip_duration: '5' } }),
       listItem({ id: 'trip-2', title: 'Manali trip', stage: 'matched', context: { origin_city: 'Delhi' } }),
     ] }));
     renderDashboardHome(GUEST);
-    await screen.findByText('Delhi · 5 days');
-    await userEvent.type(screen.getByLabelText('Search your trips'), 'Delhi · 5');
-    expect(screen.getByText('Delhi · 5 days')).toBeInTheDocument();
+    await screen.findByText('5 days from Delhi');
+    await userEvent.type(screen.getByLabelText('Search your trips'), '5 days from');
+    expect(screen.getByText('5 days from Delhi')).toBeInTheDocument();
     expect(screen.queryByText('Manali trip')).not.toBeInTheDocument();
   });
 
