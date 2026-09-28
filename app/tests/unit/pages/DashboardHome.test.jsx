@@ -172,6 +172,19 @@ describe('DashboardHome', () => {
     expect(within(railCard).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
   });
 
+  it('drops the "updated" prefix on an explore card so the timestamp fits beside the badge', async () => {
+    // TWM-232: confirmed live -- "updated 2h ago" wraps mid-phrase next to
+    // the "Exploring" badge in a 220px card; the prefix is redundant there.
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' }, updated_at: twoHoursAgo }),
+    ] }));
+    renderDashboardHome(GUEST);
+    const railCard = (await screen.findByRole('button', { name: 'Review recommendations' })).closest('.explore-card');
+    expect(within(railCard).getByText('2h ago')).toBeInTheDocument();
+    expect(within(railCard).queryByText('updated 2h ago')).not.toBeInTheDocument();
+  });
+
   it('caps the explore-card recap chips at 2, with a "+N more" chip for the rest', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
       listItem({

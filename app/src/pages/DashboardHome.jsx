@@ -80,7 +80,13 @@ function TripCard({ t, rename, busyId, onOpen, showRename = true, variant = 'com
   const badge = stageBadge(t);
   const destination = contextDestination(t);
   const recapPills = contextRecapPills(t);
-  const timestamp = formatTripTimestamp(t);
+  // TWM-232: the explore card's badge already takes most of a 220px card's
+  // width, leaving too little room for "updated 2h ago" to fit beside it
+  // without wrapping mid-phrase (confirmed live) — the "updated " prefix is
+  // redundant next to a status pill anyway, so drop it there; the wider
+  // committed trip-card row keeps the full phrase.
+  const rawTimestamp = formatTripTimestamp(t);
+  const timestamp = isExplore ? rawTimestamp?.replace(/^updated /, '') : rawTimestamp;
   // TWM-232: a discover-only trip has no real identity yet — no title worth
   // showing (naming implies something named), no destination, and
   // tripStatusLine's pre-destination text ("Still figuring out where you're
