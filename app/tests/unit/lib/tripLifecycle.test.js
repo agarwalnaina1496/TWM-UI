@@ -165,6 +165,14 @@ describe('context recap formatters', () => {
     expect(contextRecapPills(t)).toEqual(['trip_duration: 5', 'num_travelers: 2']);
   });
 
+  it('contextRecapPills drops a free-form fact (e.g. activity_preferences) from the Home-card summary', () => {
+    // TWM-232 PR 12 follow-up: context_recap now carries every extracted
+    // fact, but a Home card is a scan surface, not the facts panel -- a
+    // free-form fact should not crowd it out.
+    const t = trip({ context: { origin_city: 'Bengaluru', activity_preferences: 'museums, beaches' } });
+    expect(contextRecapPills(t)).toEqual(['From Bengaluru']);
+  });
+
   it('contextDestination reads the destinations recap item', () => {
     expect(contextDestination(trip({ context: { destinations: 'Goa' } }))).toBe('Goa');
     expect(contextDestination(trip({}))).toBeNull();

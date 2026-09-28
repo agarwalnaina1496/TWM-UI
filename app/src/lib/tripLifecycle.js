@@ -41,12 +41,21 @@ export function contextDuration(trip) {
   return trip?.context_recap?.find(item => item.key === 'trip_duration')?.value || null;
 }
 
+// TWM-232 PR 12 follow-up: the Backend's context_recap now carries every
+// extracted fact, not just these 5 — right for ScoutChat's facts panel
+// (a growing detail list), but a Home card is a scan surface, per PR 2's own
+// call ("keep individual pills for a detail view, not this home-list scan
+// surface"). Bound it back to the fixed facts a trip card was always
+// designed to summarize; a free-form fact (activity preferences, considered
+// destinations, ...) stays visible in the facts panel, not repeated here.
+const FIXED_RECAP_KEYS = ['origin_city', 'num_travelers', 'trip_duration', 'travel_dates', 'budget'];
+
 // Bare display strings for the recap pill rows — the composer already
 // formatted each value; this only drops the destination (rendered
 // elsewhere) and prefixes the origin.
 export function contextRecapPills(trip) {
   return (trip?.context_recap || [])
-    .filter(item => item.key !== 'destinations')
+    .filter(item => FIXED_RECAP_KEYS.includes(item.key))
     .map(item => {
       if (item.key === 'origin_city') return `From ${item.value}`;
       return `${item.label}: ${item.value}`;
