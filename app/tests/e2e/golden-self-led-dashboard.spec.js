@@ -147,7 +147,10 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
 
   // TWM-140: no Choose Plan interstitial — approve_plan navigates straight in.
   // TWM-97: the Dashboard itself triggers start_itinerary and renders the real result.
+  // TWM-232 (boot-transition continuity): the dashboard auto-lands on Itinerary
+  // the moment a boot/build cycle is observed, so the traveler sees their plan
+  // build (or, as here, its already-ready result) rather than a static Overview.
   await expect(page).toHaveURL(/\/app\/dashboard/);
-  await expect(page.getByRole('button', { name: /Overview/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('button', { name: /Itinerary/ })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByText('Abbey Falls Getaway')).toBeVisible();
 });

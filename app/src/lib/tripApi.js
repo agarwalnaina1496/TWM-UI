@@ -73,8 +73,8 @@ export async function listTrips() {
 // request — POST /trips/first-message runs the agent turn before any row
 // exists and only persists a row if that turn succeeds. Returns the
 // touched-branch command response; the caller re-fetches the TripView.
-export async function startTripFromFirstMessage({ entryIntent, message, title } = {}) {
-  const payload = { entry_intent: entryIntent, message };
+export async function startTripFromFirstMessage({ entryIntent, message, title, idempotencyKey } = {}) {
+  const payload = { entry_intent: entryIntent, message, idempotency_key: idempotencyKey || newIdempotencyKey() };
   if (title !== undefined) payload.title = title;
   const saved = await request('/first-message', { method: 'POST', body: JSON.stringify(payload) });
   return {

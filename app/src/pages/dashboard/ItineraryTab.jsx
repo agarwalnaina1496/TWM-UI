@@ -2,10 +2,22 @@ import BudgetBar, { moneyRange } from '../../components/BudgetBar.jsx';
 import { BookingReadinessBadge, VerificationTag, VerifyChip } from '../../components/StatusPills.jsx';
 import { dayCostRange } from '../../lib/atlasView.js';
 import { ROUTES } from '../../constants/routes.js';
+import HonestTransition from '../../components/ui/HonestTransition.jsx';
 
 const KIND_ICON = { TRAVEL: '🚗', STAY: '🏨', MEAL: '🍽️', FREE_TIME: '🕒' };
 
-export default function ItineraryTab({ days, staySegmentByItemId, activeDay, onSelectDay, onOpenStay, onOpenTransport }) {
+// `building`/`buildingSteps`/`buildingActiveIndex` cover the post-freeze
+// Atlas-compile window: the plan is approved but the day-by-day document
+// isn't ready yet. Rendered inline (not a page-level swap) so the dashboard
+// shell — header, TripHero, tab bar — stays mounted the whole time; only
+// this tab's own content area shows the build in progress. TripDashboard
+// owns the actual step timer (`buildingActiveIndex`) so it keeps advancing
+// even while this tab isn't mounted — passed here purely to render.
+export default function ItineraryTab({ days, staySegmentByItemId, activeDay, onSelectDay, onOpenStay, onOpenTransport, building = false, buildingSteps, buildingActiveIndex }) {
+  if (building) {
+    return <HonestTransition steps={buildingSteps} label="Building your itinerary" activeIndex={buildingActiveIndex} />;
+  }
+
   const selectedDay = days.find(day => day.day_number === activeDay) || days[0];
   if (!selectedDay) return (
     <div className="dashboard-card tab-empty-state content-narrow">
