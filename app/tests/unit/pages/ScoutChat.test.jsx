@@ -75,6 +75,20 @@ describe('ScoutChat advice-entry chat', () => {
     expect(navigate).toHaveBeenCalledWith(expect.stringContaining('/trip-preview'), { state: { guideMessage: 'Here is your plan.' } });
   });
 
+  it('shows the Meridian-flavored anything-else quick reply ("let\'s discover") when Meridian owns the turn', () => {
+    commandSnapshot = view({ activeAgent: 'meridian', matcher: { awaiting: 'anything_else' } });
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.getByText("Nothing else, let's discover")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing else, let's plan")).not.toBeInTheDocument();
+  });
+
+  it('shows the Guide-flavored anything-else quick reply ("let\'s plan") when Guide owns the turn', () => {
+    commandSnapshot = view({ activeAgent: 'guide', plan: { places: [], day_plan: [], frozen: false, awaiting: 'anything_else' } });
+    render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+    expect(screen.getByText("Nothing else, let's plan")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing else, let's discover")).not.toBeInTheDocument();
+  });
+
   it.each(['meridian', 'guide', 'scout'])(
     'always sends traveler_message, regardless of active_agent (%s)',
     async agent => {

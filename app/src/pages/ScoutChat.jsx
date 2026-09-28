@@ -231,7 +231,12 @@ export default function ScoutChat() {
     runAdvice(value);
   }
 
-  const quickReplies = QUICK_REPLIES[awaiting] || [];
+  // TWM-232 PR 9: the sixth gating question's quick-reply copy is flow-aware
+  // — Meridian hasn't chosen a destination yet ("let's discover"), Guide is
+  // already building the plan ("let's plan"). Same `awaiting` slug either way.
+  const quickReplies = (awaiting === 'anything_else' && activeAgent === 'meridian')
+    ? QUICK_REPLIES.anything_else_meridian
+    : QUICK_REPLIES[awaiting] || [];
   const thinkingMessage = useThinkingMessage(busy);
   // TWM-190 (regression fix): a known-destination *entry* session (the
   // whole live conversation up to Guide completing the plan, not just its

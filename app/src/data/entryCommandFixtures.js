@@ -32,8 +32,13 @@ export const QUICK_REPLIES = Object.freeze({
   duration_days: ['3 days', '5 days', '7 days'],
   travel_dates: ['Not sure yet', 'Sometime next month', 'Flexible'],
   budget: ['₹1,00,000 total for both'],
-  // Guide's sixth gating question, asked after the five fixed facts above.
+  // The sixth gating question both Guide and Meridian ask after the five
+  // fixed facts above — same `awaiting` slug, different copy per which
+  // agent owns the turn (ScoutChat.jsx picks the right one by activeAgent):
+  // Guide is already building a plan ("let's plan"), Meridian hasn't chosen
+  // a destination yet ("let's discover").
   anything_else: ["Nothing else, let's plan"],
+  anything_else_meridian: ["Nothing else, let's discover"],
 });
 
 // TWM-183: same `awaiting` keying as QUICK_REPLIES above — a per-turn
