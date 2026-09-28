@@ -46,10 +46,12 @@ function unavailableTrack() {
   return { status: 'pending', label: 'Available once your itinerary is ready', cta: null };
 }
 
+// TWM-232: a plain fact now, not an actionable row -- the one action for an
+// unsettled destination lives at the bottom of the tab (dashboardPrimaryCta),
+// not duplicated here too, so no `cta` field to carry.
 export function destinationFactRow(view) {
   const track = routeTrack(view);
-  if (track.status === 'done') return { label: 'Destination', value: track.label };
-  return { label: 'Destination', cta: track.cta };
+  return { label: 'Destination', value: track.status === 'done' ? track.label : null };
 }
 
 export function dashboardTrackStatuses(view) {
@@ -68,9 +70,12 @@ export function dashboardPrimaryCta(view) {
 
 // "Your trip so far" — the labelled recap rows. Labels come straight from
 // the composed context_recap now (the Backend owns the one canonical field
-// list); this only drops the destination, which renders as its own row.
+// list); this drops destination (its own row) and budget (TWM-232 --
+// TripHero's stat-tile grid already shows the traveler's stated budget
+// pre-plan, "Not set yet" when missing; showing it again here would just
+// repeat TripHero verbatim).
 export function contextFactRows(view) {
   return (view?.context_recap || [])
-    .filter(item => item.key !== 'destinations')
+    .filter(item => item.key !== 'destinations' && item.key !== 'budget')
     .map(item => ({ label: item.label, value: item.value }));
 }
