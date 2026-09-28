@@ -158,6 +158,18 @@ describe('DashboardHome', () => {
     expect(screen.queryByText('Untitled Trip')).not.toBeInTheDocument();
   });
 
+  it('does not double up the unit when trip_duration was extracted verbatim with one already ("5 days")', async () => {
+    // Meridian/Scout extract trip_duration verbatim from the traveler's own
+    // words (twm/prompts/scout.md) and the Backend passes it through
+    // unchanged -- it can already read "5 days", not just "5".
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'matching', context: { origin_city: 'Bangalore', trip_duration: '5 days' } }),
+    ] }));
+    renderDashboardHome(GUEST);
+    expect(await screen.findByText('Bangalore · 5 days')).toBeInTheDocument();
+    expect(screen.queryByText('Bangalore · 5 days days')).not.toBeInTheDocument();
+  });
+
   it('caps the explore-card recap chips at 2, with a "+N more" chip for the rest', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
       listItem({

@@ -26,15 +26,23 @@ const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution
 // default) -- never null/empty -- so `if (t.title)` always short-circuited
 // true and the origin/duration/destination fallback below never actually
 // ran. Treat that one default string as "no real title yet" too.
+// trip_duration is extracted verbatim from the traveler's own words (see
+// twm/prompts/scout.md) and passed through unchanged by the Backend's
+// context_recap composer -- it may already read "5 days" or "a week", not
+// just a bare number. Only append the "days" unit when the value is numeric.
+function formatDuration(duration) {
+  return /^\d+$/.test(duration) ? `${duration} days` : duration;
+}
+
 function displayTitle(t) {
   if (t.title && t.title !== 'Untitled Trip') return decodeHtmlEntities(t.title);
   const destination = contextDestination(t);
   if (destination) return destination;
   const origin = contextOrigin(t);
   const duration = contextDuration(t);
-  if (origin && duration) return `${origin} · ${duration} days`;
+  if (origin && duration) return `${origin} · ${formatDuration(duration)}`;
   if (origin) return `Trip from ${origin}`;
-  if (duration) return `${duration}-day trip`;
+  if (duration) return /^\d+$/.test(duration) ? `${duration}-day trip` : duration;
   return null;
 }
 
