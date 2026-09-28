@@ -47,6 +47,9 @@ function matchesSearch(t, query) {
 // TWM-221: hoisted to module scope so a DashboardHome re-render (e.g. a
 // background trip prefetch landing) re-renders these in place rather than
 // remounting the subtree and dropping an open rename input's focus/value.
+// TWM-232: the only call site now only renders this at all once `title` is
+// already truthy (see TripCard) -- `label` is never falsy here, so this no
+// longer needs its own fallback chain.
 function RenameName({ t, rename, showRename = true, label }) {
   if (rename.id === t.id) {
     return (
@@ -65,7 +68,7 @@ function RenameName({ t, rename, showRename = true, label }) {
   }
   return (
     <div className="name">
-      {label || displayTitle(t) || 'Untitled trip'}{' '}
+      {label}{' '}
       {showRename && (
         <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => rename.start(t)}>
           Rename
@@ -169,7 +172,13 @@ export default function DashboardHome() {
   const pastTrips = visibleTrips.filter(t => isPastTrip(t));
   const activeTrips = visibleTrips.filter(t => !isPastTrip(t));
 
-  const hero = useMemo(() => selectHeroTrip(activeTrips), [activeTrips]);
+  // A still-deciding trip (no destination yet) never gets promoted to the
+  // prominent hero slot, even if it happens to have a stated travel window
+  // (e.g. "traveling in December" said before a destination is picked) --
+  // hero eligibility is about having a real trip to spotlight, not about
+  // lifecycle stage, but the two aren't the same thing.
+  const heroEligible = useMemo(() => activeTrips.filter(t => contextDestination(t)), [activeTrips]);
+  const hero = useMemo(() => selectHeroTrip(heroEligible), [heroEligible]);
   // Nearest known travel date first; trips with no date yet fall to the end,
   // ordered by most recently active — an untouched-but-dated trip shouldn't
   // bury a conversation the traveler just left.

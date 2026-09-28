@@ -193,13 +193,27 @@ describe('DashboardHome', () => {
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: 'Later trip', stage: 'matched', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: '2026-12' } }),
-      listItem({ id: 'trip-2', title: 'Ongoing trip', stage: 'matched', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: thisMonth } }),
+      listItem({ id: 'trip-1', title: 'Later trip', stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Goa' }, travelWindow: { precision: 'month', month: '2026-12' } }),
+      listItem({ id: 'trip-2', title: 'Ongoing trip', stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Udaipur' }, travelWindow: { precision: 'month', month: thisMonth } }),
     ] }));
     renderDashboardHome(GUEST);
     await screen.findByText('Later trip');
     const hero = document.querySelector('.hero-trip');
     expect(within(hero).getByText('Ongoing trip')).toBeInTheDocument();
+  });
+
+  it('never promotes a still-deciding trip (no destination) to the hero, even with an ongoing travel_window', async () => {
+    // A stated travel window ("traveling in December") can exist before a
+    // destination is chosen -- that alone shouldn't earn the prominent hero
+    // slot, which is for a real trip to spotlight, not any dated trip.
+    const now = new Date();
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'matching', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: thisMonth } }),
+    ] }));
+    renderDashboardHome(GUEST);
+    await screen.findByText('In conversation');
+    expect(document.querySelector('.hero-trip')).not.toBeInTheDocument();
   });
 
   it('shows no hero when no committed trip has a travel_window', async () => {
