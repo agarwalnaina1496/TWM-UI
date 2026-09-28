@@ -146,6 +146,32 @@ describe('DashboardHome', () => {
     expect(within(committedCard).getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
   });
 
+  it('falls back to origin+duration when the title is still the Backend default "Untitled Trip"', async () => {
+    // TWM-232: the Backend defaults every fresh trip's title to the literal
+    // string "Untitled Trip" -- `if (t.title)` alone never falls through to
+    // this fallback, so the auto-generated title never actually showed.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'matching', context: { origin_city: 'Delhi', trip_duration: '5' } }),
+    ] }));
+    renderDashboardHome(GUEST);
+    expect(await screen.findByText('Delhi · 5 days')).toBeInTheDocument();
+    expect(screen.queryByText('Untitled Trip')).not.toBeInTheDocument();
+  });
+
+  it('caps the explore-card recap chips at 2, with a "+N more" chip for the rest', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({
+        id: 'trip-1', title: 'Still browsing', stage: 'recommended',
+        context: { origin_city: 'Delhi', num_travelers: '1', budget: '1 lakh INR' },
+      }),
+    ] }));
+    renderDashboardHome(GUEST);
+    const railCard = (await screen.findByText('Still browsing')).closest('.explore-card');
+    const pills = within(railCard).getAllByText(/./, { selector: '.trip-card-recap-pill' });
+    expect(pills).toHaveLength(3); // 2 shown facts + 1 "+N more" chip
+    expect(within(railCard).getByText('+1 more')).toBeInTheDocument();
+  });
+
   it('promotes the ongoing trip to the hero over an upcoming one, off travel_window', async () => {
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;

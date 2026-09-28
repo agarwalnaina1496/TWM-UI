@@ -726,7 +726,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     sendTripCommand = vi.fn();
     renderDashboard();
     await screen.findByText('Your trip so far');
-    expect(screen.getAllByRole('button', { name: 'Continue chat →' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Continue matching →' })).toHaveLength(2);
   });
 
   it('points currentTripId at the trip named by ?tripId= when landing fresh', async () => {
@@ -748,7 +748,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     commandSnapshot = prePlanView({ stage: 'planning', context: { destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const button = await screen.findByRole('button', { name: 'Continue chat →' });
+    const button = await screen.findByRole('button', { name: 'Continue planning →' });
     await userEvent.setup().click(button);
     expect(setCurrentTripId).toHaveBeenCalledWith('trip-1');
   });
@@ -761,13 +761,13 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
-  it('unknown-destination Discover path: Destination row shows "Continue chat"', async () => {
+  it('unknown-destination Discover path: Destination row shows "Continue matching"', async () => {
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');
     const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
-    expect(within(row).getByRole('button', { name: 'Continue chat →' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Continue matching →' })).toBeInTheDocument();
   });
 
   it('recommendations-ready: Destination row shows "Review recommendations"', async () => {

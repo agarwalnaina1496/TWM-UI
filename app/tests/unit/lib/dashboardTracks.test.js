@@ -32,7 +32,7 @@ describe('contextFactRows', () => {
 
 describe('dashboardPrimaryCta', () => {
   it("returns Route's CTA when the destination isn't known yet", () => {
-    expect(dashboardPrimaryCta(view({ stage: 'matching' }))).toEqual({ label: 'Continue chat', to: '/scout-chat' });
+    expect(dashboardPrimaryCta(view({ stage: 'matching' }))).toEqual({ label: 'Continue matching', to: '/scout-chat' });
   });
 
   it("falls through to Day plan's CTA once Route is done", () => {
@@ -40,7 +40,7 @@ describe('dashboardPrimaryCta', () => {
       stage: 'planning',
       context: { destinations: 'Udaipur' },
       plan: { awaiting: 'trip_duration', day_plan: [], places: [], frozen: false },
-    }))).toEqual({ label: 'Continue chat', to: '/scout-chat' });
+    }))).toEqual({ label: 'Continue planning', to: '/scout-chat' });
   });
 
   it('returns null once both Route and Day plan are done (frozen)', () => {
@@ -65,6 +65,6 @@ describe('dashboardPrimaryCta', () => {
 
   it('still routes matching with no recommendation to /scout-chat', () => {
     expect(dashboardPrimaryCta(view({ stage: 'matching', matcher: { has_recommendation: false } })))
-      .toEqual({ label: 'Continue chat', to: '/scout-chat' });
+      .toEqual({ label: 'Continue matching', to: '/scout-chat' });
   });
 });

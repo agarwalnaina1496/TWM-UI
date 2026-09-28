@@ -83,10 +83,10 @@ export function stageBadge(trip) {
 
 const STAGE_CTA = {
   new: { label: 'Start planning', to: ROUTES.home },
-  matching: { label: 'Continue chat', to: ROUTES.scoutChat },
+  matching: { label: 'Continue matching', to: ROUTES.scoutChat },
   recommended: { label: 'Review recommendations', to: ROUTES.destinations },
   matched: { label: 'Review recommendations', to: ROUTES.destinations },
-  planning: { label: 'Continue chat', to: ROUTES.scoutChat },
+  planning: { label: 'Continue planning', to: ROUTES.scoutChat },
   plan_ready: { label: 'Resume plan builder', to: ROUTES.tripPreview },
   planned: { label: 'View trip', to: ROUTES.dashboard },
   booked: { label: 'View trip', to: ROUTES.dashboard },

@@ -21,8 +21,13 @@ import '../styles/dashboard-home.css';
 
 const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution', 'b-matched': 'caution', 'b-done': 'positive' };
 
+// TWM-232: the Backend defaults every fresh trip's title to the literal
+// string "Untitled Trip" (twm/schemas/trips.py's TripFirstMessageRequest
+// default) -- never null/empty -- so `if (t.title)` always short-circuited
+// true and the origin/duration/destination fallback below never actually
+// ran. Treat that one default string as "no real title yet" too.
 function displayTitle(t) {
-  if (t.title) return decodeHtmlEntities(t.title);
+  if (t.title && t.title !== 'Untitled Trip') return decodeHtmlEntities(t.title);
   const destination = contextDestination(t);
   if (destination) return destination;
   const origin = contextOrigin(t);
@@ -97,9 +102,19 @@ function TripCard({ t, rename, busyId, onOpen, showRename = true, variant = 'com
           {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
         </div>
         {statusLine && <p className="trip-card-status-line">{statusLine}</p>}
-        {recapPills.length > 0 && (isExplore
-          ? <p className="explore-card-recap-line">{recapPills.join(' · ')}</p>
-          : <div className="trip-card-recap">{recapPills.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}</div>)}
+        {recapPills.length > 0 && (() => {
+          // TWM-232: context_recap can now carry more facts than a scan-card
+          // has room for — cap the visible chips instead of cramming every
+          // one into a dot-joined line (confirmed live: unreadable past ~4).
+          const shown = recapPills.slice(0, 2);
+          const extra = recapPills.length - shown.length;
+          return (
+            <div className="trip-card-recap">
+              {shown.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
+              {extra > 0 && <span className="trip-card-recap-pill">+{extra} more</span>}
+            </div>
+          );
+        })()}
       </div>
       <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
         {isExplore ? stageCta(t).label : 'Open trip →'}
