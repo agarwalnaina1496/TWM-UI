@@ -8,11 +8,11 @@ import StatusPill from '../components/ui/StatusPill.jsx';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { trackEvent } from '../lib/analytics.js';
 import {
-  isTripEmpty, isCompletedTrip, stageBadge, stageCta, contextRecapPills, contextDestination,
+  isTripEmpty, stageBadge, contextRecapPills, contextDestination,
   tripStatusLine, relativeUpdatedAt,
 } from '../lib/tripLifecycle.js';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
-import { isDiscoverOnly, selectHeroTrip } from '../lib/tripHero.js';
+import { isPastTrip, selectHeroTrip, travelWindowDate } from '../lib/tripHero.js';
 import { withTripId } from '../lib/tripUrl.js';
 import { decodeHtmlEntities } from '../lib/text.js';
 import { ROUTES } from '../constants/routes.js';
@@ -20,12 +20,15 @@ import '../styles/dashboard-home.css';
 
 const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution', 'b-matched': 'caution', 'b-done': 'positive' };
 
-// TWM-232: the Backend now owns title composition entirely -- a real
+// TWM-232: the Backend owns title composition entirely -- a real
 // traveler-set title, or an LLM-generated one Meridian/Guide produce once
 // the traveler answers the "anything else?" gate, or the placeholder
-// "Untitled Trip" until either exists. No client-side fallback chain.
+// "Untitled Trip" until either exists. No client-side fallback chain here --
+// just presence detection, so the uniform card knows whether to render a
+// title row at all (the literal placeholder counts as "nothing to show yet",
+// same as no title).
 function displayTitle(t) {
-  return t.title ? decodeHtmlEntities(t.title) : null;
+  return t.title && t.title !== 'Untitled Trip' ? decodeHtmlEntities(t.title) : null;
 }
 
 // updated_at is set on every mutation, but a never-touched-since-creation
@@ -72,37 +75,29 @@ function RenameName({ t, rename, showRename = true, label }) {
   );
 }
 
-// TWM-171: exactly one primary affordance per committed trip card, fixed
+// TWM-171/TWM-232: exactly one primary affordance per trip card, fixed
 // label regardless of stage — stage is communicated via the adjacent status
-// tag, not this button's text.
-function TripCard({ t, rename, busyId, onOpen, showRename = true, variant = 'committed' }) {
-  const isExplore = variant === 'explore';
+// tag, not this button's text. One uniform shape for every stage now: the
+// title row only renders once a real title exists (nothing to rename before
+// that), everything else (badge, timestamp, facts, CTA) is identical
+// structure regardless of where the trip is in its lifecycle. The badge
+// always shows the honest, stage-specific text — no more generic label —
+// since every card's CTA now opens the same place (Dashboard) and lets the
+// per-stage next-step live there instead of in the card's own label.
+function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
   const badge = stageBadge(t);
   const destination = contextDestination(t);
   const recapPills = contextRecapPills(t);
-  // TWM-232: the explore card's badge already takes most of a 220px card's
-  // width, leaving too little room for "updated 2h ago" to fit beside it
-  // without wrapping mid-phrase (confirmed live) — the "updated " prefix is
-  // redundant next to a status pill anyway, so drop it there; the wider
-  // committed trip-card row keeps the full phrase.
-  const rawTimestamp = formatTripTimestamp(t);
-  const timestamp = isExplore ? rawTimestamp?.replace(/^updated /, '') : rawTimestamp;
-  // TWM-232: a discover-only trip has no real identity yet — no title worth
-  // showing (naming implies something named), no destination, and
-  // tripStatusLine's pre-destination text ("Still figuring out where you're
-  // headed.") says nothing the facts below don't already say. The badge and
-  // timestamp are the only two things actually worth a traveler's glance
-  // here, on one row; everything else is this card's real content.
-  const statusLine = isExplore ? null : tripStatusLine(t);
+  const timestamp = formatTripTimestamp(t);
+  const title = displayTitle(t);
+  const statusLine = tripStatusLine(t);
   return (
-    <div className={`card ${isExplore ? 'explore-card' : 'trip-card'}`}>
+    <div className="card trip-card">
       <div>
-        {!isExplore && (
-          <RenameName t={t} rename={rename} showRename={showRename} label={displayTitle(t)} />
-        )}
-        {!isExplore && destination && <div className="trip-card-destination">{destination}</div>}
+        {title && <RenameName t={t} rename={rename} showRename={showRename} label={title} />}
+        {destination && <div className="trip-card-destination">{destination}</div>}
         <div className="meta">
-          <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{isExplore ? 'Exploring' : badge.text}</StatusPill>
+          <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
           {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
         </div>
         {statusLine && <p className="trip-card-status-line">{statusLine}</p>}
@@ -121,14 +116,10 @@ function TripCard({ t, rename, busyId, onOpen, showRename = true, variant = 'com
         })()}
       </div>
       <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
-        {isExplore ? stageCta(t).label : 'Open trip →'}
+        Open trip →
       </button>
     </div>
   );
-}
-
-function ExploreRailCard({ t, rename, busyId, onOpen }) {
-  return <TripCard t={t} variant="explore" rename={rename} busyId={busyId} onOpen={onOpen} />;
 }
 
 // Dashboard-as-home (TWM-163): the product's home surface once a traveler
@@ -136,15 +127,15 @@ function ExploreRailCard({ t, rename, busyId, onOpen }) {
 // TripDashboard.jsx, the per-trip itinerary/booking view a card here links
 // into — naming kept separate so the two are never confused.
 //
-// TWM-172: two states. True empty (no trips at all) shows only the two entry
-// doors — no list, no search. Returning shows a date-priority hero, a
-// lighter "Continue exploring" rail for discover-only sessions, a search
-// scoped to the traveler's own trips, the regular committed-trips list, and
-// a quiet past-trips section. The prior filter tabs (all/active/upcoming/
-// completed) are intentionally dropped, not an oversight — upcoming is now
-// a subset of the regular list and completed has its own section, so a
-// separate filter no longer adds anything the new structure doesn't already
-// split out.
+// TWM-172/TWM-232: two states. True empty (no trips at all) shows only the
+// two entry doors — no list, no search. Returning groups by date, not
+// lifecycle stage: a date-priority hero ("Happening now"), one uniform
+// "Your trips" list for everything else regardless of stage (search scoped
+// to the traveler's own trips), and a quiet "Past" section for anything
+// whose travel window has fully elapsed. The prior stage-based split
+// (discover-only rail vs committed list) is gone — every card looks and
+// behaves the same way now; Dashboard is where the per-stage next-step
+// actually lives.
 export default function DashboardHome() {
   const { auth, startNewTrip, prefetchTrip, renameTrip } = useTrip();
   const tripsQuery = useTripsQuery();
@@ -175,12 +166,24 @@ export default function DashboardHome() {
   // aren't real trips from the traveler's point of view — TWM-108/163 keep
   // them out of Dashboard-home entirely.
   const visibleTrips = trips.filter(t => !isTripEmpty(t));
-  const completedTrips = visibleTrips.filter(t => isCompletedTrip(t));
-  const discoverOnlyTrips = visibleTrips.filter(t => !isCompletedTrip(t) && isDiscoverOnly(t));
-  const committedTrips = visibleTrips.filter(t => !isCompletedTrip(t) && !isDiscoverOnly(t));
+  const pastTrips = visibleTrips.filter(t => isPastTrip(t));
+  const activeTrips = visibleTrips.filter(t => !isPastTrip(t));
 
-  const hero = useMemo(() => selectHeroTrip(committedTrips), [committedTrips]);
-  const listTrips = committedTrips.filter(t => t.id !== hero?.id);
+  const hero = useMemo(() => selectHeroTrip(activeTrips), [activeTrips]);
+  // Nearest known travel date first; trips with no date yet fall to the end,
+  // ordered by most recently active — an untouched-but-dated trip shouldn't
+  // bury a conversation the traveler just left.
+  const listTrips = useMemo(() => activeTrips
+    .filter(t => t.id !== hero?.id)
+    .slice()
+    .sort((a, b) => {
+      const dateA = travelWindowDate(a);
+      const dateB = travelWindowDate(b);
+      if (dateA && dateB) return dateA - dateB;
+      if (dateA) return -1;
+      if (dateB) return 1;
+      return new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at);
+    }), [activeTrips, hero]);
 
   const searching = search.trim().length > 0;
   const searchResults = searching ? visibleTrips.filter(t => matchesSearch(t, search)) : [];
@@ -231,11 +234,6 @@ export default function DashboardHome() {
     } finally {
       setBusyId(null);
     }
-  }
-
-  function handleExploreRailOpen(t) {
-    trackEvent('explore_rail_engaged', { stage: t.lifecycle?.stage ?? 'new' });
-    handleOpen(t, { to: stageCta(t).to });
   }
 
   function startRename(t) {
@@ -340,30 +338,27 @@ export default function DashboardHome() {
           ) : (
             <>
               {hero && (
-                <section className="hero-trip" aria-label="Your most urgent trip">
+                <section className="hero-trip" aria-label="Happening now">
+                  <h2 className="section-title">Happening now</h2>
                   <TripCard t={hero} rename={rename} busyId={busyId} onOpen={handleOpen} />
                 </section>
               )}
 
-              {discoverOnlyTrips.length > 0 && (
-                <section className="explore-rail" aria-label="Continue exploring">
-                  <h2 className="section-title">Continue exploring</h2>
-                  <div className="explore-rail-row">
-                    {discoverOnlyTrips.map(t => <ExploreRailCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleExploreRailOpen} />)}
-                  </div>
+              {listTrips.length > 0 && (
+                <section aria-label="Your trips">
+                  <h2 className="section-title">Your trips</h2>
+                  {listTrips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} />)}
                 </section>
               )}
 
-              {listTrips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} />)}
-
-              {listTrips.length === 0 && !hero && discoverOnlyTrips.length === 0 && completedTrips.length === 0 && (
+              {listTrips.length === 0 && !hero && pastTrips.length === 0 && (
                 <div className="empty-trips"><p>No trips here yet.</p></div>
               )}
 
-              {completedTrips.length > 0 && (
+              {pastTrips.length > 0 && (
                 <section className="past-trips" aria-label="Past trips">
-                  <h2 className="section-title">Past trips</h2>
-                  {completedTrips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} showRename={false} />)}
+                  <h2 className="section-title">Past</h2>
+                  {pastTrips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} showRename={false} />)}
                 </section>
               )}
             </>

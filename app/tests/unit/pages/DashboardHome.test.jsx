@@ -132,18 +132,19 @@ describe('DashboardHome', () => {
     expect(screen.getByText('Itinerary ready')).toBeInTheDocument();
   });
 
-  it('keeps discover-only trips out of the main list, in the explore rail', async () => {
+  it('shows trips of any stage together in one uniform "Your trips" list', async () => {
+    // TWM-232: My Trips groups by date now, not lifecycle stage -- a
+    // recommended-stage (no destination yet) and a matched-stage trip sit
+    // in the same list, both with the same "Open trip →" affordance.
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
       listItem({ id: 'trip-1', title: 'Committed trip', stage: 'matched', context: { origin_city: 'Delhi' } }),
-      listItem({ id: 'trip-2', title: 'Still browsing', stage: 'recommended', context: { origin_city: 'Delhi' }, updated_at: '2025-12-01T00:00:00.000Z' }),
+      listItem({ id: 'trip-2', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' }, updated_at: '2025-12-01T00:00:00.000Z' }),
     ] }));
     renderDashboardHome(GUEST);
     await screen.findByText('Committed trip');
-    expect(screen.getByText('Continue exploring')).toBeInTheDocument();
-    // TWM-232: explore cards show no title (nothing real to name yet) --
-    // locate the rail card by its CTA instead.
-    const railCard = screen.getByRole('button', { name: 'Review recommendations' }).closest('.explore-card');
-    expect(railCard).toBeInTheDocument();
+    expect(screen.getByText('Your trips')).toBeInTheDocument();
+    expect(screen.queryByText('Continue exploring')).not.toBeInTheDocument();
+    expect(screen.getByText('Recommendations ready')).toBeInTheDocument();
     const committedCard = screen.getByText('Committed trip').closest('.trip-card');
     expect(within(committedCard).getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
   });
@@ -160,32 +161,21 @@ describe('DashboardHome', () => {
     expect(await screen.findByText('5 days from Bangalore')).toBeInTheDocument();
   });
 
-  it('explore cards show no title, just the "Exploring" badge, facts, and CTA', async () => {
-    // TWM-232: a discover-only trip has nothing real to name yet.
+  it('shows no title/Rename for a trip whose title is still the placeholder, honest badge otherwise', async () => {
+    // TWM-232: uniform card -- badge always shows the real, honest
+    // stage-specific text (no more generic label); title/Rename only
+    // render once a real title exists.
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
       listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' } }),
     ] }));
     renderDashboardHome(GUEST);
-    const railCard = (await screen.findByRole('button', { name: 'Review recommendations' })).closest('.explore-card');
-    expect(within(railCard).getByText('Exploring')).toBeInTheDocument();
-    expect(within(railCard).queryByText('Untitled Trip')).not.toBeInTheDocument();
-    expect(within(railCard).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
+    const card = (await screen.findByRole('button', { name: 'Open trip →' })).closest('.trip-card');
+    expect(within(card).getByText('Recommendations ready')).toBeInTheDocument();
+    expect(within(card).queryByText('Untitled Trip')).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
   });
 
-  it('drops the "updated" prefix on an explore card so the timestamp fits beside the badge', async () => {
-    // TWM-232: confirmed live -- "updated 2h ago" wraps mid-phrase next to
-    // the "Exploring" badge in a 220px card; the prefix is redundant there.
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' }, updated_at: twoHoursAgo }),
-    ] }));
-    renderDashboardHome(GUEST);
-    const railCard = (await screen.findByRole('button', { name: 'Review recommendations' })).closest('.explore-card');
-    expect(within(railCard).getByText('2h ago')).toBeInTheDocument();
-    expect(within(railCard).queryByText('updated 2h ago')).not.toBeInTheDocument();
-  });
-
-  it('caps the explore-card recap chips at 2, with a "+N more" chip for the rest', async () => {
+  it('caps the recap chips at 2, with a "+N more" chip for the rest', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
       listItem({
         id: 'trip-1', title: 'Untitled Trip', stage: 'recommended',
@@ -193,10 +183,10 @@ describe('DashboardHome', () => {
       }),
     ] }));
     renderDashboardHome(GUEST);
-    const railCard = (await screen.findByRole('button', { name: 'Review recommendations' })).closest('.explore-card');
-    const pills = within(railCard).getAllByText(/./, { selector: '.trip-card-recap-pill' });
+    const card = (await screen.findByRole('button', { name: 'Open trip →' })).closest('.trip-card');
+    const pills = within(card).getAllByText(/./, { selector: '.trip-card-recap-pill' });
     expect(pills).toHaveLength(3); // 2 shown facts + 1 "+N more" chip
-    expect(within(railCard).getByText('+1 more')).toBeInTheDocument();
+    expect(within(card).getByText('+1 more')).toBeInTheDocument();
   });
 
   it('promotes the ongoing trip to the hero over an upcoming one, off travel_window', async () => {
@@ -204,12 +194,12 @@ describe('DashboardHome', () => {
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
       listItem({ id: 'trip-1', title: 'Later trip', stage: 'matched', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: '2026-12' } }),
-      listItem({ id: 'trip-2', title: 'Happening now', stage: 'matched', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: thisMonth } }),
+      listItem({ id: 'trip-2', title: 'Ongoing trip', stage: 'matched', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: thisMonth } }),
     ] }));
     renderDashboardHome(GUEST);
     await screen.findByText('Later trip');
     const hero = document.querySelector('.hero-trip');
-    expect(within(hero).getByText('Happening now')).toBeInTheDocument();
+    expect(within(hero).getByText('Ongoing trip')).toBeInTheDocument();
   });
 
   it('shows no hero when no committed trip has a travel_window', async () => {

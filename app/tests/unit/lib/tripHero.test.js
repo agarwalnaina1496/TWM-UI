@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isDiscoverOnly, selectHeroTrip } from '../../../src/lib/tripHero.js';
+import { isPastTrip, selectHeroTrip } from '../../../src/lib/tripHero.js';
 
 const NOW = new Date(2026, 2, 15); // March 15, 2026
 
@@ -16,25 +16,26 @@ function listItem(id, travelWindow, { stage = 'matched', context = {} } = {}) {
 const month = m => ({ precision: 'month', month: m });
 const exact = d => ({ precision: 'exact', departure: d });
 
-describe('isDiscoverOnly', () => {
-  it('is true for a fresh chat that already has some context', () => {
-    expect(isDiscoverOnly(listItem('a', null, { stage: 'new', context: { origin_city: 'Delhi' } }))).toBe(true);
+describe('isPastTrip', () => {
+  it('is true once the travel window has fully elapsed', () => {
+    expect(isPastTrip(listItem('a', exact('2026-01-10')), NOW)).toBe(true);
   });
 
-  it('is true while still matching/recommending', () => {
-    expect(isDiscoverOnly(listItem('a', null, { stage: 'matching' }))).toBe(true);
-    expect(isDiscoverOnly(listItem('a', null, { stage: 'recommended' }))).toBe(true);
+  it('is false for a trip still in its ongoing month, even past the exact day', () => {
+    expect(isPastTrip(listItem('a', exact('2026-03-01')), NOW)).toBe(false);
+    expect(isPastTrip(listItem('a', month('2026-03')), NOW)).toBe(false);
   });
 
-  it('is false from matched onward', () => {
-    for (const stage of ['matched', 'planning', 'planned', 'booked']) {
-      expect(isDiscoverOnly(listItem('a', null, { stage }))).toBe(false);
-    }
+  it('is false for an upcoming trip', () => {
+    expect(isPastTrip(listItem('a', exact('2026-04-10')), NOW)).toBe(false);
   });
 
-  it('is false for a trip with no context at all', () => {
-    expect(isDiscoverOnly(listItem('a', null, { stage: 'new' }))).toBe(false);
-    expect(isDiscoverOnly({})).toBe(false);
+  it('is false for a trip with no travel window at all', () => {
+    expect(isPastTrip(listItem('a', null), NOW)).toBe(false);
+  });
+
+  it('is true once stage reaches "done", regardless of travel_window', () => {
+    expect(isPastTrip(listItem('a', null, { stage: 'done' }), NOW)).toBe(true);
   });
 });
 
