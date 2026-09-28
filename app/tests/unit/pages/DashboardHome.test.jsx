@@ -140,8 +140,10 @@ describe('DashboardHome', () => {
     renderDashboardHome(GUEST);
     await screen.findByText('Committed trip');
     expect(screen.getByText('Continue exploring')).toBeInTheDocument();
-    const railCard = screen.getByText('Still browsing').closest('.explore-card');
-    expect(within(railCard).getByRole('button', { name: 'Review recommendations' })).toBeInTheDocument();
+    // TWM-232: explore cards show no title (nothing real to name yet) --
+    // locate the rail card by its CTA instead.
+    const railCard = screen.getByRole('button', { name: 'Review recommendations' }).closest('.explore-card');
+    expect(railCard).toBeInTheDocument();
     const committedCard = screen.getByText('Committed trip').closest('.trip-card');
     expect(within(committedCard).getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
   });
@@ -149,23 +151,36 @@ describe('DashboardHome', () => {
   it('renders whatever title the Backend sends, including the placeholder', async () => {
     // TWM-232: title composition (real title, LLM-generated, or the
     // placeholder) is entirely Backend-owned now -- the UI has no
-    // client-side fallback chain and just renders t.title verbatim.
+    // client-side fallback chain and just renders t.title verbatim. Uses a
+    // committed (non-discover-only) stage since explore cards show no title.
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: '5 days from Bangalore', stage: 'matching', context: { origin_city: 'Bangalore', trip_duration: '5' } }),
+      listItem({ id: 'trip-1', title: '5 days from Bangalore', stage: 'matched', context: { origin_city: 'Bangalore', destinations: ['Goa'] } }),
     ] }));
     renderDashboardHome(GUEST);
     expect(await screen.findByText('5 days from Bangalore')).toBeInTheDocument();
   });
 
+  it('explore cards show no title, just the "Exploring" badge, facts, and CTA', async () => {
+    // TWM-232: a discover-only trip has nothing real to name yet.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' } }),
+    ] }));
+    renderDashboardHome(GUEST);
+    const railCard = (await screen.findByRole('button', { name: 'Review recommendations' })).closest('.explore-card');
+    expect(within(railCard).getByText('Exploring')).toBeInTheDocument();
+    expect(within(railCard).queryByText('Untitled Trip')).not.toBeInTheDocument();
+    expect(within(railCard).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
+  });
+
   it('caps the explore-card recap chips at 2, with a "+N more" chip for the rest', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
       listItem({
-        id: 'trip-1', title: 'Still browsing', stage: 'recommended',
+        id: 'trip-1', title: 'Untitled Trip', stage: 'recommended',
         context: { origin_city: 'Delhi', num_travelers: '1', budget: '1 lakh INR' },
       }),
     ] }));
     renderDashboardHome(GUEST);
-    const railCard = (await screen.findByText('Still browsing')).closest('.explore-card');
+    const railCard = (await screen.findByRole('button', { name: 'Review recommendations' })).closest('.explore-card');
     const pills = within(railCard).getAllByText(/./, { selector: '.trip-card-recap-pill' });
     expect(pills).toHaveLength(3); // 2 shown facts + 1 "+N more" chip
     expect(within(railCard).getByText('+1 more')).toBeInTheDocument();

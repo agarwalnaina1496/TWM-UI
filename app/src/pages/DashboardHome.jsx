@@ -81,14 +81,22 @@ function TripCard({ t, rename, busyId, onOpen, showRename = true, variant = 'com
   const destination = contextDestination(t);
   const recapPills = contextRecapPills(t);
   const timestamp = formatTripTimestamp(t);
-  const statusLine = tripStatusLine(t);
+  // TWM-232: a discover-only trip has no real identity yet — no title worth
+  // showing (naming implies something named), no destination, and
+  // tripStatusLine's pre-destination text ("Still figuring out where you're
+  // headed.") says nothing the facts below don't already say. The badge and
+  // timestamp are the only two things actually worth a traveler's glance
+  // here, on one row; everything else is this card's real content.
+  const statusLine = isExplore ? null : tripStatusLine(t);
   return (
     <div className={`card ${isExplore ? 'explore-card' : 'trip-card'}`}>
       <div>
-        <RenameName t={t} rename={rename} showRename={showRename} label={displayTitle(t)} />
+        {!isExplore && (
+          <RenameName t={t} rename={rename} showRename={showRename} label={displayTitle(t)} />
+        )}
         {!isExplore && destination && <div className="trip-card-destination">{destination}</div>}
         <div className="meta">
-          <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
+          <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{isExplore ? 'Exploring' : badge.text}</StatusPill>
           {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
         </div>
         {statusLine && <p className="trip-card-status-line">{statusLine}</p>}
