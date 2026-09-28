@@ -712,21 +712,28 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(await screen.findByRole('link', { name: '← Back to your trips' })).toHaveAttribute('href', '/');
   });
 
-  it('shows budget as a row in "Your trip so far" when present', async () => {
+  it('does not repeat the stated budget in the facts table -- TripHero already shows it', async () => {
+    // TWM-232: TripHero's stat-tile grid already renders the traveler's
+    // stated budget pre-plan ("Not set yet" when missing) -- Overview's own
+    // Budget section only appears once there's real added information (the
+    // computed range breakdown), so budget is excluded from the generic
+    // facts table entirely, at every stage, to avoid a second copy of it.
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');
-    const budgetRow = within(facts.closest('.trip-facts')).getByText('budget').closest('.trip-facts-row');
-    expect(within(budgetRow).getByText('₹1,00,000 total for both')).toBeInTheDocument();
+    expect(within(facts.closest('.trip-facts')).queryByText('budget')).not.toBeInTheDocument();
+    expect(screen.queryByText('💰 Budget')).not.toBeInTheDocument();
   });
 
-  it('shows a bottom primary CTA pointing at discovery when Route is not done', async () => {
+  it('shows exactly one bottom primary CTA pointing at discovery when Route is not done', async () => {
+    // TWM-232: the Destination row itself no longer carries its own CTA
+    // (that was a live duplicate of this same button) -- one action, once.
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     await screen.findByText('Your trip so far');
-    expect(screen.getAllByRole('button', { name: 'Continue chat →' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Continue chat →' })).toHaveLength(1);
   });
 
   it('points currentTripId at the trip named by ?tripId= when landing fresh', async () => {
@@ -761,22 +768,29 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
-  it('unknown-destination Discover path: Destination row shows "Continue chat"', async () => {
+  it('unknown-destination Discover path: Destination row shows plain "Not chosen yet", CTA lives at the bottom only', async () => {
+    // TWM-232: the row-level CTA was a live duplicate of the bottom primary
+    // CTA (same button rendered twice) -- the Destination row is a plain
+    // fact now, the single action lives at the bottom of the tab.
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');
     const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
-    expect(within(row).getByRole('button', { name: 'Continue chat →' })).toBeInTheDocument();
+    expect(within(row).getByText('Not chosen yet')).toBeInTheDocument();
+    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue chat →' })).toBeInTheDocument();
   });
 
-  it('recommendations-ready: Destination row shows "Review recommendations"', async () => {
+  it('recommendations-ready: Destination row shows plain "Not chosen yet", CTA lives at the bottom only', async () => {
     commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');
     const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
-    expect(within(row).getByRole('button', { name: 'Review recommendations →' })).toBeInTheDocument();
+    expect(within(row).getByText('Not chosen yet')).toBeInTheDocument();
+    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review recommendations →' })).toBeInTheDocument();
   });
 
   it('known-destination: Destination row shows the destination with no CTA', async () => {
