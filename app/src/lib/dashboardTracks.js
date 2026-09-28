@@ -46,10 +46,12 @@ function unavailableTrack() {
   return { status: 'pending', label: 'Available once your itinerary is ready', cta: null };
 }
 
+// TWM-232: a plain fact now, not an actionable row -- the one action for an
+// unsettled destination lives at the bottom of the tab (dashboardPrimaryCta),
+// not duplicated here too, so no `cta` field to carry.
 export function destinationFactRow(view) {
   const track = routeTrack(view);
-  if (track.status === 'done') return { label: 'Destination', value: track.label };
-  return { label: 'Destination', cta: track.cta };
+  return { label: 'Destination', value: track.status === 'done' ? track.label : null };
 }
 
 export function dashboardTrackStatuses(view) {
