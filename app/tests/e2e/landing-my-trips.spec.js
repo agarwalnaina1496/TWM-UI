@@ -35,6 +35,9 @@ test('one itinerary-ready trip lands on Dashboard-home, not an auto-open Dashboa
 });
 
 test('multiple meaningful trips land on Dashboard-home with stage-aware cards', async ({ page }) => {
+  // TWM-232: `active` (stage "matching") is discover-only, so it renders as
+  // an explore-card with no title -- a real trip name only shows once a
+  // trip is committed (has a destination), like `upcoming` below.
   const active = tripRecord({
     id: 'e2e-trip-1', title: 'Coorg weekend',
     trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
@@ -48,9 +51,8 @@ test('multiple meaningful trips land on Dashboard-home with stage-aware cards', 
   await mockTripCommandFlow(page, [], { initialTrips: [active, upcoming] });
   await page.goto('');
   await expect(page.getByRole('heading', { name: /your.*trips/i })).toBeVisible();
-  await expect(page.getByText('Coorg weekend')).toBeVisible();
+  await expect(page.locator('.explore-card').getByText('Exploring')).toBeVisible();
   await expect(page.getByText('Madhya Pradesh circuit')).toBeVisible();
-  await expect(page.getByText('In conversation')).toBeVisible();
   await expect(page.getByText('Itinerary ready')).toBeVisible();
 });
 
@@ -71,7 +73,10 @@ test('deep link to /my-trips renders the same Dashboard-home', async ({ page }) 
 });
 
 test('header "Plan a Trip" starts a separate Backend journey and preserves the existing trip', async ({ page }) => {
-  const existing = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } });
+  // Committed (not discover-only) so the trip's real title renders --
+  // this test is about the existing trip surviving navigation, not about
+  // explore-card presentation (see the discover-only-rail test for that).
+  const existing = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } });
   await mockTripCommandFlow(page, [], { initialTrips: [existing] });
 
   await page.goto('');
@@ -127,6 +132,8 @@ test('search narrows Dashboard-home to matching trips only (TWM-172)', async ({ 
 });
 
 test('discover-only trips appear in the explore rail, not the main trips list (TWM-172)', async ({ page }) => {
+  // TWM-232: an explore card shows no title -- locate it by its "Exploring"
+  // badge instead of the (never-rendered) trip title.
   const browsing = tripRecord({
     id: 'e2e-trip-1', title: 'Just browsing',
     trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
@@ -135,9 +142,9 @@ test('discover-only trips appear in the explore rail, not the main trips list (T
   await page.goto('');
 
   await expect(page.getByText('Continue exploring')).toBeVisible();
-  const railCard = page.locator('.explore-card', { hasText: 'Just browsing' });
+  const railCard = page.locator('.explore-card', { hasText: 'Exploring' });
   await expect(railCard).toBeVisible();
-  await expect(page.locator('.trip-card', { hasText: 'Just browsing' })).toHaveCount(0);
+  await expect(page.locator('.trip-card')).toHaveCount(0);
 });
 
 test('trip card renders exactly one primary affordance ("Open trip →"), regardless of stage', async ({ page }) => {
