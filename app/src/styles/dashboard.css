@@ -162,6 +162,14 @@
 .trip-facts-row:last-child{border-bottom:none}
 .trip-facts-label{color:var(--ts);font-size:13.5px}
 .trip-facts-value{font-weight:600;font-size:13.5px}
+.trip-facts-value.muted{font-weight:400;color:var(--tm)}
+
+/* TWM-232: Overview's progressive slots -- Budget and Before you go render
+   at the same position and with the same heading at every stage, only the
+   body content upgrades (a plain sentence pre-plan, the real chart/list
+   once it exists). */
+.overview-budget{margin:24px 0 0}
+.overview-empty-note{font-size:13.5px;color:var(--ts);font-style:italic;margin:0}
 
 /* TWM-182: pre-freeze placeholder for a non-Overview tab, tapped from the
    now-always-visible tab bar. */
