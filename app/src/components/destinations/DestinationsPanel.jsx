@@ -2,6 +2,7 @@ import HonestTransition from '../ui/HonestTransition.jsx';
 import OptionsCompare from './OptionsCompare.jsx';
 import { MATCHING_STEPS } from '../../constants/destinationsMatching.js';
 import { destinationsPhase } from '../../lib/destinationsPhase.js';
+import '../../styles/destinations.css';
 
 // TWM-234: the render half of Destinations -- extracted so the same
 // comparison UI can render standalone (Destinations.jsx) or embedded
