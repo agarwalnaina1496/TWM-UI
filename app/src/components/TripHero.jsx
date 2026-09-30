@@ -44,8 +44,10 @@ export default function TripHero({ view, actions = null }) {
 
   return (
     <section className="dashboard-hero">
-      {actions && <div className="hero-top"><div className="hero-actions">{actions}</div></div>}
-      <h1 className="hero-title">{decodeHtmlEntities(summary?.title || destination || view.title || 'Your trip')}</h1>
+      <div className="hero-top">
+        <h1 className="hero-title">{decodeHtmlEntities(summary?.title || destination || view.title || 'Your trip')}</h1>
+        {actions && <div className="hero-actions">{actions}</div>}
+      </div>
       <p className="hero-desc">{summary?.overview || stillWorkingCopy(view)}</p>
       <div className="hero-stats">
         <div><strong>{durationValue}</strong><span>Days</span></div>
@@ -56,10 +58,12 @@ export default function TripHero({ view, actions = null }) {
           <span>{prePlan ? 'Budget' : travelers.value ? `Total for ${travelers.value}` : 'Trip total'}</span>
         </div>
       </div>
-      <div className="hero-why">
-        <span className="hero-why-label">Why this route</span>
-        <p>{summary?.route_rationale || stillWorkingCopy(view)}</p>
-      </div>
+      {summary && (
+        <div className="hero-why">
+          <span className="hero-why-label">Why this route</span>
+          <p>{summary.route_rationale}</p>
+        </div>
+      )}
     </section>
   );
 }
