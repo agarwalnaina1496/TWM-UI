@@ -9,6 +9,7 @@ import { newIdempotencyKey } from '../../lib/tripApi.js';
 import { planReady } from '../../hooks/useGuidePlanning.js';
 import { ROUTES } from '../../constants/routes.js';
 import ChatConversation from '../../components/chat/ChatConversation.jsx';
+import FactsPanel from '../../components/FactsPanel.jsx';
 
 // TWM-232: Overview used to be a hard if/else between two structurally
 // different pages -- a plain fact table pre-itinerary, a budget
@@ -58,15 +59,17 @@ export default function OverviewTab({ view, tripId }) {
 
   return (
     <section aria-label="Trip overview">
-      <div className="trip-facts content-narrow">
-        <h2 className="trip-facts-heading">Your trip so far</h2>
-        {[...contextFactRows(view), destinationFactRow(view)].map(row => (
-          <div className="trip-facts-row" key={row.label}>
-            <span className="trip-facts-label">{row.label}</span>
-            {row.value ? <span className="trip-facts-value">{row.value}</span> : <span className="trip-facts-value muted">Not chosen yet</span>}
-          </div>
-        ))}
-      </div>
+      {!embedChat && (
+        <div className="trip-facts content-narrow">
+          <h2 className="trip-facts-heading">Your trip so far</h2>
+          {[...contextFactRows(view), destinationFactRow(view)].map(row => (
+            <div className="trip-facts-row" key={row.label}>
+              <span className="trip-facts-label">{row.label}</span>
+              {row.value ? <span className="trip-facts-value">{row.value}</span> : <span className="trip-facts-value muted">Not chosen yet</span>}
+            </div>
+          ))}
+        </div>
+      )}
 
       {budget && (
         <div className="overview-budget content-narrow">
@@ -82,6 +85,8 @@ export default function OverviewTab({ view, tripId }) {
 
       {primaryCta && embedChat && (
         <div className="overview-chat content-narrow">
+          <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
+          <FactsPanel contextRecap={view.context_recap} />
           <ChatConversation
             tripLoadStatus="ready"
             activeAgent={activeAgent}

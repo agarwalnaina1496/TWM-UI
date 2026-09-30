@@ -686,7 +686,9 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    await screen.findByText('Your trip so far');
+    // TWM-234: matching embeds the conversation (with its own facts panel)
+    // instead of the plain facts table.
+    await screen.findByText('What we know so far');
     expect(screen.getByText('Delhi')).toBeInTheDocument();
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
@@ -718,7 +720,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     // Budget section only appears once there's real added information (the
     // computed range breakdown), so budget is excluded from the generic
     // facts table entirely, at every stage, to avoid a second copy of it.
-    commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both' } });
+    commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');
@@ -735,7 +737,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    await screen.findByText('Your trip so far');
+    await screen.findByText('What we know so far');
     expect(screen.queryByRole('button', { name: 'Continue matching →' })).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText('Message Scout…')).toBeInTheDocument();
   });
@@ -784,7 +786,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     commandSnapshot = prePlanView({ stage: 'planning', context: {}, plan: { places: [], day_plan: [], frozen: false, awaiting: null } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    await screen.findByText('Your trip so far');
+    await screen.findByText('Scout is here to help with your trip.');
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
@@ -792,14 +794,13 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     // TWM-232: the row-level CTA was a live duplicate of the bottom primary
     // CTA (same button rendered twice) -- the Destination row is a plain
     // fact now, the single action lives at the bottom of the tab.
-    // TWM-234: that "single action" is the embedded conversation itself now.
+    // TWM-234: matching now embeds the conversation instead of showing the
+    // facts table at all -- the "single action" is the conversation itself.
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const facts = await screen.findByText('Your trip so far');
-    const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
-    expect(within(row).getByText('Not chosen yet')).toBeInTheDocument();
-    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+    await screen.findByText('What we know so far');
+    expect(screen.queryByText('Your trip so far')).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText('Message Scout…')).toBeInTheDocument();
   });
 
@@ -815,7 +816,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
   });
 
   it('known-destination: Destination row shows the destination with no CTA', async () => {
-    commandSnapshot = prePlanView({ stage: 'planning', context: { origin_city: 'Delhi', destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
+    commandSnapshot = prePlanView({ stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Udaipur' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');
