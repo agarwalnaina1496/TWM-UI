@@ -7,13 +7,14 @@ import { withTripId } from '../../lib/tripUrl.js';
 import { resumedGreeting } from '../../lib/chatGreeting.js';
 import { phaseProgress } from '../../lib/phaseProgress.js';
 import { newIdempotencyKey } from '../../lib/tripApi.js';
-import { planReady } from '../../hooks/useGuidePlanning.js';
 import { ROUTES } from '../../constants/routes.js';
 import ChatConversation from '../../components/chat/ChatConversation.jsx';
 import FactsPanel from '../../components/FactsPanel.jsx';
 import DestinationsPanel from '../../components/destinations/DestinationsPanel.jsx';
 import CheckpointOverlay from '../../components/destinations/CheckpointOverlay.jsx';
+import PlanBuilderPanel from '../../components/planBuilder/PlanBuilderPanel.jsx';
 import { useDestinationsMatching } from '../../hooks/useDestinationsMatching.js';
+import { usePlanBuilder } from '../../hooks/usePlanBuilder.js';
 
 // TWM-232: Overview used to be a hard if/else between two structurally
 // different pages -- a plain fact table pre-itinerary, a budget
@@ -30,10 +31,14 @@ import { useDestinationsMatching } from '../../hooks/useDestinationsMatching.js'
 // TWM-234: the plain "Your trip so far" facts table is gone -- it read as a
 // checklist of trip facets even at stages where nothing about it was
 // actionable. The primary CTA no longer just navigates either -- when the
-// next step is the conversation (matching or planning) or the Destinations
-// comparison (recommended/matched), the real panel renders inline, right
-// here. No click needed to see what's next; it IS what's next. Only Plan
-// Builder still navigates away (not embedded yet).
+// next step is the conversation (matching/planning), the Destinations
+// comparison (recommended/matched), or Plan Builder (plan_ready/planning
+// with a day_plan), the real panel renders inline, right here. No click
+// needed to see what's next; it IS what's next. Each embedded hook is
+// called with `embedded: true`, which turns its own navigate() calls into
+// no-ops -- selecting a destination or approving a plan changes the trip's
+// stage, primaryCta recomputes from the refetched TripView, and the
+// embedded panel swaps in place without ever leaving this page.
 export default function OverviewTab({ view, tripId }) {
   const navigate = useNavigate();
   const { setCurrentTripId, sendTripCommand } = useTrip();
@@ -45,8 +50,10 @@ export default function OverviewTab({ view, tripId }) {
   const awaiting = activeAgent === 'guide' ? view.plan?.awaiting : view.matcher?.awaiting;
   const embedChat = primaryCta?.to === ROUTES.scoutChat;
   const embedDestinations = primaryCta?.to === ROUTES.destinations;
+  const embedPlanBuilder = primaryCta?.to === ROUTES.tripPreview;
   const progress = phaseProgress(view);
-  const destinationsState = useDestinationsMatching({ enabled: embedDestinations });
+  const destinationsState = useDestinationsMatching({ enabled: embedDestinations, embedded: true });
+  const planBuilder = usePlanBuilder({ enabled: embedPlanBuilder, embedded: true });
 
   function go(cta) {
     setCurrentTripId(tripId);
@@ -57,10 +64,12 @@ export default function OverviewTab({ view, tripId }) {
     return sendTripCommand('traveler_message', { message: text, idempotencyKey: newIdempotencyKey() });
   }
 
-  function onChatPlanReady(response) {
-    if (!planReady(response.trip.plan)) return false;
-    navigate(withTripId(ROUTES.tripPreview, response.trip.id), { state: { guideMessage: response.message } });
-    return true;
+  // Plan Builder embeds here too now -- no navigation needed. Returning
+  // false keeps Guide's response displayed as the final chat turn; the
+  // refetched TripView's day_plan then flips primaryCta to Plan Builder on
+  // the next render, swapping this panel out in place.
+  function onChatPlanReady() {
+    return false;
   }
 
   return (
@@ -93,6 +102,9 @@ export default function OverviewTab({ view, tripId }) {
         <div className="chat-screen embedded-chat-panel">
           <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
           <FactsPanel contextRecap={view.context_recap} />
+          {/* No onSeeDestinations here -- Destinations embeds itself
+              reactively once primaryCta flips, same as this chat panel
+              does; a manual navigate-away would fight that. */}
           <ChatConversation
             tripLoadStatus="ready"
             activeAgent={activeAgent}
@@ -101,7 +113,6 @@ export default function OverviewTab({ view, tripId }) {
             greeting={resumedGreeting(view, { activeAgent, awaiting })}
             onSend={onSendChat}
             onPlanReady={onChatPlanReady}
-            onSeeDestinations={() => go({ to: ROUTES.destinations })}
           />
         </div>
       )}
@@ -123,7 +134,13 @@ export default function OverviewTab({ view, tripId }) {
         </div>
       )}
 
-      {primaryCta && !embedChat && !embedDestinations && (
+      {embedPlanBuilder && (
+        <div className="content-narrow">
+          <PlanBuilderPanel {...planBuilder} />
+        </div>
+      )}
+
+      {primaryCta && !embedChat && !embedDestinations && !embedPlanBuilder && (
         <div className="overview-primary-cta"><button type="button" className="btn btn-primary" onClick={() => go(primaryCta)}>{primaryCta.label} →</button></div>
       )}
 

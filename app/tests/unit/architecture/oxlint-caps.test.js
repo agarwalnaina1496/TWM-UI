@@ -43,16 +43,15 @@ describe('oxlint architecture caps stay configured', () => {
   });
 
   it('the complexity-exempt list only holds the known legacy pages', () => {
-    // TWM-234: Destinations.jsx is a thin page now (its matching/planning
-    // logic moved to hooks/, its render to components/destinations/) --
-    // it earns its way off this list rather than growing it.
+    // TWM-234: Destinations.jsx and TripPreview.jsx are thin pages now
+    // (their state moved to hooks/, their render to components/) -- each
+    // earns its way off this list rather than growing it.
     const exempt = (config.overrides ?? [])
       .filter(o => o.rules?.['eslint/complexity'] === 'off')
       .flatMap(o => o.files ?? [])
       .filter(f => /^src\/[^*]+\.jsx?$/.test(f));
     expect(exempt.sort()).toEqual([
       'src/pages/ScoutChat.jsx',
-      'src/pages/TripPreview.jsx',
     ]);
   });
 });

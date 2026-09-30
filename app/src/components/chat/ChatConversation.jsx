@@ -15,8 +15,7 @@ import '../../styles/chat.css';
 // exists.
 //
 // `components/` may not import from `hooks/` (TWM-224 layer graph), so the
-// thinking-message timer below is a local copy of hooks/useThinkingMessage.js
-// rather than an import.
+// thinking-message timer below is a local hook, not an import.
 const THINKING_STAGES = [
   { afterMs: 0, text: 'Thinking…' },
   { afterMs: 2500, text: 'Still working on it…' },

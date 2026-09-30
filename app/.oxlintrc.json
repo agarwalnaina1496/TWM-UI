@@ -20,7 +20,7 @@
       }
     },
     {
-      "files": ["src/pages/ScoutChat.jsx", "src/pages/TripPreview.jsx"],
+      "files": ["src/pages/ScoutChat.jsx"],
       "rules": {
         "eslint/complexity": "off"
       }

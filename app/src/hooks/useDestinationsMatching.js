@@ -30,8 +30,10 @@ function recommendationsQueryStatus(tripId, query) {
 // an embedded panel in Dashboard Overview -- one source of truth for the
 // behavior, two places it can render. `enabled: false` (Overview, when
 // Destinations isn't the current step) keeps the query and auto-continue
-// effect from firing at all.
-export function useDestinationsMatching({ enabled = true } = {}) {
+// effect from firing at all; `embedded: true` (Overview, whenever it is the
+// current step) turns planning's navigate() calls into no-ops so Overview's
+// own reactive primaryCta drives the handoff to chat/Plan Builder instead.
+export function useDestinationsMatching({ enabled = true, embedded = false } = {}) {
   const { commandSnapshot: view, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState } = useTrip();
 
   const triggered = useRef(false);
@@ -66,7 +68,7 @@ export function useDestinationsMatching({ enabled = true } = {}) {
     updateUiState({ [FOCUSED_KEY]: null, [EVIDENCE_OPEN_KEY]: false }).catch(() => {});
   }, [setFocusedKey, setEvidenceOpen, updateUiState]);
 
-  const planning = useDestinationPlanning({ view, sendTripCommand, setPlanError });
+  const planning = useDestinationPlanning({ view, sendTripCommand, setPlanError, embedded });
   const refinement = useDestinationRefinement({ sendTripCommand, applyCommandRound, resetFocus, triggeredRef: triggered, setPlanError });
 
   useEffect(() => {

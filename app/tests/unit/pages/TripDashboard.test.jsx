@@ -806,14 +806,15 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
   });
 
   it('a CTA click points currentTripId at the trip before navigating', async () => {
-    // TWM-234: planning also embeds the conversation now (it's a scoutChat
-    // CTA target too) -- use a stage whose CTA still navigates (Plan
-    // Builder isn't embedded) to keep covering the go()/setCurrentTripId
-    // behavior itself.
-    commandSnapshot = prePlanView({ stage: 'plan_ready', context: { destinations: 'Udaipur' }, plan: { places: ['A'], day_plan: [{ day_number: 1, places: ['A'], pace: 'relaxed', buffer_note: null }], frozen: false, awaiting: null } });
+    // TWM-234: matching/planning embed chat, recommended/matched embed
+    // Destinations, and planning/plan_ready-with-a-day_plan now embeds Plan
+    // Builder too -- a genuinely context-less `new` trip is the one
+    // remaining stage whose CTA still navigates, to keep covering the
+    // go()/setCurrentTripId behavior itself.
+    commandSnapshot = prePlanView({ stage: 'new', context: {} });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const button = await screen.findByRole('button', { name: 'Resume plan builder →' });
+    const button = await screen.findByRole('button', { name: 'Start planning →' });
     await userEvent.setup().click(button);
     expect(setCurrentTripId).toHaveBeenCalledWith('trip-1');
   });
@@ -868,6 +869,37 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(screen.queryByRole('button', { name: 'Review recommendations →' })).not.toBeInTheDocument();
   });
 
+  it('"Plan this trip" from the embedded Destinations panel never navigates away -- it stays on Overview', async () => {
+    // TWM-234: this used to navigate to a separate /scout-chat or
+    // /trip-preview page. Destinations is embedded now, so selecting a
+    // destination must stay on Overview -- the next embed (chat or Plan
+    // Builder) takes over once the refetched TripView's stage/plan changes,
+    // never via an explicit route change.
+    commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn()
+      .mockResolvedValueOnce({ trip: { id: 'trip-1' } }) // select_destination
+      .mockResolvedValueOnce({ message: 'Great choice!', trip: { id: 'trip-1', plan: { awaiting: 'trip_duration' } } }); // start_planning
+    global.fetch = vi.fn(async url => (url.includes('/recommendations')
+      ? jsonResponse({
+        version: 1, status: 'SUCCESS', message: 'A strong match.', trip_type: 'circuit',
+        traveler_criteria: [{ id: 'budget', label: 'Within budget', requirement_type: 'HARD', source_context_paths: ['budget'] }],
+        options: [{
+          rank: 1, type: 'circuit', name: 'Udaipur Loop', circuit_id: 'udaipur-loop', summary: 'A relaxed lakeside base.', other_considerations: [],
+          evaluations: [{
+            criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Comfortably within budget.',
+            details: [{ type: 'bullets', items: ['Fits the stated range'] }],
+          }],
+        }],
+      })
+      : jsonResponse({})));
+    renderDashboard();
+    await screen.findByText('Udaipur Loop');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Plan this trip →' }));
+
+    await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('start_planning'));
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it('known-destination: shows no primary CTA once the destination is settled and planning has not started', async () => {
     // TWM-234: the generic "Your trip so far" facts table (which used to
     // carry a plain Destination row here) is gone entirely -- TripHero's own
@@ -879,6 +911,25 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     renderDashboard();
     await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
     expect(screen.queryByRole('button', { name: /→$/ })).not.toBeInTheDocument();
+  });
+
+  it('embeds Plan Builder directly once planning has produced a day_plan, no intermediate CTA', async () => {
+    // TWM-234: `planning`/`plan_ready` with a day_plan used to show a
+    // "Resume plan builder ->" button that navigated to /trip-preview. It
+    // now embeds the Plan Builder panel right here, same pattern as chat
+    // and Destinations.
+    commandSnapshot = {
+      ...prePlanView({
+        stage: 'planning', context: { origin_city: 'Delhi', destinations: 'Udaipur' },
+        plan: { places: ['Lake Palace'], day_plan: [{ day_number: 1, places: ['Lake Palace'], pace: 'relaxed', buffer_note: null }], frozen: false, awaiting: null },
+      }),
+      has_day_plan: true,
+    };
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    expect(await screen.findByText('Lake Palace')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve this plan →' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resume plan builder →' })).not.toBeInTheDocument();
   });
 });
 

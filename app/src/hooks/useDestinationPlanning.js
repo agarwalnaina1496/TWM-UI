@@ -7,9 +7,19 @@ import { withTripId } from '../lib/tripUrl.js';
 
 // TWM-234: the "select a destination -> start planning -> possibly hit a
 // checkpoint question" flow, split out of useDestinationsMatching so neither
-// file trips the per-function complexity cap on its own.
-export function useDestinationPlanning({ view, sendTripCommand, setPlanError }) {
+// file trips the per-function complexity cap on its own. `embedded: true`
+// (Overview) turns every `navigate()` here into a no-op -- Overview's own
+// primaryCta already recomputes from the refetched TripView after each
+// command (stage flips to planning -> embeds chat or the plan builder), so
+// an explicit route change would fight that reactive switch instead of
+// cooperating with it.
+export function useDestinationPlanning({ view, sendTripCommand, setPlanError, embedded = false }) {
   const navigate = useNavigate();
+  function go(path, opts) {
+    if (embedded) return;
+    if (opts) navigate(path, opts);
+    else navigate(path);
+  }
   const [planningId, setPlanningId] = useState(null);
   const [checkpointAwaiting, setCheckpointAwaiting] = useState(null);
   const [checkpointMessage, setCheckpointMessage] = useState('');
@@ -38,10 +48,10 @@ export function useDestinationPlanning({ view, sendTripCommand, setPlanError }) 
     setCheckpointAwaiting(null);
     const nextTripId = response.trip?.id ?? view?.id;
     if (planReady(nextPlan)) {
-      navigate(withTripId('/trip-preview', nextTripId), { state: { guideMessage: response.message } });
+      go(withTripId('/trip-preview', nextTripId), { state: { guideMessage: response.message } });
       return;
     }
-    navigate(withTripId('/scout-chat', nextTripId));
+    go(withTripId('/scout-chat', nextTripId));
   }
 
   async function doPlanThis(option) {
@@ -63,7 +73,7 @@ export function useDestinationPlanning({ view, sendTripCommand, setPlanError }) 
     const isSelected = selectedOption && selectedOption.type === option.type && selectedOption.id === option.key;
     if (isSelected) {
       const destination = planReady(view?.plan) ? '/trip-preview' : '/scout-chat';
-      navigate(withTripId(destination, view?.id));
+      go(withTripId(destination, view?.id));
       return;
     }
     doPlanThis(option);
