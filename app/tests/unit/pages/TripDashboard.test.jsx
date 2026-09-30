@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TripDashboard from '../../../src/pages/TripDashboard.jsx';
+import { TestQueryProvider } from '../testUtils.js';
 
 let commandSnapshot;
 let sendTripCommand;
@@ -171,7 +172,7 @@ function makeFetch(over = {}) {
 }
 
 function renderDashboard(initialEntries = ['/dashboard']) {
-  return render(<MemoryRouter initialEntries={initialEntries}><TripDashboard /></MemoryRouter>);
+  return render(<TestQueryProvider><MemoryRouter initialEntries={initialEntries}><TripDashboard /></MemoryRouter></TestQueryProvider>);
 }
 async function readyDashboard() {
   const view = renderDashboard();
@@ -286,7 +287,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
 
     commandSnapshot = { ...readyView({ summary: { title: 'Goa Escape' } }), version: 2 };
     itineraryResponse = enrichedDoc({ trip_summary: { title: 'Goa Escape' } });
-    rerender(<MemoryRouter><TripDashboard /></MemoryRouter>);
+    rerender(<TestQueryProvider><MemoryRouter><TripDashboard /></MemoryRouter></TestQueryProvider>);
     await waitFor(() => expect(screen.getByText('Goa Escape')).toBeInTheDocument());
     await waitFor(() => expect(count).toBe(2));
     expect(sendTripCommand).not.toHaveBeenCalled();
@@ -602,7 +603,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     commandSnapshot = frozenView({ context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn(() => new Promise(() => {}));
     const user = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
-    render(<MemoryRouter><TripDashboard /></MemoryRouter>);
+    render(<TestQueryProvider><MemoryRouter><TripDashboard /></MemoryRouter></TestQueryProvider>);
     await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
     expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
 
@@ -619,7 +620,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     commandSnapshot = frozenView({ context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn(() => new Promise(() => {}));
     const user = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
-    render(<MemoryRouter><TripDashboard /></MemoryRouter>);
+    render(<TestQueryProvider><MemoryRouter><TripDashboard /></MemoryRouter></TestQueryProvider>);
     await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
     expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
 
@@ -637,7 +638,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     commandSnapshot = frozenView();
     sendTripCommand = vi.fn(() => new Promise(() => {}));
-    render(<MemoryRouter><TripDashboard /></MemoryRouter>);
+    render(<TestQueryProvider><MemoryRouter><TripDashboard /></MemoryRouter></TestQueryProvider>);
     await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
     expect(screen.getAllByRole('listitem')[0]).toHaveClass('active');
     expect(screen.getAllByRole('listitem')[0]).not.toHaveClass('done');
@@ -683,11 +684,13 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
   // ---- pre-plan Dashboard ----------------------------------------
 
   it('shows the local Matching phase progress, not a trip-wide pipeline', async () => {
+    // TWM-234: `recommended` now embeds the Destinations comparison
+    // directly (no facts table, no intermediate CTA) -- wait on the
+    // phase-progress label itself rather than the retired facts heading.
     commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    await screen.findByText('Your trip so far');
-    expect(screen.getByText('Matching')).toBeInTheDocument();
+    await screen.findByText('Matching');
     const active = screen.getByText('Recommended');
     expect(active.className).toContain('active');
     expect(screen.queryByText('Planning')).not.toBeInTheDocument();
@@ -751,7 +754,10 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     // Budget section only appears once there's real added information (the
     // computed range breakdown), so budget is excluded from the generic
     // facts table entirely, at every stage, to avoid a second copy of it.
-    commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both' } });
+    // TWM-234: `recommended`/`matching` now embed their own panel instead of
+    // the facts table -- use `matched` with a destination already chosen
+    // (no primary CTA, table renders) to keep exercising the facts table.
+    commandSnapshot = prePlanView({ stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Udaipur', budget: '₹1,00,000 total for both' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     const facts = await screen.findByText('Your trip so far');
@@ -835,15 +841,32 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(screen.getByPlaceholderText('Message Scout…')).toBeInTheDocument();
   });
 
-  it('recommendations-ready: Destination row shows plain "Not chosen yet", CTA lives at the bottom only', async () => {
+  it('recommendations-ready: embeds the Destinations comparison directly, no intermediate CTA', async () => {
+    // TWM-234: `recommended` used to show a plain facts row plus a "Review
+    // recommendations ->" button that navigated away. It now embeds the
+    // Destinations comparison panel right here, same pattern as the
+    // matching-stage chat embed -- no click needed, no facts table shown
+    // underneath it (replace, not append).
     commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
+    global.fetch = vi.fn(async url => (url.includes('/recommendations')
+      ? jsonResponse({
+        version: 1, status: 'SUCCESS', message: 'A strong match.', trip_type: 'circuit',
+        traveler_criteria: [{ id: 'budget', label: 'Within budget', requirement_type: 'HARD', source_context_paths: ['budget'] }],
+        options: [{
+          rank: 1, type: 'circuit', name: 'Udaipur Loop', circuit_id: 'udaipur-loop', summary: 'A relaxed lakeside base.', other_considerations: [],
+          evaluations: [{
+            criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Comfortably within budget.',
+            details: [{ type: 'bullets', items: ['Fits the stated range'] }],
+          }],
+        }],
+      })
+      : jsonResponse({})));
     renderDashboard();
-    const facts = await screen.findByText('Your trip so far');
-    const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
-    expect(within(row).getByText('Not chosen yet')).toBeInTheDocument();
-    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Review recommendations →' })).toBeInTheDocument();
+    expect(await screen.findByText('A few that fit well')).toBeInTheDocument();
+    expect(screen.getByText('Udaipur Loop')).toBeInTheDocument();
+    expect(screen.queryByText('Your trip so far')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Review recommendations →' })).not.toBeInTheDocument();
   });
 
   it('known-destination: Destination row shows the destination with no CTA', async () => {

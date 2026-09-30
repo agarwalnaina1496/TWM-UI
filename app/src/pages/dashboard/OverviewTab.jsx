@@ -11,6 +11,9 @@ import { planReady } from '../../hooks/useGuidePlanning.js';
 import { ROUTES } from '../../constants/routes.js';
 import ChatConversation from '../../components/chat/ChatConversation.jsx';
 import FactsPanel from '../../components/FactsPanel.jsx';
+import DestinationsPanel from '../../components/destinations/DestinationsPanel.jsx';
+import CheckpointOverlay from '../../components/destinations/CheckpointOverlay.jsx';
+import { useDestinationsMatching } from '../../hooks/useDestinationsMatching.js';
 
 // TWM-232: Overview used to be a hard if/else between two structurally
 // different pages -- a plain fact table pre-itinerary, a budget
@@ -26,12 +29,12 @@ import FactsPanel from '../../components/FactsPanel.jsx';
 // computed range breakdown by category, which TripHero's single stat tile
 // doesn't carry.
 //
-// TWM-234: the primary CTA no longer just navigates to Chat -- when the
-// next step is the conversation (matching or planning), the actual
-// ChatConversation renders inline, right here, instead of a "Continue
-// matching/planning ->" button. No click needed to see what's next; the
-// conversation IS what's next. A CTA to Destinations or Plan Builder still
-// navigates (those aren't embedded yet).
+// TWM-234: the primary CTA no longer just navigates -- when the next step
+// is the conversation (matching or planning) or the Destinations
+// comparison (recommended/matched), the real panel renders inline, right
+// here, replacing the facts table entirely (not appended below it). No
+// click needed to see what's next; it IS what's next. Only Plan Builder
+// still navigates away (not embedded yet).
 export default function OverviewTab({ view, tripId }) {
   const navigate = useNavigate();
   const { setCurrentTripId, sendTripCommand } = useTrip();
@@ -42,7 +45,9 @@ export default function OverviewTab({ view, tripId }) {
   const stage = view.lifecycle?.stage;
   const awaiting = activeAgent === 'guide' ? view.plan?.awaiting : view.matcher?.awaiting;
   const embedChat = primaryCta?.to === ROUTES.scoutChat;
+  const embedDestinations = primaryCta?.to === ROUTES.destinations;
   const progress = phaseProgress(view);
+  const destinationsState = useDestinationsMatching({ enabled: embedDestinations });
 
   function go(cta) {
     setCurrentTripId(tripId);
@@ -61,7 +66,7 @@ export default function OverviewTab({ view, tripId }) {
 
   return (
     <section aria-label="Trip overview">
-      {!embedChat && (
+      {!embedChat && !embedDestinations && (
         <div className="trip-facts content-narrow">
           <h2 className="trip-facts-heading">Your trip so far</h2>
           {[...contextFactRows(view), destinationFactRow(view)].map(row => (
@@ -114,7 +119,24 @@ export default function OverviewTab({ view, tripId }) {
         </div>
       )}
 
-      {primaryCta && !embedChat && (
+      {embedDestinations && (
+        <div className="content-narrow">
+          {destinationsState.checkpointAwaiting && (
+            <CheckpointOverlay
+              knownFacts={destinationsState.pills}
+              message={destinationsState.checkpointMessage}
+              value={destinationsState.checkpointInput}
+              onChange={destinationsState.setCheckpointInput}
+              onSubmit={destinationsState.submitCheckpoint}
+              busy={destinationsState.checkpointBusy}
+              error={destinationsState.checkpointError}
+            />
+          )}
+          <DestinationsPanel {...destinationsState} />
+        </div>
+      )}
+
+      {primaryCta && !embedChat && !embedDestinations && (
         <div className="overview-primary-cta"><button type="button" className="btn btn-primary" onClick={() => go(primaryCta)}>{primaryCta.label} →</button></div>
       )}
 

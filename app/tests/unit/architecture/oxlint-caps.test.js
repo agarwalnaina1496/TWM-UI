@@ -42,13 +42,15 @@ describe('oxlint architecture caps stay configured', () => {
     expect(names).toEqual(expect.arrayContaining(['react', 'react-router-dom']));
   });
 
-  it('the complexity-exempt list only holds the three known legacy pages', () => {
+  it('the complexity-exempt list only holds the known legacy pages', () => {
+    // TWM-234: Destinations.jsx is a thin page now (its matching/planning
+    // logic moved to hooks/, its render to components/destinations/) --
+    // it earns its way off this list rather than growing it.
     const exempt = (config.overrides ?? [])
       .filter(o => o.rules?.['eslint/complexity'] === 'off')
       .flatMap(o => o.files ?? [])
       .filter(f => /^src\/[^*]+\.jsx?$/.test(f));
     expect(exempt.sort()).toEqual([
-      'src/pages/Destinations.jsx',
       'src/pages/ScoutChat.jsx',
       'src/pages/TripPreview.jsx',
     ]);
