@@ -84,7 +84,7 @@ export default function OverviewTab({ view, tripId }) {
       )}
 
       {primaryCta && embedChat && (
-        <div className="overview-chat content-narrow">
+        <div className="chat-screen embedded-chat-panel">
           <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
           <FactsPanel contextRecap={view.context_recap} />
           <ChatConversation
