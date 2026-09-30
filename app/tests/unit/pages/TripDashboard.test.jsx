@@ -682,6 +682,14 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
 
   // ---- pre-plan Dashboard ----------------------------------------
 
+  it('hides "Before you go" entirely until Atlas has produced a summary', async () => {
+    commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    await screen.findByText('What we know so far');
+    expect(screen.queryByText('🎒 Before you go')).not.toBeInTheDocument();
+  });
+
   it('opens with only context populated and no itinerary — no crash', async () => {
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();

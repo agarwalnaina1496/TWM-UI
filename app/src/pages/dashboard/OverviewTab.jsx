@@ -104,20 +104,22 @@ export default function OverviewTab({ view, tripId }) {
         <div className="overview-primary-cta"><button type="button" className="btn btn-primary" onClick={() => go(primaryCta)}>{primaryCta.label} →</button></div>
       )}
 
-      <div className="before-you-go content-narrow">
-        <div className="tab-intro"><div><h2>🎒 Before you go</h2></div></div>
-        {view.before_you_go?.length > 0 ? (
-          <ul className="trip-notes-list">
-            {view.before_you_go.map((item, index) => (
-              <li key={index}>
-                <strong>{item.title}</strong> — {item.detail} {item.verify && <VerifyChip />}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="overview-empty-note">Nothing to verify yet — this fills in once your plan is ready.</p>
-        )}
-      </div>
+      {summary && (
+        <div className="before-you-go content-narrow">
+          <div className="tab-intro"><div><h2>🎒 Before you go</h2></div></div>
+          {view.before_you_go?.length > 0 ? (
+            <ul className="trip-notes-list">
+              {view.before_you_go.map((item, index) => (
+                <li key={index}>
+                  <strong>{item.title}</strong> — {item.detail} {item.verify && <VerifyChip />}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="overview-empty-note">Nothing to verify yet.</p>
+          )}
+        </div>
+      )}
     </section>
   );
 }
