@@ -7,9 +7,8 @@ export const DASHBOARD_TABS = [
 ];
 
 // TWM-234: Dashboard's back-link moved to the shared BackToTrip component
-// (components/BackToTrip.jsx) — it now derives "back to your trips" vs.
-// "back to trip" from the current route itself, so Dashboard no longer needs
-// its own separate implementation.
+// (components/BackToTrip.jsx) — flat, always "back to your trips", so
+// Dashboard no longer needs its own separate implementation.
 
 export function DashboardTabs({ tab, setTab }) {
   return (

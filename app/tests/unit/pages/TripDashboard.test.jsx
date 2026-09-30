@@ -726,14 +726,31 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(screen.queryByText('💰 Budget')).not.toBeInTheDocument();
   });
 
-  it('shows exactly one bottom primary CTA pointing at discovery when Route is not done', async () => {
-    // TWM-232: the Destination row itself no longer carries its own CTA
-    // (that was a live duplicate of this same button) -- one action, once.
+  it('embeds the conversation inline instead of a "Continue matching" CTA while matching', async () => {
+    // TWM-234: the next step for a matching-stage trip is the conversation
+    // itself -- it renders right here, no click needed to see it, replacing
+    // the CTA button this stage used to show (TWM-232's one-action rule
+    // still holds: exactly one thing happens here, it's just the
+    // conversation now instead of a button that opens it elsewhere).
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
     await screen.findByText('Your trip so far');
-    expect(screen.getAllByRole('button', { name: 'Continue matching →' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Continue matching →' })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Message Scout…')).toBeInTheDocument();
+  });
+
+  it('sends a message through the embedded conversation via the real trip command', async () => {
+    commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn(async () => ({
+      message: 'Got it, anything else?',
+      trip: prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } }),
+    }));
+    renderDashboard();
+    const input = await screen.findByPlaceholderText('Message Scout…');
+    await userEvent.setup().type(input, 'Actually make it 4 days{Enter}');
+    expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', expect.objectContaining({ message: 'Actually make it 4 days' }));
+    expect(await screen.findByText('Got it, anything else?')).toBeInTheDocument();
   });
 
   it('points currentTripId at the trip named by ?tripId= when landing fresh', async () => {
@@ -751,10 +768,14 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
   });
 
   it('a CTA click points currentTripId at the trip before navigating', async () => {
-    commandSnapshot = prePlanView({ stage: 'planning', context: { destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
+    // TWM-234: planning also embeds the conversation now (it's a scoutChat
+    // CTA target too) -- use a stage whose CTA still navigates (Plan
+    // Builder isn't embedded) to keep covering the go()/setCurrentTripId
+    // behavior itself.
+    commandSnapshot = prePlanView({ stage: 'plan_ready', context: { destinations: 'Udaipur' }, plan: { places: ['A'], day_plan: [{ day_number: 1, places: ['A'], pace: 'relaxed', buffer_note: null }], frozen: false, awaiting: null } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const button = await screen.findByRole('button', { name: 'Continue planning →' });
+    const button = await screen.findByRole('button', { name: 'Resume plan builder →' });
     await userEvent.setup().click(button);
     expect(setCurrentTripId).toHaveBeenCalledWith('trip-1');
   });
@@ -767,10 +788,11 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
-  it('unknown-destination Discover path: Destination row shows plain "Not chosen yet", CTA lives at the bottom only', async () => {
+  it('unknown-destination Discover path: Destination row shows plain "Not chosen yet", conversation lives at the bottom only', async () => {
     // TWM-232: the row-level CTA was a live duplicate of the bottom primary
     // CTA (same button rendered twice) -- the Destination row is a plain
     // fact now, the single action lives at the bottom of the tab.
+    // TWM-234: that "single action" is the embedded conversation itself now.
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
@@ -778,7 +800,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
     expect(within(row).getByText('Not chosen yet')).toBeInTheDocument();
     expect(within(row).queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue matching →' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Message Scout…')).toBeInTheDocument();
   });
 
   it('recommendations-ready: Destination row shows plain "Not chosen yet", CTA lives at the bottom only', async () => {

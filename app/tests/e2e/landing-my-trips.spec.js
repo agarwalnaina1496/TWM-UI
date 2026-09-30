@@ -192,13 +192,13 @@ test('a fresh Discover entry shows the same back-link as an existing trip once i
 
   await page.goto('');
   await page.getByText('Discover Destination', { exact: true }).first().click();
-  await expect(page.getByRole('link', { name: 'Back to trip' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Back to your trips' })).toHaveCount(0);
 
   await page.getByPlaceholder('Message Scout…').fill('Somewhere relaxing for a week');
   await page.getByLabel('Send').click();
   await expect(page.getByText('Where will you be travelling from?')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Back to trip' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back to your trips' })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole('link', { name: 'Back to trip' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back to your trips' })).toBeVisible();
 });

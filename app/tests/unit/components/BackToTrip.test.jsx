@@ -29,30 +29,19 @@ describe('BackToTrip', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
-  // TWM-185/TWM-221/TWM-234: carries the current trip's id — resolved from
-  // the URL's ?tripId= on a Build screen — so landing on Dashboard from here
-  // is reload/bookmark safe, not just a same-session in-memory jump. Renders
-  // identically regardless of which entry path (?intent=) put the trip here.
-  it('links to Dashboard with the current trip\'s id from a trip-scoped screen', async () => {
+  // TWM-234: flat, not hierarchical — every trip-scoped screen, Dashboard
+  // included, points straight to the trips list. No intermediate "back to
+  // trip" stop, and no dependence on which entry path (?intent=) got here.
+  it.each([
+    ['/scout-chat?tripId=trip-1'],
+    ['/scout-chat?tripId=trip-1&intent=discover_destination'],
+    ['/destinations?tripId=trip-1'],
+    ['/trip-preview?tripId=trip-1'],
+    ['/dashboard?tripId=trip-1'],
+  ])('links to the trips list once a trip is current, from %s', async entry => {
     const fetchMock = mockFetchWithGuestSession();
     fetchMock.mockResolvedValue(jsonResponse({ trips: [{ id: 'trip-1', title: 'Coorg' }] }));
-    renderBackToTrip(['/scout-chat?tripId=trip-1']);
-    await waitFor(() => expect(screen.getByRole('link', { name: /back to trip/i })).toHaveAttribute('href', '/dashboard?tripId=trip-1'));
-  });
-
-  it('links to Dashboard with the current trip\'s id regardless of entry-flavor intent on the URL', async () => {
-    const fetchMock = mockFetchWithGuestSession();
-    fetchMock.mockResolvedValue(jsonResponse({ trips: [{ id: 'trip-1', title: 'Coorg' }] }));
-    renderBackToTrip(['/scout-chat?tripId=trip-1&intent=discover_destination']);
-    await waitFor(() => expect(screen.getByRole('link', { name: /back to trip/i })).toHaveAttribute('href', '/dashboard?tripId=trip-1'));
-  });
-
-  // TWM-234: Dashboard is the top of the trip-scoped hierarchy — its own
-  // back-link points up to the trips list, not to itself.
-  it('links to the trips list from Dashboard itself', async () => {
-    const fetchMock = mockFetchWithGuestSession();
-    fetchMock.mockResolvedValue(jsonResponse({ trips: [{ id: 'trip-1', title: 'Coorg' }] }));
-    renderBackToTrip(['/dashboard?tripId=trip-1']);
+    renderBackToTrip([entry]);
     await waitFor(() => expect(screen.getByRole('link', { name: /back to your trips/i })).toHaveAttribute('href', '/'));
   });
 });

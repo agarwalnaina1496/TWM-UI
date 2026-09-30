@@ -4,6 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../../context/TripContext.jsx';
 import { contextFactRows, dashboardPrimaryCta, destinationFactRow } from '../../lib/dashboardTracks.js';
 import { withTripId } from '../../lib/tripUrl.js';
+import { resumedGreeting } from '../../lib/chatGreeting.js';
+import { newIdempotencyKey } from '../../lib/tripApi.js';
+import { planReady } from '../../hooks/useGuidePlanning.js';
+import { ROUTES } from '../../constants/routes.js';
+import ChatConversation from '../../components/chat/ChatConversation.jsx';
 
 // TWM-232: Overview used to be a hard if/else between two structurally
 // different pages -- a plain fact table pre-itinerary, a budget
@@ -18,16 +23,39 @@ import { withTripId } from '../../lib/tripUrl.js';
 // section only earns its place once there's real added information: the
 // computed range breakdown by category, which TripHero's single stat tile
 // doesn't carry.
+//
+// TWM-234: the primary CTA no longer just navigates to Chat -- when the
+// next step is the conversation (matching or planning), the actual
+// ChatConversation renders inline, right here, instead of a "Continue
+// matching/planning ->" button. No click needed to see what's next; the
+// conversation IS what's next. A CTA to Destinations or Plan Builder still
+// navigates (those aren't embedded yet).
 export default function OverviewTab({ view, tripId }) {
   const navigate = useNavigate();
-  const { setCurrentTripId } = useTrip();
+  const { setCurrentTripId, sendTripCommand } = useTrip();
   const summary = view.summary;
   const budget = view.budget_breakdown;
   const primaryCta = dashboardPrimaryCta(view);
+  const activeAgent = view.lifecycle?.active_agent;
+  const stage = view.lifecycle?.stage;
+  const awaiting = activeAgent === 'guide' ? view.plan?.awaiting : view.matcher?.awaiting;
+  const embedChat = primaryCta?.to === ROUTES.scoutChat;
+
   function go(cta) {
     setCurrentTripId(tripId);
     navigate(withTripId(cta.to, tripId));
   }
+
+  async function onSendChat(text) {
+    return sendTripCommand('traveler_message', { message: text, idempotencyKey: newIdempotencyKey() });
+  }
+
+  function onChatPlanReady(response) {
+    if (!planReady(response.trip.plan)) return false;
+    navigate(withTripId(ROUTES.tripPreview, response.trip.id), { state: { guideMessage: response.message } });
+    return true;
+  }
+
   return (
     <section aria-label="Trip overview">
       <div className="trip-facts content-narrow">
@@ -52,7 +80,22 @@ export default function OverviewTab({ view, tripId }) {
         </div>
       )}
 
-      {primaryCta && (
+      {primaryCta && embedChat && (
+        <div className="overview-chat content-narrow">
+          <ChatConversation
+            tripLoadStatus="ready"
+            activeAgent={activeAgent}
+            stage={stage}
+            awaiting={awaiting}
+            greeting={resumedGreeting(view, { activeAgent, awaiting })}
+            onSend={onSendChat}
+            onPlanReady={onChatPlanReady}
+            onSeeDestinations={() => go({ to: ROUTES.destinations })}
+          />
+        </div>
+      )}
+
+      {primaryCta && !embedChat && (
         <div className="overview-primary-cta"><button type="button" className="btn btn-primary" onClick={() => go(primaryCta)}>{primaryCta.label} →</button></div>
       )}
 

@@ -1,31 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { AWAITING_INPUT_LABELS, DESTINATION_INPUT_LABEL, ENTRY_INTENTS, QUICK_REPLIES } from '../data/entryCommandFixtures.js';
+import { AWAITING_INPUT_LABELS, DESTINATION_INPUT_LABEL, ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { newIdempotencyKey } from '../lib/tripApi.js';
-import { useThinkingMessage } from '../hooks/useThinkingMessage.js';
 import { planReady } from '../hooks/useGuidePlanning.js';
 import { trackEvent } from '../lib/analytics.js';
-import { buildRecapTurn, didHandoffOccur } from '../lib/discoverChat.js';
-import { buildPlanRecapTurn } from '../lib/planChat.js';
+import { resumedGreeting } from '../lib/chatGreeting.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
 import BackToTrip from '../components/BackToTrip.jsx';
 import FactsPanel from '../components/FactsPanel.jsx';
+import ChatConversation from '../components/chat/ChatConversation.jsx';
 import ScreenHeader from '../components/ui/ScreenHeader.jsx';
-import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import { TRIP_ID_PARAM, syncUrlParamsSilently, withTripId } from '../lib/tripUrl.js';
 import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
 import '../styles/chat.css';
 
-let nextId = 1;
-const COLD_OPEN = "Hey there! I'm Scout. Tell me about the trip you have in mind — a question, a rough idea, or the whole plan — and I'll take it from there.";
-// TWM-190: ScoutChat.jsx is the single conversational surface for both
-// specialists now — the note names whichever one the trip actually handed
-// off to, not always Meridian.
-const HANDOFF_NOTES = {
-  meridian: '→ Bringing in Meridian, who handles destination matching.',
-  guide: '→ Bringing in Guide, who builds your day-by-day plan.',
-};
 // TWM-190 (regression fix): a live, trip-less entry (via Header/DashboardHome's
 // "Discover Destination"/"Plan a Trip") lands here directly with ?intent= and
 // no trip yet — this used to be JourneyEntry.jsx's own separate chat
@@ -59,89 +48,66 @@ export default function ScoutChat() {
   const isKnownDestinationEntry = intent === ENTRY_INTENTS.KNOWN_DESTINATION;
   const isFreshDiscover = isFreshEntry && isDiscoverEntry;
   const isFreshKnownDestination = isFreshEntry && isKnownDestinationEntry;
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const initialized = useRef(false);
-  const lastCommand = useRef(null);
-  const previousAgent = useRef(null);
+  const lastIdemRef = useRef(null);
   // Guards the very first send of a genuinely fresh entry — only that one
   // send uses startTrip(); every send after (including this same mount's
   // second message) is a plain traveler_message on the now-existing trip.
   const entered = useRef(false);
 
-  function say(role, text) {
-    if (text) setMessages(previous => [...previous, { id: nextId++, role, text }]);
+  // TWM-233: read + clear `?msg=` exactly once, synchronously during render
+  // (not an effect) -- guarantees the URL is cleared before ChatConversation's
+  // own mount effect can auto-send it, so a reload mid-flight can't replay it
+  // a second time.
+  const initialMessageRef = useRef(undefined);
+  if (initialMessageRef.current === undefined) {
+    const raw = params.get('msg')?.trim();
+    initialMessageRef.current = raw || null;
+    if (raw) {
+      const syncedParams = new URLSearchParams(params);
+      syncedParams.delete('msg');
+      syncUrlParamsSilently(syncedParams);
+    }
   }
 
-  async function runAdvice(message, { showUser = true } = {}) {
-    const text = message.trim();
-    if (!text || busy) return;
-    const idempotencyKey = lastCommand.current?.message === text ? lastCommand.current.idempotencyKey : newIdempotencyKey();
-    lastCommand.current = { message: text, idempotencyKey };
-    if (showUser) say('user', text);
-    setBusy(true);
-    setError(null);
-    try {
-      let response;
-      if (!entered.current && (isFreshDiscover || isFreshKnownDestination)) {
-        // TWM-189/190: the very first send of a genuinely fresh entry
-        // creates the trip and sends the message in one call — same
-        // startTrip contract JourneyEntry.jsx used to own, merged into this
-        // single chat surface instead of a second implementation.
-        // Entry-command-collapse: both flavors now send the traveler's own
-        // raw message under one entry_intent — known-destination no longer
-        // pre-parses a `destination` field itself; Guide's own extraction
-        // (guide.md) is the only thing that ever determines `destinations`.
-        response = await startTrip({
-          entryIntent: intent === ENTRY_INTENTS.DISCOVER ? 'discover' : 'known_destination',
-          message: text,
-          // TWM-233: same stable-per-attempt key reused on a same-text
-          // retry below for sendTripCommand — a network-level retry after
-          // the Backend already committed the trip (client just never saw
-          // the response) replays the original trip instead of creating a
-          // second, orphaned one.
-          idempotencyKey,
-        });
-        // TWM-233: anchor the new trip's id into the URL the instant it
-        // exists — every other trip-bearing page in the app already does
-        // this (withTripId). Without it, `currentTripId` is the only signal
-        // this conversation isn't fresh anymore; that's pure in-memory
-        // React state, wiped by any reload, so a reload mid-conversation
-        // (before the async boot-list re-resolves it) reads as a genuinely
-        // fresh entry again and creates a second, orphaned trip. Also drops
-        // `msg` — it's been consumed either way, and leaving it on the URL
-        // would let the very next reload replay it a second time too.
-        // Uses the raw History API (not navigate()): this route remounts on
-        // any react-router-visible search-param change (App.jsx's
-        // `key={location.search}` on /journey-entry), which would otherwise
-        // wipe the conversation state we're in the middle of rendering.
-        const syncedParams = new URLSearchParams(params);
-        syncedParams.delete('msg');
-        syncedParams.set(TRIP_ID_PARAM, response.trip.id);
-        syncUrlParamsSilently(syncedParams);
-        trackEvent(
-          intent === ENTRY_INTENTS.DISCOVER ? 'discovery_started' : 'destination_provided',
-          intent === ENTRY_INTENTS.DISCOVER ? { entry_method: 'journey_entry' } : { destination_source: 'user_input' }
-        );
-      } else {
-        response = await sendTripCommand('traveler_message', { message: text, idempotencyKey });
-      }
-      entered.current = true;
-      if (planReady(response.trip.plan)) {
-        // Guide generated the complete plan in this turn — go straight to
-        // the unified Plan Builder instead of showing the message here,
-        // this component unmounts on navigate. Same handoff as JourneyEntry.
-        navigate(withTripId('/trip-preview', response.trip.id), { state: { guideMessage: response.message } });
-        return;
-      }
-      say('assistant', response.message);
-    } catch (commandError) {
-      setError(commandError.message || 'Something went wrong.');
-    } finally {
-      setBusy(false);
+  async function onSend(text) {
+    const idempotencyKey = lastIdemRef.current?.message === text ? lastIdemRef.current.idempotencyKey : newIdempotencyKey();
+    lastIdemRef.current = { message: text, idempotencyKey };
+    let response;
+    if (!entered.current && (isFreshDiscover || isFreshKnownDestination)) {
+      // TWM-189/190: the very first send of a genuinely fresh entry creates
+      // the trip and sends the message in one call. Entry-command-collapse:
+      // both flavors send the traveler's own raw message under one
+      // entry_intent — Guide's own extraction (guide.md) is the only thing
+      // that ever determines `destinations`.
+      response = await startTrip({
+        entryIntent: intent === ENTRY_INTENTS.DISCOVER ? 'discover' : 'known_destination',
+        message: text,
+        idempotencyKey,
+      });
+      // TWM-233: anchor the new trip's id into the URL the instant it
+      // exists, via the raw History API (not navigate(), which would remount
+      // this route on /journey-entry — App.jsx's `key={location.search}`).
+      const syncedParams = new URLSearchParams(params);
+      syncedParams.delete('msg');
+      syncedParams.set(TRIP_ID_PARAM, response.trip.id);
+      syncUrlParamsSilently(syncedParams);
+      trackEvent(
+        intent === ENTRY_INTENTS.DISCOVER ? 'discovery_started' : 'destination_provided',
+        intent === ENTRY_INTENTS.DISCOVER ? { entry_method: 'journey_entry' } : { destination_source: 'user_input' }
+      );
+    } else {
+      response = await sendTripCommand('traveler_message', { message: text, idempotencyKey });
     }
+    entered.current = true;
+    return response;
+  }
+
+  function onPlanReady(response) {
+    if (!planReady(response.trip.plan)) return false;
+    // Guide generated the complete plan in this turn — go straight to the
+    // unified Plan Builder instead of showing the message here.
+    navigate(withTripId('/trip-preview', response.trip.id), { state: { guideMessage: response.message } });
+    return true;
   }
 
   const activeAgent = commandSnapshot?.lifecycle?.active_agent;
@@ -151,50 +117,20 @@ export default function ScoutChat() {
   const awaiting = activeAgent === 'guide' ? guideAwaiting : matcherAwaiting;
 
   // TWM-173: a refresh must not show the cold-open greeting again once real
-  // trip_context already exists — that reads as the product forgetting
-  // everything the traveler already said. Waits for the trip to actually
-  // finish loading so a fresh trip and a not-yet-loaded trip aren't
-  // confused with each other.
-  useEffect(() => {
-    if (initialized.current || tripLoadStatus !== 'ready') return;
-    initialized.current = true;
-    // TWM-190 (regression fix): a genuinely fresh entry shows the
-    // intent-specific greeting instead of the generic cold-open/recap —
-    // matches JourneyEntry.jsx's old copy, now owned by this single chat
-    // surface rather than a second implementation.
-    if (isFreshDiscover) {
-      say('assistant', DISCOVER_WELCOME);
-      say('assistant', DISCOVER_ORIGIN_PROMPT);
-      return;
-    }
-    if (isFreshKnownDestination) {
-      say('assistant', KNOWN_DESTINATION_WELCOME);
-      say('assistant', KNOWN_DESTINATION_PROMPT);
-      return;
-    }
-    // TWM-190: Guide's recap is phrased for its planning context
-    // (buildPlanRecapTurn, already built for TripPreview's now-retired
-    // gating-chat branch) — Guide's conversation_context has no verbatim
-    // last-message field the way Meridian's does, so this is a synthesized
-    // recap rather than Guide's own last question echoed back.
-    const recap = activeAgent === 'guide'
-      ? buildPlanRecapTurn(commandSnapshot, { awaiting })
-      : buildRecapTurn(commandSnapshot, { awaiting });
-    say('assistant', recap || COLD_OPEN);
-    const message = params.get('msg')?.trim();
-    if (message) {
-      // TWM-233: drop `msg` from the URL the instant it's read, before the
-      // send even resolves — otherwise a reload while it's still present
-      // (send in flight, or the network drops before the response lands)
-      // replays it a second time on the next mount. Raw History API, same
-      // reasoning as the tripId anchor above (no remount).
-      const syncedParams = new URLSearchParams(params);
-      syncedParams.delete('msg');
-      syncUrlParamsSilently(syncedParams);
-      runAdvice(message);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripLoadStatus]);
+  // trip_context already exists. Computed once ChatConversation is ready to
+  // mount its own greeting effect (tripLoadStatus gates both).
+  let greeting;
+  if (isFreshDiscover) {
+    greeting = [DISCOVER_WELCOME, DISCOVER_ORIGIN_PROMPT];
+  } else if (isFreshKnownDestination) {
+    greeting = [KNOWN_DESTINATION_WELCOME, KNOWN_DESTINATION_PROMPT];
+  } else {
+    // TWM-190: Guide's recap is phrased for its planning context — Guide's
+    // conversation_context has no verbatim last-message field the way
+    // Meridian's does, so this is a synthesized recap rather than Guide's
+    // own last question echoed back.
+    greeting = resumedGreeting(commandSnapshot, { activeAgent, awaiting });
+  }
 
   // planning_started fires once, right as the known-destination journey
   // actually begins (mounting this screen with that intent) — this path has
@@ -216,43 +152,15 @@ export default function ScoutChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlTripId, tripLoadStatus, commandSnapshot, navigate]);
 
-  // Hand-off note fires exactly once, only on a real scout->specialist
-  // transition — never on initial load of an already-owned trip.
-  useEffect(() => {
-    if (tripLoadStatus !== 'ready') return;
-    if (didHandoffOccur(previousAgent.current, activeAgent)) say('system', HANDOFF_NOTES[activeAgent]);
-    previousAgent.current = activeAgent;
-  }, [tripLoadStatus, activeAgent]);
-
-  function send() {
-    const value = input.trim();
-    if (!value || busy) return;
-    setInput('');
-    runAdvice(value);
-  }
-
-  // TWM-232 PR 9: the sixth gating question's quick-reply copy is flow-aware
-  // — Meridian hasn't chosen a destination yet ("let's discover"), Guide is
-  // already building the plan ("let's plan"). Same `awaiting` slug either way.
-  const quickReplies = (awaiting === 'anything_else' && activeAgent === 'meridian')
-    ? QUICK_REPLIES.anything_else_meridian
-    : QUICK_REPLIES[awaiting] || [];
-  const thinkingMessage = useThinkingMessage(busy);
-  // TWM-190 (regression fix): a known-destination *entry* session (the
-  // whole live conversation up to Guide completing the plan, not just its
-  // first turn — intent stays on the URL the entire time, unlike
-  // isFreshKnownDestination which flips false right after the first send)
-  // gets the per-question destination composer JourneyEntry.jsx used to own
-  // (TWM-183) instead of the generic one. A genuine resume (/scout-chat, no
-  // intent) never gets this — matches JourneyEntry.jsx's old scope exactly.
+  // TWM-190 (regression fix): a known-destination *entry* session (the whole
+  // live conversation up to Guide completing the plan, not just its first
+  // turn — intent stays on the URL the entire time) gets the per-question
+  // destination composer JourneyEntry.jsx used to own (TWM-183) instead of
+  // the generic one. A genuine resume (/scout-chat, no intent) never gets
+  // this — matches JourneyEntry.jsx's old scope exactly.
   const isGuideFlavored = isKnownDestinationEntry;
   const destinationInputLabel = (guideAwaiting && AWAITING_INPUT_LABELS[guideAwaiting]) || DESTINATION_INPUT_LABEL;
-  // TWM-234: the generic (non-Guide-flavored) input reflects the current
-  // conversation's awaiting field, same as the Guide-flavored composer above
-  // — not which entry path/intent this session started from, so a resumed
-  // conversation and a freshly-entered one at the same awaiting step show
-  // identical copy.
-  const genericInputLabel = AWAITING_INPUT_LABELS[awaiting];
+
   return (
     <div className="chat-page chat-screen">
       <BackToTrip />
@@ -272,40 +180,19 @@ export default function ScoutChat() {
       />
       <FactsPanel contextRecap={commandSnapshot?.context_recap} />
 
-      <div className="chat-log" aria-live="polite">
-        {messages.map(message => (
-          message.role === 'system' ? (
-            <div key={message.id} className="chat-row chat-row-system"><span className="chat-system-note">{message.text}</span></div>
-          ) : (
-            <div key={message.id} className={`chat-row chat-row-${message.role}`}>
-              <div className={`chat-bub chat-bub-${message.role}`} style={{ whiteSpace: 'pre-wrap' }}>{message.text}</div>
-            </div>
-          )
-        ))}
-        {busy && <div className="think" role="status">{thinkingMessage}</div>}
-        {!busy && quickReplies.length > 0 && (
-          <div className="chat-chip-row" aria-label={`Suggested ${awaiting} replies`}>
-            {quickReplies.map(reply => <button type="button" className="chip" key={reply} onClick={() => runAdvice(reply)}>{reply}</button>)}
-          </div>
-        )}
-        {error && <ErrorBanner message={error} actionLabel="Try again" onAction={() => runAdvice(lastCommand.current?.message ?? '', { showUser: false })} />}
-        {((activeAgent === 'meridian' && !awaiting) || stage === 'recommended') && (
-          <button type="button" className="btn btn-primary" onClick={() => navigate('/destinations?next=preview')}>See destinations →</button>
-        )}
-      </div>
-
-      <div className="chat-input-bar">
-        <input
-          type="text"
-          className="chat-input"
-          aria-label={isGuideFlavored ? destinationInputLabel.label : (genericInputLabel?.label || 'Message Scout')}
-          placeholder={isGuideFlavored ? destinationInputLabel.placeholder : (genericInputLabel?.placeholder || 'Message Scout…')}
-          value={input}
-          onChange={event => setInput(event.target.value)}
-          onKeyDown={event => { if (event.key === 'Enter') send(); }}
-        />
-        <button type="button" className="chat-send" onClick={send} disabled={busy} aria-label={isGuideFlavored ? 'Start planning' : 'Send'}>→</button>
-      </div>
+      <ChatConversation
+        tripLoadStatus={tripLoadStatus}
+        activeAgent={activeAgent}
+        stage={stage}
+        awaiting={awaiting}
+        greeting={greeting}
+        initialMessage={initialMessageRef.current}
+        onSend={onSend}
+        onPlanReady={onPlanReady}
+        onSeeDestinations={() => navigate('/destinations?next=preview')}
+        inputLabelOverride={isGuideFlavored ? destinationInputLabel : undefined}
+        sendLabelOverride={isGuideFlavored ? 'Start planning' : undefined}
+      />
     </div>
   );
 }

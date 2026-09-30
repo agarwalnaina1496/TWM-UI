@@ -187,14 +187,14 @@ describe('ScoutChat advice-entry chat', () => {
       searchParams = new URLSearchParams('intent=discover_destination&tripId=trip-1');
       commandSnapshot = view({ context: { origin_city: 'Delhi' } });
       render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-      expect(screen.getByRole('link', { name: /back to trip/i })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /back to your trips/i })).toBeInTheDocument();
     });
 
     it('shows no back-link on a genuinely fresh entry with no trip yet', () => {
       searchParams = new URLSearchParams('intent=discover_destination');
       commandSnapshot = null;
       render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-      expect(screen.queryByRole('link', { name: /back to trip/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /back to your trips/i })).not.toBeInTheDocument();
     });
 
     it('shows the same placeholder for an equivalent awaiting state, discover-entry or resumed', () => {
