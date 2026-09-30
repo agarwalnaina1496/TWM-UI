@@ -9,9 +9,12 @@ import { mockTripCommandFlow, tripRecord, commandResponse, readyItineraryState }
 // entry point into a journey — there's no intermediate GetStarted screen.
 
 test('zero trips lands on Dashboard-home with its own empty state', async ({ page }) => {
+  // The "Your trips" heading is intentionally absent in the empty state --
+  // there's nothing to list yet, so the empty-state copy carries the page
+  // on its own instead of repeating a list title over an empty list.
   await mockTripCommandFlow(page, []);
   await page.goto('');
-  await expect(page.getByRole('heading', { name: /your.*trips/i, level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /your.*trips/i, level: 1 })).toHaveCount(0);
   await expect(page.getByText('No trips yet')).toBeVisible();
 });
 
