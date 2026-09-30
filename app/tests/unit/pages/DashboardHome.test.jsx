@@ -132,31 +132,88 @@ describe('DashboardHome', () => {
     expect(screen.getByText('Itinerary ready')).toBeInTheDocument();
   });
 
-  it('keeps discover-only trips out of the main list, in the explore rail', async () => {
+  it('shows trips of any stage together in one uniform "Your trips" list', async () => {
+    // TWM-232: My Trips groups by date now, not lifecycle stage -- a
+    // recommended-stage (no destination yet) and a matched-stage trip sit
+    // in the same list, both with the same "Open trip →" affordance.
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
       listItem({ id: 'trip-1', title: 'Committed trip', stage: 'matched', context: { origin_city: 'Delhi' } }),
-      listItem({ id: 'trip-2', title: 'Still browsing', stage: 'recommended', context: { origin_city: 'Delhi' }, updated_at: '2025-12-01T00:00:00.000Z' }),
+      listItem({ id: 'trip-2', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' }, updated_at: '2025-12-01T00:00:00.000Z' }),
     ] }));
     renderDashboardHome(GUEST);
     await screen.findByText('Committed trip');
-    expect(screen.getByText('Continue exploring')).toBeInTheDocument();
-    const railCard = screen.getByText('Still browsing').closest('.explore-card');
-    expect(within(railCard).getByRole('button', { name: 'Review recommendations' })).toBeInTheDocument();
+    expect(screen.getByText('Your trips')).toBeInTheDocument();
+    expect(screen.queryByText('Continue exploring')).not.toBeInTheDocument();
+    expect(screen.getByText('Recommendations ready')).toBeInTheDocument();
     const committedCard = screen.getByText('Committed trip').closest('.trip-card');
     expect(within(committedCard).getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
+  });
+
+  it('renders whatever title the Backend sends, including the placeholder', async () => {
+    // TWM-232: title composition (real title, LLM-generated, or the
+    // placeholder) is entirely Backend-owned now -- the UI has no
+    // client-side fallback chain and just renders t.title verbatim. Uses a
+    // committed (non-discover-only) stage since explore cards show no title.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({ id: 'trip-1', title: '5 days from Bangalore', stage: 'matched', context: { origin_city: 'Bangalore', destinations: ['Goa'] } }),
+    ] }));
+    renderDashboardHome(GUEST);
+    expect(await screen.findByText('5 days from Bangalore')).toBeInTheDocument();
+  });
+
+  it('shows no title/Rename for a trip whose title is still the placeholder, honest badge otherwise', async () => {
+    // TWM-232: uniform card -- badge always shows the real, honest
+    // stage-specific text (no more generic label); title/Rename only
+    // render once a real title exists.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' } }),
+    ] }));
+    renderDashboardHome(GUEST);
+    const card = (await screen.findByRole('button', { name: 'Open trip →' })).closest('.trip-card');
+    expect(within(card).getByText('Recommendations ready')).toBeInTheDocument();
+    expect(within(card).queryByText('Untitled Trip')).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
+  });
+
+  it('caps the recap chips at 2, with a "+N more" chip for the rest', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({
+        id: 'trip-1', title: 'Untitled Trip', stage: 'recommended',
+        context: { origin_city: 'Delhi', num_travelers: '1', budget: '1 lakh INR' },
+      }),
+    ] }));
+    renderDashboardHome(GUEST);
+    const card = (await screen.findByRole('button', { name: 'Open trip →' })).closest('.trip-card');
+    const pills = within(card).getAllByText(/./, { selector: '.trip-card-recap-pill' });
+    expect(pills).toHaveLength(3); // 2 shown facts + 1 "+N more" chip
+    expect(within(card).getByText('+1 more')).toBeInTheDocument();
   });
 
   it('promotes the ongoing trip to the hero over an upcoming one, off travel_window', async () => {
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: 'Later trip', stage: 'matched', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: '2026-12' } }),
-      listItem({ id: 'trip-2', title: 'Happening now', stage: 'matched', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: thisMonth } }),
+      listItem({ id: 'trip-1', title: 'Later trip', stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Goa' }, travelWindow: { precision: 'month', month: '2026-12' } }),
+      listItem({ id: 'trip-2', title: 'Ongoing trip', stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Udaipur' }, travelWindow: { precision: 'month', month: thisMonth } }),
     ] }));
     renderDashboardHome(GUEST);
     await screen.findByText('Later trip');
     const hero = document.querySelector('.hero-trip');
-    expect(within(hero).getByText('Happening now')).toBeInTheDocument();
+    expect(within(hero).getByText('Ongoing trip')).toBeInTheDocument();
+  });
+
+  it('never promotes a still-deciding trip (no destination) to the hero, even with an ongoing travel_window', async () => {
+    // A stated travel window ("traveling in December") can exist before a
+    // destination is chosen -- that alone shouldn't earn the prominent hero
+    // slot, which is for a real trip to spotlight, not any dated trip.
+    const now = new Date();
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'matching', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: thisMonth } }),
+    ] }));
+    renderDashboardHome(GUEST);
+    await screen.findByText('In conversation');
+    expect(document.querySelector('.hero-trip')).not.toBeInTheDocument();
   });
 
   it('shows no hero when no committed trip has a travel_window', async () => {
@@ -200,15 +257,17 @@ describe('DashboardHome', () => {
     expect(fetchMock.mock.calls.every(([url]) => url === '/api/trips' || /^\/api\/trips\/[^/]+$/.test(url))).toBe(true);
   });
 
-  it('searches a trip by its computed fallback display title', async () => {
+  it('searches a trip by its Backend-provided title', async () => {
+    // TWM-232: title composition (real, LLM-generated, or placeholder) is
+    // entirely Backend-owned -- search just matches whatever t.title is.
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: null, stage: 'matched', context: { origin_city: 'Delhi', trip_duration: '5' } }),
+      listItem({ id: 'trip-1', title: '5 days from Delhi', stage: 'matched', context: { origin_city: 'Delhi', trip_duration: '5' } }),
       listItem({ id: 'trip-2', title: 'Manali trip', stage: 'matched', context: { origin_city: 'Delhi' } }),
     ] }));
     renderDashboardHome(GUEST);
-    await screen.findByText('Delhi · 5 days');
-    await userEvent.type(screen.getByLabelText('Search your trips'), 'Delhi · 5');
-    expect(screen.getByText('Delhi · 5 days')).toBeInTheDocument();
+    await screen.findByText('5 days from Delhi');
+    await userEvent.type(screen.getByLabelText('Search your trips'), '5 days from');
+    expect(screen.getByText('5 days from Delhi')).toBeInTheDocument();
     expect(screen.queryByText('Manali trip')).not.toBeInTheDocument();
   });
 

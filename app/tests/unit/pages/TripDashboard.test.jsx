@@ -733,7 +733,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     sendTripCommand = vi.fn();
     renderDashboard();
     await screen.findByText('Your trip so far');
-    expect(screen.getAllByRole('button', { name: 'Continue chat →' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Continue matching →' })).toHaveLength(1);
   });
 
   it('points currentTripId at the trip named by ?tripId= when landing fresh', async () => {
@@ -755,7 +755,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     commandSnapshot = prePlanView({ stage: 'planning', context: { destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const button = await screen.findByRole('button', { name: 'Continue chat →' });
+    const button = await screen.findByRole('button', { name: 'Continue planning →' });
     await userEvent.setup().click(button);
     expect(setCurrentTripId).toHaveBeenCalledWith('trip-1');
   });
@@ -779,7 +779,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
     expect(within(row).getByText('Not chosen yet')).toBeInTheDocument();
     expect(within(row).queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue chat →' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue matching →' })).toBeInTheDocument();
   });
 
   it('recommendations-ready: Destination row shows plain "Not chosen yet", CTA lives at the bottom only', async () => {

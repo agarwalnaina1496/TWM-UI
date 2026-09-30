@@ -11,7 +11,7 @@ import { mockTripCommandFlow, tripRecord, readyItineraryState } from './testUtil
 test('zero trips lands on Dashboard-home with its own empty state', async ({ page }) => {
   await mockTripCommandFlow(page, []);
   await page.goto('');
-  await expect(page.getByRole('heading', { name: /your.*trips/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /your.*trips/i, level: 1 })).toBeVisible();
   await expect(page.getByText('No trips yet')).toBeVisible();
 });
 
@@ -21,7 +21,7 @@ test('one incomplete trip lands on Dashboard-home, not an auto-resume', async ({
   });
   await mockTripCommandFlow(page, [], { initialTrips: [trip] });
   await page.goto('');
-  await expect(page.getByRole('heading', { name: /your.*trips/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /your.*trips/i, level: 1 })).toBeVisible();
 });
 
 test('one itinerary-ready trip lands on Dashboard-home, not an auto-open Dashboard', async ({ page }) => {
@@ -30,11 +30,15 @@ test('one itinerary-ready trip lands on Dashboard-home, not an auto-open Dashboa
   });
   await mockTripCommandFlow(page, [], { initialTrips: [trip] });
   await page.goto('');
-  await expect(page.getByRole('heading', { name: /your.*trips/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /your.*trips/i, level: 1 })).toBeVisible();
   await expect(page.getByText('Itinerary ready')).toBeVisible();
 });
 
 test('multiple meaningful trips land on Dashboard-home with stage-aware cards', async ({ page }) => {
+  // TWM-232: My Trips groups by date, not lifecycle stage -- every trip
+  // uses the same uniform card. `active` (stage "matching", no destination
+  // yet) has no real title, only its honest stage badge; `upcoming` has a
+  // real title and its itinerary-ready badge.
   const active = tripRecord({
     id: 'e2e-trip-1', title: 'Coorg weekend',
     trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
@@ -47,10 +51,9 @@ test('multiple meaningful trips land on Dashboard-home with stage-aware cards', 
   });
   await mockTripCommandFlow(page, [], { initialTrips: [active, upcoming] });
   await page.goto('');
-  await expect(page.getByRole('heading', { name: /your.*trips/i })).toBeVisible();
-  await expect(page.getByText('Coorg weekend')).toBeVisible();
-  await expect(page.getByText('Madhya Pradesh circuit')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /your.*trips/i, level: 1 })).toBeVisible();
   await expect(page.getByText('In conversation')).toBeVisible();
+  await expect(page.getByText('Madhya Pradesh circuit')).toBeVisible();
   await expect(page.getByText('Itinerary ready')).toBeVisible();
 });
 
@@ -58,7 +61,7 @@ test('a completed-only trip lands on Dashboard-home instead of auto-resuming', a
   const trip = tripRecord({ trip_state: { stage: 'done', trip_context: { origin: 'Delhi' } } });
   await mockTripCommandFlow(page, [], { initialTrips: [trip] });
   await page.goto('');
-  await expect(page.getByRole('heading', { name: /your.*trips/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /your.*trips/i, level: 1 })).toBeVisible();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
 });
 
@@ -67,11 +70,14 @@ test('deep link to /my-trips renders the same Dashboard-home', async ({ page }) 
   await mockTripCommandFlow(page, [], { initialTrips: [trip] });
   await page.goto('my-trips');
   await expect(page).toHaveURL(/\/app\/my-trips/);
-  await expect(page.getByRole('heading', { name: /your.*trips/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /your.*trips/i, level: 1 })).toBeVisible();
 });
 
 test('header "Plan a Trip" starts a separate Backend journey and preserves the existing trip', async ({ page }) => {
-  const existing = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } } });
+  // Committed (not discover-only) so the trip's real title renders --
+  // this test is about the existing trip surviving navigation, not about
+  // explore-card presentation (see the discover-only-rail test for that).
+  const existing = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } });
   await mockTripCommandFlow(page, [], { initialTrips: [existing] });
 
   await page.goto('');
@@ -126,18 +132,22 @@ test('search narrows Dashboard-home to matching trips only (TWM-172)', async ({ 
   await expect(page.getByText('Coorg weekend')).not.toBeVisible();
 });
 
-test('discover-only trips appear in the explore rail, not the main trips list (TWM-172)', async ({ page }) => {
+test('a discover-only trip (no destination yet) shows in Your trips with no title (TWM-232)', async ({ page }) => {
+  // TWM-232: My Trips groups by date now, not by whether a destination is
+  // chosen -- there is no separate explore rail any more. A discover-only
+  // trip renders the same uniform card as everything else, just with no
+  // title/Rename yet (nothing real to name) and its honest stage badge.
   const browsing = tripRecord({
-    id: 'e2e-trip-1', title: 'Just browsing',
+    id: 'e2e-trip-1', title: 'Untitled Trip',
     trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
   });
   await mockTripCommandFlow(page, [], { initialTrips: [browsing] });
   await page.goto('');
 
-  await expect(page.getByText('Continue exploring')).toBeVisible();
-  const railCard = page.locator('.explore-card', { hasText: 'Just browsing' });
-  await expect(railCard).toBeVisible();
-  await expect(page.locator('.trip-card', { hasText: 'Just browsing' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Your trips', level: 2 })).toBeVisible();
+  const card = page.locator('.trip-card', { hasText: 'In conversation' });
+  await expect(card).toBeVisible();
+  await expect(card.getByText('Untitled Trip')).toHaveCount(0);
 });
 
 test('trip card renders exactly one primary affordance ("Open trip →"), regardless of stage', async ({ page }) => {

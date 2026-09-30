@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, tripStatusLine, relativeUpdatedAt,
-  contextRecapPills, contextDestination, contextOrigin, contextDuration,
+  contextRecapPills, contextDestination,
 } from '../../../src/lib/tripLifecycle.js';
 
 // TWM-220: every helper reads a `TripView` (full) or a `TripListItem` (thin).
@@ -14,15 +14,6 @@ function trip(overrides = {}) {
   const { stage = 'new', context = {}, ...rest } = overrides;
   return { lifecycle: { stage }, context_recap: recap(context), ...rest };
 }
-
-describe('context field helpers', () => {
-  it('reads canonical origin and duration values', () => {
-    const value = trip({ context: { origin_city: 'Delhi', trip_duration: '5' } });
-    expect(contextOrigin(value)).toBe('Delhi');
-    expect(contextDuration(value)).toBe('5');
-    expect(contextOrigin({})).toBeNull();
-  });
-});
 
 describe('tripLifecycle stage helpers', () => {
   it.each([
@@ -163,6 +154,14 @@ describe('context recap formatters', () => {
   it('contextRecapPills labels unit-less numeric fields (trip_duration, num_travelers)', () => {
     const t = trip({ context: { trip_duration: '5', num_travelers: '2' } });
     expect(contextRecapPills(t)).toEqual(['trip_duration: 5', 'num_travelers: 2']);
+  });
+
+  it('contextRecapPills drops a free-form fact (e.g. activity_preferences) from the Home-card summary', () => {
+    // TWM-232 PR 12 follow-up: context_recap now carries every extracted
+    // fact, but a Home card is a scan surface, not the facts panel -- a
+    // free-form fact should not crowd it out.
+    const t = trip({ context: { origin_city: 'Bengaluru', activity_preferences: 'museums, beaches' } });
+    expect(contextRecapPills(t)).toEqual(['From Bengaluru']);
   });
 
   it('contextDestination reads the destinations recap item', () => {
