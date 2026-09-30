@@ -712,18 +712,30 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
-  it('shows the tab bar in the pre-plan state, Itinerary renders its empty state, Support is always accessible', async () => {
+  it('shows the tab bar in the pre-plan state with Itinerary hidden until planning starts, Support always accessible', async () => {
+    // TWM-234: Discover (matching/recommended/matched) has nothing to show
+    // on Itinerary yet -- and showing the tab anyway implies Discover and
+    // Plan are one fixed pipeline. It only appears once planning starts.
     commandSnapshot = prePlanView({ stage: 'matching' });
     sendTripCommand = vi.fn();
     renderDashboard();
     const tabs = await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
     expect(within(tabs).getByText('Overview')).toBeInTheDocument();
+    expect(within(tabs).queryByText('Itinerary')).not.toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(within(tabs).getByText('Itinerary'));
-    expect(screen.getByText('Your day-by-day plan will appear here once Scout finishes it.')).toBeInTheDocument();
     await user.click(within(tabs).getByText('Support'));
     expect(screen.getByRole('region', { name: 'Frequently asked questions' })).toBeInTheDocument();
     expect(screen.queryByText('Available once your itinerary is ready.')).not.toBeInTheDocument();
+  });
+
+  it('shows the Itinerary tab once planning starts, with its empty state before a plan exists', async () => {
+    commandSnapshot = prePlanView({ stage: 'planning', context: {}, plan: { places: [], day_plan: [], frozen: false, awaiting: null } });
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    const tabs = await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
+    const user = userEvent.setup();
+    await user.click(within(tabs).getByText('Itinerary'));
+    expect(screen.getByText('Your day-by-day plan will appear here once Scout finishes it.')).toBeInTheDocument();
   });
 
   it('shows a "Back to your trips" link in the pre-plan state', async () => {

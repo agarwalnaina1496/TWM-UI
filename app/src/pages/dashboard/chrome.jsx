@@ -6,14 +6,27 @@ export const DASHBOARD_TABS = [
   { name: 'Support', icon: '💬' },
 ];
 
+// TWM-234: a trip still in Discover (no plan started yet) has nothing to
+// show on Itinerary -- and showing the tab anyway implies Discover and Plan
+// are one fixed pipeline the traveler must walk through. Hide it until
+// planning actually starts; a reopen back into Discover clears the day plan
+// (planner_commands._clear_planner_for_reopen) and moves stage back too, so
+// gating on stage alone is enough to hide it again on the way back.
+const DISCOVER_STAGES = new Set(['new', 'matching', 'recommended', 'matched']);
+
+export function visibleDashboardTabs(stage) {
+  if (DISCOVER_STAGES.has(stage)) return DASHBOARD_TABS.filter(t => t.name !== 'Itinerary');
+  return DASHBOARD_TABS;
+}
+
 // TWM-234: Dashboard's back-link moved to the shared BackToTrip component
 // (components/BackToTrip.jsx) — flat, always "back to your trips", so
 // Dashboard no longer needs its own separate implementation.
 
-export function DashboardTabs({ tab, setTab }) {
+export function DashboardTabs({ tab, setTab, tabs = DASHBOARD_TABS }) {
   return (
     <nav className="dashboard-tabs" aria-label="Trip Dashboard tabs">
-      {DASHBOARD_TABS.map(({ name, icon }) => (
+      {tabs.map(({ name, icon }) => (
         <button
           type="button"
           key={name}

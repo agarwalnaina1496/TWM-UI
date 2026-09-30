@@ -4,7 +4,7 @@ import TripHero from '../components/TripHero.jsx';
 import SupportContent from '../components/SupportContent.jsx';
 import BookingPromptOverlay from '../components/drawers/BookingPromptOverlay.jsx';
 import BackToTrip from '../components/BackToTrip.jsx';
-import { DASHBOARD_TABS, DashboardTabs } from './dashboard/chrome.jsx';
+import { DASHBOARD_TABS, DashboardTabs, visibleDashboardTabs } from './dashboard/chrome.jsx';
 import OverviewTab from './dashboard/OverviewTab.jsx';
 import ItineraryTab from './dashboard/ItineraryTab.jsx';
 import BookingDrawers from './dashboard/BookingDrawers.jsx';
@@ -50,6 +50,14 @@ export default function TripDashboard() {
   const drawers = useBookingDrawers({ tripId, view, days, staySegments });
 
   const building = bootStatus === 'booting' && !itineraryReady;
+  const tabs = visibleDashboardTabs(view?.lifecycle?.stage);
+
+  // A reopen back into Discover clears the plan and can drop the Itinerary
+  // tab out from under the traveler if they were on it -- land them
+  // somewhere that still exists instead of a tab that vanished.
+  useEffect(() => {
+    if (!tabs.some(t => t.name === tab)) setTab('Overview');
+  }, [tabs, tab]);
 
   // Owned here (not inside ItineraryTab/HonestTransition) so the honest-
   // transition steps keep advancing in real wall-clock time regardless of
@@ -115,7 +123,7 @@ export default function TripDashboard() {
         />
       )}
 
-      <DashboardTabs tab={tab} setTab={setTab} />
+      <DashboardTabs tab={tab} setTab={setTab} tabs={tabs} />
 
       {tab === 'Overview' && view && (
         <OverviewTab view={view} tripId={tripId} />
