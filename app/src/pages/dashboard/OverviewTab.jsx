@@ -107,7 +107,7 @@ export default function OverviewTab({ view, tripId }) {
       )}
 
       {embedDestinations && (
-        <div className="content-narrow">
+        <div>
           {destinationsState.checkpointAwaiting && (
             <CheckpointOverlay
               knownFacts={destinationsState.pills}
