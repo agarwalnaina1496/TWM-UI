@@ -37,11 +37,6 @@
 .agent-summary-badge{flex-shrink:0;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);background:var(--accent-bg);border-radius:99px;padding:3px 9px;margin-top:2px;}
 .agent-summary-message p{margin:0;font-size:13.5px;color:var(--ts);line-height:1.5;}
 
-.refine-scope-pill{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--tp);background:var(--accent-bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;}
-.refine-scope-pill strong{font-weight:700;}
-.refine-scope-clear{all:unset;cursor:pointer;font-size:14px;font-weight:700;color:var(--ts);line-height:1;padding:0 2px;}
-.refine-scope-clear:hover{color:var(--tp);}
-
 /* TWM-173: terminal-failure states get their own Scout-voiced, rust-toned
    treatment — visually distinct from .state-unsafe (reused for real load
    errors), with constraint_adjustment_suggestions as tappable chips. */
@@ -51,11 +46,13 @@
 .terminal-failure-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
 .terminal-failure .chip{background:var(--surface);}
 
-/* TWM-173: always-present general refinement drawer. */
-.refinement-drawer{margin-top:8px;}
-.refinement-toggle{all:unset;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--ts);display:flex;align-items:center;gap:6px;padding:8px 0;}
-.refinement-toggle:hover{color:var(--tp);}
-.refinement-body{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;}
+/* TWM-234: the one general refinement entry point (the per-option "more
+   like this" scoped variant was dropped -- two refine affordances read as
+   confusing UX). Made a real, visible button (btn btn-ghost in the markup)
+   rather than a barely-there text link, since it's the traveler's only way
+   to say "none of these" once results have already come back. */
+.refinement-drawer{margin-top:14px;}
+.refinement-body{margin-top:10px;display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;}
 .refinement-input{font:inherit;font-size:13px;border:1px solid var(--border);border-radius:10px;padding:10px 12px;min-height:70px;resize:vertical;background:var(--bg);color:var(--tp);}
 .refinement-body .btn{align-self:flex-end;}
 

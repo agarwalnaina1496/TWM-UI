@@ -2,16 +2,18 @@ import { useCallback, useState } from 'react';
 import { trackEvent, trackFailure } from '../lib/analytics.js';
 
 // TWM-234: everything that narrows the current options down -- the initial
-// "continue" trigger, free-text clarification, and "more like this"
-// refinement (scoped or drawer) -- split out of useDestinationsMatching so
-// neither file trips the per-function complexity cap on its own.
+// "continue" trigger, free-text clarification, and the "not quite right?"
+// refinement drawer -- split out of useDestinationsMatching so neither file
+// trips the per-function complexity cap on its own. A per-option "more like
+// this" scoped refinement used to exist alongside this general drawer, but
+// two separate refine entry points read as confusing UX; dropped down to
+// this one general drawer only.
 export function useDestinationRefinement({ sendTripCommand, applyCommandRound, resetFocus, triggeredRef, setPlanError }) {
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState(null);
   const [clarifyInput, setClarifyInput] = useState('');
   const [refinementOpen, setRefinementOpen] = useState(false);
   const [refinementValue, setRefinementValue] = useState('');
-  const [refinementScope, setRefinementScope] = useState(null);
   const [refinementBusy, setRefinementBusy] = useState(false);
 
   function triggerContinue() {
@@ -40,46 +42,17 @@ export function useDestinationRefinement({ sendTripCommand, applyCommandRound, r
     }
   }
 
-  // Unified refine handler. If refinementValue has text when "More like this" is
-  // clicked, sends immediately with that text as instructions. If empty, sets scope
-  // and opens the refine box for the user to type a qualifier.
-  async function handleMoreLikeThis(option) {
-    const instructions = refinementValue.trim();
-    if (!instructions) {
-      setRefinementScope(option);
-      setRefinementOpen(true);
-      return;
-    }
-    setRefinementValue('');
-    setRefinementBusy(true);
-    setPlanError(null);
-    try {
-      trackEvent('more_like_this_used', { with_qualifier: true });
-      const response = await sendTripCommand('more_like_this', {
-        refinement: { type: 'MORE_LIKE_THIS', reference: { type: option.type, id: option.key }, instructions },
-      });
-      applyCommandRound(response.recommendation);
-      setRefinementScope(null);
-      resetFocus();
-    } catch (commandError) {
-      setPlanError(commandError.message || 'Something went wrong.');
-    } finally {
-      setRefinementBusy(false);
-    }
-  }
-
-  // Unified submit: if a scope is set, sends more_like_this; otherwise traveler_message.
   async function submitRefinement() {
     const value = refinementValue.trim();
-    if (!value && !refinementScope) return;
+    if (!value) return;
     setRefinementValue('');
     setRefinementBusy(true);
     setPlanError(null);
     try {
-      const response = await sendRefinementCommand({ sendTripCommand, refinementScope, value });
+      trackEvent('refinement_drawer_used', {});
+      const response = await sendTripCommand('traveler_message', { message: value });
       applyCommandRound(response.recommendation);
       setRefinementOpen(false);
-      setRefinementScope(null);
       resetFocus();
     } catch (commandError) {
       setPlanError(commandError.message || 'Something went wrong.');
@@ -96,23 +69,7 @@ export function useDestinationRefinement({ sendTripCommand, applyCommandRound, r
   return {
     triggering, triggerError, triggerContinue,
     clarifyInput, setClarifyInput, submitClarification, tapFailureChip,
-    refinementOpen, setRefinementOpen, refinementValue, setRefinementValue,
-    refinementScope, setRefinementScope, refinementBusy,
-    handleMoreLikeThis, submitRefinement,
+    refinementOpen, setRefinementOpen, refinementValue, setRefinementValue, refinementBusy,
+    submitRefinement,
   };
-}
-
-async function sendRefinementCommand({ sendTripCommand, refinementScope, value }) {
-  if (refinementScope) {
-    trackEvent('more_like_this_used', { with_qualifier: Boolean(value) });
-    return sendTripCommand('more_like_this', {
-      refinement: {
-        type: 'MORE_LIKE_THIS',
-        reference: { type: refinementScope.type, id: refinementScope.key },
-        ...(value ? { instructions: value } : {}),
-      },
-    });
-  }
-  trackEvent('refinement_drawer_used', {});
-  return sendTripCommand('traveler_message', { message: value });
 }

@@ -304,26 +304,6 @@ describe('Destinations (real Meridian integration)', () => {
     expect(await screen.findByText('Scout Chat screen')).toBeInTheDocument();
   });
 
-  it('More like this sends the structured reference without committing selection', async () => {
-    const server = createServer({ recommendation: successOutcome() });
-    server.queueCommand({ message: 'Refreshed.', recommendation: successOutcome({ message: 'Refreshed around Madhya Pradesh Heritage and Nature.' }) });
-    fetchMock = createFetchMock(server);
-    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
-    renderDestinations();
-    await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
-
-    // Clicking with no qualifier text sets scope and opens the refine box; Send submits it.
-    fireEvent.click(screen.getByText('✨ More like this'));
-    fireEvent.click(within(document.querySelector('.refinement-body')).getByText('Send'));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({ body: expect.stringContaining('"command":"more_like_this"') })));
-    const cmd = fetchMock.mock.calls.find(c => c[1]?.body?.includes('"command":"more_like_this"'));
-    const body = JSON.parse(cmd[1].body);
-    expect(body.refinement).toEqual({ type: 'MORE_LIKE_THIS', reference: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna' } });
-    expect(body.option_id).toBeUndefined();
-    await waitFor(() => expect(screen.getByText(/Refreshed around Madhya Pradesh/)).toBeInTheDocument());
-  });
-
   it('shows the identical "Plan this trip →" CTA regardless of entry query params', async () => {
     const server = createServer({ recommendation: successOutcome() });
     server.queueCommand({ message: 'Confirmed.', view: view({ selectedOption: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna' } }) });
@@ -533,27 +513,26 @@ describe('Destinations (real Meridian integration)', () => {
     // Both cards and their summaries are visible simultaneously — independently comparable.
     expect(screen.getByText('Rank one.')).toBeInTheDocument();
     expect(screen.getByText('Rank two.')).toBeInTheDocument();
-    // Each card has its own CTA and More like this button.
+    // Each card has its own CTA -- refinement is the one shared drawer below, not a per-card action.
     expect(screen.getAllByText('Plan this trip →')).toHaveLength(2);
-    expect(screen.getAllByText('✨ More like this')).toHaveLength(2);
   });
 
-  it('"More like this" works with the qualifier filled in', async () => {
+  it('the refinement drawer sends a plain traveler_message with the typed text', async () => {
     const server = createServer({ recommendation: successOutcome() });
-    server.queueCommand({ message: 'Refreshed.', recommendation: successOutcome() });
+    server.queueCommand({ message: 'Refreshed.', recommendation: successOutcome({ message: 'Refreshed around Madhya Pradesh Heritage and Nature.' }) });
     fetchMock = createFetchMock(server);
     global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
     await waitFor(() => expect(screen.getAllByText('Madhya Pradesh Heritage and Nature')[0]).toBeInTheDocument());
 
-    // Fill the unified refine box, then click "More like this" — sends immediately with instructions.
     fireEvent.click(screen.getByText(/Not quite right\? Tell us more/));
     fireEvent.change(screen.getByLabelText('Tell us more'), { target: { value: 'cheaper, closer' } });
-    fireEvent.click(screen.getByText('✨ More like this'));
+    fireEvent.click(within(document.querySelector('.refinement-body')).getByText('Send'));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({ body: expect.stringContaining('"command":"more_like_this"') })));
-    const cmd = fetchMock.mock.calls.find(c => c[1]?.body?.includes('"command":"more_like_this"'));
-    expect(JSON.parse(cmd[1].body).refinement).toEqual({ type: 'MORE_LIKE_THIS', reference: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna' }, instructions: 'cheaper, closer' });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/commands', expect.objectContaining({ body: expect.stringContaining('"command":"traveler_message"') })));
+    const cmd = fetchMock.mock.calls.find(c => c[1]?.body?.includes('"command":"traveler_message"'));
+    expect(JSON.parse(cmd[1].body).message).toBe('cheaper, closer');
+    await waitFor(() => expect(screen.getByText(/Refreshed around Madhya Pradesh/)).toBeInTheDocument());
   });
 
   it('the refinement drawer does not appear before options are ready', async () => {
