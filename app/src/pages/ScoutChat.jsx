@@ -247,9 +247,15 @@ export default function ScoutChat() {
   // intent) never gets this — matches JourneyEntry.jsx's old scope exactly.
   const isGuideFlavored = isKnownDestinationEntry;
   const destinationInputLabel = (guideAwaiting && AWAITING_INPUT_LABELS[guideAwaiting]) || DESTINATION_INPUT_LABEL;
+  // TWM-234: the generic (non-Guide-flavored) input reflects the current
+  // conversation's awaiting field, same as the Guide-flavored composer above
+  // — not which entry path/intent this session started from, so a resumed
+  // conversation and a freshly-entered one at the same awaiting step show
+  // identical copy.
+  const genericInputLabel = AWAITING_INPUT_LABELS[awaiting];
   return (
     <div className="chat-page chat-screen">
-      {!isDiscoverEntry && !isKnownDestinationEntry && <BackToTrip />}
+      <BackToTrip />
       <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
       <ScreenHeader
         eyebrow={isKnownDestinationEntry ? 'Trip setup' : '✦ Scout'}
@@ -292,8 +298,8 @@ export default function ScoutChat() {
         <input
           type="text"
           className="chat-input"
-          aria-label={isGuideFlavored ? destinationInputLabel.label : (isDiscoverEntry ? 'Message Scout' : undefined)}
-          placeholder={isGuideFlavored ? destinationInputLabel.placeholder : (isDiscoverEntry ? 'Tell Scout about your trip…' : 'Ask Scout a travel question…')}
+          aria-label={isGuideFlavored ? destinationInputLabel.label : (genericInputLabel?.label || 'Message Scout')}
+          placeholder={isGuideFlavored ? destinationInputLabel.placeholder : (genericInputLabel?.placeholder || 'Message Scout…')}
           value={input}
           onChange={event => setInput(event.target.value)}
           onKeyDown={event => { if (event.key === 'Enter') send(); }}

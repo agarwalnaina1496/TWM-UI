@@ -115,7 +115,7 @@ test('full flow: header nav entry through Dashboard', async ({ page }) => {
   // real chat window (cold-open greeting) shows immediately, no separate
   // screen, no redirect.
   await expect(page.getByText(/Hey there! I'm Scout\. Tell me about the trip you have in mind\. I can help you find destinations that fit/)).toBeVisible();
-  await page.getByPlaceholder('Tell Scout about your trip…').fill('Somewhere relaxing');
+  await page.getByPlaceholder('Message Scout…').fill('Somewhere relaxing');
   await page.getByLabel('Send').click();
   await expect(page.getByText('And roughly what total budget would you like to stay within?')).toBeVisible();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();

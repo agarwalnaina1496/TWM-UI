@@ -12,6 +12,18 @@ function heroFactValue(view, key) {
   return item?.value || 'Not set yet';
 }
 
+// TWM-234: the "still working this out" fallback previously always
+// attributed the pending work to Guide, even on a Meridian-owned stage
+// (matching/recommended/matched, before a destination is even settled) —
+// misleading, since Guide hasn't started yet at that point.
+const MERIDIAN_OWNED_STAGES = new Set(['new', 'matching', 'recommended', 'matched']);
+
+function stillWorkingCopy(view) {
+  return MERIDIAN_OWNED_STAGES.has(view?.lifecycle?.stage)
+    ? 'Meridian is still working out the best match.'
+    : 'Guide is still working this out.';
+}
+
 // The pre-plan and frozen views intentionally share one DOM shape.
 // oxlint-disable-next-line complexity
 export default function TripHero({ view, actions = null }) {
@@ -32,7 +44,7 @@ export default function TripHero({ view, actions = null }) {
     <section className="dashboard-hero">
       {actions && <div className="hero-top"><div className="hero-actions">{actions}</div></div>}
       <h1 className="hero-title">{decodeHtmlEntities(summary?.title || destination || view.title || 'Your trip')}</h1>
-      <p className="hero-desc">{summary?.overview || 'Guide is still working this out.'}</p>
+      <p className="hero-desc">{summary?.overview || stillWorkingCopy(view)}</p>
       <div className="hero-stats">
         <div><strong>{durationValue}</strong><span>Days</span></div>
         <div><strong>{travelerValue}</strong><span>Travelers</span></div>
@@ -44,7 +56,7 @@ export default function TripHero({ view, actions = null }) {
       </div>
       <div className="hero-why">
         <span className="hero-why-label">Why this route</span>
-        <p>{summary?.route_rationale || 'Guide is still working this out.'}</p>
+        <p>{summary?.route_rationale || stillWorkingCopy(view)}</p>
       </div>
     </section>
   );

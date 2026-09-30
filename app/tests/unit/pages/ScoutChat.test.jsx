@@ -71,7 +71,7 @@ describe('ScoutChat advice-entry chat', () => {
     sendTripCommand = vi.fn(async () => ({ message: 'Here is your plan.', trip: view({ activeAgent: 'guide', plan: readyPlan() }) }));
     const user = userEvent.setup();
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-    await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), "That's everything{Enter}");
+    await user.type(screen.getByPlaceholderText('Anything else, or just say you\'re ready'), "That's everything{Enter}");
     expect(navigate).toHaveBeenCalledWith(expect.stringContaining('/trip-preview'), { state: { guideMessage: 'Here is your plan.' } });
   });
 
@@ -96,7 +96,7 @@ describe('ScoutChat advice-entry chat', () => {
       sendTripCommand = vi.fn(async () => ({ message: 'Got it.', trip: view({ activeAgent: agent }) }));
       const user = userEvent.setup();
       render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-      await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), 'Change of plans{Enter}');
+      await user.type(screen.getByPlaceholderText('Message Scout…'), 'Change of plans{Enter}');
       expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', expect.objectContaining({ message: 'Change of plans' }));
     }
   );
@@ -109,7 +109,7 @@ describe('ScoutChat advice-entry chat', () => {
     }));
     const user = userEvent.setup();
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-    await user.type(screen.getByPlaceholderText('Ask Scout a travel question…'), 'Plan a Coorg trip{Enter}');
+    await user.type(screen.getByPlaceholderText('e.g. ₹1,00,000 total for both'), 'Plan a Coorg trip{Enter}');
     expect(await screen.findByText('And roughly what budget?')).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalled();
   });
@@ -127,7 +127,7 @@ describe('ScoutChat advice-entry chat', () => {
       const replaceState = vi.spyOn(window.history, 'replaceState');
       const user = userEvent.setup();
       render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-      await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'A relaxing beach trip{Enter}');
+      await user.type(screen.getByPlaceholderText('Message Scout…'), 'A relaxing beach trip{Enter}');
       expect(startTrip).toHaveBeenCalledTimes(1);
       // Anchored via the raw History API, not react-router's navigate() --
       // some routes remount on any react-router-visible search-param change
@@ -150,7 +150,7 @@ describe('ScoutChat advice-entry chat', () => {
       }));
       const user = userEvent.setup();
       render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-      await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'A relaxing beach trip{Enter}');
+      await user.type(screen.getByPlaceholderText('Message Scout…'), 'A relaxing beach trip{Enter}');
       expect(startTrip).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: expect.any(String) }));
     });
 
@@ -160,7 +160,7 @@ describe('ScoutChat advice-entry chat', () => {
       sendTripCommand = vi.fn(async () => ({ message: 'Got it.', trip: view({ context: { origin_city: 'Delhi' } }) }));
       const user = userEvent.setup();
       render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-      await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'Actually make it 4 days{Enter}');
+      await user.type(screen.getByPlaceholderText('Message Scout…'), 'Actually make it 4 days{Enter}');
       expect(startTrip).not.toHaveBeenCalled();
       expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', expect.objectContaining({ message: 'Actually make it 4 days' }));
     });
@@ -177,6 +177,36 @@ describe('ScoutChat advice-entry chat', () => {
       expect(synced.has('msg')).toBe(false);
       expect(synced.get('tripId')).toBe('trip-1');
       replaceState.mockRestore();
+    });
+  });
+
+  // TWM-234: back-link and placeholder are derived from trip state, not from
+  // which entry path (?intent=) put the trip here.
+  describe('TWM-234: entry-path-independent chrome', () => {
+    it('shows the back-link once a trip exists, even on a discover-flavored entry', () => {
+      searchParams = new URLSearchParams('intent=discover_destination&tripId=trip-1');
+      commandSnapshot = view({ context: { origin_city: 'Delhi' } });
+      render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+      expect(screen.getByRole('link', { name: /back to trip/i })).toBeInTheDocument();
+    });
+
+    it('shows no back-link on a genuinely fresh entry with no trip yet', () => {
+      searchParams = new URLSearchParams('intent=discover_destination');
+      commandSnapshot = null;
+      render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+      expect(screen.queryByRole('link', { name: /back to trip/i })).not.toBeInTheDocument();
+    });
+
+    it('shows the same placeholder for an equivalent awaiting state, discover-entry or resumed', () => {
+      commandSnapshot = view({ activeAgent: 'meridian', matcher: { awaiting: 'budget' } });
+      searchParams = new URLSearchParams('intent=discover_destination&tripId=trip-1');
+      const { unmount } = render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+      expect(screen.getByPlaceholderText('e.g. ₹1,00,000 total for both')).toBeInTheDocument();
+      unmount();
+
+      searchParams = new URLSearchParams('tripId=trip-1');
+      render(<MemoryRouter><ScoutChat /></MemoryRouter>);
+      expect(screen.getByPlaceholderText('e.g. ₹1,00,000 total for both')).toBeInTheDocument();
     });
   });
 });

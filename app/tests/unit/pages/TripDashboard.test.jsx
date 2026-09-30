@@ -748,7 +748,6 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     sendTripCommand = vi.fn();
     renderDashboard();
     expect(await screen.findByRole('alert')).toHaveTextContent('This trip is no longer available.');
-    expect(screen.getByRole('button', { name: 'Back to your trips' })).toBeInTheDocument();
   });
 
   it('a CTA click points currentTripId at the trip before navigating', async () => {

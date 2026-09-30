@@ -220,7 +220,7 @@ test('Itinerary resolves a gateway transport leg and a stay via their drawers, s
   await page.getByText('Continue without login').click();
   await page.getByText('Discover Destination').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
-  await page.getByPlaceholder('Tell Scout about your trip…').fill(GOLDEN_QUERY);
+  await page.getByPlaceholder('Message Scout…').fill(GOLDEN_QUERY);
   await page.getByLabel('Send').click();
   // TWM-190 (regression fix): /journey-entry is ScoutChat.jsx itself — the
   // conversation continues on the same page, no redirect.

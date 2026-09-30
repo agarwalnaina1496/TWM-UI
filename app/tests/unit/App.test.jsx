@@ -91,7 +91,7 @@ describe('App guest-first routing (TWM-140)', () => {
       expect(screen.getByText('To start, where will you be traveling from?')).toBeInTheDocument();
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-      await user.type(screen.getByPlaceholderText('Tell Scout about your trip…'), 'Somewhere relaxing{Enter}');
+      await user.type(screen.getByPlaceholderText('Message Scout…'), 'Somewhere relaxing{Enter}');
 
       expect(await screen.findByText('What is your rough budget?')).toBeInTheDocument();
       expect(screen.getByText('Somewhere relaxing', { selector: '.chat-bub-user' })).toBeInTheDocument();

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mockTripCommandFlow, tripRecord, readyItineraryState } from './testUtils.js';
+import { mockTripCommandFlow, tripRecord, commandResponse, readyItineraryState } from './testUtils.js';
 
 // TWM-163: `/` always renders Dashboard-home directly, for any trip count
 // or stage (including zero trips, which shows Dashboard-home's own empty
@@ -169,4 +169,36 @@ test('a fresh trip with no traveler context does not clutter Dashboard-home', as
 
   await page.goto('my-trips');
   await expect(page.getByText('No trips yet')).toBeVisible();
+});
+
+// TWM-234: back-link visibility used to be keyed off which entry path
+// (?intent=) started the conversation, not off whether a trip actually
+// exists — so a fresh Discover entry never showed one, even after its first
+// message created a real trip. It's now derived from trip state alone.
+test('a fresh Discover entry shows the same back-link as an existing trip once it has one (TWM-234)', async ({ page }) => {
+  await mockTripCommandFlow(page, [
+    {
+      entryIntent: 'discover',
+      response: commandResponse('Where will you be travelling from?', tripRecord({
+        version: 2,
+        trip_state: {
+          stage: 'new', active_agent: 'meridian',
+          trip_context: { trip_duration: '7 days' },
+          matcher_state: { conversation_context: { awaiting: 'origin_city' } },
+        },
+      })),
+    },
+  ]);
+
+  await page.goto('');
+  await page.getByText('Discover Destination', { exact: true }).first().click();
+  await expect(page.getByRole('link', { name: 'Back to trip' })).toHaveCount(0);
+
+  await page.getByPlaceholder('Message Scout…').fill('Somewhere relaxing for a week');
+  await page.getByLabel('Send').click();
+  await expect(page.getByText('Where will you be travelling from?')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back to trip' })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('link', { name: 'Back to trip' })).toBeVisible();
 });
