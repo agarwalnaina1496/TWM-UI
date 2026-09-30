@@ -47,7 +47,7 @@ export default function CheckpointOverlay({ knownFacts, message, value, onChange
             {knownFacts.map(fact => <span key={fact} className="checkpoint-fact-chip">{fact}</span>)}
           </div>
         )}
-        <p className="checkpoint-message">{message || 'Guide needs one more detail before it can propose a plan.'}</p>
+        <p className="checkpoint-message">{message || 'Scout needs one more detail before it can propose a plan.'}</p>
         {error && <div className="price-evidence state-unsafe" role="alert">{error}</div>}
         <div className="checkpoint-input-row">
           <input

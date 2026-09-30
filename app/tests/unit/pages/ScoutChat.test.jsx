@@ -254,19 +254,19 @@ describe('ScoutChat refresh recap and hand-off note', () => {
     commandSnapshot = view({ activeAgent: 'scout', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     const { rerender } = render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-    expect(screen.queryByText(/Bringing in Meridian/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Scout is narrowing down destinations that fit/)).not.toBeInTheDocument();
 
     commandSnapshot = view({ activeAgent: 'meridian', context: { origin_city: 'Delhi' } });
     rerender(<MemoryRouter><ScoutChat /></MemoryRouter>);
 
-    expect(await screen.findByText(/Bringing in Meridian, who handles destination matching/)).toBeInTheDocument();
+    expect(await screen.findByText(/Scout is narrowing down destinations that fit/)).toBeInTheDocument();
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
   it('shows no hand-off note when a trip loads already owned by meridian', () => {
     commandSnapshot = view({ activeAgent: 'meridian', context: { origin_city: 'Delhi' } });
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-    expect(screen.queryByText(/Bringing in Meridian/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Scout is narrowing down destinations that fit/)).not.toBeInTheDocument();
   });
 
   it('shows a Guide-phrased recap turn when resuming a Guide-owned trip', () => {
@@ -285,18 +285,18 @@ describe('ScoutChat refresh recap and hand-off note', () => {
     commandSnapshot = view({ activeAgent: 'scout', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     const { rerender } = render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-    expect(screen.queryByText(/Bringing in Guide/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Scout is starting to build your day-by-day plan/)).not.toBeInTheDocument();
 
     commandSnapshot = view({ activeAgent: 'guide', context: { origin_city: 'Delhi' } });
     rerender(<MemoryRouter><ScoutChat /></MemoryRouter>);
 
-    expect(await screen.findByText(/Bringing in Guide, who builds your day-by-day plan/)).toBeInTheDocument();
+    expect(await screen.findByText(/Scout is starting to build your day-by-day plan/)).toBeInTheDocument();
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
   it('shows no hand-off note when a trip loads already owned by guide', () => {
     commandSnapshot = view({ activeAgent: 'guide', context: { origin_city: 'Delhi' } });
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
-    expect(screen.queryByText(/Bringing in Guide/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Scout is starting to build your day-by-day plan/)).not.toBeInTheDocument();
   });
 });

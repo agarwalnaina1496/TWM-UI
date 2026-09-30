@@ -37,9 +37,11 @@ function useThinkingMessage(busy) {
   return message;
 }
 
+// Scout is the only agent name shown to the traveler -- Meridian/Guide are
+// internal specialist names, never surfaced in UI copy.
 const HANDOFF_NOTES = {
-  meridian: '→ Bringing in Meridian, who handles destination matching.',
-  guide: '→ Bringing in Guide, who builds your day-by-day plan.',
+  meridian: '→ Scout is narrowing down destinations that fit.',
+  guide: '→ Scout is starting to build your day-by-day plan.',
 };
 
 let nextId = 1;

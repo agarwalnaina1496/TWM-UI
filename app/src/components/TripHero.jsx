@@ -15,13 +15,15 @@ function heroFactValue(view, key) {
 // TWM-234: the "still working this out" fallback previously always
 // attributed the pending work to Guide, even on a Meridian-owned stage
 // (matching/recommended/matched, before a destination is even settled) —
-// misleading, since Guide hasn't started yet at that point.
-const MERIDIAN_OWNED_STAGES = new Set(['new', 'matching', 'recommended', 'matched']);
+// misleading, since Guide hasn't started yet at that point. Scout is the
+// only agent name ever shown to the traveler, so the copy stays
+// stage-accurate about what's happening without naming either specialist.
+const MATCHING_STAGES = new Set(['new', 'matching', 'recommended', 'matched']);
 
 function stillWorkingCopy(view) {
-  return MERIDIAN_OWNED_STAGES.has(view?.lifecycle?.stage)
-    ? 'Meridian is still working out the best match.'
-    : 'Guide is still working this out.';
+  return MATCHING_STAGES.has(view?.lifecycle?.stage)
+    ? 'Scout is still narrowing down the best match.'
+    : 'Scout is still working out your plan.';
 }
 
 // The pre-plan and frozen views intentionally share one DOM shape.

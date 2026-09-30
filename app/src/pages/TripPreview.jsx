@@ -14,7 +14,7 @@ import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
 import '../styles/preview.css';
 
 const REOPEN_DESTINATION_MESSAGE = 'I want to change my destination and explore other options.';
-const REOPEN_STEPS = ['Stepping back from your current plan', 'Bringing in Meridian, who handles destination matching', 'Finding fresh options'];
+const REOPEN_STEPS = ['Stepping back from your current plan', 'Scout is narrowing down destinations that fit', 'Finding fresh options'];
 
 // Shared by the gating-question screen and the chat drawer — both are a
 // plain free-text message to Guide, just with a different placeholder and
@@ -28,7 +28,7 @@ function FreeTextComposer({ value, onChange, onSubmit, placeholder, pending }) {
   return (
     <>
       <input
-        aria-label="Message Guide"
+        aria-label="Message Scout"
         value={value}
         disabled={pending}
         placeholder={placeholder}
@@ -287,7 +287,7 @@ export default function TripPreview() {
     return (
       <main className="wrap plan-builder">
         <BackToTrip />
-        <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Guide is drafting your plan…</div>
+        <div className="think"><span className="dot-flash"></span><span className="dot-flash"></span><span className="dot-flash"></span> Scout is drafting your plan…</div>
       </main>
     );
   }
@@ -302,7 +302,7 @@ export default function TripPreview() {
     <main className="wrap plan-builder">
       <BackToTrip />
       <ScreenHeader
-        eyebrow="Guide Plan Builder"
+        eyebrow="✦ Scout"
         title={<>{summary.destinationLabel || 'Your trip'} <em>| {summary.durationDays} days</em></>}
         lede="Shape the places and day pace together. Dates can stay open until you book."
       />
@@ -362,12 +362,12 @@ export default function TripPreview() {
         </button>
       </div>
       {drawerOpen && (
-        <section className="chat-drawer" aria-label="Chat with Guide">
+        <section className="chat-drawer" aria-label="Chat with Scout">
           <FreeTextComposer
             value={freeText}
             onChange={setFreeText}
             pending={pending}
-            placeholder="Tell Guide what to change…"
+            placeholder="Tell Scout what to change…"
             onSubmit={value => { setFreeText(''); sendChat(value); }}
           />
         </section>

@@ -417,7 +417,7 @@ export default function Destinations() {
         <div>
           <h2 className="section-title">A few that fit well</h2>
           <div className="agent-summary-message">
-            <span className="agent-summary-badge">Guide</span>
+            <span className="agent-summary-badge">Scout</span>
             <p>{outcome.data.message}</p>
           </div>
           {planError && <div className="price-evidence state-unsafe" role="alert">{planError}</div>}

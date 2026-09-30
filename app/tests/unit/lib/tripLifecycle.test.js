@@ -100,7 +100,7 @@ describe('tripStatusLine', () => {
   });
 
   it('destination known + awaiting', () => {
-    expect(tripStatusLine(trip({ context: { destinations: 'Udaipur' }, awaiting: 'trip_duration' }))).toBe("Guide's working out the details with you.");
+    expect(tripStatusLine(trip({ context: { destinations: 'Udaipur' }, awaiting: 'trip_duration' }))).toBe("Scout's working out the details with you.");
   });
 
   it('destination known + has_places', () => {

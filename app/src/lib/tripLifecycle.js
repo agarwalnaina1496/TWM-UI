@@ -117,7 +117,7 @@ export function tripStatusLine(trip) {
   }
   if (trip?.has_day_plan) return 'A full day-by-day plan is set — sorting out bookings next.';
   if (trip?.has_places) return 'Places picked — building the day-by-day plan.';
-  if (trip?.awaiting) return "Guide's working out the details with you.";
+  if (trip?.awaiting) return "Scout's working out the details with you.";
   return 'Destination settled — planning not started yet.';
 }
 

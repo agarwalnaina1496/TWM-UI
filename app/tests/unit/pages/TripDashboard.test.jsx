@@ -709,7 +709,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(within(tabs).getByText('Overview')).toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(within(tabs).getByText('Itinerary'));
-    expect(screen.getByText('Your day-by-day plan will appear here once Guide finishes it.')).toBeInTheDocument();
+    expect(screen.getByText('Your day-by-day plan will appear here once Scout finishes it.')).toBeInTheDocument();
     await user.click(within(tabs).getByText('Support'));
     expect(screen.getByRole('region', { name: 'Frequently asked questions' })).toBeInTheDocument();
     expect(screen.queryByText('Available once your itinerary is ready.')).not.toBeInTheDocument();

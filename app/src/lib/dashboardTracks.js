@@ -37,7 +37,7 @@ function dayPlanTrack(view) {
     return { status: 'progress', label: 'Draft ready for review', cta: stageCta(view) };
   }
   if (progress.known) {
-    return { status: 'progress', label: 'Guide is gathering trip details', cta: stageCta(view) };
+    return { status: 'progress', label: 'Scout is gathering trip details', cta: stageCta(view) };
   }
   return { status: 'pending', label: 'Not started', cta: null };
 }

@@ -6,18 +6,20 @@ function view(overrides = {}) {
   return { id: 't1', title: null, context_recap: [], ...overrides };
 }
 
-// TWM-234: the pre-plan "still working this out" fallback previously always
-// attributed the pending work to Guide, even on a Meridian-owned stage
-// (matching/recommended/matched) where Guide hasn't started yet.
+// TWM-234: the pre-plan "still working this out" fallback stays
+// stage-accurate about what's happening (matching vs. planning) without
+// ever naming Meridian or Guide -- Scout is the only agent name shown to
+// the traveler.
 describe('TripHero pre-plan fallback copy', () => {
-  it('attributes a Meridian-owned stage to Meridian, not Guide', () => {
+  it('reflects a matching-owned stage without naming Meridian', () => {
     render(<TripHero view={view({ lifecycle: { stage: 'matching' } })} />);
-    expect(screen.getAllByText('Meridian is still working out the best match.').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Guide is still working this out.')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Scout is still narrowing down the best match.').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Meridian/)).not.toBeInTheDocument();
   });
 
-  it('attributes a Guide-owned stage to Guide', () => {
+  it('reflects a planning-owned stage without naming Guide', () => {
     render(<TripHero view={view({ lifecycle: { stage: 'planning' } })} />);
-    expect(screen.getAllByText('Guide is still working this out.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Scout is still working out your plan.').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Guide/)).not.toBeInTheDocument();
   });
 });
