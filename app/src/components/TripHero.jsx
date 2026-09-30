@@ -1,6 +1,7 @@
 import { decodeHtmlEntities } from '../lib/text.js';
 import { contextDestination } from '../lib/tripLifecycle.js';
 import { formatMoney } from '../lib/formatters.js';
+import '../styles/dashboard.css';
 
 
 // TWM-220: renders entirely from the composed `TripView.summary` — no raw

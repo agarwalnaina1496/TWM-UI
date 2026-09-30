@@ -1,4 +1,5 @@
 import OptionDetailCard from './OptionDetailCard.jsx';
+import '../../styles/destinations.css';
 
 // TWM-234: the ranked-options grid plus the "tell us more" refinement
 // drawer -- split out of DestinationsPanel to keep that file's complexity

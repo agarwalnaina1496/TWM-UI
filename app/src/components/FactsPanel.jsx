@@ -1,3 +1,5 @@
+import '../styles/chat.css';
+
 // TWM-173/TWM-220: live-updating facts panel — renders the server-composed
 // context recap (label + value per known field). Renders nothing until at
 // least one field is known.

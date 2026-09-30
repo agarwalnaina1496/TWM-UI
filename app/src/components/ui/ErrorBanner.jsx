@@ -1,3 +1,5 @@
+import '../../styles/destinations.css';
+
 export default function ErrorBanner({ message, actionLabel, onAction }) {
   return (
     <div className="price-evidence state-unsafe" role="alert">
