@@ -180,6 +180,17 @@
    step regardless of which track it's on. */
 .overview-primary-cta{margin:24px auto 0;text-align:center}
 
+/* TWM-234: local progress scoped to whichever phase (matching/planning) is
+   currently active -- three steps, never a trip-wide pipeline bar. */
+.phase-progress{margin:24px 0 0}
+.phase-progress-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);margin:0 0 8px}
+.phase-progress-bar{display:flex;gap:6px;margin-bottom:6px}
+.phase-progress-bar span{flex:1;height:4px;border-radius:9px;background:var(--border)}
+.phase-progress-bar span.done{background:var(--accent)}
+.phase-progress-steps{display:flex;gap:6px}
+.phase-progress-steps span{flex:1;font-size:11px;font-weight:600;color:var(--tm)}
+.phase-progress-steps span.active{color:var(--accent)}
+
 /* TWM-175: trip-shape day-strip on Overview — tappable, jumps into Itinerary. */
 .day-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 16px}
 .day-strip-pill{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;border-radius:14px;border:1px solid var(--border);background:var(--surface);cursor:pointer;min-width:64px}

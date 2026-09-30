@@ -5,6 +5,7 @@ import { useTrip } from '../../context/TripContext.jsx';
 import { contextFactRows, dashboardPrimaryCta, destinationFactRow } from '../../lib/dashboardTracks.js';
 import { withTripId } from '../../lib/tripUrl.js';
 import { resumedGreeting } from '../../lib/chatGreeting.js';
+import { phaseProgress } from '../../lib/phaseProgress.js';
 import { newIdempotencyKey } from '../../lib/tripApi.js';
 import { planReady } from '../../hooks/useGuidePlanning.js';
 import { ROUTES } from '../../constants/routes.js';
@@ -41,6 +42,7 @@ export default function OverviewTab({ view, tripId }) {
   const stage = view.lifecycle?.stage;
   const awaiting = activeAgent === 'guide' ? view.plan?.awaiting : view.matcher?.awaiting;
   const embedChat = primaryCta?.to === ROUTES.scoutChat;
+  const progress = phaseProgress(view);
 
   function go(cta) {
     setCurrentTripId(tripId);
@@ -79,6 +81,18 @@ export default function OverviewTab({ view, tripId }) {
           <div className="budget-summary-card">
             {budget.lines.map((line, index) => <div className="budget-summary-row" key={index}><span>{line.category}</span><strong>{moneyRange(line.low, line.high)}</strong><p>{line.note}</p></div>)}
             <div className="budget-summary-row total"><span>Estimated total</span><strong>{moneyRange(summary.budget.low, summary.budget.high)}</strong></div>
+          </div>
+        </div>
+      )}
+
+      {progress && (
+        <div className="phase-progress content-narrow">
+          <div className="phase-progress-label">{progress.label}</div>
+          <div className="phase-progress-bar">
+            {progress.steps.map((_, index) => <span key={index} className={index <= progress.activeStep ? 'done' : ''} />)}
+          </div>
+          <div className="phase-progress-steps">
+            {progress.steps.map((step, index) => <span key={step} className={index === progress.activeStep ? 'active' : ''}>{step}</span>)}
           </div>
         </div>
       )}

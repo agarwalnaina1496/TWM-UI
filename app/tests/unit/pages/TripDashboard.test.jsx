@@ -682,6 +682,17 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
 
   // ---- pre-plan Dashboard ----------------------------------------
 
+  it('shows the local Matching phase progress, not a trip-wide pipeline', async () => {
+    commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    await screen.findByText('Your trip so far');
+    expect(screen.getByText('Matching')).toBeInTheDocument();
+    const active = screen.getByText('Recommended');
+    expect(active.className).toContain('active');
+    expect(screen.queryByText('Planning')).not.toBeInTheDocument();
+  });
+
   it('hides "Before you go" entirely until Atlas has produced a summary', async () => {
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
