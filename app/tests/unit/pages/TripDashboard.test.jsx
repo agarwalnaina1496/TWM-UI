@@ -595,7 +595,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     // Switching away and manually back is still possible — the auto-switch doesn't re-fire.
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /Overview/ }));
-    expect(await screen.findByText('Your trip so far')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /View trip/ })).toBeInTheDocument();
   });
 
   it('does not reset build progress to step one when switching tabs away and back', async () => {
@@ -608,7 +608,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
 
     await user.click(screen.getByRole('button', { name: /Overview/ }));
-    expect(await screen.findByText('Your trip so far')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /View trip/ })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Itinerary/ }));
 
     expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
@@ -748,20 +748,19 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(await screen.findByRole('link', { name: '← Back to your trips' })).toHaveAttribute('href', '/');
   });
 
-  it('does not repeat the stated budget in the facts table -- TripHero already shows it', async () => {
+  it('does not show a Budget section pre-plan -- TripHero already shows the stated figure, no computed breakdown exists yet', async () => {
     // TWM-232: TripHero's stat-tile grid already renders the traveler's
     // stated budget pre-plan ("Not set yet" when missing) -- Overview's own
     // Budget section only appears once there's real added information (the
-    // computed range breakdown), so budget is excluded from the generic
-    // facts table entirely, at every stage, to avoid a second copy of it.
-    // TWM-234: `recommended`/`matching` now embed their own panel instead of
-    // the facts table -- use `matched` with a destination already chosen
-    // (no primary CTA, table renders) to keep exercising the facts table.
+    // computed range breakdown).
+    // TWM-234: the generic "Your trip so far" facts table is gone entirely
+    // (it read as a checklist of trip facets at stages where none of it was
+    // actionable) -- `matched` here (no primary CTA) keeps this test on a
+    // stage where nothing else is embedded either.
     commandSnapshot = prePlanView({ stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Udaipur', budget: '₹1,00,000 total for both' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const facts = await screen.findByText('Your trip so far');
-    expect(within(facts.closest('.trip-facts')).queryByText('budget')).not.toBeInTheDocument();
+    await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
     expect(screen.queryByText('💰 Budget')).not.toBeInTheDocument();
   });
 
@@ -869,14 +868,17 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(screen.queryByRole('button', { name: 'Review recommendations →' })).not.toBeInTheDocument();
   });
 
-  it('known-destination: Destination row shows the destination with no CTA', async () => {
+  it('known-destination: shows no primary CTA once the destination is settled and planning has not started', async () => {
+    // TWM-234: the generic "Your trip so far" facts table (which used to
+    // carry a plain Destination row here) is gone entirely -- TripHero's own
+    // heading already names the destination. Overview itself has nothing
+    // actionable to show at this stage, so no CTA button and neither
+    // embedded panel should render.
     commandSnapshot = prePlanView({ stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Udaipur' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const facts = await screen.findByText('Your trip so far');
-    const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
-    expect(within(row).getByText('Udaipur')).toBeInTheDocument();
-    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+    await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
+    expect(screen.queryByRole('button', { name: /→$/ })).not.toBeInTheDocument();
   });
 });
 

@@ -2,7 +2,7 @@ import BudgetBar, { moneyRange } from '../../components/BudgetBar.jsx';
 import { VerifyChip } from '../../components/StatusPills.jsx';
 import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../../context/TripContext.jsx';
-import { contextFactRows, dashboardPrimaryCta, destinationFactRow } from '../../lib/dashboardTracks.js';
+import { dashboardPrimaryCta } from '../../lib/dashboardTracks.js';
 import { withTripId } from '../../lib/tripUrl.js';
 import { resumedGreeting } from '../../lib/chatGreeting.js';
 import { phaseProgress } from '../../lib/phaseProgress.js';
@@ -19,22 +19,21 @@ import { useDestinationsMatching } from '../../hooks/useDestinationsMatching.js'
 // different pages -- a plain fact table pre-itinerary, a budget
 // chart/checklist post-itinerary -- swapped wholesale the moment `summary`
 // existed. That's not progressive, it's two dashboards stitched together.
-// Same slots now at every stage: facts -> destination -> (budget, once
-// there's something new to say) -> before you go. "Why this route" and the
-// traveler's own stated budget are TripHero's job (its stat-tile grid
-// already shows the raw stated figure pre-plan, "Not set yet" when
-// missing) -- both dropped from here entirely; showing them again in
-// Overview would just repeat TripHero verbatim. Overview's own Budget
-// section only earns its place once there's real added information: the
-// computed range breakdown by category, which TripHero's single stat tile
-// doesn't carry.
+// "Why this route" and the traveler's own stated budget are TripHero's job
+// (its stat-tile grid already shows the raw stated figure pre-plan, "Not
+// set yet" when missing) -- both dropped from here entirely; showing them
+// again in Overview would just repeat TripHero verbatim. Overview's own
+// Budget section only earns its place once there's real added information:
+// the computed range breakdown by category, which TripHero's single stat
+// tile doesn't carry.
 //
-// TWM-234: the primary CTA no longer just navigates -- when the next step
-// is the conversation (matching or planning) or the Destinations
+// TWM-234: the plain "Your trip so far" facts table is gone -- it read as a
+// checklist of trip facets even at stages where nothing about it was
+// actionable. The primary CTA no longer just navigates either -- when the
+// next step is the conversation (matching or planning) or the Destinations
 // comparison (recommended/matched), the real panel renders inline, right
-// here, replacing the facts table entirely (not appended below it). No
-// click needed to see what's next; it IS what's next. Only Plan Builder
-// still navigates away (not embedded yet).
+// here. No click needed to see what's next; it IS what's next. Only Plan
+// Builder still navigates away (not embedded yet).
 export default function OverviewTab({ view, tripId }) {
   const navigate = useNavigate();
   const { setCurrentTripId, sendTripCommand } = useTrip();
@@ -66,18 +65,6 @@ export default function OverviewTab({ view, tripId }) {
 
   return (
     <section aria-label="Trip overview">
-      {!embedChat && !embedDestinations && (
-        <div className="trip-facts content-narrow">
-          <h2 className="trip-facts-heading">Your trip so far</h2>
-          {[...contextFactRows(view), destinationFactRow(view)].map(row => (
-            <div className="trip-facts-row" key={row.label}>
-              <span className="trip-facts-label">{row.label}</span>
-              {row.value ? <span className="trip-facts-value">{row.value}</span> : <span className="trip-facts-value muted">Not chosen yet</span>}
-            </div>
-          ))}
-        </div>
-      )}
-
       {budget && (
         <div className="overview-budget content-narrow">
           <div className="tab-intro"><div><h2>💰 Budget</h2></div></div>
