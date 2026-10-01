@@ -23,3 +23,29 @@ describe('TripHero pre-plan fallback copy', () => {
     expect(screen.queryByText(/Guide/)).not.toBeInTheDocument();
   });
 });
+
+// TWM-234: a fresh, pre-match trip has no known facts yet -- the stat row
+// should never show placeholder tiles around an empty conversation.
+describe('TripHero pre-plan stat row', () => {
+  it('shows no stat row at all when nothing is known yet', () => {
+    const { container } = render(<TripHero view={view({ lifecycle: { stage: 'matching' } })} />);
+    expect(container.querySelector('.hero-stats')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not set yet')).not.toBeInTheDocument();
+  });
+
+  it('shows only the facts that are actually known, growing as they arrive', () => {
+    render(<TripHero view={view({
+      lifecycle: { stage: 'matching' },
+      context_recap: [
+        { key: 'origin_city', label: 'origin_city', value: 'Delhi' },
+        { key: 'num_travelers', label: 'num_travelers', value: '2 travelers' },
+      ],
+    })} />);
+    expect(screen.getByText('2 travelers')).toBeInTheDocument();
+    expect(screen.getByText('Travelers')).toBeInTheDocument();
+    expect(screen.queryByText('Days')).not.toBeInTheDocument();
+    expect(screen.queryByText('Travel dates')).not.toBeInTheDocument();
+    expect(screen.queryByText('Budget')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not set yet')).not.toBeInTheDocument();
+  });
+});
