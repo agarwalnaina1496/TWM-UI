@@ -1,4 +1,5 @@
 import OptionDetailCard from './OptionDetailCard.jsx';
+import MatchedDestinationPanel from './MatchedDestinationPanel.jsx';
 import '../../styles/destinations.css';
 
 // TWM-234: the ranked-options grid plus the "tell us more" refinement
@@ -20,18 +21,13 @@ export default function OptionsCompare({
       {planError && <div className="price-evidence state-unsafe" role="alert">{planError}</div>}
 
       {selectedOption && (
-        <div className="destination-picked">
-          <p className="destination-picked-label">Your pick</p>
-          <p className="destination-picked-name">{selectedOptionName}</p>
-          <div className="destination-picked-actions">
-            <button type="button" className="btn btn-pick-plan" onClick={planThis} disabled={planningId != null}>
-              Plan this trip →
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={compareOtherDestinations} disabled={unselecting}>
-              Compare other destinations
-            </button>
-          </div>
-        </div>
+        <MatchedDestinationPanel
+          selectedOptionName={selectedOptionName}
+          planThis={planThis}
+          planningId={planningId}
+          compareOtherDestinations={compareOtherDestinations}
+          unselecting={unselecting}
+        />
       )}
 
       <div className={`options-grid${refinementBusy ? ' options-busy' : ''}`}>

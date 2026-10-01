@@ -20,18 +20,6 @@ function recommendationsQueryStatus(tripId, query) {
   return query.data !== undefined ? 'ready' : 'loading';
 }
 
-// A chosen destination with no recommendation round to show it against is a
-// genuine data problem, not a loading state -- surfaces through the same
-// recoverable error UI as a real fetch failure, retried with a plain
-// refetch, never by attempting continue (which has nothing to "continue"
-// once a destination is already chosen, and which backend now rejects from
-// the matched stage).
-function recoErrorStatus({ showTripLoadError, recoStatus, selectedOption, latest }) {
-  if (showTripLoadError) return false;
-  if (recoStatus === 'error') return true;
-  return Boolean(selectedOption) && recoStatus === 'ready' && !latest;
-}
-
 // TWM-234: split into useDestinationPlanning (select -> plan -> checkpoint),
 // useDestinationRefinement (continue/clarify/more-like-this), useDestinationFocus
 // (which card is focused/expanded), and useThinkingState (the loading flag)
@@ -112,16 +100,16 @@ export function useDestinationsMatching({ enabled = true, embedded = false } = {
   });
 
   const showTripLoadError = tripLoadStatus === 'error';
-  const showRecoError = recoErrorStatus({
-    showTripLoadError, recoStatus, latest, selectedOption: planning.selectedOption,
-  });
+  const showRecoError = !showTripLoadError && recoStatus === 'error';
   const focusedOption = outcome?.kind === 'options' && outcome.data
     ? outcome.data.options.find(o => o.key === focusedKey) ?? outcome.data.options[0]
     : null;
 
-  const selectedOptionName = planning.selectedOption && outcome?.kind === 'options' && outcome.data
-    ? outcome.data.options.find(o => o.type === planning.selectedOption.type && o.key === planning.selectedOption.id)?.name
-    : null;
+  // selected_option already carries its own name (set deterministically by
+  // select_destination) -- reading it straight off the matched trip itself
+  // rather than re-deriving it from the recommendations round means the
+  // matched screen never depends on that round having loaded.
+  const selectedOptionName = planning.selectedOption?.name ?? null;
 
   return {
     pills, selectedOptionName, showTripLoadError, showRecoError, recoError, thinking,

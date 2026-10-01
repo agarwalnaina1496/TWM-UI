@@ -1,5 +1,6 @@
 import HonestTransition from '../ui/HonestTransition.jsx';
 import OptionsCompare from './OptionsCompare.jsx';
+import MatchedDestinationPanel from './MatchedDestinationPanel.jsx';
 import { MATCHING_STEPS } from '../../constants/destinationsMatching.js';
 import { destinationsPhase } from '../../lib/destinationsPhase.js';
 import '../../styles/destinations.css';
@@ -17,6 +18,7 @@ export default function DestinationsPanel(props) {
     triggerError, triggerContinue,
     lastMeridianMessage, clarifyInput, setClarifyInput, submitClarification,
     outcome, tapFailureChip,
+    selectedOptionName, planThis, planningId, compareOtherDestinations, unselecting,
   } = props;
 
   const phase = destinationsPhase(props);
@@ -93,6 +95,18 @@ export default function DestinationsPanel(props) {
         <strong>Recommendations unavailable</strong>
         <span>We could not validate the recommendation response safely. Please try again.</span>
       </div>
+    );
+  }
+
+  if (phase === 'matched') {
+    return (
+      <MatchedDestinationPanel
+        selectedOptionName={selectedOptionName}
+        planThis={planThis}
+        planningId={planningId}
+        compareOtherDestinations={compareOtherDestinations}
+        unselecting={unselecting}
+      />
     );
   }
 
