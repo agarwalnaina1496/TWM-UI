@@ -1,6 +1,7 @@
 import { decodeHtmlEntities } from '../lib/text.js';
 import { contextDestination } from '../lib/tripLifecycle.js';
 import { formatMoney } from '../lib/formatters.js';
+import { DISCOVER_STAGES } from '../constants/tripStages.js';
 import '../styles/dashboard.css';
 
 
@@ -26,12 +27,20 @@ function heroFactValue(view, key) {
 // misleading, since Guide hasn't started yet at that point. Scout is the
 // only agent name ever shown to the traveler, so the copy stays
 // stage-accurate about what's happening without naming either specialist.
-const MATCHING_STAGES = new Set(['new', 'matching', 'recommended', 'matched']);
-
 function stillWorkingCopy(view) {
-  return MATCHING_STAGES.has(view?.lifecycle?.stage)
+  return DISCOVER_STAGES.has(view?.lifecycle?.stage)
     ? 'Scout is still narrowing down the best match.'
     : 'Scout is still working out your plan.';
+}
+
+// TWM-234: Discover and Plan are two distinct modules, not one fixed
+// pipeline -- this small label is the one constant, always-visible signal
+// of which one a trip is currently in, regardless of which tab is active
+// or what else on the hero has or hasn't filled in yet.
+function moduleLabel(view) {
+  return DISCOVER_STAGES.has(view?.lifecycle?.stage)
+    ? { text: 'Discovering a destination', cls: 'module-discover' }
+    : { text: 'Planning your trip', cls: 'module-plan' };
 }
 
 // The pre-plan and frozen views intentionally share one DOM shape.
@@ -43,6 +52,7 @@ export default function TripHero({ view, actions = null }) {
   const dates = summary?.dates;
   const budget = summary?.budget;
   const destination = contextDestination(view);
+  const module = moduleLabel(view);
 
   // Post-plan, every field below comes from the composed summary and is
   // always present -- the stat row is a fixed four-tile grid, same as
@@ -74,6 +84,7 @@ export default function TripHero({ view, actions = null }) {
 
   return (
     <section className="dashboard-hero">
+      <p className={`hero-module-label ${module.cls}`}>{module.text}</p>
       <div className="hero-top">
         <h1 className="hero-title">{decodeHtmlEntities(summary?.title || destination || view.title || 'Your trip')}</h1>
         {actions && <div className="hero-actions">{actions}</div>}

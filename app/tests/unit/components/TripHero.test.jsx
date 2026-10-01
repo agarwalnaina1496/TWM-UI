@@ -24,6 +24,26 @@ describe('TripHero pre-plan fallback copy', () => {
   });
 });
 
+// TWM-234: Discover and Plan are two distinct modules -- this label is the
+// one constant signal of which one a trip is currently in.
+describe('TripHero module label', () => {
+  it('says "Discovering a destination" for every Discover stage', () => {
+    for (const stage of ['new', 'matching', 'recommended', 'matched']) {
+      const { unmount } = render(<TripHero view={view({ lifecycle: { stage } })} />);
+      expect(screen.getByText('Discovering a destination')).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('says "Planning your trip" for every Plan stage', () => {
+    for (const stage of ['planning', 'plan_ready', 'planned']) {
+      const { unmount } = render(<TripHero view={view({ lifecycle: { stage } })} />);
+      expect(screen.getByText('Planning your trip')).toBeInTheDocument();
+      unmount();
+    }
+  });
+});
+
 // TWM-234: a fresh, pre-match trip has no known facts yet -- the stat row
 // should never show placeholder tiles around an empty conversation.
 describe('TripHero pre-plan stat row', () => {
