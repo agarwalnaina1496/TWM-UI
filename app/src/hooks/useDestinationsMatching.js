@@ -20,6 +20,18 @@ function recommendationsQueryStatus(tripId, query) {
   return query.data !== undefined ? 'ready' : 'loading';
 }
 
+// A chosen destination with no recommendation round to show it against is a
+// genuine data problem, not a loading state -- surfaces through the same
+// recoverable error UI as a real fetch failure, retried with a plain
+// refetch, never by attempting continue (which has nothing to "continue"
+// once a destination is already chosen, and which backend now rejects from
+// the matched stage).
+function recoErrorStatus({ showTripLoadError, recoStatus, selectedOption, latest }) {
+  if (showTripLoadError) return false;
+  if (recoStatus === 'error') return true;
+  return Boolean(selectedOption) && recoStatus === 'ready' && !latest;
+}
+
 // TWM-234: split into useDestinationPlanning (select -> plan -> checkpoint),
 // useDestinationRefinement (continue/clarify/more-like-this), useDestinationFocus
 // (which card is focused/expanded), and useThinkingState (the loading flag)
@@ -93,10 +105,16 @@ export function useDestinationsMatching({ enabled = true, embedded = false } = {
   useOutcomeTracking({ outcome, latestVersion: latest?.version, focusedKey, setFocusedKey });
 
   const pills = contextRecapPills(view);
-  const thinking = useThinkingState({ enabled, tripLoadStatus, recoStatus, latest, awaiting, triggering: refinement.triggering, triggerError: refinement.triggerError });
+  const thinking = useThinkingState({
+    enabled, tripLoadStatus, recoStatus, latest, awaiting,
+    triggering: refinement.triggering, triggerError: refinement.triggerError,
+    selectedOption: planning.selectedOption,
+  });
 
   const showTripLoadError = tripLoadStatus === 'error';
-  const showRecoError = !showTripLoadError && recoStatus === 'error';
+  const showRecoError = recoErrorStatus({
+    showTripLoadError, recoStatus, latest, selectedOption: planning.selectedOption,
+  });
   const focusedOption = outcome?.kind === 'options' && outcome.data
     ? outcome.data.options.find(o => o.key === focusedKey) ?? outcome.data.options[0]
     : null;

@@ -187,6 +187,11 @@ describe('Destinations (real Meridian integration)', () => {
 
     await waitFor(() => expect(fetchMock.mock.calls.some(call => call[0] === '/api/trips/trip-1/recommendations')).toBe(true));
     expect(fetchMock.mock.calls.some(call => call[0] === '/api/trips/trip-1/commands')).toBe(false);
+    // Never stuck on the "thinking" spinner either -- a chosen destination
+    // with no recommendation round is a genuine, recoverable error, not an
+    // unending wait for a first match that already happened.
+    await waitFor(() => expect(screen.getByText('Recommendations unavailable')).toBeInTheDocument());
+    expect(screen.queryByRole('status', { name: 'Finding your matches' })).not.toBeInTheDocument();
   });
 
   it('renders a real SUCCESS result already saved on the trip without re-triggering matching', async () => {
