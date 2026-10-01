@@ -41,7 +41,10 @@ test('full flow: header nav entry through Dashboard', async ({ page }) => {
       command: 'select_destination',
       response: commandResponse('Coorg is confirmed.', tripRecord({
         version: 5,
-        trip_state: { stage: 'matched', active_agent: null, matcher_state: { conversation_context: { awaiting: null } } },
+        trip_state: {
+          stage: 'matched', active_agent: null, matcher_state: { conversation_context: { awaiting: null } },
+          selected_option: { type: 'single', id: 'coorg' },
+        },
       })),
     },
     {
@@ -125,7 +128,8 @@ test('full flow: header nav entry through Dashboard', async ({ page }) => {
   // Destinations (real Meridian recommendations via the continue command)
   await expect(page).toHaveURL(/\/app\/destinations/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
-  await page.getByText('Plan this trip →').first().click();
+  await page.getByText('Choose this destination').first().click();
+  await page.getByText('Plan this trip →').click();
 
   // TripPreview: real Guide session bootstraps via start_planning, which
   // generates the complete plan (places + day_plan) in a single step, then

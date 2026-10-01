@@ -9,6 +9,20 @@
 .checkpoint-input-row{display:flex;gap:8px;}
 .checkpoint-input-row input{flex:1;border:1px solid var(--border);border-radius:10px;padding:11px 13px;font-size:13.5px;background:var(--bg);color:var(--tp);}
 
+/* TWM-234: the matched-destination panel -- choosing and planning are two
+   separate actions, so this is its own confirmation, not part of the card
+   grid. "Plan this trip" is deliberately not the lone/filled action here:
+   it sits beside "Compare other destinations" at equal visual weight, so
+   staying matched without planning reads as a complete outcome, not an
+   interrupted one. */
+.destination-picked{background:var(--accent-bg);border-radius:16px;padding:20px 22px;margin-bottom:18px;}
+.destination-picked-label{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px;}
+.destination-picked-name{font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--tp);margin:0 0 14px;}
+.destination-picked-actions{display:flex;gap:10px;flex-wrap:wrap;}
+.destination-picked-actions .btn{font:inherit;cursor:pointer;}
+.btn-pick-plan{background:transparent;color:var(--accent);border:1px solid var(--accent);}
+.btn-pick-plan:hover{background:var(--surface);}
+
 /* Price-forward independently comparable option cards. */
 .options-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:18px;}
 .options-grid.options-busy{opacity:.55;pointer-events:none;}

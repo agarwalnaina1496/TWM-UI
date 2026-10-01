@@ -148,7 +148,10 @@ test('Itinerary resolves a gateway transport leg and a stay via their drawers, s
     },
     {
       command: 'select_destination',
-      response: commandResponse('Coorg is confirmed.', tripRecord({ version: 6, trip_state: { stage: 'matched', active_agent: null } })),
+      response: commandResponse('Coorg is confirmed.', tripRecord({
+        version: 6,
+        trip_state: { stage: 'matched', active_agent: null, selected_option: { type: 'single', id: 'coorg' } },
+      })),
     },
     {
       command: 'start_planning',
@@ -229,7 +232,8 @@ test('Itinerary resolves a gateway transport leg and a stay via their drawers, s
   await page.getByRole('button', { name: 'See destinations →' }).click();
 
   await expect(page).toHaveURL(/\/app\/destinations/);
-  await page.getByText('Plan this trip →').first().click();
+  await page.getByText('Choose this destination').first().click();
+  await page.getByText('Plan this trip →').click();
 
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await page.getByText('Approve this plan →').click();

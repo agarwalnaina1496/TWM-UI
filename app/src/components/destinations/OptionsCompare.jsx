@@ -5,8 +5,9 @@ import '../../styles/destinations.css';
 // drawer -- split out of DestinationsPanel to keep that file's complexity
 // under the cap.
 export default function OptionsCompare({
-  outcome, planError, refinementBusy, selectedOption, focusedOption, evidenceOpen,
-  focusOption, handleToggleEvidence, planThis, planningId,
+  outcome, planError, refinementBusy, selectedOption, selectedOptionName, focusedOption, evidenceOpen,
+  focusOption, handleToggleEvidence, chooseDestination, choosingId,
+  planThis, planningId, compareOtherDestinations, unselecting,
   refinementOpen, setRefinementOpen, refinementValue, setRefinementValue, submitRefinement,
 }) {
   return (
@@ -17,6 +18,21 @@ export default function OptionsCompare({
         <p>{outcome.data.message}</p>
       </div>
       {planError && <div className="price-evidence state-unsafe" role="alert">{planError}</div>}
+
+      {selectedOption && (
+        <div className="destination-picked">
+          <p className="destination-picked-label">Your pick</p>
+          <p className="destination-picked-name">{selectedOptionName}</p>
+          <div className="destination-picked-actions">
+            <button type="button" className="btn btn-pick-plan" onClick={planThis} disabled={planningId != null}>
+              Plan this trip →
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={compareOtherDestinations} disabled={unselecting}>
+              Compare other destinations
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className={`options-grid${refinementBusy ? ' options-busy' : ''}`}>
         {outcome.data.options.map(option => {
@@ -32,8 +48,8 @@ export default function OptionsCompare({
               evidenceOpen={isFocused && evidenceOpen}
               onFocus={() => focusOption(option.key)}
               onToggleEvidence={() => handleToggleEvidence(option)}
-              onPlan={() => planThis(option)}
-              planning={planningId === option.key}
+              onChoose={() => chooseDestination(option)}
+              choosing={choosingId === option.key}
             />
           );
         })}

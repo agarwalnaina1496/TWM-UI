@@ -869,16 +869,28 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(screen.queryByRole('button', { name: 'Review recommendations →' })).not.toBeInTheDocument();
   });
 
-  it('"Plan this trip" from the embedded Destinations panel never navigates away -- it stays on Overview', async () => {
+  it('"Choose this destination" then "Plan this trip" from the embedded Destinations panel never navigates away -- it stays on Overview', async () => {
     // TWM-234: this used to navigate to a separate /scout-chat or
-    // /trip-preview page. Destinations is embedded now, so selecting a
-    // destination must stay on Overview -- the next embed (chat or Plan
+    // /trip-preview page. Destinations is embedded now, so choosing a
+    // destination and starting to plan it -- now two separate traveler
+    // actions -- must both stay on Overview; the next embed (chat or Plan
     // Builder) takes over once the refetched TripView's stage/plan changes,
     // never via an explicit route change.
     commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
-    sendTripCommand = vi.fn()
-      .mockResolvedValueOnce({ trip: { id: 'trip-1' } }) // select_destination
-      .mockResolvedValueOnce({ message: 'Great choice!', trip: { id: 'trip-1', plan: { awaiting: 'trip_duration' } } }); // start_planning
+    sendTripCommand = vi.fn(async command => {
+      if (command === 'select_destination') {
+        commandSnapshot = {
+          ...prePlanView({ stage: 'matched', context: { origin_city: 'Delhi' } }),
+          lifecycle: { stage: 'matched', status: 'free', active_agent: null, selected_option: { type: 'circuit', id: 'udaipur-loop' } },
+        };
+        return { trip: { id: 'trip-1' } };
+      }
+      commandSnapshot = {
+        ...prePlanView({ stage: 'planning', context: { origin_city: 'Delhi' }, plan: { awaiting: 'trip_duration' } }),
+        lifecycle: { stage: 'planning', status: 'free', active_agent: 'guide', selected_option: { type: 'circuit', id: 'udaipur-loop' } },
+      };
+      return { message: 'Great choice!', trip: { id: 'trip-1', plan: { awaiting: 'trip_duration' } } };
+    });
     global.fetch = vi.fn(async url => (url.includes('/recommendations')
       ? jsonResponse({
         version: 1, status: 'SUCCESS', message: 'A strong match.', trip_type: 'circuit',
@@ -894,6 +906,10 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
       : jsonResponse({})));
     renderDashboard();
     await screen.findByText('Udaipur Loop');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Choose this destination' }));
+    await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('select_destination', { optionId: 'udaipur-loop' }));
+
+    await screen.findByRole('button', { name: 'Plan this trip →' });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Plan this trip →' }));
 
     await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('start_planning'));

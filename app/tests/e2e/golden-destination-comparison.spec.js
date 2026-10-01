@@ -64,7 +64,7 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
       command: 'select_destination',
       response: commandResponse('Madhya Pradesh Heritage and Nature is confirmed.', tripRecord({
         version: 6,
-        trip_state: { stage: 'matched', active_agent: null },
+        trip_state: { stage: 'matched', active_agent: null, selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna' } },
       })),
     },
     {
@@ -120,7 +120,8 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
   await mpCard.getByText('See why this fits').click();
   await expect(mpCard.getByText(/Winter days generally support sightseeing/).first()).toBeVisible();
 
-  await mpCard.getByText('Plan this trip →').click();
+  await mpCard.getByText('Choose this destination').click();
+  await page.getByText('Plan this trip →').click();
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await expect(page.getByText('Gwalior Fort')).toBeVisible();
 });

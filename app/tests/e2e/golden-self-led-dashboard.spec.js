@@ -67,7 +67,10 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
     },
     {
       command: 'select_destination',
-      response: commandResponse('Coorg is confirmed.', tripRecord({ version: 6, trip_state: { stage: 'matched', active_agent: null } })),
+      response: commandResponse('Coorg is confirmed.', tripRecord({
+        version: 6,
+        trip_state: { stage: 'matched', active_agent: null, selected_option: { type: 'single', id: 'coorg' } },
+      })),
     },
     {
       // Single-step generation: start_planning returns the complete plan
@@ -139,7 +142,8 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
 
   await expect(page).toHaveURL(/\/app\/destinations/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
-  await page.getByText('Plan this trip →').first().click();
+  await page.getByText('Choose this destination').first().click();
+  await page.getByText('Plan this trip →').click();
 
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await expect(page.getByText('Abbey Falls')).toBeVisible();

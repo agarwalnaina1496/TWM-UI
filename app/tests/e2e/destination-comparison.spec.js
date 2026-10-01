@@ -44,7 +44,13 @@ function recommendedTripState(extra = {}) {
 test('loads real recommendations via the continue command, shows a disclosed trade-off, and plans the trip through select_destination', async ({ page }) => {
   await mockTripCommandFlow(page, [
     { command: 'continue', response: commandResponse(null, tripRecord({ version: 2, trip_state: recommendedTripState() })), recommendation: successOutcome() },
-    { command: 'select_destination', response: commandResponse('Madhya Pradesh Heritage and Nature is confirmed.', tripRecord({ version: 3, trip_state: recommendedTripState() })) },
+    {
+      command: 'select_destination',
+      response: commandResponse('Madhya Pradesh Heritage and Nature is confirmed.', tripRecord({
+        version: 3,
+        trip_state: recommendedTripState({ stage: 'matched', selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna' } }),
+      })),
+    },
     // TWM-106: landing on the Plan Builder immediately bootstraps a real
     // Guide session — scripted so the route mock doesn't reject it.
     {
@@ -89,7 +95,8 @@ test('loads real recommendations via the continue command, shows a disclosed tra
   await detailCard.getByText('See why this fits').click();
   await expect(detailCard.getByText(/A late add-on activity could push the total slightly higher\./)).toBeVisible();
 
-  await detailCard.getByText('Plan this trip →').click();
+  await detailCard.getByText('Choose this destination').click();
+  await page.getByText('Plan this trip →').click();
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await expect(page.getByText('Gwalior Fort')).toBeVisible();
 });

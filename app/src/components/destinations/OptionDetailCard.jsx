@@ -8,7 +8,7 @@ import {
 
 export default function OptionDetailCard({
   option, criteria, isSelected, isFocused, evidenceOpen, onFocus,
-  onToggleEvidence, onPlan, planning,
+  onToggleEvidence, onChoose, choosing,
 }) {
   const access = accessFact(option);
   const price = priceRange(option);
@@ -62,7 +62,11 @@ export default function OptionDetailCard({
       )}
 
       <div className="dest-actions">
-        <button type="button" className="btn btn-primary" onClick={onPlan} disabled={planning}>Plan this trip →</button>
+        {isSelected ? (
+          <button type="button" className="btn btn-ghost" disabled>Chosen</button>
+        ) : (
+          <button type="button" className="btn btn-ghost" onClick={onChoose} disabled={choosing}>Choose this destination</button>
+        )}
       </div>
     </div>
   );

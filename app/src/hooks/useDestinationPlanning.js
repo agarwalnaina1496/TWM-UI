@@ -5,14 +5,19 @@ import { isFixedFieldGap } from '../lib/planChat.js';
 import { planReady } from './useGuidePlanning.js';
 import { withTripId } from '../lib/tripUrl.js';
 
-// TWM-234: the "select a destination -> start planning -> possibly hit a
-// checkpoint question" flow, split out of useDestinationsMatching so neither
-// file trips the per-function complexity cap on its own. `embedded: true`
-// (Overview) turns every `navigate()` here into a no-op -- Overview's own
-// primaryCta already recomputes from the refetched TripView after each
-// command (stage flips to planning -> embeds chat or the plan builder), so
-// an explicit route change would fight that reactive switch instead of
-// cooperating with it.
+// TWM-234: choosing a destination and starting to plan it are two separate
+// traveler actions, not one fused step -- "Choose this destination" only
+// confirms a match (stage -> matched, no planning triggered); a visible but
+// unforced "Plan this trip" is what actually starts planning, and "Compare
+// other destinations" undoes the match and goes back to browsing (stage ->
+// matching) without re-invoking Meridian, since the already-fetched
+// recommendation round is still good to show. Split out of
+// useDestinationsMatching so neither file trips the per-function complexity
+// cap on its own. `embedded: true` (Overview) turns every `navigate()` here
+// into a no-op -- Overview's own primaryCta already recomputes from the
+// refetched TripView after each command (stage flips to planning -> embeds
+// chat or the plan builder), so an explicit route change would fight that
+// reactive switch instead of cooperating with it.
 export function useDestinationPlanning({ view, sendTripCommand, setPlanError, embedded = false }) {
   const navigate = useNavigate();
   function go(path, opts) {
@@ -20,6 +25,8 @@ export function useDestinationPlanning({ view, sendTripCommand, setPlanError, em
     if (opts) navigate(path, opts);
     else navigate(path);
   }
+  const [choosingId, setChoosingId] = useState(null);
+  const [unselecting, setUnselecting] = useState(null);
   const [planningId, setPlanningId] = useState(null);
   const [checkpointAwaiting, setCheckpointAwaiting] = useState(null);
   const [checkpointMessage, setCheckpointMessage] = useState('');
@@ -54,12 +61,31 @@ export function useDestinationPlanning({ view, sendTripCommand, setPlanError, em
     go(withTripId('/scout-chat', nextTripId));
   }
 
-  async function doPlanThis(option) {
+  async function chooseDestination(option) {
     setPlanError(null);
-    setPlanningId(option.key);
+    setChoosingId(option.key);
     try {
       await sendTripCommand('select_destination', { optionId: option.key });
-      trackEvent('destination_selected', { selection_source: 'plan_this_trip' });
+      trackEvent('destination_selected', { selection_source: 'choose' });
+    } catch (commandError) {
+      setPlanError(commandError.message || 'Something went wrong.');
+    } finally {
+      setChoosingId(null);
+    }
+  }
+
+  async function planThis() {
+    if (!selectedOption) return;
+    const isAlreadyPlanning = view?.lifecycle?.stage && view.lifecycle.stage !== 'matched';
+    if (isAlreadyPlanning) {
+      const destination = planReady(view?.plan) ? '/trip-preview' : '/scout-chat';
+      go(withTripId(destination, view?.id));
+      return;
+    }
+    setPlanError(null);
+    setPlanningId(selectedOption.id);
+    try {
+      trackEvent('planning_started', { selection_source: 'plan_this_trip' });
       const response = await sendTripCommand('start_planning');
       proceedFromGuideResponse(response);
     } catch (commandError) {
@@ -69,14 +95,17 @@ export function useDestinationPlanning({ view, sendTripCommand, setPlanError, em
     }
   }
 
-  function planThis(option) {
-    const isSelected = selectedOption && selectedOption.type === option.type && selectedOption.id === option.key;
-    if (isSelected) {
-      const destination = planReady(view?.plan) ? '/trip-preview' : '/scout-chat';
-      go(withTripId(destination, view?.id));
-      return;
+  async function compareOtherDestinations() {
+    setPlanError(null);
+    setUnselecting(true);
+    try {
+      await sendTripCommand('unselect_destination');
+      trackEvent('destination_unselected', {});
+    } catch (commandError) {
+      setPlanError(commandError.message || 'Something went wrong.');
+    } finally {
+      setUnselecting(false);
     }
-    doPlanThis(option);
   }
 
   async function submitCheckpoint() {
@@ -96,7 +125,8 @@ export function useDestinationPlanning({ view, sendTripCommand, setPlanError, em
   }
 
   return {
-    selectedOption, planningId, planThis,
+    selectedOption, choosingId, chooseDestination,
+    planningId, planThis, unselecting, compareOtherDestinations,
     checkpointAwaiting, checkpointMessage, checkpointInput, checkpointBusy, checkpointError,
     setCheckpointInput, submitCheckpoint,
   };
