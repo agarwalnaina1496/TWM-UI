@@ -102,12 +102,14 @@ describe('DashboardHome', () => {
     expect(screen.getByRole('menuitem', { name: /discover destination/i })).toBeInTheDocument();
   });
 
-  it('renders stage-aware badge and CTA for a real trip', async () => {
+  it('renders stage-aware badge and CTA for a matched (still Discovering) trip', async () => {
     routeFetch({ trips: [listItem({ title: 'Coorg', stage: 'matched', context: { origin_city: 'Delhi' } })] });
     renderDashboardHome(GUEST);
     await waitFor(() => expect(screen.getByText('Destination chosen')).toBeInTheDocument());
     expect(screen.getByText('Coorg')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
+    // TWM-234: matched means a destination is chosen but planning hasn't
+    // started -- still Discovering, not yet "a trip" to open.
+    expect(screen.getByRole('button', { name: 'Continue exploring →' })).toBeInTheDocument();
   });
 
   it('shows a status line and a relative "updated" timestamp on a trip card', async () => {
@@ -132,21 +134,24 @@ describe('DashboardHome', () => {
     expect(screen.getByText('Itinerary ready')).toBeInTheDocument();
   });
 
-  it('shows trips of any stage together in one uniform "Your trips" list', async () => {
-    // TWM-232: My Trips groups by date now, not lifecycle stage -- a
-    // recommended-stage (no destination yet) and a matched-stage trip sit
-    // in the same list, both with the same "Open trip →" affordance.
+  it('splits Discovering (no plan started) from actual trips, each with its own CTA', async () => {
+    // TWM-234: a destination matched but not yet planned, or still being
+    // recommended, isn't "a trip" to the traveler yet -- it gets its own
+    // "Discovering" section and "Continue exploring" CTA, separate from
+    // "Your trips"/"Open trip" for anything already past matched.
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: 'Committed trip', stage: 'matched', context: { origin_city: 'Delhi' } }),
+      listItem({ id: 'trip-1', title: 'Committed trip', stage: 'planning', context: { origin_city: 'Delhi' } }),
       listItem({ id: 'trip-2', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' }, updated_at: '2025-12-01T00:00:00.000Z' }),
     ] }));
     renderDashboardHome(GUEST);
     await screen.findByText('Committed trip');
+    expect(screen.getByText('Discovering')).toBeInTheDocument();
     expect(screen.getByText('Your trips')).toBeInTheDocument();
-    expect(screen.queryByText('Continue exploring')).not.toBeInTheDocument();
     expect(screen.getByText('Recommendations ready')).toBeInTheDocument();
     const committedCard = screen.getByText('Committed trip').closest('.trip-card');
     expect(within(committedCard).getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
+    const discoveringCard = screen.getByText('Recommendations ready').closest('.trip-card');
+    expect(within(discoveringCard).getByRole('button', { name: 'Continue exploring →' })).toBeInTheDocument();
   });
 
   it('renders whatever title the Backend sends, including the placeholder', async () => {
@@ -169,7 +174,7 @@ describe('DashboardHome', () => {
       listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' } }),
     ] }));
     renderDashboardHome(GUEST);
-    const card = (await screen.findByRole('button', { name: 'Open trip →' })).closest('.trip-card');
+    const card = (await screen.findByRole('button', { name: 'Continue exploring →' })).closest('.trip-card');
     expect(within(card).getByText('Recommendations ready')).toBeInTheDocument();
     expect(within(card).queryByText('Untitled Trip')).not.toBeInTheDocument();
     expect(within(card).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
@@ -183,7 +188,7 @@ describe('DashboardHome', () => {
       }),
     ] }));
     renderDashboardHome(GUEST);
-    const card = (await screen.findByRole('button', { name: 'Open trip →' })).closest('.trip-card');
+    const card = (await screen.findByRole('button', { name: 'Continue exploring →' })).closest('.trip-card');
     const pills = within(card).getAllByText(/./, { selector: '.trip-card-recap-pill' });
     expect(pills).toHaveLength(3); // 2 shown facts + 1 "+N more" chip
     expect(within(card).getByText('+1 more')).toBeInTheDocument();
@@ -309,7 +314,7 @@ describe('DashboardHome', () => {
     });
     renderDashboardHome(GUEST);
     await screen.findByText('Deleted elsewhere');
-    await userEvent.click(within(screen.getByText('Deleted elsewhere').closest('.trip-card')).getByRole('button', { name: 'Open trip →' }));
+    await userEvent.click(within(screen.getByText('Deleted elsewhere').closest('.trip-card')).getByRole('button', { name: 'Continue exploring →' }));
     await waitFor(() => expect(screen.queryByText('Deleted elsewhere')).not.toBeInTheDocument());
     expect(screen.getByText('Coorg')).toBeInTheDocument();
   });

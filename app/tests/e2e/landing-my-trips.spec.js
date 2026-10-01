@@ -135,11 +135,11 @@ test('search narrows Dashboard-home to matching trips only (TWM-172)', async ({ 
   await expect(page.getByText('Coorg weekend')).not.toBeVisible();
 });
 
-test('a discover-only trip (no destination yet) shows in Your trips with no title (TWM-232)', async ({ page }) => {
-  // TWM-232: My Trips groups by date now, not by whether a destination is
-  // chosen -- there is no separate explore rail any more. A discover-only
-  // trip renders the same uniform card as everything else, just with no
-  // title/Rename yet (nothing real to name) and its honest stage badge.
+test('a discover-only trip (no destination yet) shows in Discovering with no title (TWM-234)', async ({ page }) => {
+  // TWM-234: a trip with no destination committed isn't "a trip" to the
+  // traveler yet -- it gets its own Discovering section, separate from
+  // Your trips, with no title/Rename yet (nothing real to name) and its
+  // honest stage badge.
   const browsing = tripRecord({
     id: 'e2e-trip-1', title: 'Untitled Trip',
     trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
@@ -147,19 +147,25 @@ test('a discover-only trip (no destination yet) shows in Your trips with no titl
   await mockTripCommandFlow(page, [], { initialTrips: [browsing] });
   await page.goto('');
 
-  await expect(page.getByRole('heading', { name: 'Your trips', level: 2 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Discovering', level: 2 })).toBeVisible();
   const card = page.locator('.trip-card', { hasText: 'In conversation' });
   await expect(card).toBeVisible();
   await expect(card.getByText('Untitled Trip')).toHaveCount(0);
 });
 
-test('trip card renders exactly one primary affordance ("Open trip →"), regardless of stage', async ({ page }) => {
-  const active = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } });
-  await mockTripCommandFlow(page, [], { initialTrips: [active] });
+test('trip card renders exactly one primary affordance, worded for its stage ("Continue exploring" vs "Open trip")', async ({ page }) => {
+  const discovering = tripRecord({ id: 'e2e-trip-1', title: 'Coorg weekend', trip_state: { stage: 'matched', trip_context: { origin: 'Delhi' } } });
+  const planning = tripRecord({ id: 'e2e-trip-2', title: 'Manali plan', trip_state: { stage: 'planning', trip_context: { origin: 'Delhi' } }, updated_at: '2025-12-01T00:00:00.000Z' });
+  await mockTripCommandFlow(page, [], { initialTrips: [discovering, planning] });
   await page.goto('');
-  const card = page.locator('.trip-card', { hasText: 'Coorg weekend' });
-  await expect(card.getByRole('button', { name: 'Open trip →' })).toHaveCount(1);
-  await expect(card.getByRole('button')).toHaveCount(2); // "Open trip →" + "Rename" only
+
+  const discoveringCard = page.locator('.trip-card', { hasText: 'Coorg weekend' });
+  await expect(discoveringCard.getByRole('button', { name: 'Continue exploring →' })).toHaveCount(1);
+  await expect(discoveringCard.getByRole('button')).toHaveCount(2); // "Continue exploring →" + "Rename" only
+
+  const planningCard = page.locator('.trip-card', { hasText: 'Manali plan' });
+  await expect(planningCard.getByRole('button', { name: 'Open trip →' })).toHaveCount(1);
+  await expect(planningCard.getByRole('button')).toHaveCount(2); // "Open trip →" + "Rename" only
 });
 
 test('a fresh trip with no traveler context does not clutter Dashboard-home', async ({ page }) => {

@@ -16,6 +16,7 @@ import { isPastTrip, selectHeroTrip, travelWindowDate } from '../lib/tripHero.js
 import { withTripId } from '../lib/tripUrl.js';
 import { decodeHtmlEntities } from '../lib/text.js';
 import { ROUTES } from '../constants/routes.js';
+import { DISCOVER_STAGES } from '../constants/tripStages.js';
 import '../styles/dashboard-home.css';
 
 const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution', 'b-matched': 'caution', 'b-done': 'positive' };
@@ -78,15 +79,16 @@ function RenameName({ t, rename, showRename = true, label }) {
   );
 }
 
-// TWM-171/TWM-232: exactly one primary affordance per trip card, fixed
-// label regardless of stage — stage is communicated via the adjacent status
-// tag, not this button's text. One uniform shape for every stage now: the
-// title row only renders once a real title exists (nothing to rename before
-// that), everything else (badge, timestamp, facts, CTA) is identical
-// structure regardless of where the trip is in its lifecycle. The badge
-// always shows the honest, stage-specific text — no more generic label —
-// since every card's CTA now opens the same place (Dashboard) and lets the
-// per-stage next-step live there instead of in the card's own label.
+// TWM-171/TWM-232/TWM-234: exactly one primary affordance per trip card.
+// The badge always shows the honest, stage-specific text, and every card's
+// CTA opens the same place (Dashboard), letting the per-stage next-step
+// live there instead of in the card's own label -- except the CTA's own
+// verb, which now says whether this is still Discovering ("Continue
+// exploring") or an actual trip ("Open trip"), since that distinction is
+// the one thing worth knowing before you click, not after. One uniform
+// shape otherwise: the title row only renders once a real title exists
+// (nothing to rename before that), everything else (timestamp, facts) is
+// identical structure regardless of where the trip is in its lifecycle.
 function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
   const badge = stageBadge(t);
   const destination = contextDestination(t);
@@ -94,6 +96,11 @@ function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
   const timestamp = formatTripTimestamp(t);
   const title = displayTitle(t);
   const statusLine = tripStatusLine(t);
+  // TWM-234: still Discovering (no destination committed) isn't "a trip" to
+  // the traveler yet -- the one CTA says so, same uniform-card shape
+  // otherwise. Every card still opens the same place (Dashboard); the
+  // per-stage next step lives there, same as before.
+  const discovering = DISCOVER_STAGES.has(t.lifecycle?.stage);
   return (
     <div className="card trip-card">
       <div>
@@ -119,9 +126,22 @@ function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
         })()}
       </div>
       <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
-        Open trip →
+        {discovering ? 'Continue exploring →' : 'Open trip →'}
       </button>
     </div>
+  );
+}
+
+// TWM-234: the shared markup behind every trip-list section (Discovering,
+// Your trips, Past) -- extracted so adding the Discovering/Your trips split
+// didn't just duplicate the same section JSX a second time.
+function TripListSection({ label, title, trips, rename, busyId, onOpen, className, showRename = true }) {
+  if (trips.length === 0) return null;
+  return (
+    <section className={className} aria-label={label}>
+      <h2 className="section-title">{title}</h2>
+      {trips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={onOpen} showRename={showRename} />)}
+    </section>
   );
 }
 
@@ -193,6 +213,13 @@ export default function DashboardHome() {
       if (dateB) return 1;
       return new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at);
     }), [activeTrips, hero]);
+  // TWM-234: split the one "Your trips" list into Discovering (no
+  // destination committed yet -- not a trip in the traveler's own sense)
+  // and actual trips, each its own section with its own CTA verb, instead
+  // of one uniform list that reads every card as equally "a trip" even
+  // when nothing has been decided yet.
+  const discoveringTrips = useMemo(() => listTrips.filter(t => DISCOVER_STAGES.has(t.lifecycle?.stage)), [listTrips]);
+  const planningTrips = useMemo(() => listTrips.filter(t => !DISCOVER_STAGES.has(t.lifecycle?.stage)), [listTrips]);
 
   const searching = search.trim().length > 0;
   const searchResults = searching ? visibleTrips.filter(t => matchesSearch(t, search)) : [];
@@ -353,12 +380,8 @@ export default function DashboardHome() {
                 </section>
               )}
 
-              {listTrips.length > 0 && (
-                <section aria-label="Your trips">
-                  <h2 className="section-title">Your trips</h2>
-                  {listTrips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} />)}
-                </section>
-              )}
+              <TripListSection label="Discovering" title="Discovering" trips={discoveringTrips} rename={rename} busyId={busyId} onOpen={handleOpen} />
+              <TripListSection label="Your trips" title="Your trips" trips={planningTrips} rename={rename} busyId={busyId} onOpen={handleOpen} />
 
               {listTrips.length === 0 && !hero && pastTrips.length === 0 && (
                 <div className="empty-trips"><p>No trips here yet.</p></div>

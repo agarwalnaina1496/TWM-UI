@@ -1,3 +1,5 @@
+import { DISCOVER_STAGES } from '../../constants/tripStages.js';
+
 // TWM-175/198/206: down from 7 tabs — Map folded into Overview, Docs/Bookings
 // retired. Transport/Stay resolution lives inline on the Itinerary item now.
 export const DASHBOARD_TABS = [
@@ -12,7 +14,6 @@ export const DASHBOARD_TABS = [
 // planning actually starts; a reopen back into Discover clears the day plan
 // (planner_commands._clear_planner_for_reopen) and moves stage back too, so
 // gating on stage alone is enough to hide it again on the way back.
-const DISCOVER_STAGES = new Set(['new', 'matching', 'recommended', 'matched']);
 
 export function visibleDashboardTabs(stage) {
   if (DISCOVER_STAGES.has(stage)) return DASHBOARD_TABS.filter(t => t.name !== 'Itinerary');
