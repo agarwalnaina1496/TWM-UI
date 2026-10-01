@@ -73,10 +73,17 @@ export function useDestinationsMatching({ enabled = true, embedded = false } = {
 
   useEffect(() => {
     if (!enabled || triggered.current || tripLoadStatus !== 'ready' || recoStatus !== 'ready') return;
-    if (latest || awaiting) return;
+    // A chosen destination means matching is already done -- never kick off
+    // a fresh continue here, even if this mount's own recommendations cache
+    // looks momentarily empty (e.g. a reload racing the refetch). Backend's
+    // `continue` now safely rejects this case rather than reopening
+    // matching, but there's no reason to even attempt it: `selectedOption`
+    // is the authoritative "nothing left to continue" signal, independent
+    // of whether this specific query has resolved yet.
+    if (latest || awaiting || planning.selectedOption) return;
     refinement.triggerContinue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, tripLoadStatus, recoStatus, latest, awaiting]);
+  }, [enabled, tripLoadStatus, recoStatus, latest, awaiting, planning.selectedOption]);
 
   const outcome = useMemo(
     () => (latest ? safeMatcherOutcomeViewModel(latest) : null),

@@ -170,6 +170,25 @@ describe('Destinations (real Meridian integration)', () => {
     expect(fetchMock.mock.calls.filter(c => c[0] === '/api/trips/trip-1/recommendations').length).toBe(1);
   });
 
+  it('never auto-sends continue once a destination is already chosen, even with no recommendation cached yet', async () => {
+    // TWM-234: a real production bug -- the auto-continue effect used to
+    // fire whenever its own recommendations cache looked empty, with no
+    // regard for whether a destination was already matched. Backend's
+    // `continue` from the matched stage used to silently un-match the
+    // traveler's choice; it now rejects that case outright, but the UI
+    // should never even attempt it once selectedOption is set.
+    const server = createServer({
+      recommendation: null,
+      view: view({ stage: 'matched', selectedOption: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna' } }),
+    });
+    fetchMock = createFetchMock(server);
+    global.fetch = wrapFetchMockWithGuestSession(fetchMock);
+    renderDestinations();
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(call => call[0] === '/api/trips/trip-1/recommendations')).toBe(true));
+    expect(fetchMock.mock.calls.some(call => call[0] === '/api/trips/trip-1/commands')).toBe(false);
+  });
+
   it('renders a real SUCCESS result already saved on the trip without re-triggering matching', async () => {
     const server = createServer({ recommendation: successOutcome() });
     fetchMock = createFetchMock(server);
