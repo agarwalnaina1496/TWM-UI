@@ -126,7 +126,7 @@ describe('App guest-first routing (TWM-140)', () => {
       vi.restoreAllMocks();
     });
 
-    it('sends entry_intent="known_destination" with the raw message and, once Guide generates places and a day plan together, lands on the unified Plan Builder — never /dashboard', async () => {
+    it('sends entry_intent="known_destination" with the raw message and, once Guide generates places and a day plan together, hands off into the unified Dashboard shell with Plan Builder embedded (TWM-234)', async () => {
       const user = userEvent.setup();
       fetchMock
         .mockResolvedValueOnce(jsonResponse({ trips: [] }))          // boot list

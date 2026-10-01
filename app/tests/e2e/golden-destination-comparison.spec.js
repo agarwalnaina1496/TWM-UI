@@ -103,7 +103,8 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
   await expect(page.getByText(HANDOFF)).toBeVisible();
   await page.getByRole('button', { name: 'See destinations →' }).click();
 
-  await expect(page).toHaveURL(/\/app\/destinations/);
+  // TWM-234: Destinations embeds into the unified Dashboard shell.
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
 
   // The exact persisted budget must survive verbatim, never a generic bucket.
@@ -122,6 +123,7 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
 
   await mpCard.getByText('Choose this destination').click();
   await page.getByText('Plan this trip →').click();
-  await expect(page).toHaveURL(/\/app\/trip-preview/);
+  // TWM-234: Plan Builder embeds into the same Dashboard shell -- no navigation.
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('Gwalior Fort')).toBeVisible();
 });

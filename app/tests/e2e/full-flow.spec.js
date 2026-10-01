@@ -125,16 +125,19 @@ test('full flow: header nav entry through Dashboard', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'See destinations →' })).toBeVisible();
   await page.getByText('See destinations →').click();
 
-  // Destinations (real Meridian recommendations via the continue command)
-  await expect(page).toHaveURL(/\/app\/destinations/);
+  // TWM-234: Destinations now embeds into the unified Dashboard shell
+  // instead of its own standalone page (real Meridian recommendations via
+  // the continue command).
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
   await page.getByText('Choose this destination').first().click();
   await page.getByText('Plan this trip →').click();
 
-  // TripPreview: real Guide session bootstraps via start_planning, which
-  // generates the complete plan (places + day_plan) in a single step, then
-  // a single Finalize action freezes the plan.
-  await expect(page).toHaveURL(/\/app\/trip-preview/);
+  // TWM-234: Plan Builder embeds into the same Dashboard shell too -- real
+  // Guide session bootstraps via start_planning, which generates the
+  // complete plan (places + day_plan) in a single step, then a single
+  // Finalize action freezes the plan. Same URL throughout, no navigation.
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('Abbey Falls')).toBeVisible();
   await page.getByText('Approve this plan →').click();
 

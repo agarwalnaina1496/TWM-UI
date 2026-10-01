@@ -104,9 +104,12 @@ export default function ScoutChat() {
 
   function onPlanReady(response) {
     if (!planReady(response.trip.plan)) return false;
-    // Guide generated the complete plan in this turn — go straight to the
-    // unified Plan Builder instead of showing the message here.
-    navigate(withTripId('/trip-preview', response.trip.id), { state: { guideMessage: response.message } });
+    // TWM-234: Guide generated the complete plan in this turn — hand off to
+    // the unified Dashboard shell (same place a resumed trip already lands),
+    // not the standalone Plan Builder page. OverviewTab embeds Plan Builder
+    // itself once the refetched TripView shows a day_plan, so no state needs
+    // to travel with the navigation.
+    navigate(withTripId('/dashboard', response.trip.id));
     return true;
   }
 
@@ -189,7 +192,10 @@ export default function ScoutChat() {
         initialMessage={initialMessageRef.current}
         onSend={onSend}
         onPlanReady={onPlanReady}
-        onSeeDestinations={() => navigate('/destinations?next=preview')}
+        // TWM-234: hand off into the unified Dashboard shell -- OverviewTab
+        // embeds Destinations itself once the refetched TripView reaches
+        // stage recommended/matched, same as a resumed trip.
+        onSeeDestinations={() => navigate(withTripId('/dashboard', urlTripId || currentTripId))}
         inputLabelOverride={isGuideFlavored ? destinationInputLabel : undefined}
         sendLabelOverride={isGuideFlavored ? 'Start planning' : undefined}
       />

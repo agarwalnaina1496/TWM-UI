@@ -119,6 +119,17 @@ export default function OverviewTab({ view, tripId }) {
 
       {embedDestinations && (
         <div>
+          {/* TWM-234: Destinations.jsx's own page chrome shows this recap
+              pill row above the panel -- DestinationsPanel itself never
+              rendered it, so embedding the panel here alone silently
+              dropped it. Carried over verbatim so the embedded view shows
+              the same traveler-context pills (budget, travelers, ...) the
+              standalone page did. */}
+          {destinationsState.pills.length > 0 && (
+            <div className="trip-recap">
+              {destinationsState.pills.map(p => <span key={p} className="recap-pill">{p}</span>)}
+            </div>
+          )}
           {destinationsState.checkpointAwaiting && (
             <CheckpointOverlay
               knownFacts={destinationsState.pills}

@@ -72,7 +72,9 @@ describe('ScoutChat advice-entry chat', () => {
     const user = userEvent.setup();
     render(<MemoryRouter><ScoutChat /></MemoryRouter>);
     await user.type(screen.getByPlaceholderText('Anything else, or just say you\'re ready'), "That's everything{Enter}");
-    expect(navigate).toHaveBeenCalledWith(expect.stringContaining('/trip-preview'), { state: { guideMessage: 'Here is your plan.' } });
+    // TWM-234: hand off into the unified Dashboard shell, not the standalone
+    // Plan Builder page -- OverviewTab embeds it itself.
+    expect(navigate).toHaveBeenCalledWith(expect.stringContaining('/dashboard'));
   });
 
   it('shows the Meridian-flavored anything-else quick reply ("let\'s discover") when Meridian owns the turn', () => {

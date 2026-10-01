@@ -140,12 +140,14 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
   await page.getByRole('button', { name: 'See destinations →' }).click();
 
-  await expect(page).toHaveURL(/\/app\/destinations/);
+  // TWM-234: Destinations and Plan Builder both embed into the unified
+  // Dashboard shell now -- no navigation between them.
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
   await page.getByText('Choose this destination').first().click();
   await page.getByText('Plan this trip →').click();
 
-  await expect(page).toHaveURL(/\/app\/trip-preview/);
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('Abbey Falls')).toBeVisible();
   await page.getByText('Approve this plan →').click();
 

@@ -76,6 +76,16 @@ describe('tripLifecycle stage helpers', () => {
   ])('stageCta artifact-based routing: %s -> %s', (_label, overrides, expectedTo) => {
     expect(stageCta(trip(overrides)).to).toBe(expectedTo);
   });
+
+  // TWM-234: a full TripView (the shape OverviewTab's embed decision reads,
+  // not My Trips' thin TripListItem) has no `has_day_plan` flag -- the same
+  // fact lives at `plan.day_plan.length > 0`. Missing this shape made the
+  // embedded Dashboard fall back to the chat panel instead of Plan Builder
+  // the instant Guide produced a day plan.
+  it('stageCta recognizes a day_plan on a full TripView, not just the thin has_day_plan flag', () => {
+    const fullView = trip({ stage: 'planning', plan: { day_plan: [{ day_number: 1, places: ['Coorg Palace'] }] } });
+    expect(stageCta(fullView).to).toBe('/trip-preview');
+  });
 });
 
 describe('tripStatusLine', () => {
