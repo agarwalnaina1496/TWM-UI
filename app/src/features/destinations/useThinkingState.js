@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { trackEvent } from '../lib/analytics.js';
+import { trackEvent } from '../../lib/analytics.js';
 
-// TWM-234: split out of useDestinationsMatching purely to keep that file's
+// TWM-234: split out of useDestinations purely to keep that file's
 // complexity under the cap -- the "are we still waiting on a result" flag
 // plus its one-time analytics event.
 export function useThinkingState({ enabled, tripLoadStatus, recoStatus, latest, awaiting, triggering, triggerError, selectedOption }) {
@@ -10,7 +10,7 @@ export function useThinkingState({ enabled, tripLoadStatus, recoStatus, latest, 
   // no legitimate "still waiting for the first result" state once matched,
   // only a genuine data problem (missing recommendation for an
   // already-matched trip). That case belongs to the recoverable reco-error
-  // path (useDestinationsMatching), never an unending "thinking" spinner.
+  // path (useDestinations), never an unending "thinking" spinner.
   const thinking = enabled && !selectedOption && (tripLoadStatus === 'loading' || !recoSettled || triggering
     || (tripLoadStatus === 'ready' && recoStatus === 'ready' && !latest && !awaiting && !triggerError));
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import '../../styles/design-system.css';
-import '../../styles/destinations.css';
+import './your-pick.css';
 
 // TWM-174: a transient overlay over Destinations, shown only when Guide's
 // fixed-checklist gate finds one genuinely missing field that Meridian's

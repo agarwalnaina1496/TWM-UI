@@ -10,10 +10,9 @@ import { newIdempotencyKey } from '../../lib/tripApi.js';
 import { ROUTES } from '../../constants/routes.js';
 import ChatConversation from '../../components/chat/ChatConversation.jsx';
 import FactsPanel from '../../components/FactsPanel.jsx';
-import DestinationsPanel from '../../components/destinations/DestinationsPanel.jsx';
-import CheckpointOverlay from '../../components/destinations/CheckpointOverlay.jsx';
+import DestinationsSection from '../../features/destinations/DestinationsSection.jsx';
+import YourPickSection from '../../features/your-pick/YourPickSection.jsx';
 import PlanBuilderPanel from '../../components/planBuilder/PlanBuilderPanel.jsx';
-import { useDestinationsMatching } from '../../hooks/useDestinationsMatching.js';
 import { usePlanBuilder } from '../../hooks/usePlanBuilder.js';
 
 // TWM-232: Overview used to be a hard if/else between two structurally
@@ -34,11 +33,11 @@ import { usePlanBuilder } from '../../hooks/usePlanBuilder.js';
 // next step is the conversation (matching/planning), the Destinations
 // comparison (recommended/matched), or Plan Builder (plan_ready/planning
 // with a day_plan), the real panel renders inline, right here. No click
-// needed to see what's next; it IS what's next. Each embedded hook is
-// called with `embedded: true`, which turns its own navigate() calls into
-// no-ops -- selecting a destination or approving a plan changes the trip's
-// stage, primaryCta recomputes from the refetched TripView, and the
-// embedded panel swaps in place without ever leaving this page.
+// needed to see what's next; it IS what's next. Destinations and "Your
+// pick" are self-contained sections (features/), so this page only decides
+// which one to render -- selecting a destination or approving a plan changes
+// the trip's stage, primaryCta recomputes from the refetched TripView, and
+// the section swaps in place without ever leaving this page.
 export default function OverviewTab({ view, tripId }) {
   const navigate = useNavigate();
   const { setCurrentTripId, sendTripCommand } = useTrip();
@@ -51,8 +50,8 @@ export default function OverviewTab({ view, tripId }) {
   const embedChat = primaryCta?.to === ROUTES.scoutChat;
   const embedDestinations = primaryCta?.to === ROUTES.destinations;
   const embedPlanBuilder = primaryCta?.to === ROUTES.tripPreview;
+  const selectedOption = view.lifecycle?.selected_option ?? null;
   const progress = phaseProgress(view);
-  const destinationsState = useDestinationsMatching({ enabled: embedDestinations, embedded: true });
   const planBuilder = usePlanBuilder({ enabled: embedPlanBuilder, embedded: true });
 
   function go(cta) {
@@ -117,33 +116,7 @@ export default function OverviewTab({ view, tripId }) {
         </div>
       )}
 
-      {embedDestinations && (
-        <div>
-          {/* TWM-234: Destinations.jsx's own page chrome shows this recap
-              pill row above the panel -- DestinationsPanel itself never
-              rendered it, so embedding the panel here alone silently
-              dropped it. Carried over verbatim so the embedded view shows
-              the same traveler-context pills (budget, travelers, ...) the
-              standalone page did. */}
-          {destinationsState.pills.length > 0 && (
-            <div className="trip-recap">
-              {destinationsState.pills.map(p => <span key={p} className="recap-pill">{p}</span>)}
-            </div>
-          )}
-          {destinationsState.checkpointAwaiting && (
-            <CheckpointOverlay
-              knownFacts={destinationsState.pills}
-              message={destinationsState.checkpointMessage}
-              value={destinationsState.checkpointInput}
-              onChange={destinationsState.setCheckpointInput}
-              onSubmit={destinationsState.submitCheckpoint}
-              busy={destinationsState.checkpointBusy}
-              error={destinationsState.checkpointError}
-            />
-          )}
-          <DestinationsPanel {...destinationsState} />
-        </div>
-      )}
+      {embedDestinations && (selectedOption ? <YourPickSection /> : <DestinationsSection />)}
 
       {embedPlanBuilder && (
         <div className="content-narrow">

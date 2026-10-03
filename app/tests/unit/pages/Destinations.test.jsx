@@ -185,7 +185,9 @@ describe('Destinations (real Meridian integration)', () => {
     global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
-    await waitFor(() => expect(fetchMock.mock.calls.some(call => call[0] === '/api/trips/trip-1/recommendations')).toBe(true));
+    // The matched screen is its own section and needs no recommendation
+    // round at all -- it must neither fetch-and-wait on one nor send continue.
+    await waitFor(() => expect(screen.getByText('Madhya Pradesh Heritage and Nature')).toBeInTheDocument());
     expect(fetchMock.mock.calls.some(call => call[0] === '/api/trips/trip-1/commands')).toBe(false);
     // Never stuck on the "thinking" spinner, and never a generic
     // "Recommendations unavailable" error either -- a matched trip with no
@@ -427,7 +429,10 @@ describe('Destinations (real Meridian integration)', () => {
     expect(await screen.findByText('Trip Preview screen')).toBeInTheDocument();
   });
 
-  it('shows a Selected badge and the same CTA for an option already chosen', async () => {
+  it('replaces the comparison grid with just the chosen destination once matched', async () => {
+    // TWM-234: the traveler already chose -- the options they passed on are
+    // not shown again (no grid, no "Selected"/"Chosen" states) until they
+    // ask to compare other destinations.
     const server = createServer({
       recommendation: successOutcome(),
       view: view({ stage: 'matched', selectedOption: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' } }),
@@ -436,11 +441,11 @@ describe('Destinations (real Meridian integration)', () => {
     global.fetch = wrapFetchMockWithGuestSession(fetchMock);
     renderDestinations();
 
-    // Waits on the grid's own "Selected" badge, not the destination name --
-    // that name now also renders in the standalone matched panel as soon as
-    // selected_option is known, before the comparison grid itself (a
-    // separate, slower fetch) has necessarily resolved.
-    await waitFor(() => expect(screen.getByText('Selected')).toBeInTheDocument());
+    expect(await screen.findByText('Your pick')).toBeInTheDocument();
+    expect(screen.getByText('Plan this trip →')).toBeInTheDocument();
+    expect(screen.getByText('Compare other destinations')).toBeInTheDocument();
+    expect(screen.queryByText('A few that fit well')).not.toBeInTheDocument();
+    expect(screen.queryByText('Choose this destination')).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Plan this trip →'));
     await waitFor(() => expect(fetchMock.mock.calls.every(call => !call[1]?.body?.includes('select_destination'))).toBe(true));
   });
@@ -617,11 +622,12 @@ describe('Destinations (real Meridian integration)', () => {
     expect(document.querySelector('script')).toBeNull();
   });
 
-  describe('Discover→Plan checkpoint overlay', () => {
+  const PICKED = { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' };
+describe('Discover→Plan checkpoint overlay', () => {
     it('shows the checkpoint with known facts and the single missing field', async () => {
       const server = createServer({ recommendation: successOutcome() });
       server.queueCommand({ message: 'Confirmed.', view: view({ stage: 'matched', selectedOption: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' } }) });
-      server.queueCommand({ message: 'What is your rough budget?', view: view({ plan: guidePlan({ awaiting: 'budget' }) }) });
+      server.queueCommand({ message: 'What is your rough budget?', view: view({ selectedOption: PICKED, plan: guidePlan({ awaiting: 'budget' }) }) });
       fetchMock = createFetchMock(server);
       global.fetch = wrapFetchMockWithGuestSession(fetchMock);
       renderDestinations();
@@ -640,7 +646,7 @@ describe('Destinations (real Meridian integration)', () => {
     it('never shows the checkpoint when Guide has no gap', async () => {
       const server = createServer({ recommendation: successOutcome() });
       server.queueCommand({ message: 'Confirmed.', view: view({ stage: 'matched', selectedOption: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' } }) });
-      server.queueCommand({ message: 'Anything else before I plan?', view: view({ plan: guidePlan({ awaiting: 'anything_else' }) }) });
+      server.queueCommand({ message: 'Anything else before I plan?', view: view({ selectedOption: PICKED, plan: guidePlan({ awaiting: 'anything_else' }) }) });
       fetchMock = createFetchMock(server);
       global.fetch = wrapFetchMockWithGuestSession(fetchMock);
       renderDestinations();
@@ -656,8 +662,8 @@ describe('Destinations (real Meridian integration)', () => {
     it('submitting the checkpoint answer chains to a second field if another gap remains', async () => {
       const server = createServer({ recommendation: successOutcome() });
       server.queueCommand({ message: 'Confirmed.', view: view({ stage: 'matched', selectedOption: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' } }) });
-      server.queueCommand({ message: 'What is your rough budget?', view: view({ plan: guidePlan({ awaiting: 'budget' }) }) });
-      server.queueCommand({ message: 'How many travelers?', view: view({ plan: guidePlan({ awaiting: 'num_travelers' }) }) });
+      server.queueCommand({ message: 'What is your rough budget?', view: view({ selectedOption: PICKED, plan: guidePlan({ awaiting: 'budget' }) }) });
+      server.queueCommand({ message: 'How many travelers?', view: view({ selectedOption: PICKED, plan: guidePlan({ awaiting: 'num_travelers' }) }) });
       fetchMock = createFetchMock(server);
       global.fetch = wrapFetchMockWithGuestSession(fetchMock);
       renderDestinations();
@@ -678,7 +684,7 @@ describe('Destinations (real Meridian integration)', () => {
     it('proceeds when day_plan is populated even if awaiting still names a fixed field', async () => {
       const server = createServer({ recommendation: successOutcome() });
       server.queueCommand({ message: 'Confirmed.', view: view({ stage: 'matched', selectedOption: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna', name: 'Madhya Pradesh Heritage and Nature' } }) });
-      server.queueCommand({ message: 'Here is your finished plan.', view: view({ plan: guidePlan({ awaiting: 'budget', places: ['Gwalior Fort'], day_plan: [{ day_number: 1, places: ['Gwalior Fort'], pace: 'balanced', buffer_note: null }] }) }) });
+      server.queueCommand({ message: 'Here is your finished plan.', view: view({ selectedOption: PICKED, plan: guidePlan({ awaiting: 'budget', places: ['Gwalior Fort'], day_plan: [{ day_number: 1, places: ['Gwalior Fort'], pace: 'balanced', buffer_note: null }] }) }) });
       fetchMock = createFetchMock(server);
       global.fetch = wrapFetchMockWithGuestSession(fetchMock);
       renderDestinations();

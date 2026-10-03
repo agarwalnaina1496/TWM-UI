@@ -1,4 +1,4 @@
-import StatusPill from '../ui/StatusPill.jsx';
+import StatusPill from '../../components/ui/StatusPill.jsx';
 import { rollupSummary } from '../../lib/recommendationViewModel.js';
 import DetailBlock from './DetailBlock.jsx';
 import {
@@ -7,14 +7,13 @@ import {
 } from './matrixView.js';
 
 export default function OptionDetailCard({
-  option, criteria, isSelected, isFocused, evidenceOpen, onFocus,
+  option, criteria, isFocused, evidenceOpen, onFocus,
   onToggleEvidence, onChoose, choosing,
 }) {
   const access = accessFact(option);
   const price = priceRange(option);
   return (
     <div className={`dest-detail-card${isFocused ? ' focused' : ''}`}>
-      {isSelected && <span className="pick-badge">Selected</span>}
       <button type="button" className="dest-card-name-btn" onClick={onFocus}>
         {option.name}
       </button>
@@ -62,11 +61,7 @@ export default function OptionDetailCard({
       )}
 
       <div className="dest-actions">
-        {isSelected ? (
-          <button type="button" className="btn btn-ghost" disabled>Chosen</button>
-        ) : (
-          <button type="button" className="btn btn-ghost" onClick={onChoose} disabled={choosing}>Choose this destination</button>
-        )}
+        <button type="button" className="btn btn-ghost" onClick={onChoose} disabled={choosing}>Choose this destination</button>
       </div>
     </div>
   );

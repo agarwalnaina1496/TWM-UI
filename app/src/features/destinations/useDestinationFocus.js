@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 // TWM-234: which option card is focused / has its evidence open, restored
-// from and persisted to ui_state -- split out of useDestinationsMatching
+// from and persisted to ui_state -- split out of useDestinations
 // purely to keep that file's complexity under the cap. `uiState` can arrive
 // asynchronously after first render, so a restore effect re-applies it once
 // `enabled` + `tripLoadStatus` settle, on top of the initial useState value.

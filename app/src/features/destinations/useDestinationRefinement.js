@@ -1,14 +1,14 @@
 import { useCallback, useState } from 'react';
-import { trackEvent, trackFailure } from '../lib/analytics.js';
+import { trackEvent, trackFailure } from '../../lib/analytics.js';
 
 // TWM-234: everything that narrows the current options down -- the initial
 // "continue" trigger, free-text clarification, and the "not quite right?"
-// refinement drawer -- split out of useDestinationsMatching so neither file
+// refinement drawer -- split out of useDestinations so neither file
 // trips the per-function complexity cap on its own. A per-option "more like
 // this" scoped refinement used to exist alongside this general drawer, but
 // two separate refine entry points read as confusing UX; dropped down to
 // this one general drawer only.
-export function useDestinationRefinement({ sendTripCommand, applyCommandRound, resetFocus, triggeredRef, setPlanError }) {
+export function useDestinationRefinement({ sendTripCommand, applyCommandRound, resetFocus, triggeredRef, setActionError }) {
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState(null);
   const [clarifyInput, setClarifyInput] = useState('');
@@ -47,7 +47,7 @@ export function useDestinationRefinement({ sendTripCommand, applyCommandRound, r
     if (!value) return;
     setRefinementValue('');
     setRefinementBusy(true);
-    setPlanError(null);
+    setActionError(null);
     try {
       trackEvent('refinement_drawer_used', {});
       const response = await sendTripCommand('traveler_message', { message: value });
@@ -55,7 +55,7 @@ export function useDestinationRefinement({ sendTripCommand, applyCommandRound, r
       setRefinementOpen(false);
       resetFocus();
     } catch (commandError) {
-      setPlanError(commandError.message || 'Something went wrong.');
+      setActionError(commandError.message || 'Something went wrong.');
     } finally {
       setRefinementBusy(false);
     }

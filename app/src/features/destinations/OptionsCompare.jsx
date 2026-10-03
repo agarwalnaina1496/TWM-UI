@@ -1,14 +1,14 @@
 import OptionDetailCard from './OptionDetailCard.jsx';
-import MatchedDestinationPanel from './MatchedDestinationPanel.jsx';
-import '../../styles/destinations.css';
+import '../../styles/feedback.css';
+import './destinations.css';
 
 // TWM-234: the ranked-options grid plus the "tell us more" refinement
-// drawer -- split out of DestinationsPanel to keep that file's complexity
-// under the cap.
+// drawer -- split out of DestinationsSection to keep that file's complexity
+// under the cap. Only rendered while no destination is chosen: a matched
+// trip shows YourPickSection instead (see destinationsPhase).
 export default function OptionsCompare({
-  outcome, planError, refinementBusy, selectedOption, selectedOptionName, focusedOption, evidenceOpen,
+  outcome, actionError, refinementBusy, focusedOption, evidenceOpen,
   focusOption, handleToggleEvidence, chooseDestination, choosingId,
-  planThis, planningId, compareOtherDestinations, unselecting,
   refinementOpen, setRefinementOpen, refinementValue, setRefinementValue, submitRefinement,
 }) {
   return (
@@ -18,28 +18,16 @@ export default function OptionsCompare({
         <span className="agent-summary-badge">Scout</span>
         <p>{outcome.data.message}</p>
       </div>
-      {planError && <div className="price-evidence state-unsafe" role="alert">{planError}</div>}
-
-      {selectedOption && (
-        <MatchedDestinationPanel
-          selectedOptionName={selectedOptionName}
-          planThis={planThis}
-          planningId={planningId}
-          compareOtherDestinations={compareOtherDestinations}
-          unselecting={unselecting}
-        />
-      )}
+      {actionError && <div className="price-evidence state-unsafe" role="alert">{actionError}</div>}
 
       <div className={`options-grid${refinementBusy ? ' options-busy' : ''}`}>
         {outcome.data.options.map(option => {
-          const isSelected = selectedOption && selectedOption.type === option.type && selectedOption.id === option.key;
           const isFocused = option.key === (focusedOption?.key ?? null);
           return (
             <OptionDetailCard
               key={option.key}
               option={option}
               criteria={outcome.data.criteria}
-              isSelected={isSelected}
               isFocused={isFocused}
               evidenceOpen={isFocused && evidenceOpen}
               onFocus={() => focusOption(option.key)}

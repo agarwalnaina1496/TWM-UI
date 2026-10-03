@@ -1,27 +1,38 @@
-import HonestTransition from '../ui/HonestTransition.jsx';
+import HonestTransition from '../../components/ui/HonestTransition.jsx';
 import OptionsCompare from './OptionsCompare.jsx';
-import MatchedDestinationPanel from './MatchedDestinationPanel.jsx';
-import { MATCHING_STEPS } from '../../constants/destinationsMatching.js';
-import { destinationsPhase } from '../../lib/destinationsPhase.js';
-import '../../styles/destinations.css';
+import { useDestinations } from './useDestinations.js';
+import { MATCHING_STEPS } from './constants.js';
+import { destinationsPhase } from './destinationsPhase.js';
+import '../../styles/feedback.css';
+import './destinations.css';
 
-// TWM-234: the render half of Destinations -- extracted so the same
-// comparison UI can render standalone (Destinations.jsx) or embedded
-// directly in Dashboard Overview, no intermediate CTA, same pattern as
-// ChatConversation. All state and commands come from useDestinationsMatching();
-// this component only renders it, dispatching on a single computed phase
-// instead of a long chain of `&&`-guarded conditions.
-export default function DestinationsPanel(props) {
+// The destination-comparison section: matching a traveler's trip against
+// ranked destination options and letting them pick one or refine. Fully
+// self-contained -- it reads the current trip itself, owns its own state and
+// commands (useDestinations), and carries its own styling -- so it can be
+// rendered anywhere with just <DestinationsSection />. It renders nothing
+// about what happens after a destination is chosen; that is YourPickSection.
+export default function DestinationsSection() {
+  const state = useDestinations();
+  const phase = destinationsPhase(state);
+
+  return (
+    <div>
+      {state.pills.length > 0 && (
+        <div className="trip-recap">{state.pills.map(p => <span key={p} className="recap-pill">{p}</span>)}</div>
+      )}
+      <PhaseContent phase={phase} state={state} />
+    </div>
+  );
+}
+
+function PhaseContent({ phase, state }) {
   const {
-    tripLoadError, retryTripLoad,
-    recoError, refreshLatest,
+    tripLoadError, retryTripLoad, recoError, refreshLatest,
     triggerError, triggerContinue,
     lastMeridianMessage, clarifyInput, setClarifyInput, submitClarification,
     outcome, tapFailureChip,
-    selectedOptionName, planThis, planningId, compareOtherDestinations, unselecting,
-  } = props;
-
-  const phase = destinationsPhase(props);
+  } = state;
 
   if (phase === 'trip-error') {
     return (
@@ -98,20 +109,8 @@ export default function DestinationsPanel(props) {
     );
   }
 
-  if (phase === 'matched') {
-    return (
-      <MatchedDestinationPanel
-        selectedOptionName={selectedOptionName}
-        planThis={planThis}
-        planningId={planningId}
-        compareOtherDestinations={compareOtherDestinations}
-        unselecting={unselecting}
-      />
-    );
-  }
-
   if (phase === 'options') {
-    return <OptionsCompare {...props} />;
+    return <OptionsCompare {...state} />;
   }
 
   return null;

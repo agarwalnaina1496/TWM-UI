@@ -1,4 +1,4 @@
-import '../../styles/destinations.css';
+import '../../styles/feedback.css';
 
 export default function ErrorBanner({ message, actionLabel, onAction }) {
   return (

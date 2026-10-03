@@ -904,10 +904,13 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
         }],
       })
       : jsonResponse({})));
-    renderDashboard();
+    const rendered = renderDashboard();
     await screen.findByText('Udaipur Loop');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Choose this destination' }));
     await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('select_destination', { optionId: 'udaipur-loop' }));
+    // useTrip is mocked and not reactive here; re-render so Overview sees the
+    // new snapshot, as the real query cache would push it.
+    rendered.rerender(<TestQueryProvider><MemoryRouter initialEntries={['/dashboard']}><TripDashboard /></MemoryRouter></TestQueryProvider>);
 
     await screen.findByRole('button', { name: 'Plan this trip →' });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Plan this trip →' }));

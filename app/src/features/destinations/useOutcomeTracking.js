@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { trackEvent } from '../lib/analytics.js';
+import { trackEvent } from '../../lib/analytics.js';
 
 // TWM-234: one-time analytics/default-focus side effects that fire off the
-// computed outcome -- split out of useDestinationsMatching purely to keep
+// computed outcome -- split out of useDestinations purely to keep
 // that file's complexity under the cap.
 export function useOutcomeTracking({ outcome, latestVersion, focusedKey, setFocusedKey }) {
   const viewedVersion = useRef(null);

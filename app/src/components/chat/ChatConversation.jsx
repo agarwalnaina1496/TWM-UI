@@ -3,6 +3,7 @@ import { QUICK_REPLIES, AWAITING_INPUT_LABELS } from '../../data/entryCommandFix
 import { didHandoffOccur } from '../../lib/discoverChat.js';
 import ErrorBanner from '../ui/ErrorBanner.jsx';
 import '../../styles/chat.css';
+import '../../styles/feedback.css';
 
 // TWM-234: the reusable core of a Scout/Meridian/Guide conversation --
 // message log, input bar, quick replies, busy/error state, hand-off notes.

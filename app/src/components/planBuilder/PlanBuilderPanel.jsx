@@ -4,6 +4,7 @@ import DayTimeline from './DayTimeline.jsx';
 import FreeTextComposer from './FreeTextComposer.jsx';
 import { REOPEN_STEPS } from '../../constants/planBuilder.js';
 import '../../styles/preview.css';
+import '../../styles/feedback.css';
 
 // TWM-234: the render half of Plan Builder -- extracted so the same
 // generate/edit/approve/reopen UI can render standalone (TripPreview.jsx)

@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTrip } from '../context/TripContext.jsx';
-import { useRecommendationsQuery } from './tripQueries.js';
-import { useDestinationPlanning } from './useDestinationPlanning.js';
+import { useTrip } from '../../context/TripContext.jsx';
+import { useRecommendationsQuery } from '../../hooks/tripQueries.js';
 import { useDestinationRefinement } from './useDestinationRefinement.js';
 import { useDestinationFocus } from './useDestinationFocus.js';
 import { useOutcomeTracking } from './useOutcomeTracking.js';
 import { useThinkingState } from './useThinkingState.js';
-import { safeMatcherOutcomeViewModel } from '../lib/recommendationViewModel.js';
-import { contextRecapPills } from '../lib/tripLifecycle.js';
-import { trackEvent } from '../lib/analytics.js';
-import { UI_STATE_SCREEN, uiStateKey } from '../lib/uiStateKeys.js';
+import { safeMatcherOutcomeViewModel } from '../../lib/recommendationViewModel.js';
+import { contextRecapPills } from '../../lib/tripLifecycle.js';
+import { trackEvent } from '../../lib/analytics.js';
+import { UI_STATE_SCREEN, uiStateKey } from '../../lib/uiStateKeys.js';
 
 const FOCUSED_KEY = uiStateKey(UI_STATE_SCREEN.DESTINATIONS, 'focusedKey');
 const EVIDENCE_OPEN_KEY = uiStateKey(UI_STATE_SCREEN.DESTINATIONS, 'evidenceOpen');
@@ -20,28 +19,23 @@ function recommendationsQueryStatus(tripId, query) {
   return query.data !== undefined ? 'ready' : 'loading';
 }
 
-// TWM-234: split into useDestinationPlanning (select -> plan -> checkpoint),
-// useDestinationRefinement (continue/clarify/more-like-this), useDestinationFocus
-// (which card is focused/expanded), and useThinkingState (the loading flag)
-// so this file stays under the per-function complexity cap; it owns just
-// the recommendations query and the outcome view model, then composes the
-// rest. Extracted from Destinations.jsx (the page) so the same matching/
-// comparison state can drive either the standalone Destinations screen or
-// an embedded panel in Dashboard Overview -- one source of truth for the
-// behavior, two places it can render. `enabled: false` (Overview, when
-// Destinations isn't the current step) keeps the query and auto-continue
-// effect from firing at all; `embedded: true` (Overview, whenever it is the
-// current step) turns planning's navigate() calls into no-ops so Overview's
-// own reactive primaryCta drives the handoff to chat/Plan Builder instead.
-export function useDestinationsMatching({ enabled = true, embedded = false } = {}) {
+// Everything the Destinations section needs, owned by the section itself:
+// the recommendations query, the outcome view model, choosing a destination,
+// and the refinement/focus helpers it composes. The section only runs while
+// it is mounted, so there is no "enabled" switch -- not rendering it is what
+// keeps the query and the auto-continue effect from firing. What happens
+// after a destination is chosen is YourPickSection's job, not this one's.
+export function useDestinations() {
   const { commandSnapshot: view, sendTripCommand, tripLoadStatus, tripLoadError, retryTripLoad, uiState, updateUiState } = useTrip();
 
   const triggered = useRef(false);
-  const [planError, setPlanError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [choosingId, setChoosingId] = useState(null);
 
-  const tripId = enabled ? view?.id : undefined;
+  const tripId = view?.id;
   const awaiting = view?.matcher?.awaiting;
   const lastMeridianMessage = view?.matcher?.last_message;
+  const selectedOption = view?.lifecycle?.selected_option ?? null;
 
   const recommendationsQuery = useRecommendationsQuery(tripId);
   const latest = recommendationsQuery.data ?? null;
@@ -56,7 +50,7 @@ export function useDestinationsMatching({ enabled = true, embedded = false } = {
   }, []);
 
   const focus = useDestinationFocus({
-    enabled, tripLoadStatus, uiState, updateUiState,
+    enabled: true, tripLoadStatus, uiState, updateUiState,
     focusedKeyStateKey: FOCUSED_KEY,
     evidenceOpenStateKey: EVIDENCE_OPEN_KEY,
   });
@@ -68,11 +62,10 @@ export function useDestinationsMatching({ enabled = true, embedded = false } = {
     updateUiState({ [FOCUSED_KEY]: null, [EVIDENCE_OPEN_KEY]: false }).catch(() => {});
   }, [setFocusedKey, setEvidenceOpen, updateUiState]);
 
-  const planning = useDestinationPlanning({ view, sendTripCommand, setPlanError, embedded });
-  const refinement = useDestinationRefinement({ sendTripCommand, applyCommandRound, resetFocus, triggeredRef: triggered, setPlanError });
+  const refinement = useDestinationRefinement({ sendTripCommand, applyCommandRound, resetFocus, triggeredRef: triggered, setActionError });
 
   useEffect(() => {
-    if (!enabled || triggered.current || tripLoadStatus !== 'ready' || recoStatus !== 'ready') return;
+    if (triggered.current || tripLoadStatus !== 'ready' || recoStatus !== 'ready') return;
     // A chosen destination means matching is already done -- never kick off
     // a fresh continue here, even if this mount's own recommendations cache
     // looks momentarily empty (e.g. a reload racing the refetch). Backend's
@@ -80,10 +73,10 @@ export function useDestinationsMatching({ enabled = true, embedded = false } = {
     // matching, but there's no reason to even attempt it: `selectedOption`
     // is the authoritative "nothing left to continue" signal, independent
     // of whether this specific query has resolved yet.
-    if (latest || awaiting || planning.selectedOption) return;
+    if (latest || awaiting || selectedOption) return;
     refinement.triggerContinue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, tripLoadStatus, recoStatus, latest, awaiting, planning.selectedOption]);
+  }, [tripLoadStatus, recoStatus, latest, awaiting, selectedOption]);
 
   const outcome = useMemo(
     () => (latest ? safeMatcherOutcomeViewModel(latest) : null),
@@ -94,9 +87,9 @@ export function useDestinationsMatching({ enabled = true, embedded = false } = {
 
   const pills = contextRecapPills(view);
   const thinking = useThinkingState({
-    enabled, tripLoadStatus, recoStatus, latest, awaiting,
+    enabled: true, tripLoadStatus, recoStatus, latest, awaiting,
     triggering: refinement.triggering, triggerError: refinement.triggerError,
-    selectedOption: planning.selectedOption,
+    selectedOption,
   });
 
   const showTripLoadError = tripLoadStatus === 'error';
@@ -105,18 +98,25 @@ export function useDestinationsMatching({ enabled = true, embedded = false } = {
     ? outcome.data.options.find(o => o.key === focusedKey) ?? outcome.data.options[0]
     : null;
 
-  // selected_option already carries its own name (set deterministically by
-  // select_destination) -- reading it straight off the matched trip itself
-  // rather than re-deriving it from the recommendations round means the
-  // matched screen never depends on that round having loaded.
-  const selectedOptionName = planning.selectedOption?.name ?? null;
+  async function chooseDestination(option) {
+    setActionError(null);
+    setChoosingId(option.key);
+    try {
+      await sendTripCommand('select_destination', { optionId: option.key });
+      trackEvent('destination_selected', { selection_source: 'choose' });
+    } catch (commandError) {
+      setActionError(commandError.message || 'Something went wrong.');
+    } finally {
+      setChoosingId(null);
+    }
+  }
 
   return {
-    pills, selectedOptionName, showTripLoadError, showRecoError, recoError, thinking,
+    pills, showTripLoadError, showRecoError, recoError, thinking,
     awaiting, latest, lastMeridianMessage, outcome, focusedOption, evidenceOpen,
-    planError, tripLoadError, retryTripLoad, refreshLatest,
+    actionError, tripLoadError, retryTripLoad, refreshLatest,
     focusOption: focus.focusOption, handleToggleEvidence: focus.handleToggleEvidence,
-    ...planning,
+    chooseDestination, choosingId,
     ...refinement,
   };
 }

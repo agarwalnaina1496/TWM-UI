@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   optionLabel, criterionLabel, criterionIcon, costIcon, accessFact,
-} from '../../../../src/components/destinations/matrixView.js';
+} from '../../../../src/features/destinations/matrixView.js';
 
 describe('destinations/matrixView helpers', () => {
   it('optionLabel distinguishes circuit from single', () => {

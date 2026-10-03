@@ -6,7 +6,7 @@ import { trackEvent } from '../lib/analytics.js';
 import '../styles/auth.css';
 import '../styles/details.css';
 import '../styles/contextual-auth-modal.css';
-import '../styles/destinations.css';
+import '../styles/feedback.css';
 
 // Deep-link support for `/login` (bookmarks, old links, tests seeding auth
 // state directly): opens the overlay, then redirects to `/` — there's no
