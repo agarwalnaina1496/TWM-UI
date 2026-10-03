@@ -58,6 +58,17 @@ describe('dashboardPrimaryCta', () => {
     }
   );
 
+  // TWM-234 regression: a destination in the recap at `matched` is a
+  // selection, not a committed route -- it must still surface the Discover
+  // panel (Plan this trip / Compare other), never a blank Overview.
+  it.each(['recommended', 'matched'])(
+    'still surfaces the Discover panel for stage %s when a destination is already selected',
+    stage => {
+      expect(dashboardPrimaryCta(view({ stage, context: { destinations: 'Darjeeling and Gangtok Circuit' } })))
+        .toEqual({ label: 'Review recommendations', to: '/destinations' });
+    }
+  );
+
   it('routes matching with an existing recommendation to /destinations', () => {
     expect(dashboardPrimaryCta(view({ stage: 'matching', matcher: { has_recommendation: true } })))
       .toEqual({ label: 'Continue refining', to: '/destinations' });

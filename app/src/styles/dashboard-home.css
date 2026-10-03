@@ -37,3 +37,10 @@
 .section-title{font-family:var(--font-display);font-size:15px;font-weight:600;margin:22px 0 10px;}
 
 .past-trips .trip-card{opacity:.72;}
+
+.trip-card-matched .name{font-family:inherit;font-size:13px;font-weight:500;color:var(--ts);}
+.trip-card-unnamed{color:var(--tm);}
+.trip-card-destination-primary{font-family:var(--font-display);font-size:17px;font-weight:600;margin:2px 0 6px;}
+.trip-card-actions-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
+.trip-card-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+.trip-card-action-error{font-size:12px;color:var(--danger,#a32d2d);margin:0;}

@@ -12,6 +12,7 @@ import {
   tripStatusLine, relativeUpdatedAt,
 } from '../lib/tripLifecycle.js';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
+import MatchedTripActions from '../components/MatchedTripActions.jsx';
 import { isPastTrip, selectHeroTrip, travelWindowDate } from '../lib/tripHero.js';
 import { withTripId } from '../lib/tripUrl.js';
 import { decodeHtmlEntities } from '../lib/text.js';
@@ -51,7 +52,7 @@ function matchesSearch(t, query) {
 // TWM-232: the only call site now only renders this at all once `title` is
 // already truthy (see TripCard) -- `label` is never falsy here, so this no
 // longer needs its own fallback chain.
-function RenameName({ t, rename, showRename = true, label }) {
+function RenameName({ t, rename, showRename = true, label, actionLabel = 'Rename', blankStart = false }) {
   if (rename.id === t.id) {
     return (
       <input
@@ -71,10 +72,49 @@ function RenameName({ t, rename, showRename = true, label }) {
     <div className="name">
       {label}{' '}
       {showRename && (
-        <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => rename.start(t)}>
-          Rename
+        <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => rename.start(blankStart ? { ...t, title: '' } : t)}>
+          {actionLabel}
         </button>
       )}
+    </div>
+  );
+}
+
+// TWM-232: context_recap can now carry more facts than a scan-card has room
+// for -- cap the visible chips instead of cramming every one into a
+// dot-joined line (confirmed live: unreadable past ~4).
+function RecapPills({ pills }) {
+  if (pills.length === 0) return null;
+  const shown = pills.slice(0, 2);
+  const extra = pills.length - shown.length;
+  return (
+    <div className="trip-card-recap">
+      {shown.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
+      {extra > 0 && <span className="trip-card-recap-pill">+{extra} more</span>}
+    </div>
+  );
+}
+
+// TWM-234: a matched trip's card is about the destination the traveler
+// chose, with two ways forward -- plan it, or look for a different one.
+// Destination and title are two separate things that coexist: the
+// destination is always shown (the card's main line), the title is only the
+// traveler's own (`title_source === 'user'`). Meridian's generated title
+// described the trip before a destination was picked, so it isn't shown
+// here; "Add a name" gives the traveler the way to set their own.
+function MatchedTripCard({ t, rename }) {
+  const userTitle = t.title_source === 'user' ? decodeHtmlEntities(t.title) : null;
+  const destination = contextDestination(t);
+  return (
+    <div className="card trip-card trip-card-matched">
+      <div>
+        {userTitle
+          ? <RenameName t={t} rename={rename} label={userTitle} />
+          : <RenameName t={t} rename={rename} label={<span className="trip-card-unnamed">Unnamed trip</span>} actionLabel="Add a name" blankStart />}
+        {destination && <div className="trip-card-destination-primary">{destination}</div>}
+        <RecapPills pills={contextRecapPills(t)} />
+      </div>
+      <MatchedTripActions tripId={t.id} />
     </div>
   );
 }
@@ -90,6 +130,7 @@ function RenameName({ t, rename, showRename = true, label }) {
 // (nothing to rename before that), everything else (timestamp, facts) is
 // identical structure regardless of where the trip is in its lifecycle.
 function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
+  if (t.lifecycle?.stage === 'matched') return <MatchedTripCard t={t} rename={rename} />;
   const badge = stageBadge(t);
   const destination = contextDestination(t);
   const recapPills = contextRecapPills(t);
@@ -111,19 +152,7 @@ function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
           {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
         </div>
         {statusLine && <p className="trip-card-status-line">{statusLine}</p>}
-        {recapPills.length > 0 && (() => {
-          // TWM-232: context_recap can now carry more facts than a scan-card
-          // has room for — cap the visible chips instead of cramming every
-          // one into a dot-joined line (confirmed live: unreadable past ~4).
-          const shown = recapPills.slice(0, 2);
-          const extra = recapPills.length - shown.length;
-          return (
-            <div className="trip-card-recap">
-              {shown.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
-              {extra > 0 && <span className="trip-card-recap-pill">+{extra} more</span>}
-            </div>
-          );
-        })()}
+        <RecapPills pills={recapPills} />
       </div>
       <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
         {discovering ? 'Continue exploring →' : 'Open trip →'}
