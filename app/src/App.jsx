@@ -5,6 +5,7 @@ import LoginModal, { LoginRouteRedirect } from './components/LoginModal.jsx';
 import ClaimConfirmation from './components/ClaimConfirmation.jsx';
 import DashboardHome from './pages/DashboardHome.jsx';
 import { trackEvent } from './lib/analytics.js';
+import './styles/feedback.css';
 
 // TWM-219: DashboardHome (the `/` + `/my-trips` landing) stays eager — every
 // visitor lands there first. Every other route is its own lazy chunk.

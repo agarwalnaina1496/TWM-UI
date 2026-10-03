@@ -213,8 +213,8 @@ export function TripProvider({ children }) {
   // invalidation), fold the produced round into ['recommendations', id], and
   // let ['itinerary', id] revalidate. The response's own message /
   // agent_meta / recommendation are returned alongside the fresh view.
-  const sendTripCommand = useCallback(async (command, { message, optionId, destination, tripContext, refinement, partyUpdate, searchPrefUpdate, searchPrefClear, idempotencyKey, placeName, dayNumber } = {}) => {
-    const id = await ensureTripId();
+  const sendTripCommand = useCallback(async (command, { message, optionId, destination, tripContext, refinement, partyUpdate, searchPrefUpdate, searchPrefClear, idempotencyKey, placeName, dayNumber, tripId } = {}) => {
+    const id = tripId ?? await ensureTripId();
     return queueTripMutation(id, async () => {
       const current = await readTripView(id);
       const payload = {
@@ -312,6 +312,7 @@ function toListItem(view) {
   return {
     id: view.id,
     title: view.title,
+    title_source: view.title_source,
     product_mode: view.product_mode,
     version: view.version,
     created_at: view.created_at ?? null,

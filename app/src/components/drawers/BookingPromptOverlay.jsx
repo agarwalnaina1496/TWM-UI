@@ -1,3 +1,6 @@
+import '../../styles/design-system.css';
+import '../../styles/dashboard.css';
+
 // TWM-175: shown exactly once, the first time an itinerary is generated
 // (persisted via ui_state).
 export default function BookingPromptOverlay({ onResolveBookings, onLookAround }) {

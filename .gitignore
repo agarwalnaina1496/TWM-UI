@@ -3,3 +3,4 @@
 !.env.example
 app/src/styles/_design-tokens.generated.css
 app/src/styles/_shared-layout.generated.css
+**/_snip*/

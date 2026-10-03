@@ -19,20 +19,29 @@ function renderBackToTrip(entries = ['/scout-chat']) {
 describe('BackToTrip', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('links to Dashboard with no trip id when no trip is current yet', async () => {
+  // TWM-234: nothing to go back to yet — a genuinely fresh, not-yet-created
+  // trip renders no back-link at all, on any trip-scoped screen.
+  it('renders nothing when no trip is current yet', async () => {
     const fetchMock = mockFetchWithGuestSession();
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
     renderBackToTrip();
-    await waitFor(() => expect(screen.getByRole('link', { name: /back to trip/i })).toHaveAttribute('href', '/dashboard'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
-  // TWM-185/TWM-221: carries the current trip's id — resolved from the URL's
-  // ?tripId= on a Build screen — so landing on Dashboard from here is
-  // reload/bookmark safe, not just a same-session in-memory jump.
-  it('links to Dashboard with the current trip\'s id once a trip is current', async () => {
+  // TWM-234: flat, not hierarchical — every trip-scoped screen, Dashboard
+  // included, points straight to the trips list. No intermediate "back to
+  // trip" stop, and no dependence on which entry path (?intent=) got here.
+  it.each([
+    ['/scout-chat?tripId=trip-1'],
+    ['/scout-chat?tripId=trip-1&intent=discover_destination'],
+    ['/destinations?tripId=trip-1'],
+    ['/trip-preview?tripId=trip-1'],
+    ['/dashboard?tripId=trip-1'],
+  ])('links to the trips list once a trip is current, from %s', async entry => {
     const fetchMock = mockFetchWithGuestSession();
     fetchMock.mockResolvedValue(jsonResponse({ trips: [{ id: 'trip-1', title: 'Coorg' }] }));
-    renderBackToTrip(['/scout-chat?tripId=trip-1']);
-    await waitFor(() => expect(screen.getByRole('link', { name: /back to trip/i })).toHaveAttribute('href', '/dashboard?tripId=trip-1'));
+    renderBackToTrip([entry]);
+    await waitFor(() => expect(screen.getByRole('link', { name: /back to your trips/i })).toHaveAttribute('href', '/'));
   });
 });

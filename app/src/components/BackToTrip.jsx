@@ -1,18 +1,15 @@
 import { Link } from 'react-router-dom';
 import { useTrip } from '../context/TripContext.jsx';
-import { withTripId } from '../lib/tripUrl.js';
+import { ROUTES } from '../constants/routes.js';
 import '../styles/design-system.css';
 
-// TWM-171: every Build screen (Discover, Destinations, Plan, Plan Builder)
-// gets exactly this link, in the same position/style, always pointing at
-// Dashboard — never Home, regardless of how deep the traveler is or which
-// entry path (Discover→Plan vs. Direct-Plan) got them there.
-//
-// TWM-185: carries the current trip's id so landing on Dashboard from here
-// is reload/bookmark safe too, not just a same-session in-memory jump.
+// TWM-234: the one shared back-link, used by every trip-scoped screen
+// (Chat, Destinations, Plan Builder, Dashboard). Flat, not hierarchical —
+// always "back to your trips", never an intermediate "back to trip" stop at
+// Dashboard. There is one hub (the trips list); every trip screen, Dashboard
+// included, points straight to it. Renders nothing until a trip exists.
 export default function BackToTrip() {
   const { currentTripId } = useTrip();
-  return (
-    <Link className="back-to-trip" to={withTripId('/dashboard', currentTripId)}>← Back to trip</Link>
-  );
+  if (!currentTripId) return null;
+  return <Link className="back-to-trip" to={ROUTES.home}>← Back to your trips</Link>;
 }

@@ -1,3 +1,5 @@
+import '../styles/dashboard.css';
+
 // TWM-176: real Self-Led contact/help surface — no TWM-Led upsell language.
 // Shared by Dashboard's Support tab (trip-specific framing) and the
 // standalone /support page (account-level, reachable with no trip open).

@@ -17,9 +17,9 @@ function addDaysIso(iso, days) {
 
 const TRIP_ID = 'e2e-trip-1';
 
-function tripRecord({ id = TRIP_ID, version = 1, trip_state = {}, title = 'Untitled Trip', updated_at = '2026-01-01T00:00:00.000Z' } = {}) {
+function tripRecord({ id = TRIP_ID, version = 1, trip_state = {}, title = 'Untitled Trip', title_source, updated_at = '2026-01-01T00:00:00.000Z' } = {}) {
   return {
-    id, title, product_mode: 'self_led', version,
+    id, title, title_source: title_source ?? (title === 'Untitled Trip' ? 'placeholder' : 'user'), product_mode: 'self_led', version,
     trip_state, ui_state: {}, created_at: '2026-01-01T00:00:00.000Z', updated_at,
   };
 }
@@ -101,7 +101,7 @@ function toTripView(record, hasRecommendation) {
   const ts = record.trip_state || {};
   const result = itineraryResult(record);
   return {
-    id: record.id, title: record.title, product_mode: record.product_mode, version: record.version,
+    id: record.id, title: record.title, title_source: record.title_source, product_mode: record.product_mode, version: record.version,
     ui_state: record.ui_state || {}, created_at: record.created_at, updated_at: record.updated_at,
     lifecycle: {
       stage: ts.stage ?? 'new', status: ts.status ?? 'free',
@@ -299,7 +299,7 @@ export async function mockTripCommandFlow(page, steps, { initialTrip, initialTri
     const renameMatch = method === 'PATCH' && pathname.match(/\/api\/trips\/([^/]+)$/);
     if (renameMatch && records.has(renameMatch[1])) {
       const body = request.postDataJSON();
-      const updated = { ...records.get(renameMatch[1]), title: body.title ?? records.get(renameMatch[1]).title, ui_state: body.ui_state ?? records.get(renameMatch[1]).ui_state, version: body.expected_version + 1 };
+      const updated = { ...records.get(renameMatch[1]), title: body.title ?? records.get(renameMatch[1]).title, title_source: body.title ? 'user' : records.get(renameMatch[1]).title_source, ui_state: body.ui_state ?? records.get(renameMatch[1]).ui_state, version: body.expected_version + 1 };
       records.set(renameMatch[1], updated);
       return route.fulfill({ json: toTripView(updated, updated.id === current?.id && latestRecommendation != null) });
     }

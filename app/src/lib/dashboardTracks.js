@@ -4,6 +4,7 @@
 // planner branch.
 
 import { contextDestination, stageCta } from './tripLifecycle.js';
+import { DISCOVER_STAGES } from '../constants/tripStages.js';
 
 function plannerProgress(view) {
   const plan = view?.plan;
@@ -18,9 +19,16 @@ function plannerProgress(view) {
   };
 }
 
+// TWM-234: in Discover (matching/recommended/matched) a destination in the
+// recap is a *selection*, not a committed route -- the traveler can still
+// compare other destinations or hit "Plan this trip". Treating it as done
+// left `matched` with no CTA, so nothing embedded and Overview rendered
+// blank. Route is only done once the trip has left Discover.
 function routeTrack(view) {
   const destination = contextDestination(view);
-  if (destination) return { status: 'done', label: destination, cta: null };
+  if (destination && !DISCOVER_STAGES.has(view?.lifecycle?.stage)) {
+    return { status: 'done', label: destination, cta: null };
+  }
   const cta = stageCta(view);
   return { status: 'progress', label: cta.label, cta };
 }
@@ -37,7 +45,7 @@ function dayPlanTrack(view) {
     return { status: 'progress', label: 'Draft ready for review', cta: stageCta(view) };
   }
   if (progress.known) {
-    return { status: 'progress', label: 'Guide is gathering trip details', cta: stageCta(view) };
+    return { status: 'progress', label: 'Scout is gathering trip details', cta: stageCta(view) };
   }
   return { status: 'pending', label: 'Not started', cta: null };
 }

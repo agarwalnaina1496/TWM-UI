@@ -95,8 +95,10 @@ export function stageCta(trip) {
   if (stage === 'new' && hasContext(trip)) return { label: 'Resume chat', to: ROUTES.scoutChat };
   // planning/matching route by whether the stage's defining artifact
   // actually exists yet (day_plan / a recommendation round), not by stage
-  // string alone.
-  if ((stage === 'planning' || stage === 'plan_ready') && trip?.has_day_plan) {
+  // string alone. `has_day_plan` is the thin TripListItem flag (My Trips);
+  // a full TripView (TWM-234 embedded Dashboard) carries the same fact as
+  // `plan.day_plan.length > 0` instead -- check both shapes.
+  if ((stage === 'planning' || stage === 'plan_ready') && (trip?.has_day_plan || trip?.plan?.day_plan?.length > 0)) {
     return { label: 'Resume plan builder', to: ROUTES.tripPreview };
   }
   if (stage === 'matching' && (trip?.has_recommendation || trip?.matcher?.has_recommendation)) {
@@ -117,7 +119,7 @@ export function tripStatusLine(trip) {
   }
   if (trip?.has_day_plan) return 'A full day-by-day plan is set — sorting out bookings next.';
   if (trip?.has_places) return 'Places picked — building the day-by-day plan.';
-  if (trip?.awaiting) return "Guide's working out the details with you.";
+  if (trip?.awaiting) return "Scout's working out the details with you.";
   return 'Destination settled — planning not started yet.';
 }
 

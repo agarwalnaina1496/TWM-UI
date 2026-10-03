@@ -1,3 +1,5 @@
+import '../../styles/preview.css';
+
 const PACE_LEVEL = { relaxed: 1, balanced: 2, packed: 3 };
 
 // TWM-174: pace shown as a density meter, not a text badge — three bars,

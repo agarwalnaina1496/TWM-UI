@@ -107,7 +107,7 @@ test('reloading immediately after a fresh Discover entry creates its trip does n
   await page.getByText('Continue without login').click();
   await page.getByText('Discover Destination').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
-  await page.getByPlaceholder('Tell Scout about your trip…').fill('a relaxing beach trip');
+  await page.getByPlaceholder('Message Scout…').fill('a relaxing beach trip');
   await page.getByLabel('Send').click();
 
   await expect(page.getByText('Where will you be travelling from?')).toBeVisible();

@@ -1,6 +1,7 @@
 import { moneyRange } from '../BudgetBar.jsx';
 import { BookingBody, DrawerShell } from './BookingDrawer.jsx';
 import TrustedActionCta from './TrustedActionCta.jsx';
+import '../../styles/feedback.css';
 
 const STAY_TIER_LABEL = { budget: 'Budget', mid_range: 'Mid-range', premium: 'Premium' };
 

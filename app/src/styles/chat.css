@@ -47,6 +47,13 @@
 .chat-input:focus{outline:none;border-color:var(--accent);}
 .chat-send{width:40px;height:40px;flex-shrink:0;border-radius:10px;border:none;background:var(--tp);color:var(--bg);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s ease;}
 .chat-send:hover{background:var(--accent);}
+/* TWM-234: Dashboard's Overview tab embeds the same chat-log/facts-panel/
+   input-bar trio inline, inside its own tab content -- not a full page, so
+   it reuses .chat-screen's grid (facts panel as the 260px side column)
+   but not the page's fixed viewport height, scroll, or sticky composer. */
+.chat-screen.embedded-chat-panel{height:auto;max-width:none;margin:0;padding:0;overflow:visible;}
+.chat-screen.embedded-chat-panel>.chat-input-bar{position:static;box-shadow:none;}
+
 @media (max-width:760px){.chat-screen{height:calc(100dvh - 54px);max-width:none;padding:0;display:flex;flex-direction:column}.chat-screen>.chat-log{flex:1 1 auto;order:4;padding:20px 14px}.chat-screen>.chat-input-bar{order:5;width:calc(100% - 28px);margin:0 auto}.chat-context-bar{order:2;padding:10px 14px}.facts-panel{order:3;flex:0 0 auto;display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;overflow-x:auto;overflow-y:hidden;margin-top:0;padding:8px 14px;border:0;border-radius:0;border-bottom:1px solid var(--border);background:transparent}.facts-panel-heading{flex:0 0 100%;}.facts-panel-item{white-space:nowrap}}
 
 /* Small-mobile pass (<480px): tighter padding/type so chat bubbles and the

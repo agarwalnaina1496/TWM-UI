@@ -33,13 +33,16 @@
 .movement-guidance{font-style:italic;color:var(--tm)!important;font-size:12.5px!important}
 
 /* ===== Hero ===== */
-.dashboard-hero{background:transparent;border:0;border-radius:20px;padding:26px 0;margin-top:6px}
-.hero-top{display:flex;justify-content:flex-end;align-items:flex-start;gap:12px;flex-wrap:wrap}
-.hero-actions{display:flex;gap:8px}
-.hero-title{font-family:'Fraunces',serif;font-size:34px;font-weight:700;letter-spacing:-0.01em;margin:10px 0 12px}
+.dashboard-hero{background:transparent;border:0;border-radius:20px;padding:26px 0 0;margin-top:6px}
+.hero-module-label{margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.hero-module-label.module-discover{color:#0f6e56}
+.hero-module-label.module-plan{color:var(--accent)}
+.hero-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.hero-actions{display:flex;gap:8px;flex-shrink:0}
+.hero-title{font-family:'Fraunces',serif;font-size:34px;font-weight:700;letter-spacing:-0.01em;margin:0}
 .hero-title em{font-style:italic;color:var(--accent);font-weight:500}
 .hero-desc{margin:0 0 18px;font-size:14.5px;line-height:1.6;color:var(--ts);max-width:none}
-.hero-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:18px 0;border-top:1px solid var(--border)}
+.hero-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:18px 0 6px;border-top:1px solid var(--border)}
 .hero-stats strong{display:block;font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--tp)}
 .hero-stats span{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--tm);font-weight:700}
 .hero-why{border-top:1px solid var(--border);padding-top:16px}
@@ -179,6 +182,17 @@
    right now (Route, else Day plan), so there's always one obvious next
    step regardless of which track it's on. */
 .overview-primary-cta{margin:24px auto 0;text-align:center}
+
+/* TWM-234: local progress scoped to whichever phase (matching/planning) is
+   currently active -- three steps, never a trip-wide pipeline bar. */
+.phase-progress{margin:24px 0 0}
+.phase-progress-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);margin:0 0 8px}
+.phase-progress-bar{display:flex;gap:6px;margin-bottom:6px}
+.phase-progress-bar span{flex:1;height:4px;border-radius:9px;background:var(--border)}
+.phase-progress-bar span.done{background:var(--accent)}
+.phase-progress-steps{display:flex;gap:6px}
+.phase-progress-steps span{flex:1;font-size:11px;font-weight:600;color:var(--tm)}
+.phase-progress-steps span.active{color:var(--accent)}
 
 /* TWM-175: trip-shape day-strip on Overview — tappable, jumps into Itinerary. */
 .day-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 16px}

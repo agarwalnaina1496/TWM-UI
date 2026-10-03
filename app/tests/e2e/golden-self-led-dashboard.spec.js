@@ -67,7 +67,10 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
     },
     {
       command: 'select_destination',
-      response: commandResponse('Coorg is confirmed.', tripRecord({ version: 6, trip_state: { stage: 'matched', active_agent: null } })),
+      response: commandResponse('Coorg is confirmed.', tripRecord({
+        version: 6,
+        trip_state: { stage: 'matched', active_agent: null, selected_option: { type: 'single', id: 'coorg' } },
+      })),
     },
     {
       // Single-step generation: start_planning returns the complete plan
@@ -129,7 +132,7 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
   await page.getByText('Continue without login').click();
   await page.getByText('Discover Destination').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
-  await page.getByPlaceholder('Tell Scout about your trip…').fill(GOLDEN_QUERY);
+  await page.getByPlaceholder('Message Scout…').fill(GOLDEN_QUERY);
   await page.getByLabel('Send').click();
   // TWM-190 (regression fix): /journey-entry is ScoutChat.jsx itself — the
   // conversation continues on the same page, no redirect.
@@ -137,11 +140,14 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
   await page.getByRole('button', { name: 'See destinations →' }).click();
 
-  await expect(page).toHaveURL(/\/app\/destinations/);
+  // TWM-234: Destinations and Plan Builder both embed into the unified
+  // Dashboard shell now -- no navigation between them.
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
-  await page.getByText('Plan this trip →').first().click();
+  await page.getByText('Choose this destination').first().click();
+  await page.getByText('Plan this trip →').click();
 
-  await expect(page).toHaveURL(/\/app\/trip-preview/);
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('Abbey Falls')).toBeVisible();
   await page.getByText('Approve this plan →').click();
 

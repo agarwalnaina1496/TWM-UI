@@ -44,7 +44,13 @@ function recommendedTripState(extra = {}) {
 test('loads real recommendations via the continue command, shows a disclosed trade-off, and plans the trip through select_destination', async ({ page }) => {
   await mockTripCommandFlow(page, [
     { command: 'continue', response: commandResponse(null, tripRecord({ version: 2, trip_state: recommendedTripState() })), recommendation: successOutcome() },
-    { command: 'select_destination', response: commandResponse('Madhya Pradesh Heritage and Nature is confirmed.', tripRecord({ version: 3, trip_state: recommendedTripState() })) },
+    {
+      command: 'select_destination',
+      response: commandResponse('Madhya Pradesh Heritage and Nature is confirmed.', tripRecord({
+        version: 3,
+        trip_state: recommendedTripState({ stage: 'matched', selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna' } }),
+      })),
+    },
     // TWM-106: landing on the Plan Builder immediately bootstraps a real
     // Guide session — scripted so the route mock doesn't reject it.
     {
@@ -89,16 +95,21 @@ test('loads real recommendations via the continue command, shows a disclosed tra
   await detailCard.getByText('See why this fits').click();
   await expect(detailCard.getByText(/A late add-on activity could push the total slightly higher\./)).toBeVisible();
 
-  await detailCard.getByText('Plan this trip →').click();
+  await detailCard.getByText('Choose this destination').click();
+  await page.getByText('Plan this trip →').click();
   await expect(page).toHaveURL(/\/app\/trip-preview/);
   await expect(page.getByText('Gwalior Fort')).toBeVisible();
 });
 
-test('More like this refreshes recommendations through the real command without committing selection', async ({ page }) => {
+test('the refinement drawer refreshes recommendations through the real command without committing selection', async ({ page }) => {
+  // TWM-234: the per-option scoped "more like this" was dropped (two refine
+  // entry points read as confusing UX) -- the one general drawer sends a
+  // plain traveler_message, which the Backend routes through Meridian again
+  // at the recommended/matching stage exactly like the old scoped command did.
   await mockTripCommandFlow(page, [
     { command: 'continue', response: commandResponse(null, tripRecord({ version: 2, trip_state: recommendedTripState() })), recommendation: successOutcome() },
     {
-      command: 'more_like_this',
+      command: 'traveler_message',
       response: commandResponse(
         'Refreshed around Madhya Pradesh Heritage and Nature, while keeping your existing preferences.',
         tripRecord({ version: 3, trip_state: recommendedTripState() })
@@ -116,9 +127,8 @@ test('More like this refreshes recommendations through the real command without 
   await page.goto('destinations?next=preview');
   await expect(page.getByText('A few that fit well')).toBeVisible();
 
-  const detailCard = page.locator('.dest-detail-card');
-  // Clicking "More like this" with an empty refine box sets scope and opens it; Send submits.
-  await detailCard.getByRole('button', { name: /More like this/ }).click();
+  await page.getByText(/Not quite right\? Tell us more/).click();
+  await page.getByLabel('Tell us more').fill('cheaper, closer');
   await page.locator('.refinement-body').getByText('Send').click();
   await expect(page.getByText(/Refreshed around Madhya Pradesh Heritage and Nature/)).toBeVisible();
   // Refreshing recommendations must not itself commit a selection — staying

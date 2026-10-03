@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import TripHero from '../components/TripHero.jsx';
 import SupportContent from '../components/SupportContent.jsx';
 import BookingPromptOverlay from '../components/drawers/BookingPromptOverlay.jsx';
-import { DASHBOARD_TABS, DashboardBackLink, DashboardTabs } from './dashboard/chrome.jsx';
+import BackToTrip from '../components/BackToTrip.jsx';
+import { DASHBOARD_TABS, DashboardTabs, visibleDashboardTabs } from './dashboard/chrome.jsx';
 import OverviewTab from './dashboard/OverviewTab.jsx';
 import ItineraryTab from './dashboard/ItineraryTab.jsx';
 import BookingDrawers from './dashboard/BookingDrawers.jsx';
@@ -19,7 +20,7 @@ const ARRIVAL_STEP_DURATION_MS = 20000;
 function DashboardError({ title, message }) {
   return (
     <main className="wrap dashboard">
-      <DashboardBackLink />
+      <BackToTrip />
       <ErrorBanner message={<><strong>{title}</strong><span>{message}</span></>} />
     </main>
   );
@@ -38,7 +39,6 @@ function SupportTab({ itineraryReady }) {
 }
 
 export default function TripDashboard() {
-  const navigate = useNavigate();
   const [params] = useSearchParams();
   const initialTab = DASHBOARD_TABS.some(t => t.name === params.get('tab')) ? params.get('tab') : 'Overview';
   const [tab, setTab] = useState(initialTab);
@@ -50,6 +50,14 @@ export default function TripDashboard() {
   const drawers = useBookingDrawers({ tripId, view, days, staySegments });
 
   const building = bootStatus === 'booting' && !itineraryReady;
+  const tabs = visibleDashboardTabs(view?.lifecycle?.stage);
+
+  // A reopen back into Discover clears the plan and can drop the Itinerary
+  // tab out from under the traveler if they were on it -- land them
+  // somewhere that still exists instead of a tab that vanished.
+  useEffect(() => {
+    if (!tabs.some(t => t.name === tab)) setTab('Overview');
+  }, [tabs, tab]);
 
   // Owned here (not inside ItineraryTab/HonestTransition) so the honest-
   // transition steps keep advancing in real wall-clock time regardless of
@@ -81,8 +89,8 @@ export default function TripDashboard() {
   if (tripLoadStatus === 'ready' && !view) {
     return (
       <main className="wrap dashboard">
+        <BackToTrip />
         <ErrorBanner message={<><strong>Trip unavailable</strong><span>This trip is no longer available.</span></>} />
-        <button type="button" className="btn btn-primary" onClick={() => navigate('/')}>Back to your trips</button>
       </main>
     );
   }
@@ -99,7 +107,7 @@ export default function TripDashboard() {
   // The tab bar and Support are always present once a view exists.
   return (
     <main className="wrap dashboard">
-      <DashboardBackLink />
+      <BackToTrip />
       {showBookingPrompt && (
         <BookingPromptOverlay
           onResolveBookings={() => resolveBookingPrompt('bookings')}
@@ -115,7 +123,7 @@ export default function TripDashboard() {
         />
       )}
 
-      <DashboardTabs tab={tab} setTab={setTab} />
+      <DashboardTabs tab={tab} setTab={setTab} tabs={tabs} />
 
       {tab === 'Overview' && view && (
         <OverviewTab view={view} tripId={tripId} />

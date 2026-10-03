@@ -10,7 +10,7 @@ import { join, relative } from 'node:path';
 // `/itinerary` document — never from raw canonical `trip_state` branch
 // paths. Backend owns trip_state; the client only ever sees what the
 // composer / document surface hands it.
-const SCAN_ROOTS = ['src/lib', 'src/components'];
+const SCAN_ROOTS = ['src/lib', 'src/components', 'src/features'];
 
 // These legitimately read a self-describing *document* (the enriched
 // /itinerary result) or the matcher *round* shape, not raw trip_state.

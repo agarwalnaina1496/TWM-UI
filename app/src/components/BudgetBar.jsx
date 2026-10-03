@@ -1,4 +1,5 @@
 import { formatMoney, formatMoneyRange } from '../lib/formatters.js';
+import '../styles/dashboard.css';
 
 export const money = formatMoney;
 export const moneyRange = formatMoneyRange;
