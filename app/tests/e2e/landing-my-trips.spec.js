@@ -38,10 +38,9 @@ test('one itinerary-ready trip lands on Dashboard-home, not an auto-open Dashboa
 });
 
 test('multiple meaningful trips land on Dashboard-home with stage-aware cards', async ({ page }) => {
-  // TWM-232: My Trips groups by date, not lifecycle stage -- every trip
-  // uses the same uniform card. `active` (stage "matching", no destination
-  // yet) has no real title, only its honest stage badge; `upcoming` has a
-  // real title and its itinerary-ready badge.
+  // TWM-232/TWM-234: `active` (stage "matching") is still Discovering -- its
+  // heading is its stored title, and it says the destination is still open;
+  // `upcoming` is a real trip with its itinerary-ready badge.
   const active = tripRecord({
     id: 'e2e-trip-1', title: 'Coorg weekend',
     trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
@@ -55,7 +54,8 @@ test('multiple meaningful trips land on Dashboard-home with stage-aware cards', 
   await mockTripCommandFlow(page, [], { initialTrips: [active, upcoming] });
   await page.goto('');
   await expect(page.getByRole('heading', { name: /your.*trips/i, level: 1 })).toBeVisible();
-  await expect(page.getByText('In conversation')).toBeVisible();
+  await expect(page.getByText('Coorg weekend')).toBeVisible();
+  await expect(page.getByText('Destination not chosen yet')).toBeVisible();
   await expect(page.getByText('Madhya Pradesh circuit')).toBeVisible();
   await expect(page.getByText('Itinerary ready')).toBeVisible();
 });
@@ -135,11 +135,11 @@ test('search narrows Dashboard-home to matching trips only (TWM-172)', async ({ 
   await expect(page.getByText('Coorg weekend')).not.toBeVisible();
 });
 
-test('a discover-only trip (no destination yet) shows in Discovering with no title (TWM-234)', async ({ page }) => {
-  // TWM-234: a trip with no destination committed isn't "a trip" to the
-  // traveler yet -- it gets its own Discovering section, separate from
-  // Your trips, with no title/Rename yet (nothing real to name) and its
-  // honest stage badge.
+test('a discovering trip with no title yet shows a "New discovery" heading, not the placeholder (TWM-234)', async ({ page }) => {
+  // A trip with no destination committed isn't "a trip" to the traveler yet
+  // -- it lives in its own Discovering section. With nothing identifying
+  // known, its heading is "New discovery"; the placeholder title is never
+  // shown, Rename is always available, and the destination is marked open.
   const browsing = tripRecord({
     id: 'e2e-trip-1', title: 'Untitled Trip',
     trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
@@ -148,9 +148,12 @@ test('a discover-only trip (no destination yet) shows in Discovering with no tit
   await page.goto('');
 
   await expect(page.getByRole('heading', { name: 'Discovering', level: 2 })).toBeVisible();
-  const card = page.locator('.trip-card', { hasText: 'In conversation' });
-  await expect(card).toBeVisible();
+  const card = page.locator('.trip-card-discovering');
+  await expect(card.getByText('New discovery')).toBeVisible();
   await expect(card.getByText('Untitled Trip')).toHaveCount(0);
+  await expect(card.getByText('Destination not chosen yet')).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Rename' })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Continue exploring →' })).toBeVisible();
 });
 
 test('matched card offers two next steps; a planning card opens the trip (TWM-234)', async ({ page }) => {

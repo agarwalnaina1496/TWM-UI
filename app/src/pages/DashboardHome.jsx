@@ -8,7 +8,7 @@ import StatusPill from '../components/ui/StatusPill.jsx';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { trackEvent } from '../lib/analytics.js';
 import {
-  isTripEmpty, stageBadge, contextRecapPills, contextDestination,
+  isTripEmpty, stageBadge, contextRecapPills, contextDestination, discoveryHeadline, discoveryPills,
   tripStatusLine, relativeUpdatedAt,
 } from '../lib/tripLifecycle.js';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
@@ -119,6 +119,30 @@ function MatchedTripCard({ t, rename }) {
   );
 }
 
+// TWM-234: a trip still being discovered (matching or recommended -- nothing
+// chosen yet). Heading, most to least preferred: the traveler's title (their
+// own or Meridian's -- one stored title), else the most telling fact so far
+// (that fact then isn't repeated in the chips), else a plain "New discovery".
+// The destination line is there to say it is still open. Rename is always
+// available; with no title yet it starts from a blank input.
+function DiscoveringTripCard({ t, rename, busyId, onOpen, showRename = true }) {
+  const title = displayTitle(t);
+  const headline = title ? null : discoveryHeadline(t);
+  const recommended = t.lifecycle?.stage === 'recommended';
+  return (
+    <div className="card trip-card trip-card-discovering">
+      <div>
+        <RenameName t={t} rename={rename} showRename={showRename} label={title ?? headline?.text ?? 'New discovery'} blankStart={!title} />
+        <div className="trip-card-destination-pending">Destination not chosen yet</div>
+        <RecapPills pills={discoveryPills(t, headline?.key)} />
+      </div>
+      <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
+        {recommended ? 'Review recommendations →' : 'Continue exploring →'}
+      </button>
+    </div>
+  );
+}
+
 // TWM-171/TWM-232/TWM-234: exactly one primary affordance per trip card.
 // The badge always shows the honest, stage-specific text, and every card's
 // CTA opens the same place (Dashboard), letting the per-stage next-step
@@ -131,17 +155,13 @@ function MatchedTripCard({ t, rename }) {
 // identical structure regardless of where the trip is in its lifecycle.
 function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
   if (t.lifecycle?.stage === 'matched') return <MatchedTripCard t={t} rename={rename} />;
+  if (DISCOVER_STAGES.has(t.lifecycle?.stage)) return <DiscoveringTripCard t={t} rename={rename} busyId={busyId} onOpen={onOpen} showRename={showRename} />;
   const badge = stageBadge(t);
   const destination = contextDestination(t);
   const recapPills = contextRecapPills(t);
   const timestamp = formatTripTimestamp(t);
   const title = displayTitle(t);
   const statusLine = tripStatusLine(t);
-  // TWM-234: still Discovering (no destination committed) isn't "a trip" to
-  // the traveler yet -- the one CTA says so, same uniform-card shape
-  // otherwise. Every card still opens the same place (Dashboard); the
-  // per-stage next step lives there, same as before.
-  const discovering = DISCOVER_STAGES.has(t.lifecycle?.stage);
   return (
     <div className="card trip-card">
       <div>
@@ -155,7 +175,7 @@ function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
         <RecapPills pills={recapPills} />
       </div>
       <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
-        {discovering ? 'Continue exploring →' : 'Open trip →'}
+        Open trip →
       </button>
     </div>
   );

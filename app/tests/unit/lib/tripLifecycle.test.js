@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   isTripEmpty, isItineraryReady, isCompletedTrip, stageBadge, stageCta, tripStatusLine, relativeUpdatedAt,
-  contextRecapPills, contextDestination,
+  contextRecapPills, contextDestination, discoveryHeadline, discoveryPills,
 } from '../../../src/lib/tripLifecycle.js';
 
 // TWM-220: every helper reads a `TripView` (full) or a `TripListItem` (thin).
@@ -177,5 +177,44 @@ describe('context recap formatters', () => {
   it('contextDestination reads the destinations recap item', () => {
     expect(contextDestination(trip({ context: { destinations: 'Goa' } }))).toBe('Goa');
     expect(contextDestination(trip({}))).toBeNull();
+  });
+});
+
+// TWM-234: a Discovering trip is identified by what the traveler has told us,
+// not by origin (the same on every trip) -- dates first, then length, party
+// size and budget.
+describe('discoveryHeadline', () => {
+  it('prefers dates, then duration, then party size, then budget', () => {
+    const all = { budget: '1 lakh INR', num_travelers: '4', trip_duration: '5', travel_dates: 'After Navratri' };
+    expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'travel_dates', text: 'After Navratri' });
+    delete all.travel_dates;
+    expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'trip_duration', text: '5 days' });
+    delete all.trip_duration;
+    expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'num_travelers', text: '4 travellers' });
+    delete all.num_travelers;
+    expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'budget', text: '1 lakh INR' });
+  });
+
+  it('keeps already-worded values and singularises one traveller', () => {
+    expect(discoveryHeadline(trip({ context: { trip_duration: '3 days' } })).text).toBe('3 days');
+    expect(discoveryHeadline(trip({ context: { num_travelers: '1' } })).text).toBe('1 traveller');
+  });
+
+  it('is null when only the origin (or nothing) is known', () => {
+    expect(discoveryHeadline(trip({ context: { origin_city: 'Delhi' } }))).toBeNull();
+    expect(discoveryHeadline(trip({}))).toBeNull();
+    expect(discoveryHeadline(undefined)).toBeNull();
+  });
+});
+
+describe('discoveryPills', () => {
+  it('drops the fact used as the heading and puts the origin last', () => {
+    const t = trip({ context: { origin_city: 'Delhi', travel_dates: 'After Navratri', num_travelers: '4' } });
+    expect(discoveryPills(t, 'travel_dates')).toEqual(['num_travelers: 4', 'From Delhi']);
+  });
+
+  it('keeps every fixed fact when nothing is excluded', () => {
+    const t = trip({ context: { origin_city: 'Delhi', budget: '1 lakh INR' } });
+    expect(discoveryPills(t)).toEqual(['budget: 1 lakh INR', 'From Delhi']);
   });
 });

@@ -54,6 +54,41 @@ export function contextRecapPills(trip) {
     });
 }
 
+// TWM-234: while a trip is still Discovering it has no destination and, until
+// a title exists, no name -- so its card is identified by what the traveler
+// has actually told us. The headline is the single most telling fact so far,
+// in this order: when they travel, for how long, how many, the budget. Origin
+// is deliberately not a candidate: for one traveler it is the same on every
+// trip, so it identifies none of them.
+const HEADLINE_FACTS = [
+  { key: 'travel_dates', text: value => value },
+  { key: 'trip_duration', text: value => (/^\d+$/.test(value) ? `${value} days` : value) },
+  { key: 'num_travelers', text: value => (/^\d+$/.test(value) ? `${value} ${value === '1' ? 'traveller' : 'travellers'}` : value) },
+  { key: 'budget', text: value => value },
+];
+
+export function discoveryHeadline(trip) {
+  const recap = trip?.context_recap || [];
+  for (const { key, text } of HEADLINE_FACTS) {
+    const item = recap.find(fact => fact.key === key && fact.value);
+    if (item) return { key, text: text(String(item.value)) };
+  }
+  return null;
+}
+
+// The facts for a Discovering card's chips: the same fixed set as
+// contextRecapPills, minus the fact already used as the headline, with the
+// origin last (it is the least telling one).
+export function discoveryPills(trip, excludeKey = null) {
+  const pills = (trip?.context_recap || [])
+    .filter(item => FIXED_RECAP_KEYS.includes(item.key) && item.key !== excludeKey);
+  const origin = pills.filter(item => item.key === 'origin_city');
+  const rest = pills.filter(item => item.key !== 'origin_city');
+  return [...rest, ...origin].map(item => (
+    item.key === 'origin_city' ? `From ${item.value}` : `${item.label}: ${item.value}`
+  ));
+}
+
 const STAGE_BADGES = {
   new: { cls: 'b-new', text: 'New' },
   matching: { cls: 'b-chat', text: 'In conversation' },

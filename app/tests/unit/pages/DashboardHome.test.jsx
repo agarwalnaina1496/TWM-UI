@@ -128,10 +128,9 @@ describe('DashboardHome', () => {
   });
 
   it('splits Discovering (no plan started) from actual trips, each with its own CTA', async () => {
-    // TWM-234: a destination matched but not yet planned, or still being
-    // recommended, isn't "a trip" to the traveler yet -- it gets its own
-    // "Discovering" section and "Continue exploring" CTA, separate from
-    // "Your trips"/"Open trip" for anything already past matched.
+    // TWM-234: a trip still being recommended isn't "a trip" to the traveler
+    // yet -- it gets its own "Discovering" section and its own CTA, separate
+    // from "Your trips"/"Open trip" for anything already past matched.
     fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
       listItem({ id: 'trip-1', title: 'Committed trip', stage: 'planning', context: { origin_city: 'Delhi' } }),
       listItem({ id: 'trip-2', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' }, updated_at: '2025-12-01T00:00:00.000Z' }),
@@ -140,11 +139,10 @@ describe('DashboardHome', () => {
     await screen.findByText('Committed trip');
     expect(screen.getByText('Discovering')).toBeInTheDocument();
     expect(screen.getByText('Your trips')).toBeInTheDocument();
-    expect(screen.getByText('Recommendations ready')).toBeInTheDocument();
     const committedCard = screen.getByText('Committed trip').closest('.trip-card');
     expect(within(committedCard).getByRole('button', { name: 'Open trip →' })).toBeInTheDocument();
-    const discoveringCard = screen.getByText('Recommendations ready').closest('.trip-card');
-    expect(within(discoveringCard).getByRole('button', { name: 'Continue exploring →' })).toBeInTheDocument();
+    const discoveringCard = document.querySelector('.trip-card-discovering');
+    expect(within(discoveringCard).getByRole('button', { name: 'Review recommendations →' })).toBeInTheDocument();
   });
 
   it('renders whatever title the Backend sends, including the placeholder', async () => {
@@ -159,32 +157,87 @@ describe('DashboardHome', () => {
     expect(await screen.findByText('5 days from Bangalore')).toBeInTheDocument();
   });
 
-  it('shows no title/Rename for a trip whose title is still the placeholder, honest badge otherwise', async () => {
-    // TWM-232: uniform card -- badge always shows the real, honest
-    // stage-specific text (no more generic label); title/Rename only
-    // render once a real title exists.
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'recommended', context: { origin_city: 'Delhi' } }),
-    ] }));
-    renderDashboardHome(GUEST);
-    const card = (await screen.findByRole('button', { name: 'Continue exploring →' })).closest('.trip-card');
-    expect(within(card).getByText('Recommendations ready')).toBeInTheDocument();
-    expect(within(card).queryByText('Untitled Trip')).not.toBeInTheDocument();
-    expect(within(card).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
-  });
+  // TWM-234: a Discovering card (matching / recommended) has no destination
+  // yet. Heading, most to least preferred: the stored title (the traveler's
+  // own or Meridian's), the most telling fact so far, then "New discovery".
+  describe('Discovering cards', () => {
+    const discovering = (overrides = {}) => listItem({ id: 'trip-1', stage: 'matching', ...overrides });
+    async function renderCard(trip) {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [trip] }));
+      renderDashboardHome(GUEST);
+      await screen.findByText('Discovering');
+      return document.querySelector('.trip-card-discovering');
+    }
 
-  it('caps the recap chips at 2, with a "+N more" chip for the rest', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({
-        id: 'trip-1', title: 'Untitled Trip', stage: 'recommended',
-        context: { origin_city: 'Delhi', num_travelers: '1', budget: '1 lakh INR' },
-      }),
-    ] }));
-    renderDashboardHome(GUEST);
-    const card = (await screen.findByRole('button', { name: 'Continue exploring →' })).closest('.trip-card');
-    const pills = within(card).getAllByText(/./, { selector: '.trip-card-recap-pill' });
-    expect(pills).toHaveLength(3); // 2 shown facts + 1 "+N more" chip
-    expect(within(card).getByText('+1 more')).toBeInTheDocument();
+    it('uses the stored title as the heading, with Rename and every fact as a chip', async () => {
+      const card = await renderCard(discovering({
+        title: '5 Day Getaway from Delhi', title_source: 'generated',
+        context: { travel_dates: 'After Navratri', trip_duration: '5 days', origin_city: 'Delhi' },
+      }));
+      expect(within(card).getByText('5 Day Getaway from Delhi')).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+      expect(within(card).getByText('Destination not chosen yet')).toBeInTheDocument();
+      expect(within(card).getByText('trip_duration: 5 days')).toBeInTheDocument();
+    });
+
+    it('falls back to the most telling fact (dates first) and does not repeat it as a chip', async () => {
+      const card = await renderCard(discovering({
+        context: { origin_city: 'Delhi', num_travelers: '4', trip_duration: '5', travel_dates: 'After Navratri' },
+      }));
+      expect(within(card).getByText('After Navratri')).toBeInTheDocument();
+      expect(within(card).queryByText(/travel_dates/)).not.toBeInTheDocument();
+      expect(within(card).queryByText('Untitled Trip')).not.toBeInTheDocument();
+    });
+
+    it('turns a bare duration or party size into words, and ranks duration above party size', async () => {
+      const card = await renderCard(discovering({ context: { num_travelers: '4', trip_duration: '5' } }));
+      expect(within(card).getByText('5 days')).toBeInTheDocument();
+      expect(within(card).getByText('Travellers: 4')).toBeInTheDocument();
+    });
+
+    it("never uses the origin as the heading -- it is the same on every trip -- and lists it last", async () => {
+      const card = await renderCard(discovering({ context: { origin_city: 'Delhi', budget: '1 lakh INR' } }));
+      expect(within(card).getByText('1 lakh INR')).toBeInTheDocument();
+      expect(within(card).getByText('From Delhi')).toBeInTheDocument();
+      const only = await screen.findAllByText('From Delhi');
+      expect(only).toHaveLength(1);
+    });
+
+    it('says "New discovery" when nothing identifying is known yet', async () => {
+      const card = await renderCard(discovering({ context: { origin_city: 'Delhi' } }));
+      expect(within(card).getByText('New discovery')).toBeInTheDocument();
+      expect(within(card).getByText('From Delhi')).toBeInTheDocument();
+      expect(within(card).queryByText('In conversation')).not.toBeInTheDocument();
+    });
+
+    it('Rename with no title yet starts from a blank input and saves the traveler\'s own title', async () => {
+      routeFetch({
+        trips: [discovering({ context: { origin_city: 'Delhi' } })],
+        patch: () => tripView({ title: 'Puja holidays', version: 2 }),
+      });
+      renderDashboardHome(GUEST);
+      await userEvent.click(await screen.findByRole('button', { name: 'Rename' }));
+      const input = await screen.findByRole('textbox');
+      expect(input).toHaveValue('');
+      await userEvent.type(input, 'Puja holidays{Enter}');
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1', expect.objectContaining({
+        method: 'PATCH', body: JSON.stringify({ expected_version: 1, title: 'Puja holidays' }),
+      })));
+    });
+
+    it('words the one action for its stage', async () => {
+      const exploring = await renderCard(discovering({ context: { origin_city: 'Delhi' } }));
+      expect(within(exploring).getByRole('button', { name: 'Continue exploring →' })).toBeInTheDocument();
+    });
+
+    it('caps the chips at 2 with a "+N more" chip for the rest', async () => {
+      const card = await renderCard(discovering({
+        context: { travel_dates: 'After Navratri', trip_duration: '5', num_travelers: '4', budget: '1 lakh INR', origin_city: 'Delhi' },
+      }));
+      const chips = within(card).getAllByText(/./, { selector: '.trip-card-recap-pill' });
+      expect(chips).toHaveLength(3); // 2 shown facts + the "+N more" chip
+      expect(within(card).getByText('+2 more')).toBeInTheDocument();
+    });
   });
 
   it('promotes the ongoing trip to the hero over an upcoming one, off travel_window', async () => {
@@ -210,7 +263,7 @@ describe('DashboardHome', () => {
       listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'matching', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: thisMonth } }),
     ] }));
     renderDashboardHome(GUEST);
-    await screen.findByText('In conversation');
+    await screen.findByText('Destination not chosen yet');
     expect(document.querySelector('.hero-trip')).not.toBeInTheDocument();
   });
 
