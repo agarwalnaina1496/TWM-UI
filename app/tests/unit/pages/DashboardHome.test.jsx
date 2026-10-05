@@ -128,11 +128,26 @@ describe('DashboardHome', () => {
       expect(within(card).getByRole('button', { name: 'Rename' })).toBeInTheDocument();
     });
 
-    it('a planning trip with no title is headed by its destination', async () => {
-      await renderTrips([listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'planning', context: { destinations: 'Nainital' } })]);
+    it('an untitled planning trip is headed by its most telling fact, with the destination on the line', async () => {
+      await renderTrips([listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'planning', context: { destinations: 'Nainital', num_travelers: '3 people' } })]);
       const card = document.querySelector('.trip-card-plan');
-      expect(within(card).getByText('Nainital')).toBeInTheDocument();
-      expect(card.querySelector('.trip-card-line')).toHaveTextContent('Planning in progress');
+      expect(card.querySelector('.name')).toHaveTextContent('3 travellers');
+      expect(card.querySelector('.trip-card-line')).toHaveTextContent('Nainital · Planning in progress');
+    });
+
+    it('planning and matching share one anatomy: name, one line, chips, one ghost button', async () => {
+      await renderTrips([
+        listItem({ id: 'a', title: 'Trip A', stage: 'planning', context: { destinations: 'Coorg', num_travelers: '2' } }),
+        listItem({ id: 'b', title: 'Trip B', stage: 'matching', context: { num_travelers: '2' } }),
+      ]);
+      for (const selector of ['.trip-card-plan', '.trip-card-discovering']) {
+        const card = document.querySelector(selector);
+        expect(card.querySelector('.name')).not.toBeNull();
+        expect(card.querySelectorAll('.trip-card-line')).toHaveLength(1);
+        expect(card.querySelector('.trip-card-recap')).not.toBeNull();
+        expect(card.querySelectorAll(':scope > button.btn-ghost')).toHaveLength(1);
+        expect(card.querySelector('.btn-primary')).toBeNull();
+      }
     });
 
     it('a draft day plan waiting for review says so and offers Review plan', async () => {

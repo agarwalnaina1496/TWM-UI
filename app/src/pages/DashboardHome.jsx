@@ -111,13 +111,22 @@ function RecapPills({ pills, limit = 2 }) {
 // it starts from a blank input. One action per stage: matched offers
 // plan-or-reconsider, the others a single way back in.
 function DiscoveringTripCard({ t, rename, busyId, onOpen, showRename = true }) {
+  const stage = t.lifecycle?.stage;
+  if (stage !== 'matched') {
+    return (
+      <InProgressTripCard
+        t={t} rename={rename} busyId={busyId} onOpen={onOpen} showRename={showRename}
+        className="trip-card-discovering" emptyLabel="New discovery"
+        line="Destination not chosen yet"
+        cta={stage === 'recommended' ? 'Review recommendations →' : 'Continue exploring →'}
+      />
+    );
+  }
   const title = displayTitle(t);
   const headline = title ? null : discoveryHeadline(t);
-  const stage = t.lifecycle?.stage;
-  const matched = stage === 'matched';
-  const chosen = matched ? (contextDestination(t) || t.lifecycle?.selected_option?.name) : null;
+  const chosen = contextDestination(t) || t.lifecycle?.selected_option?.name;
   return (
-    <div className={`card trip-card trip-card-discovering${matched ? ' trip-card-matched' : ''}`}>
+    <div className="card trip-card trip-card-discovering trip-card-matched">
       <div>
         <RenameName t={t} rename={rename} showRename={showRename} label={title ?? headline?.text ?? 'New discovery'} blankStart={!title} />
         {chosen && (
@@ -126,38 +135,44 @@ function DiscoveringTripCard({ t, rename, busyId, onOpen, showRename = true }) {
             <div className="trip-card-destination-chosen">{chosen}</div>
           </>
         )}
-        {!matched && <div className="trip-card-destination-pending">Destination not chosen yet</div>}
         <RecapPills pills={discoveryPills(t, headline?.key)} limit={4} />
       </div>
-      {matched ? <MatchedTripActions tripId={t.id} /> : (
-        <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
-          {stage === 'recommended' ? 'Review recommendations →' : 'Continue exploring →'}
-        </button>
-      )}
+      <MatchedTripActions tripId={t.id} />
+    </div>
+  );
+}
+
+// TWM-234: the one card behind both modules' first two steps -- matching and
+// planning, recommended and plan_ready. Heading (the stored title, else the
+// most telling fact so far), one line saying where the trip stands, the facts
+// as chips, one ghost action. Only the line and the action's wording differ
+// by module, so the two lists read as one family.
+function InProgressTripCard({ t, rename, busyId, onOpen, showRename = true, className, emptyLabel, line, cta }) {
+  const title = displayTitle(t);
+  const headline = title ? null : discoveryHeadline(t);
+  return (
+    <div className={`card trip-card ${className}`}>
+      <div>
+        <RenameName t={t} rename={rename} showRename={showRename} label={title ?? headline?.text ?? emptyLabel} blankStart={!title} />
+        <div className="trip-card-line">{line}</div>
+        <RecapPills pills={discoveryPills(t, headline?.key)} limit={4} />
+      </div>
+      <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>{cta}</button>
     </div>
   );
 }
 
 // TWM-234: a trip being planned (planning, or a draft plan waiting for review).
-// Same anatomy as a Discovering card -- heading (stored title, else the
-// destination, which a planning trip always has), one line saying where the
-// plan stands, chips, one action -- so the first two steps of each module
-// read alike. The line leads with the destination when a title is the heading.
-function PlanTripCard({ t, rename, busyId, onOpen, showRename = true }) {
-  const title = displayTitle(t);
+function PlanTripCard(props) {
+  const { t } = props;
   const destination = contextDestination(t);
-  const heading = title ?? destination ?? discoveryHeadline(t)?.text ?? 'New trip';
   return (
-    <div className="card trip-card trip-card-plan">
-      <div>
-        <RenameName t={t} rename={rename} showRename={showRename} label={heading} blankStart={!title} />
-        <div className="trip-card-line">{title && destination && <><b>{destination}</b> · </>}{planStateLine(t)}</div>
-        <RecapPills pills={discoveryPills(t)} limit={4} />
-      </div>
-      <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
-        {isPlanDraftReady(t) ? 'Review plan →' : 'Continue planning →'}
-      </button>
-    </div>
+    <InProgressTripCard
+      {...props}
+      className="trip-card-plan" emptyLabel="New trip"
+      line={<>{destination && <><b>{destination}</b> · </>}{planStateLine(t)}</>}
+      cta={isPlanDraftReady(t) ? 'Review plan →' : 'Continue planning →'}
+    />
   );
 }
 
