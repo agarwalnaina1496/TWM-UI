@@ -174,8 +174,8 @@ test('matched card offers two next steps; a planning card opens the trip (TWM-23
   await expect(matchedCard.getByRole('button', { name: 'Rename' })).toHaveCount(1);
 
   const planningCard = page.locator('.trip-card', { hasText: 'Manali plan' });
-  await expect(planningCard.getByRole('button', { name: 'Open trip →' })).toHaveCount(1);
-  await expect(planningCard.getByRole('button')).toHaveCount(2); // "Open trip →" + "Rename" only
+  await expect(planningCard.getByRole('button', { name: 'Continue planning →' })).toHaveCount(1);
+  await expect(planningCard.getByRole('button')).toHaveCount(2); // "Continue planning →" + "Rename" only
 });
 
 test('matched card keeps its Meridian title and shows the chosen destination on its own line (TWM-234)', async ({ page }) => {

@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout.jsx';
 import { useTrip } from '../context/TripContext.jsx';
 import { useTripsQuery } from '../hooks/tripQueries.js';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
-import StatusPill from '../components/ui/StatusPill.jsx';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { trackEvent } from '../lib/analytics.js';
 import {
-  isTripEmpty, stageBadge, contextRecapPills, contextDestination, discoveryHeadline, discoveryPills,
-  tripStatusLine, relativeUpdatedAt,
+  isTripEmpty, isPlanFinished, isPlanDraftReady, planStateLine, planCompletionLabel, planFacts,
+  contextDestination, discoveryHeadline, discoveryPills,
 } from '../lib/tripLifecycle.js';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import MatchedTripActions from '../components/MatchedTripActions.jsx';
@@ -19,8 +18,6 @@ import { decodeHtmlEntities } from '../lib/text.js';
 import { ROUTES } from '../constants/routes.js';
 import { DISCOVER_STAGES } from '../constants/tripStages.js';
 import '../styles/dashboard-home.css';
-
-const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution', 'b-matched': 'caution', 'b-done': 'positive' };
 
 // TWM-232: the Backend owns title composition entirely -- a real
 // traveler-set title, or an LLM-generated one Meridian/Guide produce once
@@ -39,12 +36,6 @@ function byDiscoveryStage(a, b) {
 
 function displayTitle(t) {
   return t.title && t.title !== 'Untitled Trip' ? decodeHtmlEntities(t.title) : null;
-}
-
-// updated_at is set on every mutation, but a never-touched-since-creation
-// trip can still have it null — fall back to created_at rather than show nothing.
-function formatTripTimestamp(t) {
-  return relativeUpdatedAt(t.updated_at || t.created_at);
 }
 
 function matchesSearch(t, query) {
@@ -142,46 +133,104 @@ function DiscoveringTripCard({ t, rename, busyId, onOpen, showRename = true }) {
   );
 }
 
-// TWM-171/TWM-232/TWM-234: exactly one primary affordance per trip card.
-// The badge always shows the honest, stage-specific text, and every card's
-// CTA opens the same place (Dashboard), letting the per-stage next-step
-// live there instead of in the card's own label -- except the CTA's own
-// verb, which now says whether this is still Discovering ("Continue
-// exploring") or an actual trip ("Open trip"), since that distinction is
-// the one thing worth knowing before you click, not after. One uniform
-// shape otherwise: the title row only renders once a real title exists
-// (nothing to rename before that), everything else (timestamp, facts) is
-// identical structure regardless of where the trip is in its lifecycle.
-function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
-  if (DISCOVER_STAGES.has(t.lifecycle?.stage)) return <DiscoveringTripCard t={t} rename={rename} busyId={busyId} onOpen={onOpen} showRename={showRename} />;
-  const badge = stageBadge(t);
-  const destination = contextDestination(t);
-  const recapPills = contextRecapPills(t);
-  const timestamp = formatTripTimestamp(t);
+// TWM-234: a trip being planned (planning, or a draft plan waiting for review).
+// Same anatomy as a Discovering card -- heading (stored title, else the
+// destination, which a planning trip always has), one line saying where the
+// plan stands, chips, one action -- so the first two steps of each module
+// read alike. The line leads with the destination when a title is the heading.
+function PlanTripCard({ t, rename, busyId, onOpen, showRename = true }) {
   const title = displayTitle(t);
-  const statusLine = tripStatusLine(t);
+  const destination = contextDestination(t);
+  const heading = title ?? destination ?? discoveryHeadline(t)?.text ?? 'New trip';
   return (
-    <div className="card trip-card">
+    <div className="card trip-card trip-card-plan">
       <div>
-        {title && <RenameName t={t} rename={rename} showRename={showRename} label={title} />}
-        {destination && <div className="trip-card-destination">{destination}</div>}
-        <div className="meta">
-          <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
-          {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
-        </div>
-        {statusLine && <p className="trip-card-status-line">{statusLine}</p>}
-        <RecapPills pills={recapPills} />
+        <RenameName t={t} rename={rename} showRename={showRename} label={heading} blankStart={!title} />
+        <div className="trip-card-line">{title && destination && <><b>{destination}</b> · </>}{planStateLine(t)}</div>
+        <RecapPills pills={discoveryPills(t)} limit={4} />
       </div>
       <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
-        Open trip →
+        {isPlanDraftReady(t) ? 'Review plan →' : 'Continue planning →'}
       </button>
     </div>
   );
 }
 
+// TWM-234: a finished trip -- the Plan module's own ending, deliberately not
+// a mirror of the matched card. A sage card for something already made: what
+// state it ended in, its name, and the facts that matter once a trip is real
+// (when, how long, who) as a line rather than chips, with one way to open it.
+function PlannedTripCard({ t, rename, busyId, onOpen, showRename = true }) {
+  const title = displayTitle(t);
+  const destination = contextDestination(t);
+  const heading = title ?? destination ?? 'Your trip';
+  const parts = [...(title && destination ? [<b key="destination">{destination}</b>] : []), ...planFacts(t)];
+  return (
+    <div className="card trip-card trip-card-planned">
+      <div>
+        <div className="trip-card-eyebrow">{planCompletionLabel(t)}</div>
+        <RenameName t={t} rename={rename} showRename={showRename} label={heading} blankStart={!title} />
+        {parts.length > 0 && (
+          <p className="trip-card-facts">{parts.map((part, i) => <Fragment key={i}>{i > 0 && ' · '}{part}</Fragment>)}</p>
+        )}
+      </div>
+      <button type="button" className="btn btn-primary" disabled={busyId === t.id} onClick={() => onOpen(t)}>Open trip →</button>
+    </div>
+  );
+}
+
+// One card family per module stage: Discovering (matching / recommended /
+// matched), Plan in progress, Plan finished.
+function TripCard(props) {
+  const { t } = props;
+  if (DISCOVER_STAGES.has(t.lifecycle?.stage)) return <DiscoveringTripCard {...props} />;
+  return isPlanFinished(t) ? <PlannedTripCard {...props} /> : <PlanTripCard {...props} />;
+}
+
 // TWM-234: the shared markup behind every trip-list section (Discovering,
 // Your trips, Past) -- extracted so adding the Discovering/Your trips split
 // didn't just duplicate the same section JSX a second time.
+// TWM-234: the Plan module's section. A trip happening now (or next up) leads,
+// then everything still coming up; past trips sit collapsed at the bottom so
+// they never push the Discovering section out of view.
+function YourTripsSection({ hero, trips, pastTrips, standalone, rename, busyId, onOpen }) {
+  if (!hero && trips.length === 0 && pastTrips.length === 0) return null;
+  const card = (t, showRename = true) => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={onOpen} showRename={showRename} />;
+  return (
+    <section aria-label="Your trips">
+      <h2 className="section-title">Your trips</h2>
+      {hero && (
+        <div className="hero-trip">
+          <h3 className="trip-group-label">Happening now</h3>
+          {card(hero)}
+        </div>
+      )}
+      {trips.length > 0 && (
+        <>
+          <h3 className="trip-group-label">Coming up</h3>
+          {trips.map(t => card(t))}
+        </>
+      )}
+      <PastTrips trips={pastTrips} card={card} startOpen={standalone && !hero && trips.length === 0} />
+    </section>
+  );
+}
+
+// Collapsed by default, unless past trips are all the traveler has -- then
+// hiding them would leave an empty-looking page.
+function PastTrips({ trips, card, startOpen }) {
+  const [open, setOpen] = useState(startOpen);
+  if (trips.length === 0) return null;
+  return (
+    <div className="past-trips">
+      <button type="button" className="past-trips-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+        <span>Past trips ({trips.length})</span><span>{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open && trips.map(t => card(t, false))}
+    </div>
+  );
+}
+
 function TripListSection({ label, title, trips, rename, busyId, onOpen, className, showRename = true }) {
   if (trips.length === 0) return null;
   return (
@@ -244,7 +293,7 @@ export default function DashboardHome() {
   // (e.g. "traveling in December" said before a destination is picked) --
   // hero eligibility is about having a real trip to spotlight, not about
   // lifecycle stage, but the two aren't the same thing.
-  const heroEligible = useMemo(() => activeTrips.filter(t => contextDestination(t)), [activeTrips]);
+  const heroEligible = useMemo(() => activeTrips.filter(t => !DISCOVER_STAGES.has(t.lifecycle?.stage) && contextDestination(t)), [activeTrips]);
   const hero = useMemo(() => selectHeroTrip(heroEligible), [heroEligible]);
   // Nearest known travel date first; trips with no date yet fall to the end,
   // ordered by most recently active — an untouched-but-dated trip shouldn't
@@ -420,26 +469,13 @@ export default function DashboardHome() {
             )
           ) : (
             <>
-              {hero && (
-                <section className="hero-trip" aria-label="Happening now">
-                  <h2 className="section-title">Happening now</h2>
-                  <TripCard t={hero} rename={rename} busyId={busyId} onOpen={handleOpen} />
-                </section>
-              )}
-
+              <YourTripsSection hero={hero} trips={planningTrips} pastTrips={pastTrips} standalone={discoveringTrips.length === 0} rename={rename} busyId={busyId} onOpen={handleOpen} />
               <TripListSection label="Discovering" title="Discovering" trips={discoveringTrips} rename={rename} busyId={busyId} onOpen={handleOpen} />
-              <TripListSection label="Your trips" title="Your trips" trips={planningTrips} rename={rename} busyId={busyId} onOpen={handleOpen} />
 
               {listTrips.length === 0 && !hero && pastTrips.length === 0 && (
                 <div className="empty-trips"><p>No trips here yet.</p></div>
               )}
 
-              {pastTrips.length > 0 && (
-                <section className="past-trips" aria-label="Past trips">
-                  <h2 className="section-title">Past</h2>
-                  {pastTrips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} showRename={false} />)}
-                </section>
-              )}
             </>
           )}
         </>

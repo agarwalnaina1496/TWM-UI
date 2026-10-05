@@ -101,6 +101,49 @@ export function discoveryPills(trip, excludeKey = null) {
   return pills;
 }
 
+// TWM-234: a Plan-module trip is either still being worked on (planning, or a
+// draft plan waiting for review) or finished (approved plan, itinerary ready,
+// booked, completed). The two get different cards -- see DashboardHome.
+export function isPlanFinished(trip) {
+  const stage = trip?.lifecycle?.stage;
+  return isItineraryReady(trip) || stage === 'planned' || stage === 'booked' || stage === 'done';
+}
+
+// A planning card is "reviewing" once a draft day plan exists, even while the
+// stage still reads `planning`.
+export function isPlanDraftReady(trip) {
+  const stage = trip?.lifecycle?.stage;
+  return stage === 'plan_ready' || (stage === 'planning' && Boolean(trip?.has_day_plan));
+}
+
+export function planStateLine(trip) {
+  return isPlanDraftReady(trip) ? 'Draft plan ready to review' : 'Planning in progress';
+}
+
+// The eyebrow on a finished trip's card -- what state its ending is in.
+export function planCompletionLabel(trip) {
+  const stage = trip?.lifecycle?.stage;
+  if (stage === 'done') return 'Completed';
+  if (isItineraryReady(trip)) return 'Itinerary ready';
+  if (stage === 'booked') return 'Booked';
+  return 'Plan approved';
+}
+
+// The facts line of a finished trip: when, how long, who, and where from --
+// worded compactly, in the same order as the Discovering chips, no budget.
+export function planFacts(trip) {
+  const recap = trip?.context_recap || [];
+  const facts = [];
+  for (const { key, text } of HEADLINE_FACTS) {
+    if (key === 'budget') continue;
+    const item = recap.find(fact => fact.key === key && fact.value);
+    if (item) facts.push(text(String(item.value)));
+  }
+  const origin = recap.find(fact => fact.key === 'origin_city' && fact.value);
+  if (origin) facts.push(`From ${origin.value}`);
+  return facts;
+}
+
 const STAGE_BADGES = {
   new: { cls: 'b-new', text: 'New' },
   matching: { cls: 'b-chat', text: 'In conversation' },
