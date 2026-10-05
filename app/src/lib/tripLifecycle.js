@@ -1,4 +1,5 @@
 import { ROUTES } from '../constants/routes.js';
+import { DISCOVER_STAGES } from '../constants/tripStages.js';
 
 // Canonical stage/status helpers shared by the adaptive landing resolver
 // and My Trips. TWM-220: every consumer now reads a `TripView` (full) or a
@@ -122,32 +123,33 @@ export function isPlanDraftReady(trip) {
   return stage === 'plan_ready' || (stage === 'planning' && Boolean(trip?.has_day_plan));
 }
 
-export function planStateLine(trip) {
-  return isPlanDraftReady(trip) ? 'Draft plan ready to review' : 'Planning in progress';
-}
-
-// The eyebrow on a finished trip's card -- what state its ending is in.
-export function planCompletionLabel(trip) {
+// TWM-234: what a My Trips card says, by stage -- every stage renders the same
+// card (title, facts chips, one action) and this is the only thing that varies:
+//   line     the one line under the title, when there is no hero
+//   eyebrow  set for the two stages that end a module's first half (matched,
+//            planned): the card then shows the destination as its hero
+//   cta      the single action's label; `actions: 'matched'` swaps in the two
+//            matched actions instead
+//   tone     'matched' | 'planned' tints a hero card
+export function tripCardSpec(trip) {
   const stage = trip?.lifecycle?.stage;
-  if (stage === 'done') return 'Completed';
-  if (isItineraryReady(trip)) return 'Itinerary ready';
-  if (stage === 'booked') return 'Booked';
-  return 'Plan approved';
-}
-
-// The facts line of a finished trip: when, how long, who, and where from --
-// worded compactly, in the same order as the Discovering chips, no budget.
-export function planFacts(trip) {
-  const recap = trip?.context_recap || [];
-  const facts = [];
-  for (const { key, text } of HEADLINE_FACTS) {
-    if (key === 'budget') continue;
-    const item = recap.find(fact => fact.key === key && fact.value);
-    if (item) facts.push(text(String(item.value)));
+  const destination = contextDestination(trip) || trip?.lifecycle?.selected_option?.name || null;
+  const discovering = DISCOVER_STAGES.has(stage);
+  const base = { module: discovering ? 'discovering' : 'plan', destination, emptyLabel: discovering ? 'New discovery' : 'New trip' };
+  if (stage === 'matched') return { ...base, tone: 'matched', eyebrow: 'Your pick', actions: 'matched' };
+  if (discovering) {
+    return { ...base, line: { text: 'Destination not chosen yet' }, cta: stage === 'recommended' ? 'Review recommendations →' : 'Continue exploring →' };
   }
-  const origin = recap.find(fact => fact.key === 'origin_city' && fact.value);
-  if (origin) facts.push(`From ${origin.value}`);
-  return facts;
+  if (isPlanFinished(trip)) {
+    const eyebrow = stage === 'done' ? 'Completed' : stage === 'booked' ? 'Booked' : 'Plan approved';
+    return { ...base, module: 'planned', tone: 'planned', eyebrow, cta: 'Open trip →' };
+  }
+  const draft = isPlanDraftReady(trip);
+  return {
+    ...base,
+    line: { bold: destination, text: draft ? 'Draft plan ready to review' : 'Planning in progress' },
+    cta: draft ? 'Review plan →' : 'Continue planning →',
+  };
 }
 
 const STAGE_BADGES = {

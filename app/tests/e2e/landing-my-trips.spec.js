@@ -34,13 +34,13 @@ test('one itinerary-ready trip lands on Dashboard-home, not an auto-open Dashboa
   await mockTripCommandFlow(page, [], { initialTrips: [trip] });
   await page.goto('');
   await expect(page.getByRole('heading', { name: /your.*trips/i, level: 1 })).toBeVisible();
-  await expect(page.getByText('Itinerary ready')).toBeVisible();
+  await expect(page.getByText('Plan approved')).toBeVisible();
 });
 
 test('multiple meaningful trips land on Dashboard-home with stage-aware cards', async ({ page }) => {
   // TWM-232/TWM-234: `active` (stage "matching") is still Discovering -- its
   // heading is its stored title, and it says the destination is still open;
-  // `upcoming` is a real trip with its itinerary-ready badge.
+  // `upcoming` is a real trip as an approved plan.
   const active = tripRecord({
     id: 'e2e-trip-1', title: 'Coorg weekend',
     trip_state: { stage: 'matching', trip_context: { origin: 'Delhi' } },
@@ -57,7 +57,7 @@ test('multiple meaningful trips land on Dashboard-home with stage-aware cards', 
   await expect(page.getByText('Coorg weekend')).toBeVisible();
   await expect(page.getByText('Destination not chosen yet')).toBeVisible();
   await expect(page.getByText('Madhya Pradesh circuit')).toBeVisible();
-  await expect(page.getByText('Itinerary ready')).toBeVisible();
+  await expect(page.getByText('Plan approved')).toBeVisible();
 });
 
 test('a completed-only trip lands on Dashboard-home instead of auto-resuming', async ({ page }) => {

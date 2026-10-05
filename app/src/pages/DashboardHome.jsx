@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout.jsx';
 import { useTrip } from '../context/TripContext.jsx';
@@ -7,8 +7,7 @@ import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { trackEvent } from '../lib/analytics.js';
 import {
-  isTripEmpty, isPlanFinished, isPlanDraftReady, planStateLine, planCompletionLabel, planFacts,
-  contextDestination, discoveryHeadline, discoveryPills,
+  isTripEmpty, tripCardSpec, contextDestination, discoveryHeadline, discoveryPills,
 } from '../lib/tripLifecycle.js';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import MatchedTripActions from '../components/MatchedTripActions.jsx';
@@ -99,112 +98,35 @@ function RecapPills({ pills, limit = 2 }) {
   );
 }
 
-// TWM-234: a trip still being discovered (matching, recommended or matched).
-// One layout for all three, so a list of them reads as one family. Heading,
-// most to least preferred: the stored title (the traveler's own or
-// Meridian's -- one title, whoever set it), else the most telling fact so far
-// (that fact then isn't repeated in the chips), else "New discovery". The line
-// beneath is the destination: still open until one is chosen. Matched is the
-// one that looks different -- a tinted card where the chosen destination is
-// the hero ("Your pick") and the title steps back to a small name tag, so the
-// two never read as one line. Rename is always available; with no title yet
-// it starts from a blank input. One action per stage: matched offers
-// plan-or-reconsider, the others a single way back in.
-function DiscoveringTripCard({ t, rename, busyId, onOpen, showRename = true }) {
-  const stage = t.lifecycle?.stage;
-  if (stage !== 'matched') {
-    return (
-      <InProgressTripCard
-        t={t} rename={rename} busyId={busyId} onOpen={onOpen} showRename={showRename}
-        className="trip-card-discovering" emptyLabel="New discovery"
-        line="Destination not chosen yet"
-        cta={stage === 'recommended' ? 'Review recommendations →' : 'Continue exploring →'}
-      />
-    );
-  }
+// TWM-234: one card for every stage of every module. Title (the traveler's own,
+// else the one Meridian or Guide stored -- a single title, whoever set it --
+// else the most telling fact so far, which the chips then don't repeat, else a
+// generic), the facts as chips, one action. `tripCardSpec` supplies the only
+// things that vary by stage: the line under the title, the action's wording,
+// and -- for matched and planned, which are symmetric -- a tint, an eyebrow and
+// the destination as the card's hero, with the title stepping back to a small
+// name tag so the two never read as one line.
+function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
+  const spec = tripCardSpec(t);
   const title = displayTitle(t);
   const headline = title ? null : discoveryHeadline(t);
-  const chosen = contextDestination(t) || t.lifecycle?.selected_option?.name;
+  const tone = spec.tone ? ` trip-card-${spec.tone}` : '';
   return (
-    <div className="card trip-card trip-card-discovering trip-card-matched">
+    <div className={`card trip-card trip-card-${spec.module === 'planned' ? 'planned' : spec.module}${tone}`}>
       <div>
-        <RenameName t={t} rename={rename} showRename={showRename} label={title ?? headline?.text ?? 'New discovery'} blankStart={!title} />
-        {chosen && (
-          <>
-            <div className="trip-card-eyebrow">Your pick</div>
-            <div className="trip-card-destination-chosen">{chosen}</div>
-          </>
+        <RenameName t={t} rename={rename} showRename={showRename} label={title ?? headline?.text ?? spec.emptyLabel} blankStart={!title} />
+        {spec.eyebrow && <div className="trip-card-eyebrow">{spec.eyebrow}</div>}
+        {spec.eyebrow && spec.destination && <div className="trip-card-destination-chosen">{spec.destination}</div>}
+        {spec.line && (
+          <div className="trip-card-line">{spec.line.bold && <><b>{spec.line.bold}</b> · </>}{spec.line.text}</div>
         )}
         <RecapPills pills={discoveryPills(t, headline?.key)} limit={4} />
       </div>
-      <MatchedTripActions tripId={t.id} />
+      {spec.actions === 'matched' ? <MatchedTripActions tripId={t.id} /> : (
+        <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>{spec.cta}</button>
+      )}
     </div>
   );
-}
-
-// TWM-234: the one card behind both modules' first two steps -- matching and
-// planning, recommended and plan_ready. Heading (the stored title, else the
-// most telling fact so far), one line saying where the trip stands, the facts
-// as chips, one ghost action. Only the line and the action's wording differ
-// by module, so the two lists read as one family.
-function InProgressTripCard({ t, rename, busyId, onOpen, showRename = true, className, emptyLabel, line, cta }) {
-  const title = displayTitle(t);
-  const headline = title ? null : discoveryHeadline(t);
-  return (
-    <div className={`card trip-card ${className}`}>
-      <div>
-        <RenameName t={t} rename={rename} showRename={showRename} label={title ?? headline?.text ?? emptyLabel} blankStart={!title} />
-        <div className="trip-card-line">{line}</div>
-        <RecapPills pills={discoveryPills(t, headline?.key)} limit={4} />
-      </div>
-      <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>{cta}</button>
-    </div>
-  );
-}
-
-// TWM-234: a trip being planned (planning, or a draft plan waiting for review).
-function PlanTripCard(props) {
-  const { t } = props;
-  const destination = contextDestination(t);
-  return (
-    <InProgressTripCard
-      {...props}
-      className="trip-card-plan" emptyLabel="New trip"
-      line={<>{destination && <><b>{destination}</b> · </>}{planStateLine(t)}</>}
-      cta={isPlanDraftReady(t) ? 'Review plan →' : 'Continue planning →'}
-    />
-  );
-}
-
-// TWM-234: a finished trip -- the Plan module's own ending, deliberately not
-// a mirror of the matched card. A sage card for something already made: what
-// state it ended in, its name, and the facts that matter once a trip is real
-// (when, how long, who) as a line rather than chips, with one way to open it.
-function PlannedTripCard({ t, rename, busyId, onOpen, showRename = true }) {
-  const title = displayTitle(t);
-  const destination = contextDestination(t);
-  const heading = title ?? destination ?? 'Your trip';
-  const parts = [...(title && destination ? [<b key="destination">{destination}</b>] : []), ...planFacts(t)];
-  return (
-    <div className="card trip-card trip-card-planned">
-      <div>
-        <div className="trip-card-eyebrow">{planCompletionLabel(t)}</div>
-        <RenameName t={t} rename={rename} showRename={showRename} label={heading} blankStart={!title} />
-        {parts.length > 0 && (
-          <p className="trip-card-facts">{parts.map((part, i) => <Fragment key={i}>{i > 0 && ' · '}{part}</Fragment>)}</p>
-        )}
-      </div>
-      <button type="button" className="btn btn-primary" disabled={busyId === t.id} onClick={() => onOpen(t)}>Open trip →</button>
-    </div>
-  );
-}
-
-// One card family per module stage: Discovering (matching / recommended /
-// matched), Plan in progress, Plan finished.
-function TripCard(props) {
-  const { t } = props;
-  if (DISCOVER_STAGES.has(t.lifecycle?.stage)) return <DiscoveringTripCard {...props} />;
-  return isPlanFinished(t) ? <PlannedTripCard {...props} /> : <PlanTripCard {...props} />;
 }
 
 // TWM-234: the shared markup behind every trip-list section (Discovering,
