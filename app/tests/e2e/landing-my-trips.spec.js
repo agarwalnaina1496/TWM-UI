@@ -178,7 +178,7 @@ test('matched card offers two next steps; a planning card opens the trip (TWM-23
   await expect(planningCard.getByRole('button')).toHaveCount(2); // "Open trip →" + "Rename" only
 });
 
-test('matched card never shows a generated title, only the destination and "Add a name" (TWM-234)', async ({ page }) => {
+test('matched card keeps its Meridian title and shows the chosen destination on its own line (TWM-234)', async ({ page }) => {
   const matched = tripRecord({
     id: 'e2e-trip-1', title: '5 Day Getaway from Delhi', title_source: 'generated',
     trip_state: { stage: 'matched', trip_context: { origin: 'Delhi', destinations: ['Coorg'] } },
@@ -186,16 +186,15 @@ test('matched card never shows a generated title, only the destination and "Add 
   await mockTripCommandFlow(page, [], { initialTrips: [matched] });
   await page.goto('');
 
-  const card = page.locator('.trip-card-matched');
+  const card = page.locator('.trip-card-discovering');
+  await expect(card.getByText('5 Day Getaway from Delhi')).toBeVisible();
   await expect(card.getByText('Coorg', { exact: true })).toBeVisible();
-  await expect(page.getByText('5 Day Getaway from Delhi')).toHaveCount(0);
-  await expect(card.getByText('Unnamed trip')).toBeVisible();
+  await expect(card.getByText('Destination not chosen yet')).toHaveCount(0);
 
-  await card.getByRole('button', { name: 'Add a name' }).click();
+  await card.getByRole('button', { name: 'Rename' }).click();
   await page.locator('input.name').fill('Family trip');
   await page.keyboard.press('Enter');
   await expect(card.getByText('Family trip')).toBeVisible();
-  await expect(card.getByRole('button', { name: 'Rename' })).toBeVisible();
 });
 
 test('"Plan this trip" on a matched card starts planning and opens the Dashboard (TWM-234)', async ({ page }) => {

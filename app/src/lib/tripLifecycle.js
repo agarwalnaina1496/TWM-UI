@@ -60,11 +60,21 @@ export function contextRecapPills(trip) {
 // in this order: when they travel, for how long, how many, the budget. Origin
 // is deliberately not a candidate: for one traveler it is the same on every
 // trip, so it identifies none of them.
+//
+// Facts arrive as the traveler's own words ("mid to end October", "after
+// Navratri (around Navami/Dashami)"), so they are tidied for display: a
+// parenthetical aside is dropped and the first letter capitalised. Bare
+// numbers are given their unit so a chip reads on its own ("2 travellers").
+function tidy(value) {
+  const cleaned = String(value).replace(/\s*\([^)]*\)/g, '').trim();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
 const HEADLINE_FACTS = [
-  { key: 'travel_dates', text: value => value },
-  { key: 'trip_duration', text: value => (/^\d+$/.test(value) ? `${value} days` : value) },
-  { key: 'num_travelers', text: value => (/^\d+$/.test(value) ? `${value} ${value === '1' ? 'traveller' : 'travellers'}` : value) },
-  { key: 'budget', text: value => value },
+  { key: 'travel_dates', text: value => tidy(value) },
+  { key: 'trip_duration', text: value => (/^\d+$/.test(value) ? `${value} days` : tidy(value)) },
+  { key: 'num_travelers', text: value => (/^\d+$/.test(value) ? `${value} ${value === '1' ? 'traveller' : 'travellers'}` : tidy(value)) },
+  { key: 'budget', text: value => (/budget/i.test(value) ? tidy(value) : `Budget: ${tidy(value)}`) },
 ];
 
 export function discoveryHeadline(trip) {
@@ -76,17 +86,19 @@ export function discoveryHeadline(trip) {
   return null;
 }
 
-// The facts for a Discovering card's chips: the same fixed set as
-// contextRecapPills, minus the fact already used as the headline, with the
-// origin last (it is the least telling one).
+// The facts for a Discovering card's chips, worded compactly and in the same
+// priority order as the headline, minus the fact already used as the
+// headline, with the origin last (it is the least telling one).
 export function discoveryPills(trip, excludeKey = null) {
-  const pills = (trip?.context_recap || [])
-    .filter(item => FIXED_RECAP_KEYS.includes(item.key) && item.key !== excludeKey);
-  const origin = pills.filter(item => item.key === 'origin_city');
-  const rest = pills.filter(item => item.key !== 'origin_city');
-  return [...rest, ...origin].map(item => (
-    item.key === 'origin_city' ? `From ${item.value}` : `${item.label}: ${item.value}`
-  ));
+  const recap = trip?.context_recap || [];
+  const pills = [];
+  for (const { key, text } of HEADLINE_FACTS) {
+    const item = key !== excludeKey && recap.find(fact => fact.key === key && fact.value);
+    if (item) pills.push(text(String(item.value)));
+  }
+  const origin = recap.find(fact => fact.key === 'origin_city' && fact.value);
+  if (origin) pills.push(`From ${origin.value}`);
+  return pills;
 }
 
 const STAGE_BADGES = {

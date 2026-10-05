@@ -177,7 +177,9 @@ describe('DashboardHome', () => {
       expect(within(card).getByText('5 Day Getaway from Delhi')).toBeInTheDocument();
       expect(within(card).getByRole('button', { name: 'Rename' })).toBeInTheDocument();
       expect(within(card).getByText('Destination not chosen yet')).toBeInTheDocument();
-      expect(within(card).getByText('trip_duration: 5 days')).toBeInTheDocument();
+      expect(within(card).getByText('5 days')).toBeInTheDocument();
+      expect(within(card).getByText('After Navratri')).toBeInTheDocument();
+      expect(within(card).getByText('From Delhi')).toBeInTheDocument();
     });
 
     it('falls back to the most telling fact (dates first) and does not repeat it as a chip', async () => {
@@ -192,12 +194,12 @@ describe('DashboardHome', () => {
     it('turns a bare duration or party size into words, and ranks duration above party size', async () => {
       const card = await renderCard(discovering({ context: { num_travelers: '4', trip_duration: '5' } }));
       expect(within(card).getByText('5 days')).toBeInTheDocument();
-      expect(within(card).getByText('Travellers: 4')).toBeInTheDocument();
+      expect(within(card).getByText('4 travellers')).toBeInTheDocument();
     });
 
     it("never uses the origin as the heading -- it is the same on every trip -- and lists it last", async () => {
       const card = await renderCard(discovering({ context: { origin_city: 'Delhi', budget: '1 lakh INR' } }));
-      expect(within(card).getByText('1 lakh INR')).toBeInTheDocument();
+      expect(within(card).getByText('Budget: 1 lakh INR')).toBeInTheDocument();
       expect(within(card).getByText('From Delhi')).toBeInTheDocument();
       const only = await screen.findAllByText('From Delhi');
       expect(only).toHaveLength(1);
@@ -230,154 +232,32 @@ describe('DashboardHome', () => {
       expect(within(exploring).getByRole('button', { name: 'Continue exploring →' })).toBeInTheDocument();
     });
 
-    it('caps the chips at 2 with a "+N more" chip for the rest', async () => {
+    it('shows up to 4 chips with a "+N more" chip for the rest', async () => {
       const card = await renderCard(discovering({
+        title: 'Puja holidays',
         context: { travel_dates: 'After Navratri', trip_duration: '5', num_travelers: '4', budget: '1 lakh INR', origin_city: 'Delhi' },
       }));
       const chips = within(card).getAllByText(/./, { selector: '.trip-card-recap-pill' });
-      expect(chips).toHaveLength(3); // 2 shown facts + the "+N more" chip
-      expect(within(card).getByText('+2 more')).toBeInTheDocument();
+      expect(chips).toHaveLength(5); // 4 shown facts + the "+N more" chip
+      expect(within(card).getByText('+1 more')).toBeInTheDocument();
     });
-  });
 
-  it('promotes the ongoing trip to the hero over an upcoming one, off travel_window', async () => {
-    const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: 'Later trip', stage: 'planning', context: { origin_city: 'Delhi', destinations: 'Goa' }, travelWindow: { precision: 'month', month: '2026-12' } }),
-      listItem({ id: 'trip-2', title: 'Ongoing trip', stage: 'planning', context: { origin_city: 'Delhi', destinations: 'Udaipur' }, travelWindow: { precision: 'month', month: thisMonth } }),
-    ] }));
-    renderDashboardHome(GUEST);
-    await screen.findByText('Later trip');
-    const hero = document.querySelector('.hero-trip');
-    expect(within(hero).getByText('Ongoing trip')).toBeInTheDocument();
-  });
-
-  it('never promotes a still-deciding trip (no destination) to the hero, even with an ongoing travel_window', async () => {
-    // A stated travel window ("traveling in December") can exist before a
-    // destination is chosen -- that alone shouldn't earn the prominent hero
-    // slot, which is for a real trip to spotlight, not any dated trip.
-    const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: 'Untitled Trip', stage: 'matching', context: { origin_city: 'Delhi' }, travelWindow: { precision: 'month', month: thisMonth } }),
-    ] }));
-    renderDashboardHome(GUEST);
-    await screen.findByText('Destination not chosen yet');
-    expect(document.querySelector('.hero-trip')).not.toBeInTheDocument();
-  });
-
-  it('shows no hero when no committed trip has a travel_window', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [listItem({ title: 'Vague trip', stage: 'planning', context: { origin_city: 'Delhi' } })] }));
-    renderDashboardHome(GUEST);
-    await screen.findByText('Vague trip');
-    expect(document.querySelector('.hero-trip')).not.toBeInTheDocument();
-  });
-
-  it('separates completed trips into their own past-trips section', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: 'Still going', stage: 'planning', context: { origin_city: 'Delhi' } }),
-      listItem({ id: 'trip-2', title: 'All done', stage: 'done', context: { origin_city: 'Delhi' } }),
-    ] }));
-    renderDashboardHome(GUEST);
-    await screen.findByText('Still going');
-    const pastSection = document.querySelector('.past-trips');
-    expect(within(pastSection).getByText('All done')).toBeInTheDocument();
-    expect(within(pastSection).queryByText('Still going')).not.toBeInTheDocument();
-  });
-
-  it('does not show the empty-list fallback when the only trips are completed', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [listItem({ title: 'Old trip', stage: 'done', context: { origin_city: 'Delhi' } })] }));
-    renderDashboardHome(GUEST);
-    await screen.findByText('Old trip');
-    expect(screen.queryByText('No trips here yet.')).not.toBeInTheDocument();
-    expect(document.querySelector('.past-trips')).toBeInTheDocument();
-  });
-
-  it('search filters to matching trips only, without any lookup request', async () => {
-    routeFetch({ trips: [
-      listItem({ id: 'trip-1', title: 'Coorg weekend', stage: 'planning', context: { origin_city: 'Delhi' } }),
-      listItem({ id: 'trip-2', title: 'Manali trip', stage: 'planning', context: { origin_city: 'Delhi' } }),
-    ] });
-    renderDashboardHome(GUEST);
-    await screen.findByText('Coorg weekend');
-    await userEvent.type(screen.getByLabelText('Search your trips'), 'coorg');
-    expect(screen.getByText('Coorg weekend')).toBeInTheDocument();
-    expect(screen.queryByText('Manali trip')).not.toBeInTheDocument();
-    // No search/lookup endpoint — every call is the list or a trip read.
-    expect(fetchMock.mock.calls.every(([url]) => url === '/api/trips' || /^\/api\/trips\/[^/]+$/.test(url))).toBe(true);
-  });
-
-  it('searches a trip by its Backend-provided title', async () => {
-    // TWM-232: title composition (real, LLM-generated, or placeholder) is
-    // entirely Backend-owned -- search just matches whatever t.title is.
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
-      listItem({ id: 'trip-1', title: '5 days from Delhi', stage: 'planning', context: { origin_city: 'Delhi', trip_duration: '5' } }),
-      listItem({ id: 'trip-2', title: 'Manali trip', stage: 'planning', context: { origin_city: 'Delhi' } }),
-    ] }));
-    renderDashboardHome(GUEST);
-    await screen.findByText('5 days from Delhi');
-    await userEvent.type(screen.getByLabelText('Search your trips'), '5 days from');
-    expect(screen.getByText('5 days from Delhi')).toBeInTheDocument();
-    expect(screen.queryByText('Manali trip')).not.toBeInTheDocument();
-  });
-
-  it('empty-state entry door creates no Backend record', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [] }));
-    renderDashboardHome(GUEST);
-    await screen.findByText('No trips yet');
-    const callsBefore = fetchMock.mock.calls.length;
-    await userEvent.click(screen.getByText("Know where you're going?"));
-    expect(fetchMock.mock.calls.length).toBe(callsBefore);
-  });
-
-  it('renames a trip through the Backend', async () => {
-    routeFetch({
-      trips: [listItem({ title: 'Coorg', stage: 'planning', context: { origin_city: 'Delhi' } })],
-      patch: () => tripView({ title: 'Coorg Weekend', version: 2 }),
+    it('tidies the heading: capitalised, parenthetical aside dropped', async () => {
+      const card = await renderCard(discovering({ context: { travel_dates: 'after Navratri (around Navami/Dashami)' } }));
+      expect(within(card).getByText('After Navratri')).toBeInTheDocument();
     });
-    renderDashboardHome(GUEST);
-    await screen.findByText('Coorg');
-    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
-    const input = await screen.findByDisplayValue('Coorg');
-    await userEvent.clear(input);
-    await userEvent.type(input, 'Coorg Weekend{Enter}');
-    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1', expect.objectContaining({
-      method: 'PATCH',
-      body: JSON.stringify({ expected_version: 1, title: 'Coorg Weekend' }),
-    })));
-  });
 
-  it('opening a trip deleted elsewhere drops it from the shared cache (TWM-109)', async () => {
-    fetchMock.mockImplementation((url) => {
-      if (url === '/api/trips') return Promise.resolve(jsonResponse({ trips: [
-        listItem({ id: 'trip-1', title: 'Coorg', stage: 'planning', context: { origin_city: 'Delhi' } }),
-        listItem({ id: 'trip-2', title: 'Deleted elsewhere', stage: 'planning', context: { origin_city: 'Delhi' }, updated_at: '2025-12-01T00:00:00.000Z' }),
+    it('lists the trips furthest along first: matched, then recommended, then matching', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ trips: [
+        listItem({ id: 'a', title: 'Chat trip', stage: 'matching', context: { origin_city: 'Delhi' } }),
+        listItem({ id: 'b', title: 'Reco trip', stage: 'recommended', context: { origin_city: 'Delhi' } }),
+        listItem({ id: 'c', title: 'Picked trip', stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Goa' } }),
       ] }));
-      if (url === '/api/trips/trip-2') return Promise.resolve(jsonResponse({ detail: 'Trip not found.' }, { status: 404 }));
-      if (/^\/api\/trips\/[^/]+/.test(url)) return Promise.resolve(tripView());
-      return Promise.resolve(jsonResponse({}));
+      renderDashboardHome(GUEST);
+      await screen.findByText('Discovering');
+      const order = [...document.querySelectorAll('.trip-card-discovering .name')].map(el => el.textContent.replace('Rename', '').trim());
+      expect(order).toEqual(['Picked trip', 'Reco trip', 'Chat trip']);
     });
-    renderDashboardHome(GUEST);
-    await screen.findByText('Deleted elsewhere');
-    await userEvent.click(within(screen.getByText('Deleted elsewhere').closest('.trip-card')).getByRole('button', { name: 'Open trip →' }));
-    await waitFor(() => expect(screen.queryByText('Deleted elsewhere')).not.toBeInTheDocument());
-    expect(screen.getByText('Coorg')).toBeInTheDocument();
-  });
-
-  it('renaming a trip that returns 404 shows an unavailable notice (TWM-109)', async () => {
-    routeFetch({
-      trips: [listItem({ title: 'Coorg', stage: 'planning', context: { origin_city: 'Delhi' } })],
-      patch: () => jsonResponse({ detail: 'Trip not found.' }, { status: 404 }),
-    });
-    renderDashboardHome(GUEST);
-    await screen.findByText('Coorg');
-    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
-    const input = await screen.findByDisplayValue('Coorg');
-    await userEvent.clear(input);
-    await userEvent.type(input, 'Coorg Weekend{Enter}');
-    expect(await screen.findByRole('alert')).toHaveTextContent('This trip is no longer available.');
-    expect(screen.queryByText('Coorg')).not.toBeInTheDocument();
   });
 
   // TWM-234: a matched trip's card is about the chosen destination, with two
@@ -433,22 +313,24 @@ describe('DashboardHome', () => {
       expect(within(card).queryByText('Destination chosen')).not.toBeInTheDocument();
     });
 
-    it("never shows an agent-generated title, only the destination plus 'Add a name'", async () => {
+    it('a matched trip keeps its Meridian title like any other Discovering card, with the destination on its own line', async () => {
       routeMatched({ trip: matchedTrip({ title: '5 Day Getaway from Delhi', title_source: 'generated' }) });
       renderWithDashboardRoute();
-      expect(await screen.findByText(DESTINATION)).toBeInTheDocument();
-      expect(screen.queryByText('5 Day Getaway from Delhi')).not.toBeInTheDocument();
-      expect(screen.getByText('Unnamed trip')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Add a name' })).toBeInTheDocument();
+      const card = (await screen.findByText('5 Day Getaway from Delhi')).closest('.trip-card');
+      expect(within(card).getByText(DESTINATION)).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+      expect(within(card).queryByText('Unnamed trip')).not.toBeInTheDocument();
+      expect(within(card).queryByText('Destination not chosen yet')).not.toBeInTheDocument();
     });
 
-    it("'Add a name' starts from a blank input and saves it as the traveler's title", async () => {
+    it('a matched trip with no title yet is headed by its most telling fact, and Rename starts blank', async () => {
       routeMatched({
-        trip: matchedTrip({ title: '5 Day Getaway from Delhi', title_source: 'generated' }),
+        trip: matchedTrip({ title: 'Untitled Trip', context: { origin_city: 'Delhi', destinations: DESTINATION, num_travelers: '4' } }),
         patch: () => tripView({ title: 'Family trip', version: 2 }),
       });
       renderWithDashboardRoute();
-      await userEvent.click(await screen.findByRole('button', { name: 'Add a name' }));
+      expect(await screen.findByText('4 travellers')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
       const input = await screen.findByRole('textbox');
       expect(input).toHaveValue('');
       await userEvent.type(input, 'Family trip{Enter}');

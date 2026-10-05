@@ -182,22 +182,28 @@ describe('context recap formatters', () => {
 
 // TWM-234: a Discovering trip is identified by what the traveler has told us,
 // not by origin (the same on every trip) -- dates first, then length, party
-// size and budget.
+// size and budget -- worded so each reads on its own.
 describe('discoveryHeadline', () => {
   it('prefers dates, then duration, then party size, then budget', () => {
-    const all = { budget: '1 lakh INR', num_travelers: '4', trip_duration: '5', travel_dates: 'After Navratri' };
+    const all = { budget: '1 lakh INR', num_travelers: '4', trip_duration: '5', travel_dates: 'after Navratri' };
     expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'travel_dates', text: 'After Navratri' });
     delete all.travel_dates;
     expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'trip_duration', text: '5 days' });
     delete all.trip_duration;
     expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'num_travelers', text: '4 travellers' });
     delete all.num_travelers;
-    expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'budget', text: '1 lakh INR' });
+    expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'budget', text: 'Budget: 1 lakh INR' });
+  });
+
+  it("tidies the traveler's own words: capitalises and drops a parenthetical aside", () => {
+    expect(discoveryHeadline(trip({ context: { travel_dates: 'mid to end October' } })).text).toBe('Mid to end October');
+    expect(discoveryHeadline(trip({ context: { travel_dates: 'after Navratri (around Navami/Dashami)' } })).text).toBe('After Navratri');
   });
 
   it('keeps already-worded values and singularises one traveller', () => {
     expect(discoveryHeadline(trip({ context: { trip_duration: '3 days' } })).text).toBe('3 days');
     expect(discoveryHeadline(trip({ context: { num_travelers: '1' } })).text).toBe('1 traveller');
+    expect(discoveryHeadline(trip({ context: { budget: '50k total budget' } })).text).toBe('50k total budget');
   });
 
   it('is null when only the origin (or nothing) is known', () => {
@@ -208,13 +214,13 @@ describe('discoveryHeadline', () => {
 });
 
 describe('discoveryPills', () => {
-  it('drops the fact used as the heading and puts the origin last', () => {
+  it('drops the fact used as the heading, words the rest compactly, and puts the origin last', () => {
     const t = trip({ context: { origin_city: 'Delhi', travel_dates: 'After Navratri', num_travelers: '4' } });
-    expect(discoveryPills(t, 'travel_dates')).toEqual(['num_travelers: 4', 'From Delhi']);
+    expect(discoveryPills(t, 'travel_dates')).toEqual(['4 travellers', 'From Delhi']);
   });
 
-  it('keeps every fixed fact when nothing is excluded', () => {
-    const t = trip({ context: { origin_city: 'Delhi', budget: '1 lakh INR' } });
-    expect(discoveryPills(t)).toEqual(['budget: 1 lakh INR', 'From Delhi']);
+  it('lists every fact in priority order when nothing is excluded', () => {
+    const t = trip({ context: { origin_city: 'Delhi', budget: '1 lakh INR', trip_duration: '5' } });
+    expect(discoveryPills(t)).toEqual(['5 days', 'Budget: 1 lakh INR', 'From Delhi']);
   });
 });

@@ -29,6 +29,14 @@ const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution
 // just presence detection, so the uniform card knows whether to render a
 // title row at all (the literal placeholder counts as "nothing to show yet",
 // same as no title).
+// Within Discovering, the trips furthest along come first: a chosen
+// destination is waiting on a decision, recommendations on a review, and a
+// conversation can pick up whenever. Ties keep the list's own order.
+const DISCOVERY_ORDER = { matched: 0, recommended: 1 };
+function byDiscoveryStage(a, b) {
+  return (DISCOVERY_ORDER[a.lifecycle?.stage] ?? 2) - (DISCOVERY_ORDER[b.lifecycle?.stage] ?? 2);
+}
+
 function displayTitle(t) {
   return t.title && t.title !== 'Untitled Trip' ? decodeHtmlEntities(t.title) : null;
 }
@@ -80,12 +88,12 @@ function RenameName({ t, rename, showRename = true, label, actionLabel = 'Rename
   );
 }
 
-// TWM-232: context_recap can now carry more facts than a scan-card has room
-// for -- cap the visible chips instead of cramming every one into a
-// dot-joined line (confirmed live: unreadable past ~4).
-function RecapPills({ pills }) {
+// TWM-232: context_recap can carry more facts than a scan-card has room for
+// -- cap the visible chips instead of cramming every one into a dot-joined
+// line. `limit` is how many show before collapsing into "+N more".
+function RecapPills({ pills, limit = 2 }) {
   if (pills.length === 0) return null;
-  const shown = pills.slice(0, 2);
+  const shown = pills.slice(0, limit);
   const extra = pills.length - shown.length;
   return (
     <div className="trip-card-recap">
@@ -95,50 +103,34 @@ function RecapPills({ pills }) {
   );
 }
 
-// TWM-234: a matched trip's card is about the destination the traveler
-// chose, with two ways forward -- plan it, or look for a different one.
-// Destination and title are two separate things that coexist: the
-// destination is always shown (the card's main line), the title is only the
-// traveler's own (`title_source === 'user'`). Meridian's generated title
-// described the trip before a destination was picked, so it isn't shown
-// here; "Add a name" gives the traveler the way to set their own.
-function MatchedTripCard({ t, rename }) {
-  const userTitle = t.title_source === 'user' ? decodeHtmlEntities(t.title) : null;
-  const destination = contextDestination(t);
-  return (
-    <div className="card trip-card trip-card-matched">
-      <div>
-        {userTitle
-          ? <RenameName t={t} rename={rename} label={userTitle} />
-          : <RenameName t={t} rename={rename} label={<span className="trip-card-unnamed">Unnamed trip</span>} actionLabel="Add a name" blankStart />}
-        {destination && <div className="trip-card-destination-primary">{destination}</div>}
-        <RecapPills pills={contextRecapPills(t)} />
-      </div>
-      <MatchedTripActions tripId={t.id} />
-    </div>
-  );
-}
-
-// TWM-234: a trip still being discovered (matching or recommended -- nothing
-// chosen yet). Heading, most to least preferred: the traveler's title (their
-// own or Meridian's -- one stored title), else the most telling fact so far
-// (that fact then isn't repeated in the chips), else a plain "New discovery".
-// The destination line is there to say it is still open. Rename is always
-// available; with no title yet it starts from a blank input.
+// TWM-234: a trip still being discovered (matching, recommended or matched).
+// One layout for all three, so a list of them reads as one family. Heading,
+// most to least preferred: the stored title (the traveler's own or
+// Meridian's -- one title, whoever set it), else the most telling fact so far
+// (that fact then isn't repeated in the chips), else "New discovery". The line
+// beneath is the destination: still open until one is chosen, then the chosen
+// one. Rename is always available; with no title yet it starts from a blank
+// input. One action per stage: matched offers plan-or-reconsider, the others
+// a single way back in.
 function DiscoveringTripCard({ t, rename, busyId, onOpen, showRename = true }) {
   const title = displayTitle(t);
   const headline = title ? null : discoveryHeadline(t);
-  const recommended = t.lifecycle?.stage === 'recommended';
+  const stage = t.lifecycle?.stage;
+  const matched = stage === 'matched';
+  const chosen = matched ? (contextDestination(t) || t.lifecycle?.selected_option?.name) : null;
   return (
     <div className="card trip-card trip-card-discovering">
       <div>
         <RenameName t={t} rename={rename} showRename={showRename} label={title ?? headline?.text ?? 'New discovery'} blankStart={!title} />
-        <div className="trip-card-destination-pending">Destination not chosen yet</div>
-        <RecapPills pills={discoveryPills(t, headline?.key)} />
+        {chosen && <div className="trip-card-destination-chosen">{chosen}</div>}
+        {!matched && <div className="trip-card-destination-pending">Destination not chosen yet</div>}
+        <RecapPills pills={discoveryPills(t, headline?.key)} limit={4} />
       </div>
-      <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
-        {recommended ? 'Review recommendations →' : 'Continue exploring →'}
-      </button>
+      {matched ? <MatchedTripActions tripId={t.id} /> : (
+        <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
+          {stage === 'recommended' ? 'Review recommendations →' : 'Continue exploring →'}
+        </button>
+      )}
     </div>
   );
 }
@@ -154,7 +146,6 @@ function DiscoveringTripCard({ t, rename, busyId, onOpen, showRename = true }) {
 // (nothing to rename before that), everything else (timestamp, facts) is
 // identical structure regardless of where the trip is in its lifecycle.
 function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
-  if (t.lifecycle?.stage === 'matched') return <MatchedTripCard t={t} rename={rename} />;
   if (DISCOVER_STAGES.has(t.lifecycle?.stage)) return <DiscoveringTripCard t={t} rename={rename} busyId={busyId} onOpen={onOpen} showRename={showRename} />;
   const badge = stageBadge(t);
   const destination = contextDestination(t);
@@ -267,7 +258,7 @@ export default function DashboardHome() {
   // and actual trips, each its own section with its own CTA verb, instead
   // of one uniform list that reads every card as equally "a trip" even
   // when nothing has been decided yet.
-  const discoveringTrips = useMemo(() => listTrips.filter(t => DISCOVER_STAGES.has(t.lifecycle?.stage)), [listTrips]);
+  const discoveringTrips = useMemo(() => listTrips.filter(t => DISCOVER_STAGES.has(t.lifecycle?.stage)).sort(byDiscoveryStage), [listTrips]);
   const planningTrips = useMemo(() => listTrips.filter(t => !DISCOVER_STAGES.has(t.lifecycle?.stage)), [listTrips]);
 
   const searching = search.trim().length > 0;

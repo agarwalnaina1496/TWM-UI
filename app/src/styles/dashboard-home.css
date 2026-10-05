@@ -38,11 +38,9 @@
 
 .past-trips .trip-card{opacity:.72;}
 
-.trip-card-matched .name{font-family:inherit;font-size:13px;font-weight:500;color:var(--ts);}
-.trip-card-unnamed{color:var(--tm);}
-.trip-card-destination-primary{font-family:var(--font-display);font-size:17px;font-weight:600;margin:2px 0 6px;}
 .trip-card-actions-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
 .trip-card-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
 .trip-card-action-error{font-size:12px;color:var(--danger,#a32d2d);margin:0;}
 .trip-card-discovering .name{margin-bottom:2px;}
 .trip-card-destination-pending{font-size:12.5px;color:var(--tm);margin:2px 0 4px;}
+.trip-card-destination-chosen{font-size:15px;font-weight:600;color:var(--tp);margin:2px 0 4px;}
