@@ -313,6 +313,15 @@ describe('DashboardHome', () => {
       expect(within(card).queryByText('Destination chosen')).not.toBeInTheDocument();
     });
 
+    it('is visually its own card: the chosen destination is the "Your pick" hero, and only matched is marked', async () => {
+      routeMatched({ trip: matchedTrip({ title: 'Puja holidays' }) });
+      renderWithDashboardRoute();
+      const card = (await screen.findByText('Puja holidays')).closest('.trip-card');
+      expect(card).toHaveClass('trip-card-matched');
+      expect(within(card).getByText('Your pick')).toBeInTheDocument();
+      expect(within(card).getByText(DESTINATION)).toHaveClass('trip-card-destination-chosen');
+    });
+
     it('a matched trip keeps its Meridian title like any other Discovering card, with the destination on its own line', async () => {
       routeMatched({ trip: matchedTrip({ title: '5 Day Getaway from Delhi', title_source: 'generated' }) });
       renderWithDashboardRoute();

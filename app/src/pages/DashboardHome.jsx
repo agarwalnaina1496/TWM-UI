@@ -108,10 +108,12 @@ function RecapPills({ pills, limit = 2 }) {
 // most to least preferred: the stored title (the traveler's own or
 // Meridian's -- one title, whoever set it), else the most telling fact so far
 // (that fact then isn't repeated in the chips), else "New discovery". The line
-// beneath is the destination: still open until one is chosen, then the chosen
-// one. Rename is always available; with no title yet it starts from a blank
-// input. One action per stage: matched offers plan-or-reconsider, the others
-// a single way back in.
+// beneath is the destination: still open until one is chosen. Matched is the
+// one that looks different -- a tinted card where the chosen destination is
+// the hero ("Your pick") and the title steps back to a small name tag, so the
+// two never read as one line. Rename is always available; with no title yet
+// it starts from a blank input. One action per stage: matched offers
+// plan-or-reconsider, the others a single way back in.
 function DiscoveringTripCard({ t, rename, busyId, onOpen, showRename = true }) {
   const title = displayTitle(t);
   const headline = title ? null : discoveryHeadline(t);
@@ -119,10 +121,15 @@ function DiscoveringTripCard({ t, rename, busyId, onOpen, showRename = true }) {
   const matched = stage === 'matched';
   const chosen = matched ? (contextDestination(t) || t.lifecycle?.selected_option?.name) : null;
   return (
-    <div className="card trip-card trip-card-discovering">
+    <div className={`card trip-card trip-card-discovering${matched ? ' trip-card-matched' : ''}`}>
       <div>
         <RenameName t={t} rename={rename} showRename={showRename} label={title ?? headline?.text ?? 'New discovery'} blankStart={!title} />
-        {chosen && <div className="trip-card-destination-chosen">{chosen}</div>}
+        {chosen && (
+          <>
+            <div className="trip-card-eyebrow">Your pick</div>
+            <div className="trip-card-destination-chosen">{chosen}</div>
+          </>
+        )}
         {!matched && <div className="trip-card-destination-pending">Destination not chosen yet</div>}
         <RecapPills pills={discoveryPills(t, headline?.key)} limit={4} />
       </div>

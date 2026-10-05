@@ -43,4 +43,8 @@
 .trip-card-action-error{font-size:12px;color:var(--danger,#a32d2d);margin:0;}
 .trip-card-discovering .name{margin-bottom:2px;}
 .trip-card-destination-pending{font-size:12.5px;color:var(--tm);margin:2px 0 4px;}
-.trip-card-destination-chosen{font-size:15px;font-weight:600;color:var(--tp);margin:2px 0 4px;}
+.trip-card.trip-card-matched{background:var(--accent-bg);border-color:rgba(156,90,52,0.28);}
+.trip-card-matched .name{font-family:inherit;font-size:13px;font-weight:500;color:var(--ts);margin-bottom:10px;}
+.trip-card-eyebrow{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:0 0 2px;}
+.trip-card-destination-chosen{font-family:var(--font-display);font-size:24px;font-weight:700;line-height:1.2;color:var(--tp);margin:0 0 10px;}
+.trip-card-matched .trip-card-recap-pill{background:var(--surface);}
