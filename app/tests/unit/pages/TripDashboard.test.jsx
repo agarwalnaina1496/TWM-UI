@@ -852,7 +852,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     global.fetch = vi.fn(async url => (url.includes('/recommendations')
       ? jsonResponse({
         version: 1, status: 'SUCCESS', message: 'A strong match.', trip_type: 'circuit',
-        traveler_criteria: [{ id: 'budget', label: 'Within budget', requirement_type: 'HARD', source_context_paths: ['budget'] }],
+        traveler_criteria: [{ id: 'budget', label: 'Within budget', requirement_type: 'HARD' }],
         options: [{
           rank: 1, type: 'circuit', name: 'Udaipur Loop', circuit_id: 'udaipur-loop', summary: 'A relaxed lakeside base.', other_considerations: [],
           evaluations: [{
@@ -894,7 +894,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     global.fetch = vi.fn(async url => (url.includes('/recommendations')
       ? jsonResponse({
         version: 1, status: 'SUCCESS', message: 'A strong match.', trip_type: 'circuit',
-        traveler_criteria: [{ id: 'budget', label: 'Within budget', requirement_type: 'HARD', source_context_paths: ['budget'] }],
+        traveler_criteria: [{ id: 'budget', label: 'Within budget', requirement_type: 'HARD' }],
         options: [{
           rank: 1, type: 'circuit', name: 'Udaipur Loop', circuit_id: 'udaipur-loop', summary: 'A relaxed lakeside base.', other_considerations: [],
           evaluations: [{

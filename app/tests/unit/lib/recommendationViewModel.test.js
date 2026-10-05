@@ -6,8 +6,8 @@ function response() {
     status: 'SUCCESS',
     message: 'Ranked for you.',
     traveler_criteria: [
-      { id: 'budget', label: 'Budget', requirement_type: 'HARD', source_context_paths: ['budget'] },
-      { id: 'pace', label: 'Pace', requirement_type: 'PREFERENCE', source_context_paths: ['travel_style.pace'] },
+      { id: 'budget', label: 'Budget', requirement_type: 'HARD' },
+      { id: 'pace', label: 'Pace', requirement_type: 'PREFERENCE' },
     ],
     options: [{
       rank: 1,

@@ -14,8 +14,8 @@ function successOutcome(overrides = {}) {
     message: 'Madhya Pradesh is the strongest overall match.',
     trip_type: 'circuit',
     traveler_criteria: [
-      { id: 'budget', label: '₹1,00,000 total for two from Delhi', requirement_type: 'HARD', source_context_paths: ['budget'] },
-      { id: 'pace', label: 'Easygoing balance', requirement_type: 'PREFERENCE', source_context_paths: ['traveler_style'] },
+      { id: 'budget', label: '₹1,00,000 total for two from Delhi', requirement_type: 'HARD' },
+      { id: 'pace', label: 'Easygoing balance', requirement_type: 'PREFERENCE' },
     ],
     options: [{
       rank: 1, type: 'circuit', name: 'Madhya Pradesh Heritage and Nature', circuit_id: 'gwalior-orchha-khajuraho-panna',

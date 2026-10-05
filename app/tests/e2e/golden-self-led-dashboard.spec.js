@@ -57,7 +57,7 @@ test('advice journey reaches destination match, Choose Plan and Self-Led Dashboa
       })),
       recommendation: {
         status: 'SUCCESS', message: 'Coorg is a comfortable fit within budget.', trip_type: 'single',
-        traveler_criteria: [{ id: 'budget', label: '₹1,00,000 total for both', requirement_type: 'HARD', source_context_paths: ['budget'] }],
+        traveler_criteria: [{ id: 'budget', label: '₹1,00,000 total for both', requirement_type: 'HARD' }],
         options: [{
           rank: 1, type: 'single', name: 'Coorg', destination_id: 'coorg', summary: 'A comfortable fit within budget.',
           evaluations: [{ criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Fits within budget.', details: [{ type: 'bullets', items: ['Estimated total stays within budget.'] }] }],

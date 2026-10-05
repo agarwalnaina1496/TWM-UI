@@ -1,11 +1,11 @@
 export const GOLDEN_SCENARIO_ID = 'self_led_mp_year_end_couple_v1';
 
 const criteria = [
-  { id: 'budget', label: '₹1,00,000 total for two from Delhi', requirement_type: 'HARD', source_context_paths: ['budget'] },
-  { id: 'weather', label: 'Moderate weather for walking and outdoor sightseeing', requirement_type: 'HARD', source_context_paths: ['weather_preference'] },
-  { id: 'duration', label: 'A meaningful, unhurried 14-day trip', requirement_type: 'PREFERENCE', source_context_paths: ['duration'] },
-  { id: 'experience_mix', label: 'Culture, relaxation and some nature or adventure', requirement_type: 'PREFERENCE', source_context_paths: ['trip_vibe'] },
-  { id: 'pace', label: 'Easygoing balance of exploring and relaxing', requirement_type: 'PREFERENCE', source_context_paths: ['traveler_style'] },
+  { id: 'budget', label: '₹1,00,000 total for two from Delhi', requirement_type: 'HARD' },
+  { id: 'weather', label: 'Moderate weather for walking and outdoor sightseeing', requirement_type: 'HARD' },
+  { id: 'duration', label: 'A meaningful, unhurried 14-day trip', requirement_type: 'PREFERENCE' },
+  { id: 'experience_mix', label: 'Culture, relaxation and some nature or adventure', requirement_type: 'PREFERENCE' },
+  { id: 'pace', label: 'Easygoing balance of exploring and relaxing', requirement_type: 'PREFERENCE' },
 ];
 
 const bullets = items => ({ type: 'bullets', items });
