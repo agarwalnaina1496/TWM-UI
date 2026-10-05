@@ -1,4 +1,4 @@
-import '../../styles/preview.css';
+import './plan-builder.css';
 
 const PACE_LEVEL = { relaxed: 1, balanced: 2, packed: 3 };
 

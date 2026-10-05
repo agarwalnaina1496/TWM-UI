@@ -4,16 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../../context/TripContext.jsx';
 import { dashboardPrimaryCta } from '../../lib/dashboardTracks.js';
 import { withTripId } from '../../lib/tripUrl.js';
-import { resumedGreeting } from '../../lib/chatGreeting.js';
 import { phaseProgress } from '../../lib/phaseProgress.js';
-import { newIdempotencyKey } from '../../lib/tripApi.js';
 import { ROUTES } from '../../constants/routes.js';
-import ChatConversation from '../../components/chat/ChatConversation.jsx';
-import FactsPanel from '../../components/FactsPanel.jsx';
+import ChatSection from '../../features/chat/ChatSection.jsx';
 import DestinationsSection from '../../features/destinations/DestinationsSection.jsx';
 import YourPickSection from '../../features/your-pick/YourPickSection.jsx';
-import PlanBuilderPanel from '../../components/planBuilder/PlanBuilderPanel.jsx';
-import { usePlanBuilder } from '../../hooks/usePlanBuilder.js';
+import PlanBuilderSection from '../../features/plan-builder/PlanBuilderSection.jsx';
 
 // TWM-232: Overview used to be a hard if/else between two structurally
 // different pages -- a plain fact table pre-itinerary, a budget
@@ -40,35 +36,19 @@ import { usePlanBuilder } from '../../hooks/usePlanBuilder.js';
 // the section swaps in place without ever leaving this page.
 export default function OverviewTab({ view, tripId }) {
   const navigate = useNavigate();
-  const { setCurrentTripId, sendTripCommand } = useTrip();
+  const { setCurrentTripId } = useTrip();
   const summary = view.summary;
   const budget = view.budget_breakdown;
   const primaryCta = dashboardPrimaryCta(view);
-  const activeAgent = view.lifecycle?.active_agent;
-  const stage = view.lifecycle?.stage;
-  const awaiting = activeAgent === 'guide' ? view.plan?.awaiting : view.matcher?.awaiting;
   const embedChat = primaryCta?.to === ROUTES.scoutChat;
   const embedDestinations = primaryCta?.to === ROUTES.destinations;
   const embedPlanBuilder = primaryCta?.to === ROUTES.tripPreview;
   const selectedOption = view.lifecycle?.selected_option ?? null;
   const progress = phaseProgress(view);
-  const planBuilder = usePlanBuilder({ enabled: embedPlanBuilder, embedded: true });
 
   function go(cta) {
     setCurrentTripId(tripId);
     navigate(withTripId(cta.to, tripId));
-  }
-
-  async function onSendChat(text) {
-    return sendTripCommand('traveler_message', { message: text, idempotencyKey: newIdempotencyKey() });
-  }
-
-  // Plan Builder embeds here too now -- no navigation needed. Returning
-  // false keeps Guide's response displayed as the final chat turn; the
-  // refetched TripView's day_plan then flips primaryCta to Plan Builder on
-  // the next render, swapping this panel out in place.
-  function onChatPlanReady() {
-    return false;
   }
 
   return (
@@ -97,30 +77,13 @@ export default function OverviewTab({ view, tripId }) {
         </div>
       )}
 
-      {primaryCta && embedChat && (
-        <div className="chat-screen embedded-chat-panel">
-          <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
-          <FactsPanel contextRecap={view.context_recap} />
-          {/* No onSeeDestinations here -- Destinations embeds itself
-              reactively once primaryCta flips, same as this chat panel
-              does; a manual navigate-away would fight that. */}
-          <ChatConversation
-            tripLoadStatus="ready"
-            activeAgent={activeAgent}
-            stage={stage}
-            awaiting={awaiting}
-            greeting={resumedGreeting(view, { activeAgent, awaiting })}
-            onSend={onSendChat}
-            onPlanReady={onChatPlanReady}
-          />
-        </div>
-      )}
+      {primaryCta && embedChat && <ChatSection />}
 
       {embedDestinations && (selectedOption ? <YourPickSection /> : <DestinationsSection />)}
 
       {embedPlanBuilder && (
         <div className="content-narrow">
-          <PlanBuilderPanel {...planBuilder} />
+          <PlanBuilderSection />
         </div>
       )}
 

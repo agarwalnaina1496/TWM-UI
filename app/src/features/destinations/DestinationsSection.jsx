@@ -4,6 +4,7 @@ import { useDestinations } from './useDestinations.js';
 import { MATCHING_STEPS } from './constants.js';
 import { destinationsPhase } from './destinationsPhase.js';
 import '../../styles/feedback.css';
+import '../../styles/chat.css';
 import './destinations.css';
 
 // The destination-comparison section: matching a traveler's trip against

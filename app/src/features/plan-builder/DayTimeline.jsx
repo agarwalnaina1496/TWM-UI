@@ -1,5 +1,5 @@
-import PaceMeter from '../ui/PaceMeter.jsx';
-import '../../styles/preview.css';
+import PaceMeter from './PaceMeter.jsx';
+import './plan-builder.css';
 
 // TWM-234: the day-by-day list -- split out of PlanBuilderPanel to keep
 // that file's complexity under the cap.

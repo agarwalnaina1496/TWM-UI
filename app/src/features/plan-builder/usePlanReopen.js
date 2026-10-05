@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { trackEvent } from '../lib/analytics.js';
-import { withTripId } from '../lib/tripUrl.js';
-import { REOPEN_DESTINATION_MESSAGE } from '../constants/planBuilder.js';
+import { trackEvent } from '../../lib/analytics.js';
+import { withTripId } from '../../lib/tripUrl.js';
+import { REOPEN_DESTINATION_MESSAGE } from './constants.js';
 
 // TWM-234: "reconsider the destination" from Plan Builder -- split out of
 // usePlanBuilder purely to keep that file's length under the cap.

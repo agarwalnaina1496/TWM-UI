@@ -1,5 +1,5 @@
-import { buildRecapTurn } from './discoverChat.js';
-import { buildPlanRecapTurn } from './planChat.js';
+import { buildRecapTurn } from '../../lib/discoverChat.js';
+import { buildPlanRecapTurn } from '../../lib/planChat.js';
 
 const COLD_OPEN = "Hey there! I'm Scout. Tell me about the trip you have in mind — a question, a rough idea, or the whole plan — and I'll take it from there.";
 

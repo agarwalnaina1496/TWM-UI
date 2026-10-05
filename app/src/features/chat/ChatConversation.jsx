@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { QUICK_REPLIES, AWAITING_INPUT_LABELS } from '../../data/entryCommandFixtures.js';
 import { didHandoffOccur } from '../../lib/discoverChat.js';
-import ErrorBanner from '../ui/ErrorBanner.jsx';
+import ErrorBanner from '../../components/ui/ErrorBanner.jsx';
 import '../../styles/chat.css';
 import '../../styles/feedback.css';
 

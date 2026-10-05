@@ -1,16 +1,35 @@
-import HonestTransition from '../ui/HonestTransition.jsx';
-import ErrorBanner from '../ui/ErrorBanner.jsx';
+import HonestTransition from '../../components/ui/HonestTransition.jsx';
+import ErrorBanner from '../../components/ui/ErrorBanner.jsx';
 import DayTimeline from './DayTimeline.jsx';
 import FreeTextComposer from './FreeTextComposer.jsx';
-import { REOPEN_STEPS } from '../../constants/planBuilder.js';
-import '../../styles/preview.css';
+import { REOPEN_STEPS } from './constants.js';
+import { usePlanBuilder } from './usePlanBuilder.js';
+import './plan-builder.css';
 import '../../styles/feedback.css';
 
-// TWM-234: the render half of Plan Builder -- extracted so the same
-// generate/edit/approve/reopen UI can render standalone (TripPreview.jsx)
-// or embedded directly in Dashboard Overview. All state and commands come
-// from usePlanBuilder(); this component only renders it.
-export default function PlanBuilderPanel(props) {
+// The Plan Builder section: generate, edit, approve and reopen a trip's
+// day-by-day plan. Fully self-contained -- it reads the current trip itself,
+// owns its state and commands (usePlanBuilder), and carries its own
+// styling -- so it can be rendered anywhere as <PlanBuilderSection />.
+// Optional props, only for a place with more to do around it:
+//   navigateTo(path, opts)  navigate when planning moves off this screen
+//   guideMessage            Guide's message to show on first render
+//   chrome({ reversing, ready, summary })  page chrome (back link, header)
+//                           placed above the plan; the section stays unaware
+//                           of what a page wants to put there.
+export default function PlanBuilderSection({ navigateTo, guideMessage, chrome }) {
+  const builder = usePlanBuilder({ navigateTo, guideMessage });
+  const { reversing, bootStatus, plan, summary } = builder;
+  const ready = !reversing && bootStatus === 'ready' && Boolean(plan);
+  return (
+    <>
+      {chrome?.({ reversing, ready, summary })}
+      <PlanBuilderBody {...builder} />
+    </>
+  );
+}
+
+function PlanBuilderBody(props) {
   const { reversing, bootStatus, bootError, plan } = props;
 
   if (reversing) return <HonestTransition steps={REOPEN_STEPS} label="Finding new matches" />;

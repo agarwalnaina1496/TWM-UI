@@ -5,15 +5,12 @@ import { AWAITING_INPUT_LABELS, DESTINATION_INPUT_LABEL, ENTRY_INTENTS } from '.
 import { newIdempotencyKey } from '../lib/tripApi.js';
 import { planReady } from '../hooks/useGuidePlanning.js';
 import { trackEvent } from '../lib/analytics.js';
-import { resumedGreeting } from '../lib/chatGreeting.js';
 import { isTripEmpty } from '../lib/tripLifecycle.js';
 import BackToTrip from '../components/BackToTrip.jsx';
-import FactsPanel from '../components/FactsPanel.jsx';
-import ChatConversation from '../components/chat/ChatConversation.jsx';
+import ChatSection from '../features/chat/ChatSection.jsx';
 import ScreenHeader from '../components/ui/ScreenHeader.jsx';
 import { TRIP_ID_PARAM, syncUrlParamsSilently, withTripId } from '../lib/tripUrl.js';
 import { useTripFromUrl } from '../hooks/useTripFromUrl.js';
-import '../styles/chat.css';
 
 // TWM-190 (regression fix): a live, trip-less entry (via Header/DashboardHome's
 // "Discover Destination"/"Plan a Trip") lands here directly with ?intent= and
@@ -113,26 +110,18 @@ export default function ScoutChat() {
     return true;
   }
 
-  const activeAgent = commandSnapshot?.lifecycle?.active_agent;
-  const stage = commandSnapshot?.lifecycle?.stage;
-  const matcherAwaiting = commandSnapshot?.matcher?.awaiting;
   const guideAwaiting = commandSnapshot?.plan?.awaiting;
-  const awaiting = activeAgent === 'guide' ? guideAwaiting : matcherAwaiting;
 
   // TWM-173: a refresh must not show the cold-open greeting again once real
-  // trip_context already exists. Computed once ChatConversation is ready to
-  // mount its own greeting effect (tripLoadStatus gates both).
+  // trip_context already exists. Only a genuinely fresh entry passes its own
+  // opening lines; ChatSection recaps a resumed trip itself (TWM-190: Guide's
+  // recap is a synthesized one, since Guide's conversation_context has no
+  // verbatim last-message field the way Meridian's does).
   let greeting;
   if (isFreshDiscover) {
     greeting = [DISCOVER_WELCOME, DISCOVER_ORIGIN_PROMPT];
   } else if (isFreshKnownDestination) {
     greeting = [KNOWN_DESTINATION_WELCOME, KNOWN_DESTINATION_PROMPT];
-  } else {
-    // TWM-190: Guide's recap is phrased for its planning context — Guide's
-    // conversation_context has no verbatim last-message field the way
-    // Meridian's does, so this is a synthesized recap rather than Guide's
-    // own last question echoed back.
-    greeting = resumedGreeting(commandSnapshot, { activeAgent, awaiting });
   }
 
   // planning_started fires once, right as the known-destination journey
@@ -165,40 +154,34 @@ export default function ScoutChat() {
   const destinationInputLabel = (guideAwaiting && AWAITING_INPUT_LABELS[guideAwaiting]) || DESTINATION_INPUT_LABEL;
 
   return (
-    <div className="chat-page chat-screen">
-      <BackToTrip />
-      <div className="chat-context-bar" role="status"><span aria-hidden="true">ⓘ</span>Scout is here to help with your trip.</div>
-      <ScreenHeader
-        eyebrow={isKnownDestinationEntry ? 'Trip setup' : '✦ Scout'}
-        title={isKnownDestinationEntry
-          ? <>Start with <em>your destination</em></>
-          : isDiscoverEntry
-            ? <>Let's find <em>your destination</em></>
-            : <>Tell Scout <em>in your own words</em></>}
-        lede={isKnownDestinationEntry
-          ? "Tell us where you are going. We'll take you straight to planning — no matching needed."
-          : isDiscoverEntry
-            ? "Tell Scout what matters to you, and it'll narrow down destinations that fit."
-            : 'Scout keeps the nuance in what you say, asks only for material gaps, and hands the trip to the right specialist.'}
-      />
-      <FactsPanel contextRecap={commandSnapshot?.context_recap} />
-
-      <ChatConversation
-        tripLoadStatus={tripLoadStatus}
-        activeAgent={activeAgent}
-        stage={stage}
-        awaiting={awaiting}
-        greeting={greeting}
-        initialMessage={initialMessageRef.current}
-        onSend={onSend}
-        onPlanReady={onPlanReady}
-        // TWM-234: hand off into the unified Dashboard shell -- OverviewTab
-        // embeds Destinations itself once the refetched TripView reaches
-        // stage recommended/matched, same as a resumed trip.
-        onSeeDestinations={() => navigate(withTripId('/dashboard', urlTripId || currentTripId))}
-        inputLabelOverride={isGuideFlavored ? destinationInputLabel : undefined}
-        sendLabelOverride={isGuideFlavored ? 'Start planning' : undefined}
-      />
-    </div>
+    <ChatSection
+      layout="page"
+      top={<BackToTrip />}
+      header={(
+        <ScreenHeader
+          eyebrow={isKnownDestinationEntry ? 'Trip setup' : '✦ Scout'}
+          title={isKnownDestinationEntry
+            ? <>Start with <em>your destination</em></>
+            : isDiscoverEntry
+              ? <>Let's find <em>your destination</em></>
+              : <>Tell Scout <em>in your own words</em></>}
+          lede={isKnownDestinationEntry
+            ? "Tell us where you are going. We'll take you straight to planning — no matching needed."
+            : isDiscoverEntry
+              ? "Tell Scout what matters to you, and it'll narrow down destinations that fit."
+              : 'Scout keeps the nuance in what you say, asks only for material gaps, and hands the trip to the right specialist.'}
+        />
+      )}
+      greeting={greeting}
+      initialMessage={initialMessageRef.current}
+      onSend={onSend}
+      onPlanReady={onPlanReady}
+      // TWM-234: hand off into the unified Dashboard shell -- OverviewTab
+      // embeds Destinations itself once the refetched TripView reaches
+      // stage recommended/matched, same as a resumed trip.
+      onSeeDestinations={() => navigate(withTripId('/dashboard', urlTripId || currentTripId))}
+      inputLabelOverride={isGuideFlavored ? destinationInputLabel : undefined}
+      sendLabelOverride={isGuideFlavored ? 'Start planning' : undefined}
+    />
   );
 }

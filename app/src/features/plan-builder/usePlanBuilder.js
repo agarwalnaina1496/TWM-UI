@@ -1,34 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTrip } from '../context/TripContext.jsx';
-import { planBuilderSummary } from '../lib/guidePlanAdapter.js';
-import { trackEvent, trackFailure } from '../lib/analytics.js';
-import { isTripEmpty } from '../lib/tripLifecycle.js';
-import { withTripId } from '../lib/tripUrl.js';
-import { useTripFromUrl } from './useTripFromUrl.js';
+import { useTrip } from '../../context/TripContext.jsx';
+import { planBuilderSummary } from './planBuilderSummary.js';
+import { trackEvent, trackFailure } from '../../lib/analytics.js';
+import { isTripEmpty } from '../../lib/tripLifecycle.js';
+import { withTripId } from '../../lib/tripUrl.js';
+import { useTripFromUrl } from '../../hooks/useTripFromUrl.js';
 import { usePlanReopen } from './usePlanReopen.js';
 
-// TWM-234: extracted from TripPreview.jsx (the page) so the same Plan
-// Builder state/commands can drive either the standalone screen or an
-// embedded panel in Dashboard Overview. `embedded: true` (Overview) turns
-// every `navigate()` call below into a no-op: Overview's own primaryCta
-// already recomputes from the refetched TripView after each command (stage
-// flips to matching -> embeds chat, plan freezes -> primaryCta moves off
-// this panel entirely), so an explicit route change would just fight that
-// reactive switch instead of cooperating with it. Only the standalone page
-// passes `embedded: false` and gets real navigation.
-// `enabled: false` (Overview, when Plan Builder isn't the current step)
-// keeps the boot effect from ever firing `start_planning` against a trip
-// Overview merely happens to be showing a different embed for.
-export function usePlanBuilder({ embedded = false, enabled = true, guideMessage } = {}) {
-  const navigate = useNavigate();
+// Everything the Plan Builder section needs, owned by the section itself.
+// `navigateTo(path, opts)` is optional: only the standalone screen passes
+// it and gets real navigation. A place that swaps its own content by stage
+// (Dashboard Overview) leaves it out -- its primaryCta already recomputes
+// from the refetched TripView after each command (stage flips to matching
+// -> chat, plan freezes -> off this section entirely), so an explicit route
+// change would just fight that reactive switch. The boot effect below only
+// runs while the section is mounted, so Overview never fires
+// `start_planning` against a trip it is showing something else for.
+export function usePlanBuilder({ navigateTo, guideMessage } = {}) {
   const { commandSnapshot, sendTripCommand, tripLoadStatus } = useTrip();
   const urlTripId = useTripFromUrl();
 
+  const navigates = Boolean(navigateTo);
   function go(path, opts) {
-    if (embedded) return;
-    if (opts) navigate(path, opts);
-    else navigate(path);
+    navigateTo?.(path, opts);
   }
 
   const view = commandSnapshot;
@@ -63,15 +57,15 @@ export function usePlanBuilder({ embedded = false, enabled = true, guideMessage 
   // unaffected. Standalone-page-only: an embedded panel only ever renders
   // once Overview's own view already resolved a real trip.
   useEffect(() => {
-    if (embedded || !urlTripId || tripLoadStatus !== 'ready' || !isTripEmpty(view)) return;
+    if (!navigates || !urlTripId || tripLoadStatus !== 'ready' || !isTripEmpty(view)) return;
     go('/', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [embedded, urlTripId, tripLoadStatus, view]);
+  }, [navigates, urlTripId, tripLoadStatus, view]);
 
   // Bootstraps the real Guide session for the discover path (the
   // known-destination path already starts Guide from JourneyEntry's chat).
   useEffect(() => {
-    if (!enabled || tripLoadStatus !== 'ready') return;
+    if (tripLoadStatus !== 'ready') return;
     if (frozenPlan || bootStarted.current || (urlTripId && isTripEmpty(view))) return;
     if (plan && dayPlan.length > 0) {
       setBootStatus('ready');
@@ -102,7 +96,7 @@ export function usePlanBuilder({ embedded = false, enabled = true, guideMessage 
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, tripLoadStatus, frozenPlan]);
+  }, [tripLoadStatus, frozenPlan]);
 
   useEffect(() => {
     if (trackedPlanBuilderView.current || bootStatus !== 'ready' || !planReady) return;
