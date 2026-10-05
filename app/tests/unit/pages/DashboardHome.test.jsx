@@ -115,7 +115,7 @@ describe('DashboardHome', () => {
     async function renderTrips(trips) {
       fetchMock.mockResolvedValueOnce(jsonResponse({ trips }));
       renderDashboardHome(GUEST);
-      await screen.findByText('Your trips', { selector: 'h2' });
+      await screen.findByText('Planned trips', { selector: 'h2' });
     }
 
     it('a trip being planned: stored title, destination plus state, chips, Continue planning', async () => {
@@ -168,12 +168,38 @@ describe('DashboardHome', () => {
         listItem({ id: 'd', title: 'Still deciding', stage: 'recommended', context: { origin_city: 'Delhi' } }),
       ]);
       const labels = [...document.querySelectorAll('.trip-group-label, .section-title')].map(el => el.textContent);
-      expect(labels).toEqual(['Your trips', 'Happening now', 'Upcoming trips', 'Discovering']);
+      expect(labels).toEqual(['Planned trips', 'This month', 'Upcoming trips', 'Discovering']);
       expect(document.querySelector('.hero-trip')).toHaveTextContent('Ongoing trip');
       expect(screen.queryByText('Old trip')).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: /Past trips \(1\)/ }));
       expect(within(document.querySelector('.past-trips')).getByText('Old trip')).toBeInTheDocument();
       expect(within(document.querySelector('.past-trips')).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
+    });
+
+    it('"+N more" opens the rest of the chips, and "Show less" folds them back', async () => {
+      await renderTrips([listItem({
+        id: 'a', title: 'Weekend in Coorg', stage: 'planning',
+        context: { destinations: 'Coorg', travel_dates: 'December 2026', trip_duration: '3', num_travelers: '2', budget: '50k', origin_city: 'Delhi' },
+      })]);
+      const card = document.querySelector('.trip-card-plan');
+      expect(within(card).queryByText('From Delhi')).not.toBeInTheDocument();
+      await userEvent.click(within(card).getByRole('button', { name: '+1 more' }));
+      expect(within(card).getByText('From Delhi')).toBeInTheDocument();
+      await userEvent.click(within(card).getByRole('button', { name: 'Show less' }));
+      expect(within(card).queryByText('From Delhi')).not.toBeInTheDocument();
+    });
+
+    it('words a party size the same way on every card: "3 people" reads "3 travellers"', async () => {
+      await renderTrips([listItem({ id: 'a', title: 'Trip', stage: 'planning', context: { destinations: 'Nainital', num_travelers: '3 people' } })]);
+      expect(within(document.querySelector('.trip-card-plan')).getByText('3 travellers')).toBeInTheDocument();
+    });
+
+    it('a trip with an exact departure still ahead is not "Happening now" or "This month"', async () => {
+      const soon = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+      const day = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`;
+      await renderTrips([listItem({ id: 'a', title: 'Soon trip', stage: 'planning', context: { destinations: 'Goa' }, travelWindow: { precision: 'exact', departure: day } })]);
+      expect(document.querySelector('.hero-trip')).toBeNull();
+      expect([...document.querySelectorAll('.trip-group-label')].map(el => el.textContent)).toEqual(['Upcoming trips']);
     });
 
     it('a trip that is only upcoming is listed under Upcoming trips, not Happening now', async () => {
@@ -215,7 +241,7 @@ describe('DashboardHome', () => {
     renderDashboardHome(GUEST);
     await screen.findByText('Committed trip');
     expect(screen.getByText('Discovering')).toBeInTheDocument();
-    expect(screen.getByText('Your trips')).toBeInTheDocument();
+    expect(screen.getByText('Planned trips')).toBeInTheDocument();
     const committedCard = screen.getByText('Committed trip').closest('.trip-card');
     expect(within(committedCard).getByRole('button', { name: 'Continue planning →' })).toBeInTheDocument();
     const discoveringCard = document.querySelector('.trip-card-discovering');

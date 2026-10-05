@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isPastTrip, selectHeroTrip } from '../../../src/lib/tripHero.js';
+import { heroLabel, isPastTrip, selectHeroTrip } from '../../../src/lib/tripHero.js';
 
 const NOW = new Date(2026, 2, 15); // March 15, 2026
 
@@ -40,10 +40,27 @@ describe('isPastTrip', () => {
 });
 
 describe('selectHeroTrip', () => {
-  it('picks the ongoing (current-month) trip, not an upcoming one', () => {
-    const ongoing = listItem('ongoing', month('2026-03'));
+  it('picks the trip underway, not an upcoming one', () => {
+    const underway = listItem('underway', exact('2026-03-14'), { context: { trip_duration: '4' } });
     const upcoming = listItem('upcoming', month('2026-04'));
-    expect(selectHeroTrip([upcoming, ongoing], NOW)).toBe(ongoing);
+    expect(selectHeroTrip([upcoming, underway], NOW)).toBe(underway);
+    expect(heroLabel(underway, NOW)).toBe('Happening now');
+  });
+
+  it('a trip whose departure is later this month is not underway yet', () => {
+    expect(selectHeroTrip([listItem('later', exact('2026-03-20'))], NOW)).toBeNull();
+  });
+
+  it('a trip whose length has run out is no longer underway', () => {
+    expect(selectHeroTrip([listItem('over', exact('2026-03-10'), { context: { trip_duration: '3' } })], NOW)).toBeNull();
+  });
+
+  it('with only a month known, the slot is "This month", and underway still wins over it', () => {
+    const monthOnly = listItem('month', month('2026-03'));
+    const underway = listItem('underway', exact('2026-03-15'));
+    expect(selectHeroTrip([monthOnly], NOW)).toBe(monthOnly);
+    expect(heroLabel(monthOnly, NOW)).toBe('This month');
+    expect(selectHeroTrip([monthOnly, underway], NOW)).toBe(underway);
   });
 
   it('returns null when nothing is ongoing, even if trips are upcoming', () => {

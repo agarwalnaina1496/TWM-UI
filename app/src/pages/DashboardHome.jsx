@@ -12,7 +12,7 @@ import {
 } from '../lib/tripLifecycle.js';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import MatchedTripActions from '../components/MatchedTripActions.jsx';
-import { isPastTrip, selectHeroTrip, travelWindowDate } from '../lib/tripHero.js';
+import { heroLabel, isPastTrip, selectHeroTrip, travelWindowDate } from '../lib/tripHero.js';
 import { withTripId } from '../lib/tripUrl.js';
 import { decodeHtmlEntities } from '../lib/text.js';
 import { ROUTES } from '../constants/routes.js';
@@ -83,13 +83,18 @@ function RenameName({ t, rename, showRename = true, label, actionLabel = 'Rename
 // -- cap the visible chips instead of cramming every one into a dot-joined
 // line. `limit` is how many show before collapsing into "+N more".
 function RecapPills({ pills, limit = 2 }) {
+  const [expanded, setExpanded] = useState(false);
   if (pills.length === 0) return null;
-  const shown = pills.slice(0, limit);
-  const extra = pills.length - shown.length;
+  const shown = expanded ? pills : pills.slice(0, limit);
+  const extra = pills.length - limit;
   return (
     <div className="trip-card-recap">
       {shown.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
-      {extra > 0 && <span className="trip-card-recap-pill">+{extra} more</span>}
+      {extra > 0 && (
+        <button type="button" className="trip-card-recap-pill trip-card-recap-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+          {expanded ? 'Show less' : `+${extra} more`}
+        </button>
+      )}
     </div>
   );
 }
@@ -190,18 +195,18 @@ function TripCard(props) {
 // TWM-234: the shared markup behind every trip-list section (Discovering,
 // Your trips, Past) -- extracted so adding the Discovering/Your trips split
 // didn't just duplicate the same section JSX a second time.
-// TWM-234: the Plan module's section. A trip happening now leads,
+// TWM-234: the Plan module's section. A trip underway (or, failing proof, this month's) leads,
 // then the upcoming trips; past trips sit collapsed at the bottom so
 // they never push the Discovering section out of view.
 function YourTripsSection({ hero, trips, pastTrips, standalone, rename, busyId, onOpen }) {
   if (!hero && trips.length === 0 && pastTrips.length === 0) return null;
   const card = (t, showRename = true) => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={onOpen} showRename={showRename} />;
   return (
-    <section aria-label="Your trips">
-      <h2 className="section-title">Your trips</h2>
+    <section aria-label="Planned trips">
+      <h2 className="section-title">Planned trips</h2>
       {hero && (
         <div className="hero-trip">
-          <h3 className="trip-group-label">Happening now</h3>
+          <h3 className="trip-group-label">{heroLabel(hero)}</h3>
           {card(hero)}
         </div>
       )}

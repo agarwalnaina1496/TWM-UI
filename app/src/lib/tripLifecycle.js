@@ -70,10 +70,16 @@ function tidy(value) {
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
+// "3", "3 people", "3 persons", "3 pax" all read as "3 travellers".
+function travellers(value) {
+  const match = String(value).trim().match(/^([0-9]+)(?: *(?:people|persons?|pax|travell?ers?))?$/i);
+  return match ? `${match[1]} ${match[1] === '1' ? 'traveller' : 'travellers'}` : tidy(value);
+}
+
 const HEADLINE_FACTS = [
   { key: 'travel_dates', text: value => tidy(value) },
   { key: 'trip_duration', text: value => (/^\d+$/.test(value) ? `${value} days` : tidy(value)) },
-  { key: 'num_travelers', text: value => (/^\d+$/.test(value) ? `${value} ${value === '1' ? 'traveller' : 'travellers'}` : tidy(value)) },
+  { key: 'num_travelers', text: travellers },
   { key: 'budget', text: value => (/budget/i.test(value) ? tidy(value) : `Budget: ${tidy(value)}`) },
 ];
 
