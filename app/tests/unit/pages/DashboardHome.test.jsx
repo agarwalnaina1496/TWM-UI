@@ -160,7 +160,7 @@ describe('DashboardHome', () => {
       expect(within(document.querySelector('.trip-card-planned')).getByText('Plan approved')).toBeInTheDocument();
     });
 
-    it('leads with Happening now, then Coming up, then Discovering; Past trips stay collapsed', async () => {
+    it('leads with Happening now, then Upcoming trips, then Discovering; Past trips stay collapsed', async () => {
       await renderTrips([
         listItem({ id: 'a', title: 'Ongoing trip', stage: 'planning', context: { destinations: 'Udaipur' }, travelWindow: { precision: 'month', month: thisMonth() } }),
         listItem({ id: 'b', title: 'Later trip', stage: 'planned', has_itinerary: true, context: { destinations: 'Goa' }, updated_at: '2025-12-01T00:00:00.000Z' }),
@@ -168,12 +168,21 @@ describe('DashboardHome', () => {
         listItem({ id: 'd', title: 'Still deciding', stage: 'recommended', context: { origin_city: 'Delhi' } }),
       ]);
       const labels = [...document.querySelectorAll('.trip-group-label, .section-title')].map(el => el.textContent);
-      expect(labels).toEqual(['Your trips', 'Happening now', 'Coming up', 'Discovering']);
+      expect(labels).toEqual(['Your trips', 'Happening now', 'Upcoming trips', 'Discovering']);
       expect(document.querySelector('.hero-trip')).toHaveTextContent('Ongoing trip');
       expect(screen.queryByText('Old trip')).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: /Past trips \(1\)/ }));
       expect(within(document.querySelector('.past-trips')).getByText('Old trip')).toBeInTheDocument();
       expect(within(document.querySelector('.past-trips')).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
+    });
+
+    it('a trip that is only upcoming is listed under Upcoming trips, not Happening now', async () => {
+      await renderTrips([
+        listItem({ id: 'a', title: 'Next year trip', stage: 'planned', has_itinerary: true, context: { destinations: 'Goa' }, travelWindow: { precision: 'month', month: '2099-01' } }),
+      ]);
+      expect(document.querySelector('.hero-trip')).toBeNull();
+      const labels = [...document.querySelectorAll('.trip-group-label')].map(el => el.textContent);
+      expect(labels).toEqual(['Upcoming trips']);
     });
 
     it('never calls a trip still being discovered "Happening now", even with an ongoing window', async () => {

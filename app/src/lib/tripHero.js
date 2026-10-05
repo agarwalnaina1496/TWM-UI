@@ -24,29 +24,15 @@ function isSameMonth(date, now) {
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
 }
 
-// Ranks committed, non-completed trips: one whose window is the current
-// month wins outright ("ongoing"); otherwise the nearest future month wins;
-// a trip with no parseable window never wins. Returns null when nothing
-// qualifies — the hero section is then absent entirely, never a placeholder.
+// The trip happening now: the first one whose travel window is the current
+// month. The hero is labelled "Happening now", so a trip that is merely next
+// up never takes the slot -- it belongs under "Upcoming trips". Returns null
+// when nothing is ongoing; the hero section is then absent, never a placeholder.
 export function selectHeroTrip(trips, now = new Date()) {
-  let ongoing = null;
-  let nearestUpcoming = null;
-  let nearestUpcomingDate = null;
-
-  for (const t of trips) {
+  return trips.find(t => {
     const parsed = travelWindowDate(t);
-    if (!parsed) continue;
-    if (isSameMonth(parsed, now)) {
-      if (!ongoing) ongoing = t;
-      continue;
-    }
-    if (parsed > now && (!nearestUpcomingDate || parsed < nearestUpcomingDate)) {
-      nearestUpcoming = t;
-      nearestUpcomingDate = parsed;
-    }
-  }
-
-  return ongoing || nearestUpcoming || null;
+    return parsed && isSameMonth(parsed, now);
+  }) || null;
 }
 
 // TWM-232: a trip belongs in "Past" once its travel window has fully

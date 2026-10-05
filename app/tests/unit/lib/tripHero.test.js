@@ -40,16 +40,16 @@ describe('isPastTrip', () => {
 });
 
 describe('selectHeroTrip', () => {
-  it('an ongoing (current-month) trip always wins over any upcoming trip', () => {
+  it('picks the ongoing (current-month) trip, not an upcoming one', () => {
     const ongoing = listItem('ongoing', month('2026-03'));
     const upcoming = listItem('upcoming', month('2026-04'));
     expect(selectHeroTrip([upcoming, ongoing], NOW)).toBe(ongoing);
   });
 
-  it('the nearest upcoming trip wins when nothing is ongoing', () => {
+  it('returns null when nothing is ongoing, even if trips are upcoming', () => {
     const far = listItem('far', month('2026-12'));
     const near = listItem('near', exact('2026-04-10'));
-    expect(selectHeroTrip([far, near], NOW)).toBe(near);
+    expect(selectHeroTrip([far, near], NOW)).toBeNull();
   });
 
   it('returns null when no trip has a travel window', () => {

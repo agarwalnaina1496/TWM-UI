@@ -190,8 +190,8 @@ function TripCard(props) {
 // TWM-234: the shared markup behind every trip-list section (Discovering,
 // Your trips, Past) -- extracted so adding the Discovering/Your trips split
 // didn't just duplicate the same section JSX a second time.
-// TWM-234: the Plan module's section. A trip happening now (or next up) leads,
-// then everything still coming up; past trips sit collapsed at the bottom so
+// TWM-234: the Plan module's section. A trip happening now leads,
+// then the upcoming trips; past trips sit collapsed at the bottom so
 // they never push the Discovering section out of view.
 function YourTripsSection({ hero, trips, pastTrips, standalone, rename, busyId, onOpen }) {
   if (!hero && trips.length === 0 && pastTrips.length === 0) return null;
@@ -207,7 +207,7 @@ function YourTripsSection({ hero, trips, pastTrips, standalone, rename, busyId, 
       )}
       {trips.length > 0 && (
         <>
-          <h3 className="trip-group-label">Coming up</h3>
+          <h3 className="trip-group-label">Upcoming trips</h3>
           {trips.map(t => card(t))}
         </>
       )}
