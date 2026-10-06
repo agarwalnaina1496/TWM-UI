@@ -1,4 +1,5 @@
 import { ROUTES } from '../constants/routes.js';
+import { formatBudget } from './formatBudget.js';
 import { DISCOVER_STAGES } from '../constants/tripStages.js';
 
 // Canonical stage/status helpers shared by the adaptive landing resolver
@@ -77,11 +78,16 @@ function travellers(value) {
   return match ? `${match[1]} ${match[1] === '1' ? 'traveller' : 'travellers'}` : tidy(value);
 }
 
+// Whether `text` already names `name` (case-insensitive).
+export function mentions(text, name) {
+  return Boolean(text && name) && String(text).toLowerCase().includes(String(name).toLowerCase());
+}
+
 const HEADLINE_FACTS = [
   { key: 'travel_dates', text: value => tidy(value) },
   { key: 'trip_duration', text: value => (/^\d+$/.test(value) ? `${value} days` : tidy(value)) },
   { key: 'num_travelers', text: travellers },
-  { key: 'budget', text: value => (/budget/i.test(value) ? tidy(value) : `Budget: ${tidy(value)}`) },
+  { key: 'budget', text: value => formatBudget(value) ?? (/budget/i.test(value) ? tidy(value) : `Budget: ${tidy(value)}`) },
 ];
 
 export function discoveryHeadline(trip) {
@@ -96,7 +102,10 @@ export function discoveryHeadline(trip) {
 // The facts for a Discovering card's chips, worded compactly and in the same
 // priority order as the headline, minus the fact already used as the
 // headline, with the origin last (it is the least telling one).
-export function discoveryPills(trip, excludeKey = null) {
+// `shownTitle` is the title the card actually displays: a title that already
+// says where the trip starts ("... from Delhi") makes the "From Delhi" chip a
+// repeat, so the chip is left out.
+export function discoveryPills(trip, excludeKey = null, shownTitle = null) {
   const recap = trip?.context_recap || [];
   const pills = [];
   for (const { key, text } of HEADLINE_FACTS) {
@@ -104,7 +113,7 @@ export function discoveryPills(trip, excludeKey = null) {
     if (item) pills.push(text(String(item.value)));
   }
   const origin = recap.find(fact => fact.key === 'origin_city' && fact.value);
-  if (origin) pills.push(`From ${origin.value}`);
+  if (origin && !mentions(shownTitle, origin.value)) pills.push(`From ${origin.value}`);
   return pills;
 }
 

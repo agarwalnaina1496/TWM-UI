@@ -56,3 +56,8 @@
 .trip-card-planned .trip-card-eyebrow{color:var(--sage);}
 .trip-card-planned .trip-card-recap-pill{background:var(--surface);}
 .past-trips-toggle{width:100%;display:flex;justify-content:space-between;font:inherit;font-size:13px;color:var(--ts);background:transparent;border:1px dashed var(--border);border-radius:12px;padding:10px 14px;cursor:pointer;margin-bottom:10px;}
+.trip-card .name{display:flex;align-items:center;gap:6px;}
+.rename-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:none;border-radius:6px;background:transparent;color:var(--tm);cursor:pointer;opacity:.5;transition:opacity .12s,background .12s;}
+.trip-card:hover .rename-btn,.rename-btn:hover,.rename-btn:focus-visible{opacity:1;background:var(--bg);color:var(--tp);}
+.trip-card-eyebrow{display:flex;align-items:center;gap:4px;}
+.filter-row .account-status{margin-left:auto;}

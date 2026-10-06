@@ -219,7 +219,7 @@ describe('DashboardHome', () => {
       const day = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`;
       await renderTrips([listItem({ id: 'a', title: 'Soon trip', stage: 'planning', context: { destinations: 'Goa' }, travelWindow: { precision: 'exact', departure: day } })]);
       expect(document.querySelector('.hero-trip')).toBeNull();
-      expect([...document.querySelectorAll('.trip-group-label')].map(el => el.textContent)).toEqual(['Upcoming trips']);
+      expect(document.querySelectorAll('.trip-group-label')).toHaveLength(0);
     });
 
     it('a trip that is only upcoming is listed under Upcoming trips, not Happening now', async () => {
@@ -228,7 +228,7 @@ describe('DashboardHome', () => {
       ]);
       expect(document.querySelector('.hero-trip')).toBeNull();
       const labels = [...document.querySelectorAll('.trip-group-label')].map(el => el.textContent);
-      expect(labels).toEqual(['Upcoming trips']);
+      expect(labels).toEqual([]);
     });
 
     it('never calls a trip still being discovered "Happening now", even with an ongoing window', async () => {
@@ -246,8 +246,54 @@ describe('DashboardHome', () => {
       title: 'Manali', stage: 'planned', context: { origin_city: 'Delhi' }, has_itinerary: true,
     })] }));
     renderDashboardHome({ loggedIn: true, isGuest: false, name: 'Traveler', email: 't@example.com' });
-    expect(await screen.findByText('Signed in as Traveler')).toBeInTheDocument();
-    expect(screen.getByText('Plan approved')).toBeInTheDocument();
+    expect(await screen.findByText('Plan approved')).toBeInTheDocument();
+    expect(screen.getByText(/Signed in as/)).toBeInTheDocument();
+  });
+
+  describe('card polish', () => {
+    async function renderTrips(trips) {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ trips }));
+      renderDashboardHome(GUEST);
+      await screen.findByText('Planned trips', { selector: 'h2' });
+    }
+
+    it('renaming is a quiet icon button with the accessible name "Rename", not a labelled pill', async () => {
+      await renderTrips([listItem({ id: 'a', title: 'Weekend in Coorg', stage: 'planning', context: { destinations: 'Coorg' } })]);
+      const button = within(document.querySelector('.trip-card-plan')).getByRole('button', { name: 'Rename' });
+      expect(button).toHaveClass('rename-btn');
+      expect(button.textContent).toBe('');
+    });
+
+    it('a generated title that only restates the destination is dropped from a hero card; rename moves to the eyebrow', async () => {
+      await renderTrips([listItem({ id: 'a', title: '3 Days in Kerala', title_source: 'generated', stage: 'planned', context: { destinations: 'Kerala' } })]);
+      const card = document.querySelector('.trip-card-planned');
+      expect(within(card).queryByText('3 Days in Kerala')).not.toBeInTheDocument();
+      expect(card.querySelector('.trip-card-destination-chosen')).toHaveTextContent('Kerala');
+      expect(card.querySelector('.trip-card-eyebrow')).toContainElement(within(card).getByRole('button', { name: 'Rename' }));
+    });
+
+    it('a title the traveler set is always shown, even when it names the destination', async () => {
+      await renderTrips([listItem({ id: 'a', title: 'Our Kerala trip', title_source: 'user', stage: 'planned', context: { destinations: 'Kerala' } })]);
+      expect(within(document.querySelector('.trip-card-planned')).getByText('Our Kerala trip')).toBeInTheDocument();
+    });
+
+    it('a generated title that adds something stays on a hero card', async () => {
+      await renderTrips([listItem({ id: 'a', title: 'Quiet December Getaway', title_source: 'generated', stage: 'planned', context: { destinations: 'Dalhousie' } })]);
+      expect(within(document.querySelector('.trip-card-planned')).getByText('Quiet December Getaway')).toBeInTheDocument();
+    });
+
+    it('puts "+ New trip" on the title row and the search below it', async () => {
+      await renderTrips([listItem({ id: 'a', title: 'Trip', stage: 'planning', context: { destinations: 'Goa' } })]);
+      const header = document.querySelector('.my-trips-header');
+      expect(within(header).getByRole('button', { name: '+ New trip' })).toBeInTheDocument();
+      expect(header.querySelector('input[type="search"]')).toBeNull();
+      expect(document.querySelector('.filter-row input[type="search"]')).not.toBeNull();
+    });
+
+    it('shows no group label for a single group, and "Upcoming trips" once a hero leads', async () => {
+      await renderTrips([listItem({ id: 'a', title: 'Later', stage: 'planning', context: { destinations: 'Goa' } })]);
+      expect(document.querySelectorAll('.trip-group-label')).toHaveLength(0);
+    });
   });
 
   it('splits Discovering (no plan started) from actual trips, each with its own CTA', async () => {
@@ -302,6 +348,14 @@ describe('DashboardHome', () => {
       expect(within(card).getByText('Destination not chosen yet')).toBeInTheDocument();
       expect(within(card).getByText('5 days')).toBeInTheDocument();
       expect(within(card).getByText('After Navratri')).toBeInTheDocument();
+      expect(within(card).queryByText('From Delhi')).not.toBeInTheDocument(); // the title already says it
+    });
+
+    it('keeps the origin chip when the title does not mention it', async () => {
+      const card = await renderCard(discovering({
+        title: 'Puja holidays', title_source: 'user',
+        context: { trip_duration: '5 days', origin_city: 'Delhi' },
+      }));
       expect(within(card).getByText('From Delhi')).toBeInTheDocument();
     });
 
@@ -322,7 +376,7 @@ describe('DashboardHome', () => {
 
     it("never uses the origin as the heading -- it is the same on every trip -- and lists it last", async () => {
       const card = await renderCard(discovering({ context: { origin_city: 'Delhi', budget: '1 lakh INR' } }));
-      expect(within(card).getByText('Budget: 1 lakh INR')).toBeInTheDocument();
+      expect(within(card).getByText('₹1L')).toBeInTheDocument();
       expect(within(card).getByText('From Delhi')).toBeInTheDocument();
       const only = await screen.findAllByText('From Delhi');
       expect(only).toHaveLength(1);

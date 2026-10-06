@@ -192,7 +192,7 @@ describe('discoveryHeadline', () => {
     delete all.trip_duration;
     expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'num_travelers', text: '4 travellers' });
     delete all.num_travelers;
-    expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'budget', text: 'Budget: 1 lakh INR' });
+    expect(discoveryHeadline(trip({ context: all }))).toEqual({ key: 'budget', text: '₹1L' });
   });
 
   it("tidies the traveler's own words: capitalises and drops a parenthetical aside", () => {
@@ -203,7 +203,9 @@ describe('discoveryHeadline', () => {
   it('keeps already-worded values and singularises one traveller', () => {
     expect(discoveryHeadline(trip({ context: { trip_duration: '3 days' } })).text).toBe('3 days');
     expect(discoveryHeadline(trip({ context: { num_travelers: '1' } })).text).toBe('1 traveller');
-    expect(discoveryHeadline(trip({ context: { budget: '50k total budget' } })).text).toBe('50k total budget');
+    expect(discoveryHeadline(trip({ context: { budget: '50k total budget' } })).text).toBe('₹50k total');
+    expect(discoveryHeadline(trip({ context: { budget: 'Tight' } })).text).toBe('Budget: Tight');
+    expect(discoveryHeadline(trip({ context: { budget: 'a tight budget' } })).text).toBe('A tight budget');
   });
 
   it('is null when only the origin (or nothing) is known', () => {
@@ -221,6 +223,13 @@ describe('discoveryPills', () => {
 
   it('lists every fact in priority order when nothing is excluded', () => {
     const t = trip({ context: { origin_city: 'Delhi', budget: '1 lakh INR', trip_duration: '5' } });
-    expect(discoveryPills(t)).toEqual(['5 days', 'Budget: 1 lakh INR', 'From Delhi']);
+    expect(discoveryPills(t)).toEqual(['5 days', '₹1L', 'From Delhi']);
+  });
+
+  it('leaves out the origin chip when the displayed title already says where the trip starts', () => {
+    const t = trip({ context: { origin_city: 'Delhi', trip_duration: '5' } });
+    expect(discoveryPills(t, null, 'Serene Winter Trip from Delhi')).toEqual(['5 days']);
+    expect(discoveryPills(t, null, 'Serene Winter Trip')).toEqual(['5 days', 'From Delhi']);
+    expect(discoveryPills(t, null, null)).toEqual(['5 days', 'From Delhi']);
   });
 });
