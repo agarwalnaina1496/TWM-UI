@@ -1,7 +1,7 @@
 // Maps `TripView` (plan + summary + context_recap) into what TripPreview.jsx
 // renders. TWM-220: no more raw `planner_state` / `trip_context` reads.
 
-import { contextDestination } from './tripLifecycle.js';
+import { contextDestination } from '../../lib/tripLifecycle.js';
 
 export function planBuilderSummary(view) {
   const plan = view?.plan || {};

@@ -126,7 +126,7 @@ describe('TripPreview real Guide Plan Builder', () => {
     const user = userEvent.setup();
     render(<MemoryRouter><TripPreview /></MemoryRouter>);
     await user.click(screen.getByRole('button', { name: /Anything else to change/ }));
-    await user.type(screen.getByRole('textbox', { name: 'Message Guide' }), 'Make it more adventurous');
+    await user.type(screen.getByRole('textbox', { name: 'Message Scout' }), 'Make it more adventurous');
     await user.click(screen.getByRole('button', { name: 'Send' }));
     expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', { message: 'Make it more adventurous' });
   });

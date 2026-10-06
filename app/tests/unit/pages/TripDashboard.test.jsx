@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TripDashboard from '../../../src/pages/TripDashboard.jsx';
+import { TestQueryProvider } from '../testUtils.js';
 
 let commandSnapshot;
 let sendTripCommand;
@@ -171,7 +172,7 @@ function makeFetch(over = {}) {
 }
 
 function renderDashboard(initialEntries = ['/dashboard']) {
-  return render(<MemoryRouter initialEntries={initialEntries}><TripDashboard /></MemoryRouter>);
+  return render(<TestQueryProvider><MemoryRouter initialEntries={initialEntries}><TripDashboard /></MemoryRouter></TestQueryProvider>);
 }
 async function readyDashboard() {
   const view = renderDashboard();
@@ -286,7 +287,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
 
     commandSnapshot = { ...readyView({ summary: { title: 'Goa Escape' } }), version: 2 };
     itineraryResponse = enrichedDoc({ trip_summary: { title: 'Goa Escape' } });
-    rerender(<MemoryRouter><TripDashboard /></MemoryRouter>);
+    rerender(<TestQueryProvider><MemoryRouter><TripDashboard /></MemoryRouter></TestQueryProvider>);
     await waitFor(() => expect(screen.getByText('Goa Escape')).toBeInTheDocument());
     await waitFor(() => expect(count).toBe(2));
     expect(sendTripCommand).not.toHaveBeenCalled();
@@ -594,7 +595,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     // Switching away and manually back is still possible — the auto-switch doesn't re-fire.
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /Overview/ }));
-    expect(await screen.findByText('Your trip so far')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /View trip/ })).toBeInTheDocument();
   });
 
   it('does not reset build progress to step one when switching tabs away and back', async () => {
@@ -602,12 +603,12 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     commandSnapshot = frozenView({ context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn(() => new Promise(() => {}));
     const user = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
-    render(<MemoryRouter><TripDashboard /></MemoryRouter>);
+    render(<TestQueryProvider><MemoryRouter><TripDashboard /></MemoryRouter></TestQueryProvider>);
     await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
     expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
 
     await user.click(screen.getByRole('button', { name: /Overview/ }));
-    expect(await screen.findByText('Your trip so far')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /View trip/ })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Itinerary/ }));
 
     expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
@@ -619,7 +620,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     commandSnapshot = frozenView({ context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn(() => new Promise(() => {}));
     const user = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
-    render(<MemoryRouter><TripDashboard /></MemoryRouter>);
+    render(<TestQueryProvider><MemoryRouter><TripDashboard /></MemoryRouter></TestQueryProvider>);
     await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
     expect(screen.getAllByRole('listitem')[0]).toHaveClass('done');
 
@@ -637,7 +638,7 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     commandSnapshot = frozenView();
     sendTripCommand = vi.fn(() => new Promise(() => {}));
-    render(<MemoryRouter><TripDashboard /></MemoryRouter>);
+    render(<TestQueryProvider><MemoryRouter><TripDashboard /></MemoryRouter></TestQueryProvider>);
     await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
     expect(screen.getAllByRole('listitem')[0]).toHaveClass('active');
     expect(screen.getAllByRole('listitem')[0]).not.toHaveClass('done');
@@ -682,27 +683,62 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
 
   // ---- pre-plan Dashboard ----------------------------------------
 
+  it('shows the local Matching phase progress, not a trip-wide pipeline', async () => {
+    // TWM-234: `recommended` now embeds the Destinations comparison
+    // directly (no facts table, no intermediate CTA) -- wait on the
+    // phase-progress label itself rather than the retired facts heading.
+    commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    await screen.findByText('Matching');
+    const active = screen.getByText('Recommended');
+    expect(active.className).toContain('active');
+    expect(screen.queryByText('Planning')).not.toBeInTheDocument();
+  });
+
+  it('hides "Before you go" entirely until Atlas has produced a summary', async () => {
+    commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    await screen.findByText('What we know so far');
+    expect(screen.queryByText('🎒 Before you go')).not.toBeInTheDocument();
+  });
+
   it('opens with only context populated and no itinerary — no crash', async () => {
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    await screen.findByText('Your trip so far');
+    // TWM-234: matching embeds the conversation (with its own facts panel)
+    // instead of the plain facts table.
+    await screen.findByText('What we know so far');
     expect(screen.getByText('Delhi')).toBeInTheDocument();
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
-  it('shows the tab bar in the pre-plan state, Itinerary renders its empty state, Support is always accessible', async () => {
+  it('shows the tab bar in the pre-plan state with Itinerary hidden until planning starts, Support always accessible', async () => {
+    // TWM-234: Discover (matching/recommended/matched) has nothing to show
+    // on Itinerary yet -- and showing the tab anyway implies Discover and
+    // Plan are one fixed pipeline. It only appears once planning starts.
     commandSnapshot = prePlanView({ stage: 'matching' });
     sendTripCommand = vi.fn();
     renderDashboard();
     const tabs = await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
     expect(within(tabs).getByText('Overview')).toBeInTheDocument();
+    expect(within(tabs).queryByText('Itinerary')).not.toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(within(tabs).getByText('Itinerary'));
-    expect(screen.getByText('Your day-by-day plan will appear here once Guide finishes it.')).toBeInTheDocument();
     await user.click(within(tabs).getByText('Support'));
     expect(screen.getByRole('region', { name: 'Frequently asked questions' })).toBeInTheDocument();
     expect(screen.queryByText('Available once your itinerary is ready.')).not.toBeInTheDocument();
+  });
+
+  it('shows the Itinerary tab once planning starts, with its empty state before a plan exists', async () => {
+    commandSnapshot = prePlanView({ stage: 'planning', context: {}, plan: { places: [], day_plan: [], frozen: false, awaiting: null } });
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    const tabs = await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
+    const user = userEvent.setup();
+    await user.click(within(tabs).getByText('Itinerary'));
+    expect(screen.getByText('Your day-by-day plan will appear here once Scout finishes it.')).toBeInTheDocument();
   });
 
   it('shows a "Back to your trips" link in the pre-plan state', async () => {
@@ -712,28 +748,47 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     expect(await screen.findByRole('link', { name: '← Back to your trips' })).toHaveAttribute('href', '/');
   });
 
-  it('does not repeat the stated budget in the facts table -- TripHero already shows it', async () => {
+  it('does not show a Budget section pre-plan -- TripHero already shows the stated figure, no computed breakdown exists yet', async () => {
     // TWM-232: TripHero's stat-tile grid already renders the traveler's
     // stated budget pre-plan ("Not set yet" when missing) -- Overview's own
     // Budget section only appears once there's real added information (the
-    // computed range breakdown), so budget is excluded from the generic
-    // facts table entirely, at every stage, to avoid a second copy of it.
-    commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi', budget: '₹1,00,000 total for both' } });
+    // computed range breakdown).
+    // TWM-234: the generic "Your trip so far" facts table is gone entirely
+    // (it read as a checklist of trip facets at stages where none of it was
+    // actionable) -- `matched` here (no primary CTA) keeps this test on a
+    // stage where nothing else is embedded either.
+    commandSnapshot = prePlanView({ stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Udaipur', budget: '₹1,00,000 total for both' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const facts = await screen.findByText('Your trip so far');
-    expect(within(facts.closest('.trip-facts')).queryByText('budget')).not.toBeInTheDocument();
+    await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
     expect(screen.queryByText('💰 Budget')).not.toBeInTheDocument();
   });
 
-  it('shows exactly one bottom primary CTA pointing at discovery when Route is not done', async () => {
-    // TWM-232: the Destination row itself no longer carries its own CTA
-    // (that was a live duplicate of this same button) -- one action, once.
+  it('embeds the conversation inline instead of a "Continue matching" CTA while matching', async () => {
+    // TWM-234: the next step for a matching-stage trip is the conversation
+    // itself -- it renders right here, no click needed to see it, replacing
+    // the CTA button this stage used to show (TWM-232's one-action rule
+    // still holds: exactly one thing happens here, it's just the
+    // conversation now instead of a button that opens it elsewhere).
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    await screen.findByText('Your trip so far');
-    expect(screen.getAllByRole('button', { name: 'Continue matching →' })).toHaveLength(1);
+    await screen.findByText('What we know so far');
+    expect(screen.queryByRole('button', { name: 'Continue matching →' })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Message Scout…')).toBeInTheDocument();
+  });
+
+  it('sends a message through the embedded conversation via the real trip command', async () => {
+    commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn(async () => ({
+      message: 'Got it, anything else?',
+      trip: prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } }),
+    }));
+    renderDashboard();
+    const input = await screen.findByPlaceholderText('Message Scout…');
+    await userEvent.setup().type(input, 'Actually make it 4 days{Enter}');
+    expect(sendTripCommand).toHaveBeenCalledWith('traveler_message', expect.objectContaining({ message: 'Actually make it 4 days' }));
+    expect(await screen.findByText('Got it, anything else?')).toBeInTheDocument();
   });
 
   it('points currentTripId at the trip named by ?tripId= when landing fresh', async () => {
@@ -748,14 +803,18 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     sendTripCommand = vi.fn();
     renderDashboard();
     expect(await screen.findByRole('alert')).toHaveTextContent('This trip is no longer available.');
-    expect(screen.getByRole('button', { name: 'Back to your trips' })).toBeInTheDocument();
   });
 
   it('a CTA click points currentTripId at the trip before navigating', async () => {
-    commandSnapshot = prePlanView({ stage: 'planning', context: { destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
+    // TWM-234: matching/planning embed chat, recommended/matched embed
+    // Destinations, and planning/plan_ready-with-a-day_plan now embeds Plan
+    // Builder too -- a genuinely context-less `new` trip is the one
+    // remaining stage whose CTA still navigates, to keep covering the
+    // go()/setCurrentTripId behavior itself.
+    commandSnapshot = prePlanView({ stage: 'new', context: {} });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const button = await screen.findByRole('button', { name: 'Continue planning →' });
+    const button = await screen.findByRole('button', { name: 'Start planning →' });
     await userEvent.setup().click(button);
     expect(setCurrentTripId).toHaveBeenCalledWith('trip-1');
   });
@@ -764,43 +823,132 @@ describe('Trip Dashboard (TripView + enriched itinerary)', () => {
     commandSnapshot = prePlanView({ stage: 'planning', context: {}, plan: { places: [], day_plan: [], frozen: false, awaiting: null } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    await screen.findByText('Your trip so far');
+    await screen.findByText('Scout is here to help with your trip.');
     expect(sendTripCommand).not.toHaveBeenCalled();
   });
 
-  it('unknown-destination Discover path: Destination row shows plain "Not chosen yet", CTA lives at the bottom only', async () => {
+  it('unknown-destination Discover path: Destination row shows plain "Not chosen yet", conversation lives at the bottom only', async () => {
     // TWM-232: the row-level CTA was a live duplicate of the bottom primary
     // CTA (same button rendered twice) -- the Destination row is a plain
     // fact now, the single action lives at the bottom of the tab.
+    // TWM-234: matching now embeds the conversation instead of showing the
+    // facts table at all -- the "single action" is the conversation itself.
     commandSnapshot = prePlanView({ stage: 'matching', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const facts = await screen.findByText('Your trip so far');
-    const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
-    expect(within(row).getByText('Not chosen yet')).toBeInTheDocument();
-    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue matching →' })).toBeInTheDocument();
+    await screen.findByText('What we know so far');
+    expect(screen.queryByText('Your trip so far')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Message Scout…')).toBeInTheDocument();
   });
 
-  it('recommendations-ready: Destination row shows plain "Not chosen yet", CTA lives at the bottom only', async () => {
+  it('recommendations-ready: embeds the Destinations comparison directly, no intermediate CTA', async () => {
+    // TWM-234: `recommended` used to show a plain facts row plus a "Review
+    // recommendations ->" button that navigated away. It now embeds the
+    // Destinations comparison panel right here, same pattern as the
+    // matching-stage chat embed -- no click needed, no facts table shown
+    // underneath it (replace, not append).
     commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
     sendTripCommand = vi.fn();
+    global.fetch = vi.fn(async url => (url.includes('/recommendations')
+      ? jsonResponse({
+        version: 1, status: 'SUCCESS', message: 'A strong match.', trip_type: 'circuit',
+        traveler_criteria: [{ id: 'budget', label: 'Within budget', requirement_type: 'HARD' }],
+        options: [{
+          rank: 1, type: 'circuit', name: 'Udaipur Loop', circuit_id: 'udaipur-loop', summary: 'A relaxed lakeside base.', other_considerations: [],
+          evaluations: [{
+            criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Comfortably within budget.',
+            details: [{ type: 'bullets', items: ['Fits the stated range'] }],
+          }],
+        }],
+      })
+      : jsonResponse({})));
     renderDashboard();
-    const facts = await screen.findByText('Your trip so far');
-    const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
-    expect(within(row).getByText('Not chosen yet')).toBeInTheDocument();
-    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Review recommendations →' })).toBeInTheDocument();
+    expect(await screen.findByText('A few that fit well')).toBeInTheDocument();
+    expect(screen.getByText('Udaipur Loop')).toBeInTheDocument();
+    expect(screen.queryByText('Your trip so far')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Review recommendations →' })).not.toBeInTheDocument();
   });
 
-  it('known-destination: Destination row shows the destination with no CTA', async () => {
-    commandSnapshot = prePlanView({ stage: 'planning', context: { origin_city: 'Delhi', destinations: 'Udaipur' }, plan: { places: [], day_plan: [], frozen: false, awaiting: 'trip_duration' } });
+  it('"Choose this destination" then "Plan this trip" from the embedded Destinations panel never navigates away -- it stays on Overview', async () => {
+    // TWM-234: this used to navigate to a separate /scout-chat or
+    // /trip-preview page. Destinations is embedded now, so choosing a
+    // destination and starting to plan it -- now two separate traveler
+    // actions -- must both stay on Overview; the next embed (chat or Plan
+    // Builder) takes over once the refetched TripView's stage/plan changes,
+    // never via an explicit route change.
+    commandSnapshot = prePlanView({ stage: 'recommended', context: { origin_city: 'Delhi' } });
+    sendTripCommand = vi.fn(async command => {
+      if (command === 'select_destination') {
+        commandSnapshot = {
+          ...prePlanView({ stage: 'matched', context: { origin_city: 'Delhi' } }),
+          lifecycle: { stage: 'matched', status: 'free', active_agent: null, selected_option: { type: 'circuit', id: 'udaipur-loop' } },
+        };
+        return { trip: { id: 'trip-1' } };
+      }
+      commandSnapshot = {
+        ...prePlanView({ stage: 'planning', context: { origin_city: 'Delhi' }, plan: { awaiting: 'trip_duration' } }),
+        lifecycle: { stage: 'planning', status: 'free', active_agent: 'guide', selected_option: { type: 'circuit', id: 'udaipur-loop' } },
+      };
+      return { message: 'Great choice!', trip: { id: 'trip-1', plan: { awaiting: 'trip_duration' } } };
+    });
+    global.fetch = vi.fn(async url => (url.includes('/recommendations')
+      ? jsonResponse({
+        version: 1, status: 'SUCCESS', message: 'A strong match.', trip_type: 'circuit',
+        traveler_criteria: [{ id: 'budget', label: 'Within budget', requirement_type: 'HARD' }],
+        options: [{
+          rank: 1, type: 'circuit', name: 'Udaipur Loop', circuit_id: 'udaipur-loop', summary: 'A relaxed lakeside base.', other_considerations: [],
+          evaluations: [{
+            criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Comfortably within budget.',
+            details: [{ type: 'bullets', items: ['Fits the stated range'] }],
+          }],
+        }],
+      })
+      : jsonResponse({})));
+    const rendered = renderDashboard();
+    await screen.findByText('Udaipur Loop');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Choose this destination' }));
+    await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('select_destination', { optionId: 'udaipur-loop' }));
+    // useTrip is mocked and not reactive here; re-render so Overview sees the
+    // new snapshot, as the real query cache would push it.
+    rendered.rerender(<TestQueryProvider><MemoryRouter initialEntries={['/dashboard']}><TripDashboard /></MemoryRouter></TestQueryProvider>);
+
+    await screen.findByRole('button', { name: 'Plan this trip →' });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Plan this trip →' }));
+
+    await waitFor(() => expect(sendTripCommand).toHaveBeenCalledWith('start_planning'));
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('known-destination: shows no primary CTA once the destination is settled and planning has not started', async () => {
+    // TWM-234: the generic "Your trip so far" facts table (which used to
+    // carry a plain Destination row here) is gone entirely -- TripHero's own
+    // heading already names the destination. Overview itself has nothing
+    // actionable to show at this stage, so no CTA button and neither
+    // embedded panel should render.
+    commandSnapshot = prePlanView({ stage: 'matched', context: { origin_city: 'Delhi', destinations: 'Udaipur' } });
     sendTripCommand = vi.fn();
     renderDashboard();
-    const facts = await screen.findByText('Your trip so far');
-    const row = within(facts.closest('.trip-facts')).getByText('Destination').closest('.trip-facts-row');
-    expect(within(row).getByText('Udaipur')).toBeInTheDocument();
-    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+    await screen.findByRole('navigation', { name: 'Trip Dashboard tabs' });
+    expect(screen.queryByRole('button', { name: /→$/ })).not.toBeInTheDocument();
+  });
+
+  it('embeds Plan Builder directly once planning has produced a day_plan, no intermediate CTA', async () => {
+    // TWM-234: `planning`/`plan_ready` with a day_plan used to show a
+    // "Resume plan builder ->" button that navigated to /trip-preview. It
+    // now embeds the Plan Builder panel right here, same pattern as chat
+    // and Destinations.
+    commandSnapshot = {
+      ...prePlanView({
+        stage: 'planning', context: { origin_city: 'Delhi', destinations: 'Udaipur' },
+        plan: { places: ['Lake Palace'], day_plan: [{ day_number: 1, places: ['Lake Palace'], pace: 'relaxed', buffer_note: null }], frozen: false, awaiting: null },
+      }),
+      has_day_plan: true,
+    };
+    sendTripCommand = vi.fn();
+    renderDashboard();
+    expect(await screen.findByText('Lake Palace')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve this plan →' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resume plan builder →' })).not.toBeInTheDocument();
   });
 });
 

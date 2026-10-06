@@ -4,6 +4,7 @@ import { modeLabel, PARTNER_LABEL, MODES } from '../../lib/booking/shared.js';
 import { ModeTag, VerificationTag } from '../StatusPills.jsx';
 import StatusPill from '../ui/StatusPill.jsx';
 import TrustedActionCta from './TrustedActionCta.jsx';
+import '../../styles/feedback.css';
 
 function durationDistanceLabel(option) {
   const parts = [];

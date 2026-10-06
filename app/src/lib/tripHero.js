@@ -24,29 +24,41 @@ function isSameMonth(date, now) {
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
 }
 
-// Ranks committed, non-completed trips: one whose window is the current
-// month wins outright ("ongoing"); otherwise the nearest future month wins;
-// a trip with no parseable window never wins. Returns null when nothing
-// qualifies — the hero section is then absent entirely, never a placeholder.
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function tripDays(trip) {
+  const item = (trip?.context_recap || []).find(fact => fact.key === 'trip_duration' && fact.value);
+  const days = item ? parseInt(item.value, 10) : NaN;
+  return days > 0 ? days : 1;
+}
+
+// A trip is underway only when we can prove it: an exact departure that has
+// started and whose length hasn't run out. A trip we only know the month of
+// (`precision: 'month'`) can't claim that -- it is "this month" at best.
+function isUnderway(trip, now) {
+  const window = trip?.travel_window;
+  if (window?.precision !== 'exact') return false;
+  const start = travelWindowDate(trip);
+  return Boolean(start) && start <= now && now < new Date(start.getTime() + tripDays(trip) * DAY_MS);
+}
+
+function isThisMonthOnly(trip, now) {
+  const date = travelWindowDate(trip);
+  return trip?.travel_window?.precision === 'month' && Boolean(date) && isSameMonth(date, now);
+}
+
+// The trip given the hero slot: one that is underway, else one we only know to
+// be this month. A trip that is merely next up never takes it -- it belongs
+// under "Upcoming trips". Null when neither exists; the hero section is then
+// absent, never a placeholder.
 export function selectHeroTrip(trips, now = new Date()) {
-  let ongoing = null;
-  let nearestUpcoming = null;
-  let nearestUpcomingDate = null;
+  return trips.find(t => isUnderway(t, now)) || trips.find(t => isThisMonthOnly(t, now)) || null;
+}
 
-  for (const t of trips) {
-    const parsed = travelWindowDate(t);
-    if (!parsed) continue;
-    if (isSameMonth(parsed, now)) {
-      if (!ongoing) ongoing = t;
-      continue;
-    }
-    if (parsed > now && (!nearestUpcomingDate || parsed < nearestUpcomingDate)) {
-      nearestUpcoming = t;
-      nearestUpcomingDate = parsed;
-    }
-  }
-
-  return ongoing || nearestUpcoming || null;
+// What the hero slot is called: "Happening now" only for a trip proven to be
+// underway, otherwise "This month".
+export function heroLabel(trip, now = new Date()) {
+  return isUnderway(trip, now) ? 'Happening now' : 'This month';
 }
 
 // TWM-232: a trip belongs in "Past" once its travel window has fully

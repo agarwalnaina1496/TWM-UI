@@ -46,7 +46,7 @@ test('exact natural-language journey preserves nuance and hands off after two qu
   await page.getByText('Continue without login').click();
   await page.getByText('Discover Destination').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
-  await page.getByPlaceholder('Tell Scout about your trip…').fill(GOLDEN_QUERY);
+  await page.getByPlaceholder('Message Scout…').fill(GOLDEN_QUERY);
   await page.getByLabel('Send').click();
 
   await expect(page.getByText(ASK_ORIGIN)).toBeVisible();

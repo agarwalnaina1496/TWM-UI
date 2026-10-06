@@ -1,14 +1,6 @@
 .trip-recap{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 26px;}
 .recap-pill{font-size:11px;font-weight:600;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:5px 11px;color:var(--ts);}
 
-/* TWM-174: Destinations-specific checkpoint-overlay parts. The generic
-   overlay/card/message shell lives in design-system.css since TWM-175's
-   booking prompt reuses it too. */
-.checkpoint-known-facts{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px;}
-.checkpoint-fact-chip{font-size:11px;font-weight:600;background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:4px 10px;color:var(--ts);}
-.checkpoint-input-row{display:flex;gap:8px;}
-.checkpoint-input-row input{flex:1;border:1px solid var(--border);border-radius:10px;padding:11px 13px;font-size:13.5px;background:var(--bg);color:var(--tp);}
-
 /* Price-forward independently comparable option cards. */
 .options-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:18px;}
 .options-grid.options-busy{opacity:.55;pointer-events:none;}
@@ -16,7 +8,6 @@
 
 .dest-detail-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px 26px;position:relative;display:flex;flex-direction:column;gap:0;}
 .dest-detail-card.focused{border-color:var(--accent);box-shadow:0 4px 16px rgba(156,90,52,0.1);}
-.pick-badge{position:absolute;top:-11px;left:24px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:5px 12px;border-radius:99px;letter-spacing:.02em;box-shadow:0 2px 6px rgba(156,90,52,0.25);}
 .dest-card-name-btn{all:unset;font-family:'Fraunces',serif;font-size:21px;font-weight:700;margin:6px 0 4px;letter-spacing:-0.01em;cursor:pointer;color:var(--tp);line-height:1.2;}
 .dest-card-name-btn:hover{color:var(--accent);}
 .dest-tag{font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:8px;}
@@ -37,11 +28,6 @@
 .agent-summary-badge{flex-shrink:0;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);background:var(--accent-bg);border-radius:99px;padding:3px 9px;margin-top:2px;}
 .agent-summary-message p{margin:0;font-size:13.5px;color:var(--ts);line-height:1.5;}
 
-.refine-scope-pill{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--tp);background:var(--accent-bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;}
-.refine-scope-pill strong{font-weight:700;}
-.refine-scope-clear{all:unset;cursor:pointer;font-size:14px;font-weight:700;color:var(--ts);line-height:1;padding:0 2px;}
-.refine-scope-clear:hover{color:var(--tp);}
-
 /* TWM-173: terminal-failure states get their own Scout-voiced, rust-toned
    treatment — visually distinct from .state-unsafe (reused for real load
    errors), with constraint_adjustment_suggestions as tappable chips. */
@@ -51,11 +37,13 @@
 .terminal-failure-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
 .terminal-failure .chip{background:var(--surface);}
 
-/* TWM-173: always-present general refinement drawer. */
-.refinement-drawer{margin-top:8px;}
-.refinement-toggle{all:unset;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--ts);display:flex;align-items:center;gap:6px;padding:8px 0;}
-.refinement-toggle:hover{color:var(--tp);}
-.refinement-body{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;}
+/* TWM-234: the one general refinement entry point (the per-option "more
+   like this" scoped variant was dropped -- two refine affordances read as
+   confusing UX). Made a real, visible button (btn btn-ghost in the markup)
+   rather than a barely-there text link, since it's the traveler's only way
+   to say "none of these" once results have already come back. */
+.refinement-drawer{margin-top:14px;}
+.refinement-body{margin-top:10px;display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;}
 .refinement-input{font:inherit;font-size:13px;border:1px solid var(--border);border-radius:10px;padding:10px 12px;min-height:70px;resize:vertical;background:var(--bg);color:var(--tp);}
 .refinement-body .btn{align-self:flex-end;}
 
@@ -93,18 +81,3 @@
 
 .dest-actions{display:flex;gap:8px;flex-wrap:wrap;}
 .dest-actions .btn{font:inherit;cursor:pointer;}
-
-.price-evidence{display:flex;flex-direction:column;gap:2px;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin:0 0 12px;font-size:11.5px;color:var(--ts);background:var(--bg);}
-.price-evidence strong{font-size:12px;}
-.price-evidence small{color:var(--tm);}
-.price-evidence.state-current{border-color:var(--sage);background:var(--sage-bg);}
-.price-evidence.state-stale,.price-evidence.state-partial{border-color:#d6a85c;background:#fdf3e0;}
-.price-evidence.state-unavailable,.price-evidence.state-unsafe{border-color:#d98b7b;background:#fbe8e6;}
-.checked-total{font-weight:700;}
-
-
-
-.think{display:flex;align-items:center;gap:10px;justify-content:center;margin:60px 0;font-size:13px;color:var(--ts);}
-.dot-flash{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:flash 1s infinite ease-in-out;}
-.dot-flash:nth-child(2){animation-delay:.15s;} .dot-flash:nth-child(3){animation-delay:.3s;}
-@keyframes flash{0%,80%,100%{opacity:.25;}40%{opacity:1;}}

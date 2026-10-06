@@ -64,7 +64,7 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
       command: 'select_destination',
       response: commandResponse('Madhya Pradesh Heritage and Nature is confirmed.', tripRecord({
         version: 6,
-        trip_state: { stage: 'matched', active_agent: null },
+        trip_state: { stage: 'matched', active_agent: null, selected_option: { type: 'circuit', id: 'gwalior-orchha-khajuraho-panna' } },
       })),
     },
     {
@@ -93,7 +93,7 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
   await page.getByText('Continue without login').click();
   await page.getByText('Discover Destination').click();
   await expect(page).toHaveURL(/\/app\/journey-entry/);
-  await page.getByPlaceholder('Tell Scout about your trip…').fill(GOLDEN_QUERY);
+  await page.getByPlaceholder('Message Scout…').fill(GOLDEN_QUERY);
   await page.getByLabel('Send').click();
 
   await expect(page.getByText(ASK_ORIGIN)).toBeVisible();
@@ -103,7 +103,8 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
   await expect(page.getByText(HANDOFF)).toBeVisible();
   await page.getByRole('button', { name: 'See destinations →' }).click();
 
-  await expect(page).toHaveURL(/\/app\/destinations/);
+  // TWM-234: Destinations embeds into the unified Dashboard shell.
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
 
   // The exact persisted budget must survive verbatim, never a generic bucket.
@@ -120,7 +121,9 @@ test('exact golden journey reaches real Meridian recommendations and selects Mad
   await mpCard.getByText('See why this fits').click();
   await expect(mpCard.getByText(/Winter days generally support sightseeing/).first()).toBeVisible();
 
-  await mpCard.getByText('Plan this trip →').click();
-  await expect(page).toHaveURL(/\/app\/trip-preview/);
+  await mpCard.getByText('Choose this destination').click();
+  await page.getByText('Plan this trip →').click();
+  // TWM-234: Plan Builder embeds into the same Dashboard shell -- no navigation.
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('Gwalior Fort')).toBeVisible();
 });

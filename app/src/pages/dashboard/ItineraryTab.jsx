@@ -21,7 +21,7 @@ export default function ItineraryTab({ days, staySegmentByItemId, activeDay, onS
   const selectedDay = days.find(day => day.day_number === activeDay) || days[0];
   if (!selectedDay) return (
     <div className="dashboard-card tab-empty-state content-narrow">
-      <p>Your day-by-day plan will appear here once Guide finishes it.</p>
+      <p>Your day-by-day plan will appear here once Scout finishes it.</p>
       <a className="btn btn-primary" href={ROUTES.scoutChat}>Continue chat →</a>
     </div>
   );

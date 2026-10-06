@@ -4,21 +4,19 @@ import Layout from '../components/Layout.jsx';
 import { useTrip } from '../context/TripContext.jsx';
 import { useTripsQuery } from '../hooks/tripQueries.js';
 import ContextualAuthModal from '../components/ContextualAuthModal.jsx';
-import StatusPill from '../components/ui/StatusPill.jsx';
 import { ENTRY_INTENTS } from '../data/entryCommandFixtures.js';
 import { trackEvent } from '../lib/analytics.js';
 import {
-  isTripEmpty, stageBadge, contextRecapPills, contextDestination,
-  tripStatusLine, relativeUpdatedAt,
+  isTripEmpty, tripCardSpec, contextDestination, discoveryHeadline, discoveryPills, mentions,
 } from '../lib/tripLifecycle.js';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
-import { isPastTrip, selectHeroTrip, travelWindowDate } from '../lib/tripHero.js';
+import MatchedTripActions from '../components/MatchedTripActions.jsx';
+import { heroLabel, isPastTrip, selectHeroTrip, travelWindowDate } from '../lib/tripHero.js';
 import { withTripId } from '../lib/tripUrl.js';
 import { decodeHtmlEntities } from '../lib/text.js';
 import { ROUTES } from '../constants/routes.js';
+import { DISCOVER_STAGES } from '../constants/tripStages.js';
 import '../styles/dashboard-home.css';
-
-const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution', 'b-matched': 'caution', 'b-done': 'positive' };
 
 // TWM-232: the Backend owns title composition entirely -- a real
 // traveler-set title, or an LLM-generated one Meridian/Guide produce once
@@ -27,14 +25,16 @@ const BADGE_TONE = { 'b-new': 'neutral', 'b-chat': 'caution', 'b-reco': 'caution
 // just presence detection, so the uniform card knows whether to render a
 // title row at all (the literal placeholder counts as "nothing to show yet",
 // same as no title).
-function displayTitle(t) {
-  return t.title && t.title !== 'Untitled Trip' ? decodeHtmlEntities(t.title) : null;
+// Within Discovering, the trips furthest along come first: a chosen
+// destination is waiting on a decision, recommendations on a review, and a
+// conversation can pick up whenever. Ties keep the list's own order.
+const DISCOVERY_ORDER = { matched: 0, recommended: 1 };
+function byDiscoveryStage(a, b) {
+  return (DISCOVERY_ORDER[a.lifecycle?.stage] ?? 2) - (DISCOVERY_ORDER[b.lifecycle?.stage] ?? 2);
 }
 
-// updated_at is set on every mutation, but a never-touched-since-creation
-// trip can still have it null — fall back to created_at rather than show nothing.
-function formatTripTimestamp(t) {
-  return relativeUpdatedAt(t.updated_at || t.created_at);
+function displayTitle(t) {
+  return t.title && t.title !== 'Untitled Trip' ? decodeHtmlEntities(t.title) : null;
 }
 
 function matchesSearch(t, query) {
@@ -50,7 +50,25 @@ function matchesSearch(t, query) {
 // TWM-232: the only call site now only renders this at all once `title` is
 // already truthy (see TripCard) -- `label` is never falsy here, so this no
 // longer needs its own fallback chain.
-function RenameName({ t, rename, showRename = true, label }) {
+function PencilIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11.2 2.3a1.5 1.5 0 0 1 2.1 2.1L5 12.7 2 13.5l.8-3z" />
+    </svg>
+  );
+}
+
+// A quiet pencil, not a labelled button: renaming is occasional, so it only
+// gains weight on hover or focus. The accessible name stays "Rename".
+function RenameButton({ t, rename, actionLabel = 'Rename', blankStart = false }) {
+  return (
+    <button type="button" className="rename-btn" aria-label={actionLabel} title={actionLabel} onClick={() => rename.start(blankStart ? { ...t, title: '' } : t)}>
+      <PencilIcon />
+    </button>
+  );
+}
+
+function RenameName({ t, rename, showRename = true, label, actionLabel = 'Rename', blankStart = false }) {
   if (rename.id === t.id) {
     return (
       <input
@@ -68,60 +86,125 @@ function RenameName({ t, rename, showRename = true, label }) {
   }
   return (
     <div className="name">
-      {label}{' '}
-      {showRename && (
-        <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => rename.start(t)}>
-          Rename
+      {label}
+      {showRename && <RenameButton t={t} rename={rename} actionLabel={actionLabel} blankStart={blankStart} />}
+    </div>
+  );
+}
+
+// TWM-232: context_recap can carry more facts than a scan-card has room for
+// -- cap the visible chips instead of cramming every one into a dot-joined
+// line. `limit` is how many show before collapsing into "+N more".
+function RecapPills({ pills, limit = 2 }) {
+  const [expanded, setExpanded] = useState(false);
+  if (pills.length === 0) return null;
+  const shown = expanded ? pills : pills.slice(0, limit);
+  const extra = pills.length - limit;
+  return (
+    <div className="trip-card-recap">
+      {shown.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
+      {extra > 0 && (
+        <button type="button" className="trip-card-recap-pill trip-card-recap-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+          {expanded ? 'Show less' : `+${extra} more`}
         </button>
       )}
     </div>
   );
 }
 
-// TWM-171/TWM-232: exactly one primary affordance per trip card, fixed
-// label regardless of stage — stage is communicated via the adjacent status
-// tag, not this button's text. One uniform shape for every stage now: the
-// title row only renders once a real title exists (nothing to rename before
-// that), everything else (badge, timestamp, facts, CTA) is identical
-// structure regardless of where the trip is in its lifecycle. The badge
-// always shows the honest, stage-specific text — no more generic label —
-// since every card's CTA now opens the same place (Dashboard) and lets the
-// per-stage next-step live there instead of in the card's own label.
+// TWM-234: one card for every stage of every module. Title (the traveler's own,
+// else the one Meridian or Guide stored -- a single title, whoever set it --
+// else the most telling fact so far, which the chips then don't repeat, else a
+// generic), the facts as chips, one action. `tripCardSpec` supplies the only
+// things that vary by stage: the line under the title, the action's wording,
+// and -- for matched and planned, which are symmetric -- a tint, an eyebrow and
+// the destination as the card's hero, with the title stepping back to a small
+// name tag so the two never read as one line.
 function TripCard({ t, rename, busyId, onOpen, showRename = true }) {
-  const badge = stageBadge(t);
-  const destination = contextDestination(t);
-  const recapPills = contextRecapPills(t);
-  const timestamp = formatTripTimestamp(t);
+  const spec = tripCardSpec(t);
   const title = displayTitle(t);
-  const statusLine = tripStatusLine(t);
+  const headline = title ? null : discoveryHeadline(t);
+  const tone = spec.tone ? ` trip-card-${spec.tone}` : '';
+  // On a hero card (the destination is the headline) a title Meridian or Guide
+  // generated that just restates the destination adds nothing: the name tag is
+  // dropped and rename moves to the eyebrow. A title the traveler set always shows.
+  const redundantName = Boolean(spec.eyebrow && title && t.title_source !== 'user' && mentions(title, spec.destination));
+  const hideName = redundantName && rename.id !== t.id;
+  const shownTitle = hideName ? null : title;
   return (
-    <div className="card trip-card">
+    <div className={`card trip-card trip-card-${spec.module === 'planned' ? 'planned' : spec.module}${tone}`}>
       <div>
-        {title && <RenameName t={t} rename={rename} showRename={showRename} label={title} />}
-        {destination && <div className="trip-card-destination">{destination}</div>}
-        <div className="meta">
-          <StatusPill tone={BADGE_TONE[badge.cls] || 'neutral'}>{badge.text}</StatusPill>
-          {timestamp && <span className="trip-card-timestamp">{timestamp}</span>}
-        </div>
-        {statusLine && <p className="trip-card-status-line">{statusLine}</p>}
-        {recapPills.length > 0 && (() => {
-          // TWM-232: context_recap can now carry more facts than a scan-card
-          // has room for — cap the visible chips instead of cramming every
-          // one into a dot-joined line (confirmed live: unreadable past ~4).
-          const shown = recapPills.slice(0, 2);
-          const extra = recapPills.length - shown.length;
-          return (
-            <div className="trip-card-recap">
-              {shown.map(pill => <span key={pill} className="trip-card-recap-pill">{pill}</span>)}
-              {extra > 0 && <span className="trip-card-recap-pill">+{extra} more</span>}
-            </div>
-          );
-        })()}
+        {!hideName && <RenameName t={t} rename={rename} showRename={showRename} label={title ?? headline?.text ?? spec.emptyLabel} blankStart={!title || redundantName} />}
+        {spec.eyebrow && (
+          <div className="trip-card-eyebrow">
+            {spec.eyebrow}
+            {hideName && showRename && <RenameButton t={t} rename={rename} blankStart />}
+          </div>
+        )}
+        {spec.eyebrow && spec.destination && <div className="trip-card-destination-chosen">{spec.destination}</div>}
+        {spec.line && (
+          <div className="trip-card-line">{spec.line.bold && <><b>{spec.line.bold}</b> · </>}{spec.line.text}</div>
+        )}
+        <RecapPills pills={discoveryPills(t, headline?.key, shownTitle)} limit={4} />
       </div>
-      <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>
-        Open trip →
-      </button>
+      {spec.actions === 'matched' ? <MatchedTripActions tripId={t.id} /> : (
+        <button type="button" className="btn btn-ghost" disabled={busyId === t.id} onClick={() => onOpen(t)}>{spec.cta}</button>
+      )}
     </div>
+  );
+}
+
+// TWM-234: the shared markup behind every trip-list section (Discovering,
+// Your trips, Past) -- extracted so adding the Discovering/Your trips split
+// didn't just duplicate the same section JSX a second time.
+// TWM-234: the Plan module's section. A trip underway (or, failing proof, this month's) leads,
+// then the upcoming trips; past trips sit collapsed at the bottom so
+// they never push the Discovering section out of view.
+function YourTripsSection({ hero, trips, pastTrips, standalone, rename, busyId, onOpen }) {
+  if (!hero && trips.length === 0 && pastTrips.length === 0) return null;
+  const card = (t, showRename = true) => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={onOpen} showRename={showRename} />;
+  return (
+    <section aria-label="Planned trips">
+      <h2 className="section-title">Planned trips</h2>
+      {hero && (
+        <div className="hero-trip">
+          <h3 className="trip-group-label">{heroLabel(hero)}</h3>
+          {card(hero)}
+        </div>
+      )}
+      {trips.length > 0 && (
+        <>
+          {hero && <h3 className="trip-group-label">Upcoming trips</h3>}
+          {trips.map(t => card(t))}
+        </>
+      )}
+      <PastTrips trips={pastTrips} card={card} startOpen={standalone && !hero && trips.length === 0} />
+    </section>
+  );
+}
+
+// Collapsed by default, unless past trips are all the traveler has -- then
+// hiding them would leave an empty-looking page.
+function PastTrips({ trips, card, startOpen }) {
+  const [open, setOpen] = useState(startOpen);
+  if (trips.length === 0) return null;
+  return (
+    <div className="past-trips">
+      <button type="button" className="past-trips-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+        <span>Past trips ({trips.length})</span><span>{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open && trips.map(t => card(t, false))}
+    </div>
+  );
+}
+
+function TripListSection({ label, title, trips, rename, busyId, onOpen, className, showRename = true }) {
+  if (trips.length === 0) return null;
+  return (
+    <section className={className} aria-label={label}>
+      <h2 className="section-title">{title}</h2>
+      {trips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={onOpen} showRename={showRename} />)}
+    </section>
   );
 }
 
@@ -177,7 +260,7 @@ export default function DashboardHome() {
   // (e.g. "traveling in December" said before a destination is picked) --
   // hero eligibility is about having a real trip to spotlight, not about
   // lifecycle stage, but the two aren't the same thing.
-  const heroEligible = useMemo(() => activeTrips.filter(t => contextDestination(t)), [activeTrips]);
+  const heroEligible = useMemo(() => activeTrips.filter(t => !DISCOVER_STAGES.has(t.lifecycle?.stage) && contextDestination(t)), [activeTrips]);
   const hero = useMemo(() => selectHeroTrip(heroEligible), [heroEligible]);
   // Nearest known travel date first; trips with no date yet fall to the end,
   // ordered by most recently active — an untouched-but-dated trip shouldn't
@@ -193,6 +276,13 @@ export default function DashboardHome() {
       if (dateB) return 1;
       return new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at);
     }), [activeTrips, hero]);
+  // TWM-234: split the one "Your trips" list into Discovering (no
+  // destination committed yet -- not a trip in the traveler's own sense)
+  // and actual trips, each its own section with its own CTA verb, instead
+  // of one uniform list that reads every card as equally "a trip" even
+  // when nothing has been decided yet.
+  const discoveringTrips = useMemo(() => listTrips.filter(t => DISCOVER_STAGES.has(t.lifecycle?.stage)).sort(byDiscoveryStage), [listTrips]);
+  const planningTrips = useMemo(() => listTrips.filter(t => !DISCOVER_STAGES.has(t.lifecycle?.stage)), [listTrips]);
 
   const searching = search.trim().length > 0;
   const searchResults = searching ? visibleTrips.filter(t => matchesSearch(t, search)) : [];
@@ -272,18 +362,31 @@ export default function DashboardHome() {
   const stillLoading = !tripsQuery.isFetched;
   const trueEmpty = tripsQuery.isFetched && visibleTrips.length === 0;
 
+  const showTripControls = !stillLoading && !trueEmpty;
+  const accountStatus = auth.loggedIn ? (
+    <span className="account-status">Signed in as {auth.name}</span>
+  ) : (
+    <span className="account-status">
+      You're browsing as a guest.<br />
+      <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in so you don't lose this</span>
+    </span>
+  );
+
   return (
     <Layout>
       <div className="my-trips-header">
         {!trueEmpty && <h1>Your <em>trips</em></h1>}
-        {auth.loggedIn ? (
-          <span className="account-status">Signed in as {auth.name}</span>
-        ) : (
-          <span className="account-status">
-            You're browsing as a guest.<br />
-            <span className="auth-invite-link" onClick={() => setSyncInviteOpen(true)}>Log in so you don't lose this</span>
-          </span>
-        )}
+        {showTripControls ? (
+          <div className="new-trip-menu" ref={newTripMenuRef}>
+            <button type="button" className="btn btn-primary" onClick={() => setNewTripMenuOpen(open => !open)}>+ New trip</button>
+            {newTripMenuOpen && (
+              <div className="new-trip-menu-dropdown" role="menu">
+                <button type="button" role="menuitem" onClick={handlePlanTrip}>📍 Plan a Trip</button>
+                <button type="button" role="menuitem" onClick={handleDiscover}>🧭 Discover Destination</button>
+              </div>
+            )}
+          </div>
+        ) : accountStatus}
       </div>
 
       <ContextualAuthModal
@@ -327,15 +430,7 @@ export default function DashboardHome() {
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
-            <div className="new-trip-menu" ref={newTripMenuRef}>
-              <button type="button" className="btn btn-primary" onClick={() => setNewTripMenuOpen(open => !open)}>+ New trip</button>
-              {newTripMenuOpen && (
-                <div className="new-trip-menu-dropdown" role="menu">
-                  <button type="button" role="menuitem" onClick={handlePlanTrip}>📍 Plan a Trip</button>
-                  <button type="button" role="menuitem" onClick={handleDiscover}>🧭 Discover Destination</button>
-                </div>
-              )}
-            </div>
+            {accountStatus}
           </div>
 
           {searching ? (
@@ -346,30 +441,13 @@ export default function DashboardHome() {
             )
           ) : (
             <>
-              {hero && (
-                <section className="hero-trip" aria-label="Happening now">
-                  <h2 className="section-title">Happening now</h2>
-                  <TripCard t={hero} rename={rename} busyId={busyId} onOpen={handleOpen} />
-                </section>
-              )}
-
-              {listTrips.length > 0 && (
-                <section aria-label="Your trips">
-                  <h2 className="section-title">Your trips</h2>
-                  {listTrips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} />)}
-                </section>
-              )}
+              <YourTripsSection hero={hero} trips={planningTrips} pastTrips={pastTrips} standalone={discoveringTrips.length === 0} rename={rename} busyId={busyId} onOpen={handleOpen} />
+              <TripListSection label="Discovering" title="Discovering" trips={discoveringTrips} rename={rename} busyId={busyId} onOpen={handleOpen} />
 
               {listTrips.length === 0 && !hero && pastTrips.length === 0 && (
                 <div className="empty-trips"><p>No trips here yet.</p></div>
               )}
 
-              {pastTrips.length > 0 && (
-                <section className="past-trips" aria-label="Past trips">
-                  <h2 className="section-title">Past</h2>
-                  {pastTrips.map(t => <TripCard key={t.id} t={t} rename={rename} busyId={busyId} onOpen={handleOpen} showRename={false} />)}
-                </section>
-              )}
             </>
           )}
         </>

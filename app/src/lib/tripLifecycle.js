@@ -1,4 +1,6 @@
 import { ROUTES } from '../constants/routes.js';
+import { formatBudget } from './formatBudget.js';
+import { DISCOVER_STAGES } from '../constants/tripStages.js';
 
 // Canonical stage/status helpers shared by the adaptive landing resolver
 // and My Trips. TWM-220: every consumer now reads a `TripView` (full) or a
@@ -54,6 +56,111 @@ export function contextRecapPills(trip) {
     });
 }
 
+// TWM-234: while a trip is still Discovering it has no destination and, until
+// a title exists, no name -- so its card is identified by what the traveler
+// has actually told us. The headline is the single most telling fact so far,
+// in this order: when they travel, for how long, how many, the budget. Origin
+// is deliberately not a candidate: for one traveler it is the same on every
+// trip, so it identifies none of them.
+//
+// Facts arrive as the traveler's own words ("mid to end October", "after
+// Navratri (around Navami/Dashami)"), so they are tidied for display: a
+// parenthetical aside is dropped and the first letter capitalised. Bare
+// numbers are given their unit so a chip reads on its own ("2 travellers").
+function tidy(value) {
+  const cleaned = String(value).replace(/\s*\([^)]*\)/g, '').trim();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+// "3", "3 people", "3 persons", "3 pax" all read as "3 travellers".
+function travellers(value) {
+  const match = String(value).trim().match(/^([0-9]+)(?: *(?:people|persons?|pax|travell?ers?))?$/i);
+  return match ? `${match[1]} ${match[1] === '1' ? 'traveller' : 'travellers'}` : tidy(value);
+}
+
+// Whether `text` already names `name` (case-insensitive).
+export function mentions(text, name) {
+  return Boolean(text && name) && String(text).toLowerCase().includes(String(name).toLowerCase());
+}
+
+const HEADLINE_FACTS = [
+  { key: 'travel_dates', text: value => tidy(value) },
+  { key: 'trip_duration', text: value => (/^\d+$/.test(value) ? `${value} days` : tidy(value)) },
+  { key: 'num_travelers', text: travellers },
+  { key: 'budget', text: value => formatBudget(value) ?? (/budget/i.test(value) ? tidy(value) : `Budget: ${tidy(value)}`) },
+];
+
+export function discoveryHeadline(trip) {
+  const recap = trip?.context_recap || [];
+  for (const { key, text } of HEADLINE_FACTS) {
+    const item = recap.find(fact => fact.key === key && fact.value);
+    if (item) return { key, text: text(String(item.value)) };
+  }
+  return null;
+}
+
+// The facts for a Discovering card's chips, worded compactly and in the same
+// priority order as the headline, minus the fact already used as the
+// headline, with the origin last (it is the least telling one).
+// `shownTitle` is the title the card actually displays: a title that already
+// says where the trip starts ("... from Delhi") makes the "From Delhi" chip a
+// repeat, so the chip is left out.
+export function discoveryPills(trip, excludeKey = null, shownTitle = null) {
+  const recap = trip?.context_recap || [];
+  const pills = [];
+  for (const { key, text } of HEADLINE_FACTS) {
+    const item = key !== excludeKey && recap.find(fact => fact.key === key && fact.value);
+    if (item) pills.push(text(String(item.value)));
+  }
+  const origin = recap.find(fact => fact.key === 'origin_city' && fact.value);
+  if (origin && !mentions(shownTitle, origin.value)) pills.push(`From ${origin.value}`);
+  return pills;
+}
+
+// TWM-234: a Plan-module trip is either still being worked on (planning, or a
+// draft plan waiting for review) or finished (approved plan, itinerary ready,
+// booked, completed). The two get different cards -- see DashboardHome.
+export function isPlanFinished(trip) {
+  const stage = trip?.lifecycle?.stage;
+  return isItineraryReady(trip) || stage === 'planned' || stage === 'booked' || stage === 'done';
+}
+
+// A planning card is "reviewing" once a draft day plan exists, even while the
+// stage still reads `planning`.
+export function isPlanDraftReady(trip) {
+  const stage = trip?.lifecycle?.stage;
+  return stage === 'plan_ready' || (stage === 'planning' && Boolean(trip?.has_day_plan));
+}
+
+// TWM-234: what a My Trips card says, by stage -- every stage renders the same
+// card (title, facts chips, one action) and this is the only thing that varies:
+//   line     the one line under the title, when there is no hero
+//   eyebrow  set for the two stages that end a module's first half (matched,
+//            planned): the card then shows the destination as its hero
+//   cta      the single action's label; `actions: 'matched'` swaps in the two
+//            matched actions instead
+//   tone     'matched' | 'planned' tints a hero card
+export function tripCardSpec(trip) {
+  const stage = trip?.lifecycle?.stage;
+  const destination = contextDestination(trip) || trip?.lifecycle?.selected_option?.name || null;
+  const discovering = DISCOVER_STAGES.has(stage);
+  const base = { module: discovering ? 'discovering' : 'plan', destination, emptyLabel: discovering ? 'New discovery' : 'New trip' };
+  if (stage === 'matched') return { ...base, tone: 'matched', eyebrow: 'Your pick', actions: 'matched' };
+  if (discovering) {
+    return { ...base, line: { text: 'Destination not chosen yet' }, cta: stage === 'recommended' ? 'Review recommendations →' : 'Continue exploring →' };
+  }
+  if (isPlanFinished(trip)) {
+    const eyebrow = stage === 'done' ? 'Completed' : stage === 'booked' ? 'Booked' : 'Plan approved';
+    return { ...base, module: 'planned', tone: 'planned', eyebrow, cta: 'Open trip →' };
+  }
+  const draft = isPlanDraftReady(trip);
+  return {
+    ...base,
+    line: { bold: destination, text: draft ? 'Draft plan ready to review' : 'Planning in progress' },
+    cta: draft ? 'Review plan →' : 'Continue planning →',
+  };
+}
+
 const STAGE_BADGES = {
   new: { cls: 'b-new', text: 'New' },
   matching: { cls: 'b-chat', text: 'In conversation' },
@@ -95,8 +202,10 @@ export function stageCta(trip) {
   if (stage === 'new' && hasContext(trip)) return { label: 'Resume chat', to: ROUTES.scoutChat };
   // planning/matching route by whether the stage's defining artifact
   // actually exists yet (day_plan / a recommendation round), not by stage
-  // string alone.
-  if ((stage === 'planning' || stage === 'plan_ready') && trip?.has_day_plan) {
+  // string alone. `has_day_plan` is the thin TripListItem flag (My Trips);
+  // a full TripView (TWM-234 embedded Dashboard) carries the same fact as
+  // `plan.day_plan.length > 0` instead -- check both shapes.
+  if ((stage === 'planning' || stage === 'plan_ready') && (trip?.has_day_plan || trip?.plan?.day_plan?.length > 0)) {
     return { label: 'Resume plan builder', to: ROUTES.tripPreview };
   }
   if (stage === 'matching' && (trip?.has_recommendation || trip?.matcher?.has_recommendation)) {
@@ -117,7 +226,7 @@ export function tripStatusLine(trip) {
   }
   if (trip?.has_day_plan) return 'A full day-by-day plan is set — sorting out bookings next.';
   if (trip?.has_places) return 'Places picked — building the day-by-day plan.';
-  if (trip?.awaiting) return "Guide's working out the details with you.";
+  if (trip?.awaiting) return "Scout's working out the details with you.";
   return 'Destination settled — planning not started yet.';
 }
 

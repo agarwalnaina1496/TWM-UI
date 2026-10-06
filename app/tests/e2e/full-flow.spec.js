@@ -4,7 +4,7 @@ import { commandResponse, mockTripCommandFlow, readyItineraryState, tripRecord }
 function successOutcome() {
   return {
     status: 'SUCCESS', message: 'Great, here are a few options.', trip_type: 'single',
-    traveler_criteria: [{ id: 'budget', label: '₹1,00,000 total for both', requirement_type: 'HARD', source_context_paths: ['budget'] }],
+    traveler_criteria: [{ id: 'budget', label: '₹1,00,000 total for both', requirement_type: 'HARD' }],
     options: [{
       rank: 1, type: 'single', name: 'Coorg', destination_id: 'coorg', summary: 'A comfortable fit within budget.',
       evaluations: [{ criterion_id: 'budget', outcome: 'MATCH', conclusion: 'Fits within budget.', details: [{ type: 'bullets', items: ['Estimated total stays within budget.'] }] }],
@@ -41,7 +41,10 @@ test('full flow: header nav entry through Dashboard', async ({ page }) => {
       command: 'select_destination',
       response: commandResponse('Coorg is confirmed.', tripRecord({
         version: 5,
-        trip_state: { stage: 'matched', active_agent: null, matcher_state: { conversation_context: { awaiting: null } } },
+        trip_state: {
+          stage: 'matched', active_agent: null, matcher_state: { conversation_context: { awaiting: null } },
+          selected_option: { type: 'single', id: 'coorg' },
+        },
       })),
     },
     {
@@ -115,22 +118,26 @@ test('full flow: header nav entry through Dashboard', async ({ page }) => {
   // real chat window (cold-open greeting) shows immediately, no separate
   // screen, no redirect.
   await expect(page.getByText(/Hey there! I'm Scout\. Tell me about the trip you have in mind\. I can help you find destinations that fit/)).toBeVisible();
-  await page.getByPlaceholder('Tell Scout about your trip…').fill('Somewhere relaxing');
+  await page.getByPlaceholder('Message Scout…').fill('Somewhere relaxing');
   await page.getByLabel('Send').click();
   await expect(page.getByText('And roughly what total budget would you like to stay within?')).toBeVisible();
   await page.getByRole('button', { name: '₹1,00,000 total for both' }).click();
   await expect(page.getByRole('button', { name: 'See destinations →' })).toBeVisible();
   await page.getByText('See destinations →').click();
 
-  // Destinations (real Meridian recommendations via the continue command)
-  await expect(page).toHaveURL(/\/app\/destinations/);
+  // TWM-234: Destinations now embeds into the unified Dashboard shell
+  // instead of its own standalone page (real Meridian recommendations via
+  // the continue command).
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('A few that fit well')).toBeVisible();
-  await page.getByText('Plan this trip →').first().click();
+  await page.getByText('Choose this destination').first().click();
+  await page.getByText('Plan this trip →').click();
 
-  // TripPreview: real Guide session bootstraps via start_planning, which
-  // generates the complete plan (places + day_plan) in a single step, then
-  // a single Finalize action freezes the plan.
-  await expect(page).toHaveURL(/\/app\/trip-preview/);
+  // TWM-234: Plan Builder embeds into the same Dashboard shell too -- real
+  // Guide session bootstraps via start_planning, which generates the
+  // complete plan (places + day_plan) in a single step, then a single
+  // Finalize action freezes the plan. Same URL throughout, no navigation.
+  await expect(page).toHaveURL(/\/app\/dashboard/);
   await expect(page.getByText('Abbey Falls')).toBeVisible();
   await page.getByText('Approve this plan →').click();
 
